@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SafeRide.Contracts\SafeRide.Contracts.csproj" />
+    <ProjectReference Include="..\SafeRide.Domain\SafeRide.Domain.csproj" />
+    <ProjectReference Include="..\SafeRide.Shared\SafeRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Modules\Auth\DTOs\" />
+    <Folder Include="Modules\Auth\Commands\" />
+    <Folder Include="Modules\Auth\Interfaces\" />
+    <Folder Include="Modules\Auth\Queries\" />
+    <Folder Include="Modules\Common\" />
+    <Folder Include="Modules\BackgroundJobs\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AutoMapper.Extensions.Microsoft.DependencyInjection" Version="12.0.1" />
+    <PackageReference Include="FluentValidation" Version="12.1.1" />
+    <PackageReference Include="MediatR" Version="14.1.0" />
+  </ItemGroup>
+
+</Project>
