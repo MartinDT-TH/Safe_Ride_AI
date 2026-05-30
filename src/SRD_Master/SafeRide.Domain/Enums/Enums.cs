@@ -1,34 +1,33 @@
 ﻿namespace SafeRide.Domain.Enums;
 
-public enum WorkStatus
+// ================================================================
+// USER
+// ================================================================
+// SQL hiện tại Gender chưa có CHECK constraint.
+// Nếu muốn dùng enum cho Gender thì nên thêm CHECK trong DB sau.
+public enum Gender
+{
+    Male,
+    Female,
+    Other
+}
+
+// ================================================================
+// DRIVER / KYC
+// ================================================================
+
+public enum DriverWorkStatus
 {
     Online,
     Offline,
     Busy
 }
 
-public enum DocumentType
+public enum KycDocumentType
 {
     ID_CARD,
     DRIVING_LICENSE,
     CRIMINAL_RECORD
-}
-
-/// <summary>
-/// Full license class set — used in DriverKyc.
-/// </summary>
-public enum LicenseClass
-{
-    A1, A, B1, B, C1, C, D1, D2, D,
-    Old_B1, Old_B2, Old_A1, Old_A2
-}
-
-/// <summary>
-/// Subset used in Vehicles.RequiredLicenseClass and PricingRules.VehicleClass.
-/// </summary>
-public enum VehicleClass
-{
-    A1, A, B, C1, C, D1, D2, D
 }
 
 public enum KycStatus
@@ -36,6 +35,54 @@ public enum KycStatus
     Pending,
     Approved,
     Rejected
+}
+
+/// <summary>
+/// Dùng cho DriverKyc.LicenseClass.
+/// Có cả bằng cũ vì SQL đang cho phép Old_B1, Old_B2, Old_A1, Old_A2.
+/// </summary>
+public enum LicenseClass
+{
+    A1,
+    A,
+    B1,
+    B,
+    C1,
+    C,
+    D1,
+    D2,
+    D,
+
+    Old_B1,
+    Old_B2,
+    Old_A1,
+    Old_A2
+}
+
+/// <summary>
+/// Dùng cho Vehicles.RequiredLicenseClass và PricingRules.VehicleClass.
+/// Không gồm B1 / Old_* vì SQL của RequiredLicenseClass và VehicleClass không cho phép.
+/// </summary>
+public enum RequiredLicenseClass
+{
+    A1,
+    A,
+    B,
+    C1,
+    C,
+    D1,
+    D2,
+    D
+}
+
+// ================================================================
+// VEHICLE
+// ================================================================
+
+public enum VehicleType
+{
+    Motorbike,
+    Car
 }
 
 public enum EngineType
@@ -51,6 +98,10 @@ public enum TransmissionType
     None
 }
 
+// ================================================================
+// BOOKING / TRIP
+// ================================================================
+
 public enum BookingType
 {
     Now,
@@ -59,11 +110,12 @@ public enum BookingType
 
 public enum BookingStatus
 {
-    SEARCHING,
+    SEARCHING_DRIVER,
     DRIVER_ASSIGNED,
-    CANCELLED,
+    CUSTOMER_CANCELLED,
+    DRIVER_CANCELLED,
     EXPIRED,
-    COMPLETED
+    CONVERTED_TO_TRIP
 }
 
 public enum BookingSource
@@ -76,20 +128,32 @@ public enum BookingSource
 public enum TripStatus
 {
     ACCEPTED,
+    DRIVER_ARRIVING,
     ARRIVED,
     IN_PROGRESS,
     COMPLETED,
     CANCELLED
 }
 
+// ================================================================
+// PAYMENT / WALLET
+// ================================================================
+
+public enum PaymentMethod
+{
+    QR,
+    CASH
+}
+
 public enum PaymentStatus
 {
     Pending,
     Success,
-    Failed
+    Failed,
+    Cancelled
 }
 
-public enum TransactionType
+public enum WalletTransactionType
 {
     Income,
     Withdrawal,
@@ -97,12 +161,16 @@ public enum TransactionType
     Bonus
 }
 
-public enum WithdrawalStatus
+public enum WithdrawalRequestStatus
 {
     Pending,
     Approved,
     Rejected
 }
+
+// ================================================================
+// PROMOTION
+// ================================================================
 
 public enum DiscountType
 {
@@ -110,17 +178,15 @@ public enum DiscountType
     Fixed
 }
 
-public enum CallStatus
-{
-    Missed,
-    Connected,
-    Failed
-}
+// ================================================================
+// SAFETY / REPORT
+// ================================================================
 
-public enum SOSAlertStatus
+public enum SOSStatus
 {
     Active,
-    Resolved
+    Resolved,
+    Cancelled
 }
 
 public enum ReportStatus
@@ -129,4 +195,3 @@ public enum ReportStatus
     Resolved,
     Rejected
 }
-
