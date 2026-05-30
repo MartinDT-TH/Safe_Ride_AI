@@ -11,7 +11,7 @@
    "OutputPath": "Entities",
    "PluralRules": null,
    "PreserveCasingWithRegex": true,
-   "ProjectRootNamespace": "SafeRide.API",
+   "ProjectRootNamespace": "SafeRide.Domain",
    "Schemas": null,
    "SelectedHandlebarsLanguage": 2,
    "SelectedToBeGenerated": 0,
@@ -55,10 +55,6 @@
          "ObjectType": 0
       },
       {
-         "Name": "[dbo].[OTPVerifications]",
-         "ObjectType": 0
-      },
-      {
          "Name": "[dbo].[Payments]",
          "ObjectType": 0
       },
@@ -72,6 +68,10 @@
       },
       {
          "Name": "[dbo].[Ratings]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[RefreshTokens]",
          "ObjectType": 0
       },
       {
@@ -96,14 +96,6 @@
       },
       {
          "Name": "[dbo].[SystemSettings]",
-         "ObjectType": 0
-      },
-      {
-         "Name": "[dbo].[TripCallLogs]",
-         "ObjectType": 0
-      },
-      {
-         "Name": "[dbo].[TripMessages]",
          "ObjectType": 0
       },
       {
@@ -136,7 +128,7 @@
    "UseDateOnlyTimeOnly": true,
    "UseDbContextSplitting": false,
    "UseDecimalDataAnnotationForSprocResult": true,
-   "UseFluentApiOnly": false,
+   "UseFluentApiOnly": true,
    "UseHandleBars": false,
    "UseHierarchyId": false,
    "UseInflector": true,
@@ -151,7 +143,7 @@
    "UsePrefixNavigationNaming": false,
    "UseSchemaFolders": false,
    "UseSchemaNamespaces": false,
-   "UseSpatial": false,
+   "UseSpatial": true,
    "UseT4": false,
    "UseT4Split": false,
    "UseTypedTvpParameters": true
