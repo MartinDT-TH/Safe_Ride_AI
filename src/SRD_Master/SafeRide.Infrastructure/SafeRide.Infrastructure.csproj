@@ -7,13 +7,16 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="Cache\" />
     <Folder Include="ExternalServices\" />
     <Folder Include="Identity\" />
+    <Folder Include="BackgroundJobs\" />
+    <Folder Include="Services\" />
     <Folder Include="Persistence\Configurations\" />
     <Folder Include="Persistence\Seed\" />
     <Folder Include="Persistence\Repositories\" />
-    <Folder Include="SignalR\" />
+    <Folder Include="Realtime\Dispatch\" />
+    <Folder Include="Realtime\Tracking\" />
+    <Folder Include="Realtime\SignalR\" />
   </ItemGroup>
 
   <ItemGroup>

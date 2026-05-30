@@ -13,16 +13,19 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Modules\Auth\DTOs\" />
-    <Folder Include="Modules\Auth\Commands\" />
-    <Folder Include="Modules\Auth\Interfaces\" />
-    <Folder Include="Modules\Auth\Queries\" />
-    <Folder Include="Modules\Common\" />
-    <Folder Include="Modules\BackgroundJobs\" />
+    <Folder Include="Features\Auth\Commands\" />
+    <Folder Include="Features\Auth\Validators\" />
+    <Folder Include="Features\Common\" />
+    <Folder Include="Features\BackgroundJobs\" />
+    <Folder Include="Features\Matching\DTOs\" />
+    <Folder Include="Features\Matching\Models\" />
+    <Folder Include="Features\Matching\BackgroundJobs\" />
+    <Folder Include="Features\Matching\Services\" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="AutoMapper.Extensions.Microsoft.DependencyInjection" Version="12.0.1" />
+    <PackageReference Include="FirebaseAdmin" Version="3.5.0" />
     <PackageReference Include="FluentValidation" Version="12.1.1" />
     <PackageReference Include="MediatR" Version="14.1.0" />
   </ItemGroup>
