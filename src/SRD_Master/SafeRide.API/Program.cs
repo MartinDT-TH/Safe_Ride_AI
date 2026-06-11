@@ -7,6 +7,7 @@ using Microsoft.IdentityModel.Tokens;
 using SafeRide.Application.Features.Auth.Services;
 using SafeRide.Domain.Entities;
 using SafeRide.Infrastructure.Authentication;
+using SafeRide.Infrastructure.ExternalServices;
 using SafeRide.Infrastructure.Redis;
 using SafeRide.Infrastructure.Persistence;
 using StackExchange.Redis;
@@ -71,6 +72,7 @@ builder.Services.AddSingleton<IRedisService, RedisService>();
 builder.Services.AddScoped<IFirebaseTokenVerifier, FirebaseTokenVerifier>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddHttpClient<ISpeedSmsService, InfobipSmsService>();
 
 var jwtSecret = builder.Configuration["Jwt:SecretKey"]!;
 

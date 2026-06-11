@@ -4,6 +4,8 @@ namespace SafeRide.Application.Features.Auth.Services;
 
 public interface IAuthService
 {
+    Task SendOtpAsync(SendOtpRequest request);
+
     Task<AuthResponse> FirebaseLoginAsync(
         FirebaseLoginRequest request,
         string? ipAddress,

@@ -17,6 +17,7 @@ public class AuthService : IAuthService
     private readonly IFirebaseTokenVerifier _firebaseTokenVerifier;
     private readonly IJwtTokenService _jwtTokenService;
     private readonly IRedisService _redisService;
+    private readonly ISpeedSmsService _speedSmsService;
 
     public AuthService(
         UserManager<AspNetUser> userManager,
@@ -24,7 +25,8 @@ public class AuthService : IAuthService
         ApplicationDbContext dbContext,
         IFirebaseTokenVerifier firebaseTokenVerifier,
         IJwtTokenService jwtTokenService,
-        IRedisService redisService)
+        IRedisService redisService,
+        ISpeedSmsService speedSmsService)
     {
         _userManager = userManager;
         _signInManager = signInManager;
@@ -32,8 +34,54 @@ public class AuthService : IAuthService
         _firebaseTokenVerifier = firebaseTokenVerifier;
         _jwtTokenService = jwtTokenService;
         _redisService = redisService;
+        _speedSmsService = speedSmsService;
     }
 
+    public async Task SendOtpAsync(SendOtpRequest request)
+    {
+        var phoneNumber = NormalizePhoneNumber(request.PhoneNumber);
+
+        if (string.IsNullOrWhiteSpace(phoneNumber))
+        {
+            throw new Exception("Số điện thoại không hợp lệ.");
+        }
+
+        var otpCode = Random.Shared.Next(100000, 999999).ToString();
+
+        await _redisService.SetAsync(
+            RedisKeys.Otp(phoneNumber),
+            otpCode,
+            TimeSpan.FromMinutes(5));
+
+        await _speedSmsService.SendOtpAsync(phoneNumber, otpCode);
+    }
+
+    private static string NormalizePhoneNumber(string phoneNumber)
+    {
+        if (string.IsNullOrWhiteSpace(phoneNumber))
+        {
+            return string.Empty;
+        }
+
+        var digits = new string(phoneNumber.Where(char.IsDigit).ToArray());
+
+        if (string.IsNullOrWhiteSpace(digits))
+        {
+            return string.Empty;
+        }
+
+        if (digits.StartsWith("84"))
+        {
+            return "+" + digits;
+        }
+
+        if (digits.StartsWith("0"))
+        {
+            return "+84" + digits[1..];
+        }
+
+        return "+" + digits;
+    }
 
     public async Task<AuthResponse> FirebaseLoginAsync(
         FirebaseLoginRequest request,

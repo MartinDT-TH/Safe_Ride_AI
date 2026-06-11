@@ -144,6 +144,17 @@ public class AuthController : ControllerBase
         });
     }
 
+    [HttpPost("send-otp")]
+    public async Task<IActionResult> SendOtp([FromBody] SendOtpRequest request)
+    {
+        await _authService.SendOtpAsync(request);
+
+        return Ok(new
+        {
+            message = "Mã OTP đã được gửi thành công."
+        });
+    }
+
     [HttpPost("firebase-login")]
     public async Task<IActionResult> FirebaseLogin(
         [FromBody] FirebaseLoginRequest request)
