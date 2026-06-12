@@ -26,7 +26,6 @@
 //   }
 // }
 
-
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -56,7 +55,8 @@ class AuthProvider extends ChangeNotifier {
       final response = await repository.login(phone);
       final message = response['message']?.toString() ?? '';
 
-      if (message.toLowerCase().contains('thành công') || message.toLowerCase().contains('success')) {
+      if (message.toLowerCase().contains('thành công') ||
+          message.toLowerCase().contains('success')) {
         return true;
       }
 
@@ -95,28 +95,30 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
 
       final googleSignIn = GoogleSignIn(
-        serverClientId: '1064098955991-33edjlu9mo3q5lf082qnm3u8045ro1ls.apps.googleusercontent.com',
+        serverClientId:
+            '338143275422-vnecmih3efs2n9kfqtm0d44i81n6ceat.apps.googleusercontent.com',
       );
 
       final account = await googleSignIn.signIn();
+
       if (account == null) {
         debugPrint('Google sign-in was cancelled.');
         return false;
       }
 
-      final authentication = await account.authentication;
-      final idToken = authentication.idToken;
+      final googleAuth = await account.authentication;
+      final idToken = googleAuth.idToken;
 
       if (idToken == null || idToken.isEmpty) {
         debugPrint('Google sign-in returned an empty idToken.');
         return false;
       }
 
-      final response = await repository.firebaseLogin(idToken);
+      final response = await repository.googleLogin(idToken);
       debugPrint('Google login response: $response');
 
-      return response['token'] != null ||
-          response['message']?.toString().toLowerCase().contains('success') == true;
+      _token = response['accessToken']?.toString();
+      return _token != null && _token!.isNotEmpty;
     } catch (e) {
       debugPrint('Google sign in error: $e');
       return false;

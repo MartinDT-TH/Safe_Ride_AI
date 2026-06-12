@@ -36,20 +36,17 @@ class AuthRemoteDatasource {
   Future<Map<String, dynamic>> verifyOtp(String phone, String otpCode) async {
     final response = await _dio.post(
       '/auth/verify-otp',
-      data: {
-        'phoneNumber': phone,
-        'otpCode': otpCode,
-      },
+      data: {'phoneNumber': phone, 'otpCode': otpCode},
     );
 
     return Map<String, dynamic>.from(response.data as Map);
   }
 
-  Future<Map<String, dynamic>> firebaseLogin(String firebaseIdToken) async {
+  Future<Map<String, dynamic>> googleLogin(String googleIdToken) async {
     final response = await _dio.post(
-      '/auth/firebase-login',
+      '/auth/google-login',
       data: {
-        'firebaseIdToken': firebaseIdToken,
+        'googleIdToken': googleIdToken,
         'deviceId': 'flutter-device',
         'deviceName': 'SafeRide Flutter',
       },

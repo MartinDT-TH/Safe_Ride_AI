@@ -16,18 +16,30 @@ public class AuthController : ControllerBase
     private readonly IAuthService _authService;
     private readonly UserManager<AspNetUser> _userManager;
     private readonly IJwtTokenService _jwtTokenService;
+    private readonly IHostEnvironment _environment;
 
-    public AuthController(IAuthService authService, UserManager<AspNetUser> userManager, IJwtTokenService jwtTokenService)
+    public AuthController(
+        IAuthService authService,
+        UserManager<AspNetUser> userManager,
+        IJwtTokenService jwtTokenService,
+        IHostEnvironment environment)
     {
         _authService = authService;
         _userManager = userManager;
         _jwtTokenService = jwtTokenService;
+        _environment = environment;
     }
+
 
 
     [HttpPost("demo-login")]
     public async Task<IActionResult> DemoLogin([FromBody] DemoLoginRequest request)
     {
+        if (!_environment.IsDevelopment())
+        {
+            return NotFound();
+        }
+
         if (request.Provider != "Phone" && request.Provider != "Google")
         {
             return BadRequest(new
@@ -90,10 +102,18 @@ public class AuthController : ControllerBase
                 });
             }
 
-            await _userManager.AddToRoleAsync(user, "Customer");
+            var roleResult = await _userManager.AddToRoleAsync(user, "Customer");
+            if (!roleResult.Succeeded)
+            {
+                return Conflict(new
+                {
+                    code = "auth.role_assignment_failed",
+                    errors = roleResult.Errors.Select(e => e.Description)
+                });
+            }
         }
 
-        var fakeFirebaseUid = request.Provider == "Phone"
+        var demoProviderKey = request.Provider == "Phone"
             ? $"demo-phone:{request.PhoneNumber}"
             : $"demo-google:{request.Email}";
 
@@ -105,18 +125,25 @@ public class AuthController : ControllerBase
 
         var alreadyLinked = existingLogins.Any(x =>
             x.LoginProvider == loginProvider &&
-            x.ProviderKey == fakeFirebaseUid);
+            x.ProviderKey == demoProviderKey);
 
         if (!alreadyLinked)
         {
-            await _userManager.AddLoginAsync(
+            var loginResult = await _userManager.AddLoginAsync(
                 user,
                 new UserLoginInfo(
                     loginProvider,
-                    fakeFirebaseUid,
-                    loginProvider
-                )
-            );
+                    demoProviderKey,
+                    loginProvider));
+
+            if (!loginResult.Succeeded)
+            {
+                return Conflict(new
+                {
+                    code = "auth.account_conflict",
+                    errors = loginResult.Errors.Select(e => e.Description)
+                });
+            }
         }
         var roles = await _userManager.GetRolesAsync(user);
 
@@ -128,19 +155,16 @@ public class AuthController : ControllerBase
             request.DeviceName
         );
 
-        return Ok(new
+        return Ok(new AuthResponse
         {
-            message = "Đăng nhập demo thành công.",
-            accessToken,
-            refreshToken,
-            user = new
-            {
-                user.Id,
-                user.FullName,
-                user.PhoneNumber,
-                user.Email,
-                user.AvatarUrl
-            }
+            AccessToken = accessToken.Token,
+            RefreshToken = refreshToken,
+            ExpiresIn = accessToken.ExpiresIn,
+            UserId = user.Id,
+            FullName = user.FullName ?? user.UserName ?? string.Empty,
+            PhoneNumber = user.PhoneNumber,
+            Email = user.Email,
+            Roles = roles
         });
     }
 
@@ -155,30 +179,22 @@ public class AuthController : ControllerBase
         });
     }
 
+    [HttpPost("google-login")]
+    public async Task<IActionResult> GoogleLogin(
+        [FromBody] GoogleLoginRequest request)
+    {
+        var response = await _authService.GoogleLoginAsync(
+            request,
+            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            Request.Headers.UserAgent.ToString());
+
+        return Ok(response);
+    }
+
     [HttpPost("verify-otp")]
     public async Task<IActionResult> VerifyOtp([FromBody] VerifyOtpRequest request)
     {
-        var isValid = await _authService.VerifyOtpAsync(request);
-
-        if (!isValid)
-        {
-            return BadRequest(new
-            {
-                message = "OTP không đúng hoặc đã hết hạn."
-            });
-        }
-
-        return Ok(new
-        {
-            message = "OTP hợp lệ."
-        });
-    }
-
-    [HttpPost("firebase-login")]
-    public async Task<IActionResult> FirebaseLogin(
-        [FromBody] FirebaseLoginRequest request)
-    {
-        var response = await _authService.FirebaseLoginAsync(
+        var response = await _authService.VerifyOtpAsync(
             request,
             HttpContext.Connection.RemoteIpAddress?.ToString(),
             Request.Headers.UserAgent.ToString());

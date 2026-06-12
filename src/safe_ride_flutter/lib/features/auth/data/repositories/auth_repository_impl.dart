@@ -17,7 +17,6 @@ import '../../domain/repositories/auth_repository.dart';
 import '../datasources/auth_remote_datasource.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
-
   final AuthRemoteDatasource remoteDatasource;
 
   AuthRepositoryImpl(this.remoteDatasource);
@@ -33,7 +32,7 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<Map<String, dynamic>> firebaseLogin(String firebaseIdToken) async {
-    return await remoteDatasource.firebaseLogin(firebaseIdToken);
+  Future<Map<String, dynamic>> googleLogin(String googleIdToken) async {
+    return await remoteDatasource.googleLogin(googleIdToken);
   }
 }
