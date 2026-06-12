@@ -1,18 +1,10 @@
 using System.ComponentModel.DataAnnotations;
-
 namespace SafeRide.Application.Features.Auth.DTOs;
 
-public sealed class VerifyOtpRequest
+public class GoogleLoginRequest
 {
     [Required]
-    [Phone]
-    [MaxLength(20)]
-    public string PhoneNumber { get; set; } = string.Empty;
-
-    [Required]
-    [RegularExpression(@"^\d{6}$")]
-    public string OtpCode { get; set; } = string.Empty;
-
+    public string GoogleIdToken { get; set; } = string.Empty;
     [MaxLength(200)]
     public string? DeviceId { get; set; }
 

@@ -1,6 +1,4 @@
-﻿using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using SafeRide.Application.Features.Auth.Services;
 using SafeRide.Domain.Entities;
@@ -12,29 +10,24 @@ using System.Text;
 
 namespace SafeRide.Infrastructure.Authentication;
 
-public class JwtTokenService : IJwtTokenService
+public sealed class JwtTokenService : IJwtTokenService
 {
-    private readonly IConfiguration _configuration;
-    private readonly UserManager<AspNetUser> _userManager;
+    private readonly JwtOptions _options;
     private readonly ApplicationDbContext _dbContext;
 
     public JwtTokenService(
-        IConfiguration configuration,
-        UserManager<AspNetUser> userManager,
+        IOptions<JwtOptions> options,
         ApplicationDbContext dbContext)
     {
-        _configuration = configuration;
-        _userManager = userManager;
+        _options = options.Value;
         _dbContext = dbContext;
     }
 
-    public async Task<(string Token, string JwtId, int ExpiresIn)> GenerateAccessTokenAsync(
+    public Task<(string Token, string JwtId, int ExpiresIn)> GenerateAccessTokenAsync(
         AspNetUser user,
         IList<string> roles)
     {
-        var jwtId = Guid.NewGuid().ToString();
-        var expiresInMinutes = int.Parse(_configuration["Jwt:AccessTokenMinutes"] ?? "15");
-
+        var jwtId = Guid.NewGuid().ToString("N");
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
@@ -42,70 +35,56 @@ public class JwtTokenService : IJwtTokenService
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.MobilePhone, user.PhoneNumber ?? string.Empty),
             new(ClaimTypes.Email, user.Email ?? string.Empty),
-            new(ClaimTypes.Name, user.FullName)
+            new(ClaimTypes.Name, user.FullName ?? user.UserName ?? user.Id.ToString())
         };
 
-        foreach (var role in roles)
-        {
-            claims.Add(new Claim(ClaimTypes.Role, role));
-        }
+        claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
 
-        var secretKey = _configuration["Jwt:SecretKey"]!;
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
-
-        var credentials = new SigningCredentials(
-            key,
-            SecurityAlgorithms.HmacSha256);
-
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.SecretKey));
+        var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
         var token = new JwtSecurityToken(
-            issuer: _configuration["Jwt:Issuer"],
-            audience: _configuration["Jwt:Audience"],
+            issuer: _options.Issuer,
+            audience: _options.Audience,
             claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(expiresInMinutes),
+            expires: DateTime.UtcNow.AddMinutes(_options.AccessTokenMinutes),
             signingCredentials: credentials);
 
-        return (
+        return Task.FromResult((
             new JwtSecurityTokenHandler().WriteToken(token),
             jwtId,
-            expiresInMinutes * 60
-        );
+            _options.AccessTokenMinutes * 60));
     }
 
     public string GenerateRawRefreshToken()
     {
-        var bytes = RandomNumberGenerator.GetBytes(64);
-        return Convert.ToBase64String(bytes);
+        return Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
     }
 
-    public async Task<string> GenerateRefreshTokenAsync(Guid userId, string? deviceId, string? deviceName)
+    public async Task<string> GenerateRefreshTokenAsync(
+        Guid userId,
+        string? deviceId,
+        string? deviceName)
     {
         var rawToken = GenerateRawRefreshToken();
-        var tokenHash = 
-            SHA256.HashData(Encoding.UTF8.GetBytes(rawToken));
-        
-
         var refreshToken = new RefreshToken
         {
             Id = Guid.NewGuid(),
             UserId = userId,
-            TokenHash = tokenHash,
+            SessionId = Guid.NewGuid(),
+            TokenHash = HashToken(rawToken),
             DeviceId = deviceId,
             DeviceName = deviceName,
             CreatedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddDays(30)
-            //IsRevoked = false
+            ExpiresAt = DateTime.UtcNow.AddDays(_options.RefreshTokenDays)
         };
 
         _dbContext.RefreshTokens.Add(refreshToken);
         await _dbContext.SaveChangesAsync();
-
         return rawToken;
     }
 
     public byte[] HashToken(string token)
     {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
-        return bytes;
-        //return Convert.ToBase64String(bytes);
+        return SHA256.HashData(Encoding.UTF8.GetBytes(token));
     }
 }
