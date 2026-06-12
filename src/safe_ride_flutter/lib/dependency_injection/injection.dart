@@ -1,5 +1,7 @@
 import 'package:get_it/get_it.dart';
 
+import '../core/services/device_identity_service.dart';
+import '../core/storage/secure_storage_service.dart';
 import '../features/auth/data/datasources/auth_remote_datasource.dart';
 import '../features/auth/data/repositories/auth_repository_impl.dart';
 import '../features/auth/domain/repositories/auth_repository.dart';
@@ -18,52 +20,51 @@ import '../features/home/presentation/providers/home_provider.dart';
 final getIt = GetIt.instance;
 
 Future<void> setupDependencies() async {
+  getIt.registerLazySingleton<SecureStorageService>(
+    () => SecureStorageService(),
+  );
+
+  getIt.registerLazySingleton<DeviceIdentityService>(
+    () => DeviceIdentityService(getIt<SecureStorageService>()),
+  );
 
   getIt.registerLazySingleton<AuthRemoteDatasource>(
-        () => AuthRemoteDatasource(),
+    () => AuthRemoteDatasource(),
   );
 
   getIt.registerLazySingleton<AuthRepository>(
-        () => AuthRepositoryImpl(
-      getIt<AuthRemoteDatasource>(),
-    ),
+    () => AuthRepositoryImpl(getIt<AuthRemoteDatasource>()),
   );
 
   getIt.registerFactory<AuthProvider>(
-        () => AuthProvider(
+    () => AuthProvider(
       getIt<AuthRepository>(),
+      getIt<SecureStorageService>(),
+      getIt<DeviceIdentityService>(),
     ),
   );
 
   getIt.registerLazySingleton<OnboardingRemoteDatasource>(
-        () => OnboardingRemoteDatasource(),
+    () => OnboardingRemoteDatasource(),
   );
 
   getIt.registerLazySingleton<OnboardingRepository>(
-        () => OnboardingRepositoryImpl(
-      getIt<OnboardingRemoteDatasource>(),
-    ),
+    () => OnboardingRepositoryImpl(getIt<OnboardingRemoteDatasource>()),
   );
 
   getIt.registerFactory<RoleProvider>(
-        () => RoleProvider(
-      getIt<OnboardingRepository>(),
-    ),
+    () => RoleProvider(getIt<OnboardingRepository>()),
   );
 
   getIt.registerLazySingleton<HomeRemoteDatasource>(
-        () => HomeRemoteDatasource(),
+    () => HomeRemoteDatasource(),
   );
 
   getIt.registerLazySingleton<HomeRepository>(
-        () => HomeRepositoryImpl(
-      getIt<HomeRemoteDatasource>(),
-    ),
+    () => HomeRepositoryImpl(getIt<HomeRemoteDatasource>()),
   );
 
   getIt.registerFactory<HomeProvider>(
-        () => HomeProvider(
-      getIt<HomeRepository>(),
-    ),
+    () => HomeProvider(getIt<HomeRepository>()),
   );
 }

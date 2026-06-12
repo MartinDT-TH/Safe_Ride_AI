@@ -27,12 +27,35 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<Map<String, dynamic>> verifyOtp(String phone, String otpCode) async {
-    return await remoteDatasource.verifyOtp(phone, otpCode);
+  Future<Map<String, dynamic>> verifyOtp(
+    String phone,
+    String otpCode,
+    String deviceId,
+    String deviceName,
+  ) async {
+    return await remoteDatasource.verifyOtp(
+      phone,
+      otpCode,
+      deviceId,
+      deviceName,
+    );
   }
 
   @override
-  Future<Map<String, dynamic>> googleLogin(String googleIdToken) async {
-    return await remoteDatasource.googleLogin(googleIdToken);
+  Future<Map<String, dynamic>> googleLogin(
+    String googleIdToken,
+    String deviceId,
+    String deviceName,
+  ) async {
+    return await remoteDatasource.googleLogin(
+      googleIdToken,
+      deviceId,
+      deviceName,
+    );
+  }
+
+  @override
+  Future<void> logout(String refreshToken) {
+    return remoteDatasource.logout(refreshToken);
   }
 }

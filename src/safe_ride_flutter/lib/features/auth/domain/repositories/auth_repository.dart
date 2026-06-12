@@ -5,7 +5,18 @@
 abstract class AuthRepository {
   Future<Map<String, dynamic>> login(String phone);
 
-  Future<Map<String, dynamic>> verifyOtp(String phone, String otpCode);
+  Future<Map<String, dynamic>> verifyOtp(
+    String phone,
+    String otpCode,
+    String deviceId,
+    String deviceName,
+  );
 
-  Future<Map<String, dynamic>> googleLogin(String googleIdToken);
+  Future<Map<String, dynamic>> googleLogin(
+    String googleIdToken,
+    String deviceId,
+    String deviceName,
+  );
+
+  Future<void> logout(String refreshToken);
 }

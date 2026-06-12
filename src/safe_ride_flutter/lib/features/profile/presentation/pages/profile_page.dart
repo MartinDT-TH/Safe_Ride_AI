@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import '../../../../core/constants/app_colors.dart';
+import 'package:provider/provider.dart';
+
 import '../../../../core/widgets/app_dialog.dart';
 import '../../../auth/presentation/pages/login_page.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../widgets/profile_menu_tile.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -24,8 +26,7 @@ class _ProfilePageState extends State<ProfilePage> {
         elevation: 0.5,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Color(0xFF006B70)),
-          onPressed: () {
-          },
+          onPressed: () {},
         ),
         title: const Text(
           'Hồ sơ & Cài đặt',
@@ -56,7 +57,9 @@ class _ProfilePageState extends State<ProfilePage> {
                       children: [
                         const CircleAvatar(
                           radius: 40,
-                          backgroundImage: NetworkImage('https://i.pravatar.cc/150?img=11'),
+                          backgroundImage: NetworkImage(
+                            'https://i.pravatar.cc/150?img=11',
+                          ),
                         ),
                         Positioned(
                           bottom: 0,
@@ -92,11 +95,17 @@ class _ProfilePageState extends State<ProfilePage> {
                           SizedBox(height: 4),
                           Text(
                             'alex.johnson@example.com',
-                            style: TextStyle(fontSize: 14, color: Color(0xFF666666)),
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Color(0xFF666666),
+                            ),
                           ),
                           Text(
                             '+84 123 456 789',
-                            style: TextStyle(fontSize: 14, color: Color(0xFF666666)),
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Color(0xFF666666),
+                            ),
                           ),
                         ],
                       ),
@@ -118,7 +127,11 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.directions_car_rounded, color: Color(0xFF006B70), size: 28),
+                    const Icon(
+                      Icons.directions_car_rounded,
+                      color: Color(0xFF006B70),
+                      size: 28,
+                    ),
                     const SizedBox(width: 16),
                     const Expanded(
                       child: Column(
@@ -134,7 +147,10 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                           Text(
                             'Bắt đầu nhận chuyến đi',
-                            style: TextStyle(color: Color(0xFF666666), fontSize: 13),
+                            style: TextStyle(
+                              color: Color(0xFF666666),
+                              fontSize: 13,
+                            ),
                           ),
                         ],
                       ),
@@ -232,16 +248,38 @@ class _ProfilePageState extends State<ProfilePage> {
                       context: context,
                       icon: Icons.logout_rounded,
                       title: 'Đăng xuất?',
-                      description: 'Bạn có chắc chắn muốn đăng xuất khỏi ứng dụng?',
+                      description:
+                          'Bạn có chắc chắn muốn đăng xuất khỏi ứng dụng?',
                       confirmText: 'Đăng xuất',
                       cancelText: 'Hủy',
-                      onConfirm: () {
+                      onConfirm: () async {
                         // 1. Đóng Dialog bằng rootNavigator
                         Navigator.of(context, rootNavigator: true).pop();
-                        
+
+                        final loggedOut = await context
+                            .read<AuthProvider>()
+                            .logout();
+                        if (!context.mounted) return;
+
+                        if (!loggedOut) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Không thể đăng xuất. Vui lòng thử lại.',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+
                         // 2. Chuyển về màn hình Login và xóa toàn bộ stack cũ
-                        Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
-                          MaterialPageRoute(builder: (context) => const LoginPage()),
+                        Navigator.of(
+                          context,
+                          rootNavigator: true,
+                        ).pushAndRemoveUntil(
+                          MaterialPageRoute(
+                            builder: (context) => const LoginPage(),
+                          ),
                           (route) => false,
                         );
                       },
@@ -250,7 +288,11 @@ class _ProfilePageState extends State<ProfilePage> {
                   icon: const Icon(Icons.logout_rounded, color: Colors.red),
                   label: const Text(
                     'Đăng xuất',
-                    style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16),
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: Colors.red, width: 1.5),
@@ -295,9 +337,7 @@ class _ProfilePageState extends State<ProfilePage> {
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: Colors.grey.shade100),
         ),
-        child: Column(
-          children: children,
-        ),
+        child: Column(children: children),
       ),
     );
   }

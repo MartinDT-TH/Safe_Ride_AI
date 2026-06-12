@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SafeRide.Application.Features.Auth.DTOs;
 using SafeRide.Application.Features.Auth.Services;
@@ -86,6 +87,47 @@ public sealed class AuthApiTests
     }
 
     [Fact]
+    public async Task GoogleLogin_DoesNotModifyInactiveAccount()
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateClient();
+        Guid userId;
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AspNetUser>>();
+            var user = new AspNetUser
+            {
+                Id = Guid.NewGuid(),
+                UserName = "inactive-google-user",
+                Email = "google@example.test",
+                EmailConfirmed = false,
+                FullName = "Inactive User",
+                IsActive = false,
+                CreatedAt = DateTime.UtcNow
+            };
+            Assert.True((await userManager.CreateAsync(user)).Succeeded);
+            userId = user.Id;
+        }
+
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/google-login",
+            new GoogleLoginRequest { GoogleIdToken = "valid-google-token" });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("auth.account_inactive", await ReadProblemCodeAsync(response));
+
+        using var verificationScope = factory.Services.CreateScope();
+        var dbContext = verificationScope.ServiceProvider
+            .GetRequiredService<ApplicationDbContext>();
+        var unchangedUser = dbContext.Users.Single(x => x.Id == userId);
+        Assert.False(unchangedUser.EmailConfirmed);
+        Assert.Equal("Inactive User", unchangedUser.FullName);
+        Assert.Null(unchangedUser.AvatarUrl);
+        Assert.Null(unchangedUser.UpdatedAt);
+    }
+
+    [Fact]
     public async Task OtpLogin_Refresh_Me_AndReplay_FollowExpectedContract()
     {
         using var factory = new AuthApiFactory();
@@ -93,6 +135,16 @@ public sealed class AuthApiTests
 
         var login = await LoginAsync(factory, client, "0901234567");
         Assert.Equal("+84901234567", login.PhoneNumber);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var tokenService = scope.ServiceProvider.GetRequiredService<IJwtTokenService>();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var tokenHash = tokenService.HashToken(login.RefreshToken);
+            var storedToken = dbContext.RefreshTokens.Single(x => x.TokenHash == tokenHash);
+            Assert.Equal("integration-device", storedToken.DeviceId);
+            Assert.Equal("Integration Test", storedToken.DeviceName);
+        }
 
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", login.AccessToken);
@@ -183,6 +235,44 @@ public sealed class AuthApiTests
     }
 
     [Fact]
+    public async Task RefreshToken_ForInactiveUser_RevokesSession()
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateClient();
+        var login = await LoginAsync(factory, client, "0901234575");
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var tokenService = scope.ServiceProvider.GetRequiredService<IJwtTokenService>();
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AspNetUser>>();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var tokenHash = tokenService.HashToken(login.RefreshToken);
+            var refreshToken = dbContext.RefreshTokens
+                .Include(x => x.User)
+                .Single(x => x.TokenHash == tokenHash);
+            refreshToken.User.IsActive = false;
+            Assert.True((await userManager.UpdateAsync(refreshToken.User)).Succeeded);
+        }
+
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/refresh-token",
+            new RefreshTokenRequest { RefreshToken = login.RefreshToken });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("auth.account_inactive", await ReadProblemCodeAsync(response));
+
+        using var verificationScope = factory.Services.CreateScope();
+        var verificationTokenService = verificationScope.ServiceProvider
+            .GetRequiredService<IJwtTokenService>();
+        var verificationDbContext = verificationScope.ServiceProvider
+            .GetRequiredService<ApplicationDbContext>();
+        var hash = verificationTokenService.HashToken(login.RefreshToken);
+        Assert.NotNull(verificationDbContext.RefreshTokens
+            .Single(x => x.TokenHash == hash)
+            .RevokedAt);
+    }
+
+    [Fact]
     public async Task Validation_DemoLogin_AndSendOtpRateLimit_AreEnforced()
     {
         using var factory = new AuthApiFactory();
@@ -243,6 +333,14 @@ public sealed class AuthApiTests
             "/api/auth/refresh-token",
             new RefreshTokenRequest { RefreshToken = login.RefreshToken });
         Assert.Equal(HttpStatusCode.Unauthorized, refresh.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var tokenService = scope.ServiceProvider.GetRequiredService<IJwtTokenService>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var tokenHash = tokenService.HashToken(login.RefreshToken);
+        Assert.NotNull(dbContext.RefreshTokens
+            .Single(x => x.TokenHash == tokenHash)
+            .RevokedAt);
     }
 
     [Fact]

@@ -1,0 +1,48 @@
+import 'dart:math';
+
+import 'package:flutter/foundation.dart';
+
+import '../storage/secure_storage_service.dart';
+
+class DeviceIdentity {
+  final String id;
+  final String name;
+
+  const DeviceIdentity({required this.id, required this.name});
+}
+
+class DeviceIdentityService {
+  final SecureStorageService _storage;
+
+  DeviceIdentityService(this._storage);
+
+  Future<DeviceIdentity> getIdentity() async {
+    var deviceId = await _storage.readDeviceId();
+    if (deviceId == null || deviceId.isEmpty) {
+      deviceId = _generateDeviceId();
+      await _storage.saveDeviceId(deviceId);
+    }
+
+    return DeviceIdentity(id: deviceId, name: _deviceName);
+  }
+
+  String get _deviceName {
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.android => 'SafeRide Android',
+      TargetPlatform.iOS => 'SafeRide iOS',
+      TargetPlatform.macOS => 'SafeRide macOS',
+      TargetPlatform.windows => 'SafeRide Windows',
+      TargetPlatform.linux => 'SafeRide Linux',
+      TargetPlatform.fuchsia => 'SafeRide Fuchsia',
+    };
+  }
+
+  String _generateDeviceId() {
+    final random = Random.secure();
+    final randomPart = List.generate(
+      16,
+      (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+    ).join();
+    return 'saferide-${DateTime.now().microsecondsSinceEpoch}-$randomPart';
+  }
+}

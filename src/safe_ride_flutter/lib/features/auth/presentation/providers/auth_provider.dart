@@ -29,12 +29,16 @@
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../../../../core/services/device_identity_service.dart';
+import '../../../../core/storage/secure_storage_service.dart';
 import '../../domain/repositories/auth_repository.dart';
 
 class AuthProvider extends ChangeNotifier {
   final AuthRepository repository;
+  final SecureStorageService _storage;
+  final DeviceIdentityService _deviceIdentityService;
 
-  AuthProvider(this.repository);
+  AuthProvider(this.repository, this._storage, this._deviceIdentityService);
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -76,10 +80,14 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      final response = await repository.verifyOtp(phone, otpCode);
-      final message = response['message']?.toString() ?? '';
-
-      return message.toLowerCase().contains('hợp lệ');
+      final device = await _deviceIdentityService.getIdentity();
+      final response = await repository.verifyOtp(
+        phone,
+        otpCode,
+        device.id,
+        device.name,
+      );
+      return await _saveSession(response);
     } catch (e) {
       debugPrint('Verify OTP error: $e');
       return false;
@@ -114,11 +122,15 @@ class AuthProvider extends ChangeNotifier {
         return false;
       }
 
-      final response = await repository.googleLogin(idToken);
+      final device = await _deviceIdentityService.getIdentity();
+      final response = await repository.googleLogin(
+        idToken,
+        device.id,
+        device.name,
+      );
       debugPrint('Google login response: $response');
 
-      _token = response['accessToken']?.toString();
-      return _token != null && _token!.isNotEmpty;
+      return await _saveSession(response);
     } catch (e) {
       debugPrint('Google sign in error: $e');
       return false;
@@ -126,5 +138,48 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  Future<bool> logout() async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      final refreshToken = await _storage.readRefreshToken();
+      if (refreshToken == null || refreshToken.isEmpty) {
+        debugPrint('Cannot revoke session because refresh token is missing.');
+        return false;
+      }
+
+      await repository.logout(refreshToken);
+      await _storage.clearTokens();
+      _token = null;
+      return true;
+    } catch (e) {
+      debugPrint('Logout error: $e');
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> _saveSession(Map<String, dynamic> response) async {
+    final accessToken = response['accessToken']?.toString();
+    final refreshToken = response['refreshToken']?.toString();
+    if (accessToken == null ||
+        accessToken.isEmpty ||
+        refreshToken == null ||
+        refreshToken.isEmpty) {
+      debugPrint('Auth response is missing tokens: $response');
+      return false;
+    }
+
+    await _storage.saveTokens(
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+    );
+    _token = accessToken;
+    return true;
   }
 }
