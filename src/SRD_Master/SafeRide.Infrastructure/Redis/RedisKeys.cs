@@ -1,4 +1,4 @@
-﻿using System;
+﻿﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -10,6 +10,9 @@ public static class RedisKeys
 {
     public static string Otp(string phoneNumber)
         => $"otp:{phoneNumber}";
+
+    public static string OtpAttempts(string phoneNumber)
+        => $"otp:attempts:{phoneNumber}";
 
     public static string RefreshToken(string tokenHash)
         => $"auth:refresh:{tokenHash}";

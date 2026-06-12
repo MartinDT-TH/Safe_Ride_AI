@@ -3,7 +3,9 @@
   <Project Path="SafeRide.Contracts/SafeRide.Contracts.csproj" Id="65049b47-a6b0-467c-93ca-bd3e642169e6" />
   <Project Path="SafeRide.Domain/SafeRide.Domain.csproj" />
   <Project Path="SafeRide.Infrastructure/SafeRide.Infrastructure.csproj" />
+  <Project Path="SafeRide.IntegrationTests/SafeRide.IntegrationTests.csproj" />
   <Project Path="SafeRide.API/SafeRide.API.csproj" />
   <Project Path="SafeRide.Realtime/SafeRide.Realtime.csproj" Id="c5b06efc-fbdc-44b2-aa1b-7e0f4cfbaa82" />
   <Project Path="SafeRide.Shared/SafeRide.Shared.csproj" Id="33959527-eade-44ae-ad65-e1a07859d1bd" />
+  <Project Path="SafeRide.UnitTests/SafeRide.UnitTests.csproj" />
 </Solution>
