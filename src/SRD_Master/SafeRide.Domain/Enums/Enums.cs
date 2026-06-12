@@ -1,4 +1,4 @@
-﻿namespace SafeRide.Domain.Enums;
+﻿﻿namespace SafeRide.Domain.Enums;
 
 // ================================================================
 // USER
@@ -47,11 +47,6 @@ public enum LicenseClass
     A,
     B1,
     B,
-    C1,
-    C,
-    D1,
-    D2,
-    D,
 
     Old_B1,
     Old_B2,
