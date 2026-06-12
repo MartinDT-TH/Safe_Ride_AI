@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:pin_code_fields/pin_code_fields.dart';
+import 'package:provider/provider.dart';
 
-import '../../../../core/constants/app_colors.dart';
 import '../../../../core/widgets/custom_button.dart';
+import '../providers/auth_provider.dart';
 import '../../../onboarding/presentation/pages/role_selection_page.dart';
 
 class OtpPage extends StatefulWidget {
-  const OtpPage({super.key});
+  final String phoneNumber;
+
+  const OtpPage({super.key, required this.phoneNumber});
 
   @override
   State<OtpPage> createState() => _OtpPageState();
@@ -78,8 +81,8 @@ class _OtpPageState extends State<OtpPage> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      const Text(
-                        'Vui lòng nhập mã gồm 6 chữ số đã được\ngửi đến số điện thoại của bạn.',
+                      Text(
+                        'Vui lòng nhập mã gồm 6 chữ số đã được\ngửi đến ${widget.phoneNumber}.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 15,
@@ -131,8 +134,13 @@ class _OtpPageState extends State<OtpPage> {
                       ),
                       const SizedBox(height: 8),
                       TextButton(
-                        onPressed: () {
-                          // Resend OTP logic
+                        onPressed: () async {
+                          final provider = context.read<AuthProvider>();
+                          final ok = await provider.login(widget.phoneNumber);
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(ok ? 'Đã gửi lại OTP.' : 'Không thể gửi lại OTP.')),
+                          );
                         },
                         child: const Text(
                           'Gửi lại OTP',
@@ -146,21 +154,36 @@ class _OtpPageState extends State<OtpPage> {
                   ),
                 ),
               ),
-              CustomButton(
-                text: 'Xác nhận',
-                onPressed: () {
-                  if (otpCode == '123456') {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const RoleSelectionPage(),
-                      ),
-                    );
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('OTP không đúng')),
-                    );
-                  }
+              Consumer<AuthProvider>(
+                builder: (_, provider, __) {
+                  return CustomButton(
+                    text: 'Xác nhận',
+                    isLoading: provider.isLoading,
+                    onPressed: () async {
+                      if (otpCode.length != 6) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Vui lòng nhập đủ 6 số OTP')),
+                        );
+                        return;
+                      }
+
+                      final ok = await provider.verifyOtp(widget.phoneNumber, otpCode);
+                      if (!context.mounted) return;
+
+                      if (ok) {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const RoleSelectionPage(),
+                          ),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('OTP không đúng hoặc đã hết hạn')),
+                        );
+                      }
+                    },
+                  );
                 },
               ),
               const SizedBox(height: 24),

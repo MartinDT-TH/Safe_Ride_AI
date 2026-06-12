@@ -6,6 +6,8 @@ public interface IAuthService
 {
     Task SendOtpAsync(SendOtpRequest request);
 
+    Task<bool> VerifyOtpAsync(VerifyOtpRequest request);
+
     Task<AuthResponse> FirebaseLoginAsync(
         FirebaseLoginRequest request,
         string? ipAddress,

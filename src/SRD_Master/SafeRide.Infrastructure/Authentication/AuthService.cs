@@ -56,6 +56,32 @@ public class AuthService : IAuthService
         await _speedSmsService.SendOtpAsync(phoneNumber, otpCode);
     }
 
+    public async Task<bool> VerifyOtpAsync(VerifyOtpRequest request)
+    {
+        var phoneNumber = NormalizePhoneNumber(request.PhoneNumber);
+
+        if (string.IsNullOrWhiteSpace(phoneNumber) || string.IsNullOrWhiteSpace(request.OtpCode))
+        {
+            return false;
+        }
+
+        var storedOtp = await _redisService.GetAsync(RedisKeys.Otp(phoneNumber));
+
+        if (string.IsNullOrWhiteSpace(storedOtp))
+        {
+            return false;
+        }
+
+        var isValid = string.Equals(storedOtp.Trim(), request.OtpCode.Trim(), StringComparison.OrdinalIgnoreCase);
+
+        if (isValid)
+        {
+            await _redisService.RemoveAsync(RedisKeys.Otp(phoneNumber));
+        }
+
+        return isValid;
+    }
+
     private static string NormalizePhoneNumber(string phoneNumber)
     {
         if (string.IsNullOrWhiteSpace(phoneNumber))

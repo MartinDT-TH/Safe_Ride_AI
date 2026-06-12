@@ -155,6 +155,25 @@ public class AuthController : ControllerBase
         });
     }
 
+    [HttpPost("verify-otp")]
+    public async Task<IActionResult> VerifyOtp([FromBody] VerifyOtpRequest request)
+    {
+        var isValid = await _authService.VerifyOtpAsync(request);
+
+        if (!isValid)
+        {
+            return BadRequest(new
+            {
+                message = "OTP không đúng hoặc đã hết hạn."
+            });
+        }
+
+        return Ok(new
+        {
+            message = "OTP hợp lệ."
+        });
+    }
+
     [HttpPost("firebase-login")]
     public async Task<IActionResult> FirebaseLogin(
         [FromBody] FirebaseLoginRequest request)

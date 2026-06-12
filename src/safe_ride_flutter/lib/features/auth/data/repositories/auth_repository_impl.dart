@@ -23,10 +23,17 @@ class AuthRepositoryImpl implements AuthRepository {
   AuthRepositoryImpl(this.remoteDatasource);
 
   @override
-  Future<Map<String, dynamic>> login(
-      String phone,
-      ) async {
-
+  Future<Map<String, dynamic>> login(String phone) async {
     return await remoteDatasource.login(phone);
+  }
+
+  @override
+  Future<Map<String, dynamic>> verifyOtp(String phone, String otpCode) async {
+    return await remoteDatasource.verifyOtp(phone, otpCode);
+  }
+
+  @override
+  Future<Map<String, dynamic>> firebaseLogin(String firebaseIdToken) async {
+    return await remoteDatasource.firebaseLogin(firebaseIdToken);
   }
 }

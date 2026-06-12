@@ -17,6 +17,17 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final phoneController = TextEditingController();
 
+  String _normalizePhone(String value) {
+    final digits = value.replaceAll(RegExp(r'\D'), '');
+    if (digits.length == 9) {
+      return '+84$digits';
+    }
+    if (digits.length == 10 && digits.startsWith('0')) {
+      return '+84${digits.substring(1)}';
+    }
+    return digits;
+  }
+
   @override
   void dispose() {
     phoneController.dispose();
@@ -45,7 +56,7 @@ class _LoginPageState extends State<LoginPage> {
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.grey.withOpacity(0.2),
+                        color: Colors.grey.withValues(alpha: 0.2),
                         spreadRadius: 2,
                         blurRadius: 10,
                         offset: const Offset(0, 5),
@@ -111,13 +122,15 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 24),
 
                 Consumer<AuthProvider>(
-                  builder: (_, provider, __) {
+                  builder: (context, provider, child) {
                     return CustomButton(
                       text: 'Tiếp tục / Đăng ký',
                       isLoading: provider.isLoading,
                       onPressed: () async {
-                        final phone = phoneController.text.trim();
-                        if (phone.isEmpty) {
+                        final rawPhone = phoneController.text.trim();
+                        final normalizedPhone = _normalizePhone(rawPhone);
+
+                        if (rawPhone.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text('Vui lòng nhập số điện thoại'),
@@ -126,7 +139,7 @@ class _LoginPageState extends State<LoginPage> {
                           return;
                         }
 
-                        if (phone.length != 9) {
+                        if (normalizedPhone.length != 12 || !normalizedPhone.startsWith('+84')) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text('Số điện thoại không hợp lệ'),
@@ -135,13 +148,17 @@ class _LoginPageState extends State<LoginPage> {
                           return;
                         }
 
-                        final success = await provider.login(
-                          phoneController.text,
-                        );
+                        final success = await provider.login(normalizedPhone);
                         if (success && context.mounted) {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (__) => const OtpPage()),
+                            MaterialPageRoute(
+                              builder: (_) => OtpPage(phoneNumber: normalizedPhone),
+                            ),
+                          );
+                        } else if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Không thể gửi OTP. Kiểm tra API hoặc số điện thoại.')),
                           );
                         }
                       },
@@ -172,27 +189,43 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 32),
 
-                ElevatedButton.icon(
-                  onPressed: () {
+                Consumer<AuthProvider>(
+                  builder: (context, provider, child) {
+                    return ElevatedButton.icon(
+                      onPressed: () async {
+                        final ok = await provider.signInWithGoogle();
+                        if (!context.mounted) return;
+
+                        if (ok) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Đăng nhập Google thành công')),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Đăng nhập Google thất bại')),
+                          );
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: AppColors.textPrimary,
+                        minimumSize: const Size(double.infinity, 56),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          side: const BorderSide(color: AppColors.border),
+                        ),
+                        elevation: 0,
+                      ),
+                      icon: Image.network(
+                        'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ2sSeQqjaUTuZ3gRgkKjidpaipF_l6s72lBw&s',
+                        height: 24,
+                      ),
+                      label: const Text(
+                        'Google',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                      ),
+                    );
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: AppColors.textPrimary,
-                    minimumSize: const Size(double.infinity, 56),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: const BorderSide(color: AppColors.border),
-                    ),
-                    elevation: 0,
-                  ),
-                  icon: Image.network(
-                    'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ2sSeQqjaUTuZ3gRgkKjidpaipF_l6s72lBw&s',
-                    height: 24,
-                  ),
-                  label: const Text(
-                    'Google',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                  ),
                 ),
                 const SizedBox(height: 48),
 

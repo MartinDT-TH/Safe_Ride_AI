@@ -15,29 +15,46 @@
 //   }
 // }
 
-import 'dart:async';
+import 'package:dio/dio.dart';
+
+import '../../../../core/network/dio_client.dart';
 
 class AuthRemoteDatasource {
+  final Dio _dio;
 
-  Future<Map<String, dynamic>> login(
-      String phone,
-      ) async {
+  AuthRemoteDatasource({Dio? dio}) : _dio = dio ?? DioClient().dio;
 
-    await Future.delayed(
-      const Duration(seconds: 2),
+  Future<Map<String, dynamic>> login(String phone) async {
+    final response = await _dio.post(
+      '/auth/send-otp',
+      data: {'phoneNumber': phone},
     );
 
-    return {
-      'success': true,
+    return Map<String, dynamic>.from(response.data as Map);
+  }
 
-      'message': 'Login success',
+  Future<Map<String, dynamic>> verifyOtp(String phone, String otpCode) async {
+    final response = await _dio.post(
+      '/auth/verify-otp',
+      data: {
+        'phoneNumber': phone,
+        'otpCode': otpCode,
+      },
+    );
 
-      'data': {
-        'id': 1,
-        'name': 'Alex',
-        'phone': phone,
-        'token': 'fake_jwt_token',
-      }
-    };
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<Map<String, dynamic>> firebaseLogin(String firebaseIdToken) async {
+    final response = await _dio.post(
+      '/auth/firebase-login',
+      data: {
+        'firebaseIdToken': firebaseIdToken,
+        'deviceId': 'flutter-device',
+        'deviceName': 'SafeRide Flutter',
+      },
+    );
+
+    return Map<String, dynamic>.from(response.data as Map);
   }
 }
