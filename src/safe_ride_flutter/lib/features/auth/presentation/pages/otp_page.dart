@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../providers/auth_provider.dart';
 import '../../../onboarding/presentation/pages/role_selection_page.dart';
+import '../../../home/presentation/pages/customer_home_page.dart';
+import '../../../profile/presentation/pages/edit_profile_page.dart';
 
 class OtpPage extends StatefulWidget {
   final String phoneNumber;
@@ -39,10 +41,7 @@ class _OtpPageState extends State<OtpPage> {
         centerTitle: true,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(
-            color: Colors.grey.shade100,
-            height: 1,
-          ),
+          child: Container(color: Colors.grey.shade100, height: 1),
         ),
       ),
       body: SafeArea(
@@ -137,17 +136,20 @@ class _OtpPageState extends State<OtpPage> {
                         onPressed: () async {
                           final provider = context.read<AuthProvider>();
                           final ok = await provider.login(widget.phoneNumber);
-                          if (!mounted) return;
+                          if (!context.mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(ok ? 'Đã gửi lại OTP.' : 'Không thể gửi lại OTP.')),
+                            SnackBar(
+                              content: Text(
+                                ok
+                                    ? 'Đã gửi lại OTP.'
+                                    : 'Không thể gửi lại OTP.',
+                              ),
+                            ),
                           );
                         },
                         child: const Text(
                           'Gửi lại OTP',
-                          style: TextStyle(
-                            color: Colors.grey,
-                            fontSize: 15,
-                          ),
+                          style: TextStyle(color: Colors.grey, fontSize: 15),
                         ),
                       ),
                     ],
@@ -155,31 +157,45 @@ class _OtpPageState extends State<OtpPage> {
                 ),
               ),
               Consumer<AuthProvider>(
-                builder: (_, provider, __) {
+                builder: (_, provider, child) {
                   return CustomButton(
                     text: 'Xác nhận',
                     isLoading: provider.isLoading,
                     onPressed: () async {
                       if (otpCode.length != 6) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Vui lòng nhập đủ 6 số OTP')),
+                          const SnackBar(
+                            content: Text('Vui lòng nhập đủ 6 số OTP'),
+                          ),
                         );
                         return;
                       }
 
-                      final ok = await provider.verifyOtp(widget.phoneNumber, otpCode);
+                      final ok = await provider.verifyOtp(
+                        widget.phoneNumber,
+                        otpCode,
+                      );
                       if (!context.mounted) return;
 
                       if (ok) {
+                        final Widget destination = switch (provider.nextStep) {
+                          AuthNextStep.completeProfile => EditProfilePage(
+                            requiredCompletion: true,
+                            phoneNumber:
+                                provider.phoneNumber ?? widget.phoneNumber,
+                          ),
+                          AuthNextStep.selectRole => const RoleSelectionPage(),
+                          AuthNextStep.customerHome => const CustomerHomePage(),
+                        };
                         Navigator.pushReplacement(
                           context,
-                          MaterialPageRoute(
-                            builder: (_) => const RoleSelectionPage(),
-                          ),
+                          MaterialPageRoute(builder: (_) => destination),
                         );
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('OTP không đúng hoặc đã hết hạn')),
+                          const SnackBar(
+                            content: Text('OTP không đúng hoặc đã hết hạn'),
+                          ),
                         );
                       }
                     },

@@ -33,6 +33,8 @@ import '../../../../core/services/device_identity_service.dart';
 import '../../../../core/storage/secure_storage_service.dart';
 import '../../domain/repositories/auth_repository.dart';
 
+enum AuthNextStep { completeProfile, customerHome, selectRole }
+
 class AuthProvider extends ChangeNotifier {
   final AuthRepository repository;
   final SecureStorageService _storage;
@@ -48,6 +50,21 @@ class AuthProvider extends ChangeNotifier {
 
   String? _lastPhone;
   String? get lastPhone => _lastPhone;
+
+  AuthNextStep _nextStep = AuthNextStep.customerHome;
+  AuthNextStep get nextStep => _nextStep;
+
+  String? _fullName;
+  String? get fullName => _fullName;
+
+  String? _phoneNumber;
+  String? get phoneNumber => _phoneNumber;
+
+  String? _email;
+  String? get email => _email;
+
+  String? _avatarUrl;
+  String? get avatarUrl => _avatarUrl;
 
   Future<bool> login(String phone) async {
     _lastPhone = phone;
@@ -87,7 +104,11 @@ class AuthProvider extends ChangeNotifier {
         device.id,
         device.name,
       );
-      return await _saveSession(response);
+      final saved = await _saveSession(response);
+      if (saved) {
+        _readAuthState(response);
+      }
+      return saved;
     } catch (e) {
       debugPrint('Verify OTP error: $e');
       return false;
@@ -130,9 +151,64 @@ class AuthProvider extends ChangeNotifier {
       );
       debugPrint('Google login response: $response');
 
-      return await _saveSession(response);
+      final saved = await _saveSession(response);
+      if (saved) {
+        _readAuthState(response);
+      }
+      return saved;
     } catch (e) {
       debugPrint('Google sign in error: $e');
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> updateProfile(String fullName, String? email) async {
+    final accessToken = _token;
+    if (accessToken == null || accessToken.isEmpty) {
+      return false;
+    }
+
+    try {
+      _isLoading = true;
+      notifyListeners();
+      final response = await repository.updateProfile(
+        accessToken,
+        fullName.trim(),
+        email,
+      );
+      _fullName = response['fullName']?.toString();
+      _email = response['email']?.toString();
+      _nextStep = AuthNextStep.customerHome;
+      return true;
+    } catch (e) {
+      debugPrint('Update profile error: $e');
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> uploadAvatar(String filePath) async {
+    final accessToken = _token;
+    if (accessToken == null || accessToken.isEmpty) {
+      return false;
+    }
+
+    try {
+      _isLoading = true;
+      notifyListeners();
+      final avatarUrl = await repository.uploadAvatar(accessToken, filePath);
+      if (avatarUrl.isEmpty) {
+        return false;
+      }
+      _avatarUrl = avatarUrl;
+      return true;
+    } catch (e) {
+      debugPrint('Upload avatar error: $e');
       return false;
     } finally {
       _isLoading = false;
@@ -181,5 +257,17 @@ class AuthProvider extends ChangeNotifier {
     );
     _token = accessToken;
     return true;
+  }
+
+  void _readAuthState(Map<String, dynamic> response) {
+    _fullName = response['fullName']?.toString();
+    _phoneNumber = response['phoneNumber']?.toString();
+    _email = response['email']?.toString();
+    _avatarUrl = response['avatarUrl']?.toString();
+    _nextStep = switch (response['nextStep']?.toString()) {
+      'completeProfile' => AuthNextStep.completeProfile,
+      'selectRole' => AuthNextStep.selectRole,
+      _ => AuthNextStep.customerHome,
+    };
   }
 }

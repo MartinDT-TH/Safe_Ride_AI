@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../../core/widgets/app_dialog.dart';
 import '../../../auth/presentation/pages/login_page.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import 'edit_profile_page.dart';
 import '../widgets/profile_menu_tile.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -19,6 +20,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
     return Scaffold(
       backgroundColor: const Color(0xFFFCF9F9),
       appBar: AppBar(
@@ -55,11 +57,20 @@ class _ProfilePageState extends State<ProfilePage> {
                   children: [
                     Stack(
                       children: [
-                        const CircleAvatar(
+                        CircleAvatar(
                           radius: 40,
-                          backgroundImage: NetworkImage(
-                            'https://i.pravatar.cc/150?img=11',
-                          ),
+                          backgroundColor: const Color(0xFFE8F2F2),
+                          backgroundImage: _avatarImage(auth.avatarUrl),
+                          child: _avatarImage(auth.avatarUrl) == null
+                              ? Text(
+                                  _initials(auth.fullName),
+                                  style: const TextStyle(
+                                    color: Color(0xFF006B70),
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                )
+                              : null,
                         ),
                         Positioned(
                           bottom: 0,
@@ -80,29 +91,30 @@ class _ProfilePageState extends State<ProfilePage> {
                       ],
                     ),
                     const SizedBox(width: 16),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Alex Johnson',
-                            style: TextStyle(
+                            _displayName(auth.fullName),
+                            style: const TextStyle(
                               fontSize: 22,
                               fontWeight: FontWeight.bold,
                               color: Color(0xFF1A1A1A),
                             ),
                           ),
-                          SizedBox(height: 4),
-                          Text(
-                            'alex.johnson@example.com',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Color(0xFF666666),
+                          const SizedBox(height: 4),
+                          if ((auth.email?.trim().isNotEmpty ?? false))
+                            Text(
+                              auth.email!,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Color(0xFF666666),
+                              ),
                             ),
-                          ),
                           Text(
-                            '+84 123 456 789',
-                            style: TextStyle(
+                            auth.phoneNumber ?? '',
+                            style: const TextStyle(
                               fontSize: 14,
                               color: Color(0xFF666666),
                             ),
@@ -137,7 +149,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             'Chuyển sang chế độ Tài xế',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
@@ -158,7 +170,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     Switch(
                       value: _isDriverMode,
                       onChanged: (val) => setState(() => _isDriverMode = val),
-                      activeColor: Colors.white,
+                      activeThumbColor: Colors.white,
                       activeTrackColor: const Color(0xFF006B70),
                     ),
                   ],
@@ -171,9 +183,17 @@ class _ProfilePageState extends State<ProfilePage> {
             // 3. Section: TÀI KHOẢN
             _buildSectionLabel('TÀI KHOẢN'),
             _buildMenuContainer([
-              const ProfileMenuTile(
+              ProfileMenuTile(
                 icon: Icons.person_outline_rounded,
                 title: 'Chỉnh sửa hồ sơ',
+                onTap: () async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          EditProfilePage(phoneNumber: auth.phoneNumber),
+                    ),
+                  );
+                },
               ),
               const ProfileMenuTile(
                 icon: Icons.link_rounded,
@@ -203,7 +223,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 trailingWidget: Switch(
                   value: _isDarkMode,
                   onChanged: (val) => setState(() => _isDarkMode = val),
-                  activeColor: Colors.white,
+                  activeThumbColor: Colors.white,
                   activeTrackColor: const Color(0xFF006B70),
                 ),
               ),
@@ -340,5 +360,24 @@ class _ProfilePageState extends State<ProfilePage> {
         child: Column(children: children),
       ),
     );
+  }
+
+  String _displayName(String? fullName) {
+    final value = fullName?.trim() ?? '';
+    return value.isEmpty || value == 'Người dùng SafeRide'
+        ? 'Người dùng SafeRide'
+        : value;
+  }
+
+  String _initials(String? fullName) {
+    final name = _displayName(fullName);
+    if (name == 'Người dùng SafeRide') return 'SR';
+    final words = name.split(RegExp(r'\s+'));
+    return words.take(2).map((word) => word[0].toUpperCase()).join();
+  }
+
+  ImageProvider? _avatarImage(String? avatarUrl) {
+    final value = avatarUrl?.trim() ?? '';
+    return value.isEmpty ? null : NetworkImage(value);
   }
 }

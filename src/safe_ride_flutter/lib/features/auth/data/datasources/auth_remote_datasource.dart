@@ -16,6 +16,7 @@
 // }
 
 import 'package:dio/dio.dart';
+import 'package:http_parser/http_parser.dart';
 
 import '../../../../core/network/dio_client.dart';
 
@@ -67,6 +68,50 @@ class AuthRemoteDatasource {
     );
 
     return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<Map<String, dynamic>> updateProfile(
+    String accessToken,
+    String fullName,
+    String? email,
+  ) async {
+    final response = await _dio.put(
+      '/auth/profile',
+      data: {
+        'fullName': fullName,
+        'email': email?.trim().isEmpty == true ? null : email?.trim(),
+      },
+      options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
+    );
+
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<String> uploadAvatar(String accessToken, String filePath) async {
+    final fileName = filePath.split(RegExp(r'[/\\]')).last;
+    final extension = fileName.split('.').last.toLowerCase();
+    final contentType = switch (extension) {
+      'png' => 'image/png',
+      'webp' => 'image/webp',
+      _ => 'image/jpeg',
+    };
+    final response = await _dio.post(
+      '/auth/profile/avatar',
+      data: FormData.fromMap({
+        'file': await MultipartFile.fromFile(
+          filePath,
+          filename: fileName,
+          contentType: MediaType.parse(contentType),
+        ),
+      }),
+      options: Options(
+        headers: {'Authorization': 'Bearer $accessToken'},
+        contentType: 'multipart/form-data',
+      ),
+    );
+
+    final data = Map<String, dynamic>.from(response.data as Map);
+    return data['avatarUrl']?.toString() ?? '';
   }
 
   Future<void> logout(String refreshToken) async {

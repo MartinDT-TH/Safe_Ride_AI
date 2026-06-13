@@ -191,6 +191,62 @@ public sealed class AuthApiTests
     }
 
     [Fact]
+    public async Task Otp_NewUser_RequiresProfileCompletion()
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateClient();
+
+        var login = await LoginAsync(factory, client, "0901234580");
+
+        Assert.Equal(AuthNextSteps.CompleteProfile, login.NextStep);
+        Assert.Equal(new[] { "Customer" }, login.Roles);
+    }
+
+    [Fact]
+    public async Task Otp_ExistingCustomer_GoesToCustomerHome()
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateClient();
+        const string phone = "0901234581";
+        await LoginAsync(factory, client, phone);
+        await SetFullNameAsync(factory, "+84901234581", "Existing Customer");
+
+        var secondLogin = await LoginAsync(factory, client, phone);
+
+        Assert.Equal(AuthNextSteps.CustomerHome, secondLogin.NextStep);
+        Assert.Equal(new[] { "Customer" }, secondLogin.Roles);
+    }
+
+    [Fact]
+    public async Task Otp_RegisteredDriver_MustSelectRole()
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateClient();
+        const string phone = "0901234582";
+        await LoginAsync(factory, client, phone);
+        await SetFullNameAsync(factory, "+84901234582", "Registered Driver");
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var driverId = dbContext.AspNetUsers
+                .Where(x => x.PhoneNumber == "+84901234582")
+                .Select(x => x.Id)
+                .Single();
+            dbContext.DriverProfiles.Add(new DriverProfile
+            {
+                DriverId = driverId,
+                IdentityCardNumber = "079123456789"
+            });
+            await dbContext.SaveChangesAsync();
+        }
+
+        var secondLogin = await LoginAsync(factory, client, phone);
+
+        Assert.Equal(AuthNextSteps.SelectRole, secondLogin.NextStep);
+    }
+
+    [Fact]
     public async Task Otp_FifthInvalidAttempt_BlocksAndConsumesCode()
     {
         using var factory = new AuthApiFactory();
@@ -376,6 +432,18 @@ public sealed class AuthApiTests
         var response = await VerifyOtpAsync(client, phone, code);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         return (await response.Content.ReadFromJsonAsync<AuthResponse>())!;
+    }
+
+    private static async Task SetFullNameAsync(
+        AuthApiFactory factory,
+        string phoneNumber,
+        string fullName)
+    {
+        using var scope = factory.Services.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AspNetUser>>();
+        var user = userManager.Users.Single(x => x.PhoneNumber == phoneNumber);
+        user.FullName = fullName;
+        Assert.True((await userManager.UpdateAsync(user)).Succeeded);
     }
 
     private static async Task<string> SendOtpAndGetCodeAsync(

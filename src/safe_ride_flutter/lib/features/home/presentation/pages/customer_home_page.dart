@@ -6,6 +6,7 @@ import '../widgets/quick_action_item.dart';
 import '../widgets/recent_trip_card.dart';
 import '../widgets/promo_banner.dart';
 import '../../../profile/presentation/pages/profile_page.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 
 class CustomerHomePage extends StatefulWidget {
   const CustomerHomePage({super.key});
@@ -20,13 +21,19 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       context.read<HomeProvider>().loadHomeData();
     });
   }
 
   // Hàm tiện ích để tạo item cho BottomNavigationBar với hiệu ứng pill background
-  BottomNavigationBarItem _buildNavItem(IconData icon, IconData activeIcon, String label, int index) {
+  BottomNavigationBarItem _buildNavItem(
+    IconData icon,
+    IconData activeIcon,
+    String label,
+    int index,
+  ) {
     bool isSelected = _selectedIndex == index;
     return BottomNavigationBarItem(
       icon: Container(
@@ -46,8 +53,9 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
     final List<Widget> pages = [
-      _buildHomeContent(),
+      _buildHomeContent(auth),
       const Center(child: Text('Activity Page')),
       const Center(child: Text('Wallet Page')),
       const ProfilePage(),
@@ -55,80 +63,111 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFFCF9F9),
-      appBar: _selectedIndex == 0 
-        ? AppBar(
-            backgroundColor: Colors.white,
-            elevation: 0.5,
-            leading: GestureDetector(
-              onTap: () => setState(() => _selectedIndex = 3), // Chuyển sang tab Profile khi ấn Avatar
-              child: const Padding(
-                padding: EdgeInsets.only(left: 16, top: 8, bottom: 8),
-                child: CircleAvatar(
-                  backgroundImage: NetworkImage('https://i.pravatar.cc/150?img=11'),
+      appBar: _selectedIndex == 0
+          ? AppBar(
+              backgroundColor: Colors.white,
+              elevation: 0.5,
+              leading: GestureDetector(
+                onTap: () => setState(
+                  () => _selectedIndex = 3,
+                ), // Chuyển sang tab Profile khi ấn Avatar
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 16, top: 8, bottom: 8),
+                  child: CircleAvatar(
+                    backgroundColor: const Color(0xFFE8F2F2),
+                    backgroundImage: _avatarImage(auth.avatarUrl),
+                    child: _avatarImage(auth.avatarUrl) == null
+                        ? Text(
+                            _initials(auth.fullName),
+                            style: const TextStyle(
+                              color: Color(0xFF006B70),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )
+                        : null,
+                  ),
                 ),
               ),
-            ),
-            title: const Text(
-              'SafeRide',
-              style: TextStyle(
-                color: Color(0xFF006B70),
-                fontWeight: FontWeight.bold,
-                fontSize: 22,
+              title: const Text(
+                'SafeRide',
+                style: TextStyle(
+                  color: Color(0xFF006B70),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 22,
+                ),
               ),
-            ),
-            centerTitle: true,
-            actions: [
-              Stack(
-                alignment: Alignment.center,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF006B70), size: 28),
-                    onPressed: () {},
-                  ),
-                  Positioned(
-                    top: 14,
-                    right: 14,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: Colors.red,
-                        shape: BoxShape.circle,
+              centerTitle: true,
+              actions: [
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    IconButton(
+                      icon: const Icon(
+                        Icons.notifications_none_rounded,
+                        color: Color(0xFF006B70),
+                        size: 28,
+                      ),
+                      onPressed: () {},
+                    ),
+                    Positioned(
+                      top: 14,
+                      right: 14,
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
                       ),
                     ),
-                  )
-                ],
-              ),
-              const SizedBox(width: 8),
-            ],
-          )
-        : null,
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: pages,
-      ),
+                  ],
+                ),
+                const SizedBox(width: 8),
+              ],
+            )
+          : null,
+      body: IndexedStack(index: _selectedIndex, children: pages),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         type: BottomNavigationBarType.fixed,
         selectedItemColor: const Color(0xFF006B70),
         unselectedItemColor: Colors.grey,
         showUnselectedLabels: true,
-        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+        selectedLabelStyle: const TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 12,
+        ),
         unselectedLabelStyle: const TextStyle(fontSize: 12),
         onTap: (index) => setState(() => _selectedIndex = index),
         items: [
           _buildNavItem(Icons.home_outlined, Icons.home_filled, 'Trang chủ', 0),
-          _buildNavItem(Icons.assignment_outlined, Icons.assignment_rounded, 'Hoạt động', 1),
-          _buildNavItem(Icons.account_balance_wallet_outlined, Icons.account_balance_wallet_rounded, 'Ví', 2),
-          _buildNavItem(Icons.person_outline_rounded, Icons.person_rounded, 'Tài khoản', 3),
+          _buildNavItem(
+            Icons.assignment_outlined,
+            Icons.assignment_rounded,
+            'Hoạt động',
+            1,
+          ),
+          _buildNavItem(
+            Icons.account_balance_wallet_outlined,
+            Icons.account_balance_wallet_rounded,
+            'Ví',
+            2,
+          ),
+          _buildNavItem(
+            Icons.person_outline_rounded,
+            Icons.person_rounded,
+            'Tài khoản',
+            3,
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildHomeContent() {
+  Widget _buildHomeContent(AuthProvider auth) {
     return Consumer<HomeProvider>(
-      builder: (_, provider, __) {
+      builder: (_, provider, child) {
         if (provider.isLoading) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -138,9 +177,9 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Chào Alex,',
-                style: TextStyle(
+              Text(
+                'Chào ${_displayName(auth.fullName)},',
+                style: const TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
                   color: Color(0xFF1A1A1A),
@@ -151,7 +190,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                 style: TextStyle(fontSize: 16, color: Color(0xFF666666)),
               ),
               const SizedBox(height: 24),
-              
+
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(24),
@@ -167,7 +206,11 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                       children: [
                         Text(
                           'Đặt ngay',
-                          style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         SizedBox(height: 4),
                         Text(
@@ -176,15 +219,22 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                         ),
                       ],
                     ),
-                    Icon(Icons.directions_car_rounded, color: Colors.white, size: 54),
+                    Icon(
+                      Icons.directions_car_rounded,
+                      color: Colors.white,
+                      size: 54,
+                    ),
                   ],
                 ),
               ),
               const SizedBox(height: 12),
-              
+
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 18,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(20),
@@ -192,19 +242,31 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                 ),
                 child: const Row(
                   children: [
-                    Icon(Icons.calendar_month_outlined, color: Color(0xFF006B70), size: 28),
+                    Icon(
+                      Icons.calendar_month_outlined,
+                      color: Color(0xFF006B70),
+                      size: 28,
+                    ),
                     SizedBox(width: 12),
                     Text(
                       'Đặt lịch trước',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1A1A1A)),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1A1A1A),
+                      ),
                     ),
                     Spacer(),
-                    Icon(Icons.arrow_forward_ios_rounded, color: Colors.black, size: 16),
+                    Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      color: Colors.black,
+                      size: 16,
+                    ),
                   ],
                 ),
               ),
               const SizedBox(height: 32),
-              
+
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -240,10 +302,14 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                 ],
               ),
               const SizedBox(height: 32),
-              
+
               const Text(
                 'Chuyến đi gần đây',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1A1A1A)),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1A1A1A),
+                ),
               ),
               const SizedBox(height: 16),
               const RecentTripCard(
@@ -261,5 +327,25 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
         );
       },
     );
+  }
+
+  String _displayName(String? fullName) {
+    final value = fullName?.trim() ?? '';
+    if (value.isEmpty || value == 'Người dùng SafeRide') {
+      return 'bạn';
+    }
+    return value;
+  }
+
+  String _initials(String? fullName) {
+    final name = _displayName(fullName);
+    if (name == 'bạn') return 'SR';
+    final words = name.split(RegExp(r'\s+'));
+    return words.take(2).map((word) => word[0].toUpperCase()).join();
+  }
+
+  ImageProvider? _avatarImage(String? avatarUrl) {
+    final value = avatarUrl?.trim() ?? '';
+    return value.isEmpty ? null : NetworkImage(value);
   }
 }

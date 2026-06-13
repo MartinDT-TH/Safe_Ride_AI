@@ -49,7 +49,11 @@ public static class DependencyInjection
         services
             .AddOptions<GoogleAuthOptions>()
             .Bind(configuration.GetSection(GoogleAuthOptions.SectionName));
+        services
+            .AddOptions<CloudinaryOptions>()
+            .Bind(configuration.GetSection(CloudinaryOptions.SectionName));
         services.AddSingleton<IRedisService, RedisService>();
+        services.AddSingleton<ICloudinaryImageService, CloudinaryImageService>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IGoogleTokenVerifier, GoogleTokenVerifier>();
         services.AddScoped<IAuthService, AuthService>();

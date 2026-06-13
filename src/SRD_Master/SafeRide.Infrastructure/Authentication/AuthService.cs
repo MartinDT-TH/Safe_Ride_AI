@@ -141,11 +141,15 @@ public sealed class AuthService : IAuthService
                     StatusCodes.Status429TooManyRequests);
         }
 
-        var user = await FindOrCreatePhoneUserAsync(phoneNumber);
+        var (user, isNewUser) = await FindOrCreatePhoneUserAsync(phoneNumber);
         EnsureUserActive(user);
         await EnsurePhoneLoginAsync(user, phoneNumber);
         await EnsureCustomerRoleAsync(user);
-        return await GenerateTokenResponseAsync(user, request.DeviceId, request.DeviceName);
+        return await GenerateTokenResponseAsync(
+            user,
+            request.DeviceId,
+            request.DeviceName,
+            isNewUser);
     }
 
 
@@ -272,7 +276,8 @@ public sealed class AuthService : IAuthService
             RedisKeys.RefreshToken(Convert.ToHexString(tokenHash)));
     }
 
-    private async Task<AspNetUser> FindOrCreatePhoneUserAsync(string phoneNumber)
+    private async Task<(AspNetUser User, bool IsNewUser)> FindOrCreatePhoneUserAsync(
+        string phoneNumber)
     {
         var users = await _userManager.Users
             .Where(x => x.PhoneNumber == phoneNumber)
@@ -299,7 +304,7 @@ public sealed class AuthService : IAuthService
                     AuthErrorCodes.AccountConflict,
                     "Không thể xác nhận số điện thoại.");
             }
-            return existing;
+            return (existing, false);
         }
 
         var user = new AspNetUser
@@ -316,7 +321,7 @@ public sealed class AuthService : IAuthService
             await _userManager.CreateAsync(user),
             AuthErrorCodes.AccountConflict,
             "Không thể tạo tài khoản.");
-        return user;
+        return (user, true);
     }
 
     private async Task<AspNetUser> FindOrCreateGoogleUserAsync(GoogleUserInfo googleUser)
@@ -460,9 +465,22 @@ public sealed class AuthService : IAuthService
     private async Task<AuthResponse> GenerateTokenResponseAsync(
         AspNetUser user,
         string? deviceId,
-        string? deviceName)
+        string? deviceName,
+        bool isNewUser = false)
     {
         var roles = await _userManager.GetRolesAsync(user);
+        var hasDriverRegistration =
+            roles.Any(role => role.Equals("Driver", StringComparison.OrdinalIgnoreCase)) ||
+            await _dbContext.DriverProfiles.AnyAsync(x => x.DriverId == user.Id) ||
+            await _dbContext.DriverKycs.AnyAsync(x => x.DriverId == user.Id);
+        var profileIncomplete =
+            string.IsNullOrWhiteSpace(user.FullName) ||
+            user.FullName == "Người dùng SafeRide";
+        var nextStep = hasDriverRegistration
+            ? AuthNextSteps.SelectRole
+            : isNewUser || profileIncomplete
+                ? AuthNextSteps.CompleteProfile
+                : AuthNextSteps.CustomerHome;
         var accessToken = await _jwtTokenService.GenerateAccessTokenAsync(user, roles);
         var rawRefreshToken = _jwtTokenService.GenerateRawRefreshToken();
         var refreshToken = new RefreshToken
@@ -481,7 +499,7 @@ public sealed class AuthService : IAuthService
         _dbContext.RefreshTokens.Add(refreshToken);
         await _dbContext.SaveChangesAsync();
         await TryCacheRefreshTokenAsync(refreshToken);
-        return CreateResponse(user, roles, accessToken, rawRefreshToken);
+        return CreateResponse(user, roles, accessToken, rawRefreshToken, nextStep);
     }
 
     private async Task RevokeSessionTokensAsync(Guid sessionId)
@@ -567,7 +585,8 @@ public sealed class AuthService : IAuthService
         AspNetUser user,
         IList<string> roles,
         (string Token, string JwtId, int ExpiresIn) accessToken,
-        string refreshToken)
+        string refreshToken,
+        string nextStep = AuthNextSteps.CustomerHome)
     {
         return new AuthResponse
         {
@@ -578,7 +597,9 @@ public sealed class AuthService : IAuthService
             FullName = user.FullName ?? user.UserName ?? string.Empty,
             PhoneNumber = user.PhoneNumber,
             Email = user.Email,
-            Roles = roles
+            AvatarUrl = user.AvatarUrl,
+            Roles = roles,
+            NextStep = nextStep
         };
     }
 }

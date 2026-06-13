@@ -6,6 +6,8 @@ using SafeRide.Application.Features.Auth.DTOs;
 using SafeRide.Application.Features.Auth.Services;
 using SafeRide.Domain.Entities;
 using SafeRide.Infrastructure.Authentication;
+using SafeRide.Infrastructure.ExternalServices;
+using System.Security.Claims;
 
 namespace SafeRide.API.Controllers;
 
@@ -16,17 +18,20 @@ public class AuthController : ControllerBase
     private readonly IAuthService _authService;
     private readonly UserManager<AspNetUser> _userManager;
     private readonly IJwtTokenService _jwtTokenService;
+    private readonly ICloudinaryImageService _cloudinaryImageService;
     private readonly IHostEnvironment _environment;
 
     public AuthController(
         IAuthService authService,
         UserManager<AspNetUser> userManager,
         IJwtTokenService jwtTokenService,
+        ICloudinaryImageService cloudinaryImageService,
         IHostEnvironment environment)
     {
         _authService = authService;
         _userManager = userManager;
         _jwtTokenService = jwtTokenService;
+        _cloudinaryImageService = cloudinaryImageService;
         _environment = environment;
     }
 
@@ -164,6 +169,7 @@ public class AuthController : ControllerBase
             FullName = user.FullName ?? user.UserName ?? string.Empty,
             PhoneNumber = user.PhoneNumber,
             Email = user.Email,
+            AvatarUrl = user.AvatarUrl,
             Roles = roles
         });
     }
@@ -224,6 +230,129 @@ public class AuthController : ControllerBase
         {
             message = "Đăng xuất thành công"
         });
+    }
+
+    [Authorize]
+    [HttpPut("profile")]
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
+    {
+        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userIdValue, out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var user = await _userManager.FindByIdAsync(userId.ToString());
+        if (user == null)
+        {
+            return NotFound();
+        }
+
+        user.FullName = request.FullName.Trim();
+        user.Email = string.IsNullOrWhiteSpace(request.Email)
+            ? null
+            : request.Email.Trim();
+        user.NormalizedEmail = user.Email == null
+            ? null
+            : _userManager.NormalizeEmail(user.Email);
+        user.UpdatedAt = DateTime.UtcNow;
+
+        var result = await _userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+        {
+            return Conflict(new
+            {
+                code = "auth.profile_update_failed",
+                errors = result.Errors.Select(x => x.Description)
+            });
+        }
+
+        return Ok(new
+        {
+            user.Id,
+            user.FullName,
+            user.PhoneNumber,
+            user.Email,
+            user.AvatarUrl
+        });
+    }
+
+    [Authorize]
+    [HttpPost("profile/avatar")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(5 * 1024 * 1024)]
+    public async Task<IActionResult> UploadAvatar(
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userIdValue, out var userId))
+        {
+            return Unauthorized();
+        }
+
+        if (file.Length == 0 || file.Length > 5 * 1024 * 1024)
+        {
+            return BadRequest(new
+            {
+                code = "profile.avatar_invalid_size",
+                message = "Ảnh đại diện phải có dung lượng từ 1 byte đến 5 MB."
+            });
+        }
+
+        var allowedContentTypes = new[]
+        {
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+        };
+        if (!allowedContentTypes.Contains(file.ContentType, StringComparer.OrdinalIgnoreCase))
+        {
+            return BadRequest(new
+            {
+                code = "profile.avatar_invalid_type",
+                message = "Ảnh đại diện chỉ hỗ trợ JPG, PNG hoặc WEBP."
+            });
+        }
+
+        var user = await _userManager.FindByIdAsync(userId.ToString());
+        if (user == null)
+        {
+            return NotFound();
+        }
+
+        await using var stream = file.OpenReadStream();
+        string avatarUrl;
+        try
+        {
+            avatarUrl = await _cloudinaryImageService.UploadAvatarAsync(
+                userId,
+                stream,
+                file.FileName,
+                cancellationToken);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                code = "profile.avatar_upload_unavailable",
+                message = exception.Message
+            });
+        }
+
+        user.AvatarUrl = avatarUrl;
+        user.UpdatedAt = DateTime.UtcNow;
+        var result = await _userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+        {
+            return Conflict(new
+            {
+                code = "profile.avatar_update_failed",
+                errors = result.Errors.Select(x => x.Description)
+            });
+        }
+
+        return Ok(new { avatarUrl });
     }
 
     [Authorize]

@@ -55,6 +55,20 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<Map<String, dynamic>> updateProfile(
+    String accessToken,
+    String fullName,
+    String? email,
+  ) {
+    return remoteDatasource.updateProfile(accessToken, fullName, email);
+  }
+
+  @override
+  Future<String> uploadAvatar(String accessToken, String filePath) {
+    return remoteDatasource.uploadAvatar(accessToken, filePath);
+  }
+
+  @override
   Future<void> logout(String refreshToken) {
     return remoteDatasource.logout(refreshToken);
   }

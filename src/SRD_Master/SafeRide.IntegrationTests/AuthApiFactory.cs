@@ -119,6 +119,33 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
             CREATE INDEX IX_RefreshTokens_UserId ON RefreshTokens (UserId);
             CREATE INDEX IX_RefreshTokens_SessionId_RevokedAt
                 ON RefreshTokens (SessionId, RevokedAt);
+            CREATE TABLE DriverProfiles (
+                DriverId TEXT NOT NULL PRIMARY KEY,
+                IdentityCardNumber TEXT NOT NULL,
+                ExperienceYears INTEGER NULL,
+                HomeAddress TEXT NULL,
+                WorkStatus TEXT NOT NULL DEFAULT 'Offline',
+                LastActiveAt TEXT NULL,
+                CreatedAt TEXT NOT NULL,
+                UpdatedAt TEXT NULL
+            );
+            CREATE TABLE DriverKyc (
+                Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                DriverId TEXT NOT NULL,
+                DocumentType TEXT NOT NULL,
+                DocumentNumber TEXT NULL,
+                LicenseClass TEXT NULL,
+                FrontImageUrl TEXT NULL,
+                BackImageUrl TEXT NULL,
+                FileUrl TEXT NULL,
+                IssueDate TEXT NULL,
+                ExpiryDate TEXT NULL,
+                KycStatus TEXT NOT NULL DEFAULT 'Pending',
+                CreatedAt TEXT NOT NULL,
+                VerifiedAt TEXT NULL,
+                RejectionReason TEXT NULL
+            );
+            CREATE INDEX IX_DriverKyc_DriverId ON DriverKyc (DriverId);
             """);
     }
 

@@ -18,5 +18,13 @@ abstract class AuthRepository {
     String deviceName,
   );
 
+  Future<Map<String, dynamic>> updateProfile(
+    String accessToken,
+    String fullName,
+    String? email,
+  );
+
+  Future<String> uploadAvatar(String accessToken, String filePath);
+
   Future<void> logout(String refreshToken);
 }
