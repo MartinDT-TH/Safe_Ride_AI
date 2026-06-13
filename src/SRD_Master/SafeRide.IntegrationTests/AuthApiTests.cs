@@ -34,6 +34,7 @@ public sealed class AuthApiTests
         Assert.NotNull(login);
         Assert.Equal("google@example.test", login.Email);
         Assert.Contains("Customer", login.Roles);
+        Assert.Equal(AuthNextSteps.CompleteProfile, login.NextStep);
         Assert.False(string.IsNullOrWhiteSpace(login.AccessToken));
         Assert.False(string.IsNullOrWhiteSpace(login.RefreshToken));
 
@@ -76,6 +77,7 @@ public sealed class AuthApiTests
         var login = await response.Content.ReadFromJsonAsync<AuthResponse>();
         Assert.NotNull(login);
         Assert.Equal(existingUserId, login.UserId);
+        Assert.Equal(AuthNextSteps.CustomerHome, login.NextStep);
 
         using var verificationScope = factory.Services.CreateScope();
         var verificationManager = verificationScope.ServiceProvider
@@ -188,6 +190,45 @@ public sealed class AuthApiTests
         var replay = await VerifyOtpAsync(client, phone, code);
         Assert.Equal(HttpStatusCode.Unauthorized, replay.StatusCode);
         Assert.Equal("auth.otp_expired", await ReadProblemCodeAsync(replay));
+    }
+
+    [Fact]
+    public async Task GoogleLogin_RegisteredDriver_MustSelectRole()
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateClient();
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AspNetUser>>();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var user = new AspNetUser
+            {
+                Id = Guid.NewGuid(),
+                UserName = "google-driver",
+                Email = "google@example.test",
+                EmailConfirmed = true,
+                FullName = "Google Driver",
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+            Assert.True((await userManager.CreateAsync(user)).Succeeded);
+            dbContext.DriverProfiles.Add(new DriverProfile
+            {
+                DriverId = user.Id,
+                IdentityCardNumber = "079987654321"
+            });
+            await dbContext.SaveChangesAsync();
+        }
+
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/google-login",
+            new GoogleLoginRequest { GoogleIdToken = "valid-google-token" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var login = await response.Content.ReadFromJsonAsync<AuthResponse>();
+        Assert.NotNull(login);
+        Assert.Equal(AuthNextSteps.SelectRole, login.NextStep);
     }
 
     [Fact]

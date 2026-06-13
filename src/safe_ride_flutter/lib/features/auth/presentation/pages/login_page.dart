@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'otp_page.dart';
+import '../../../home/presentation/pages/customer_home_page.dart';
+import '../../../onboarding/presentation/pages/role_selection_page.dart';
+import '../../../profile/presentation/pages/edit_profile_page.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/widgets/custom_button.dart';
@@ -139,7 +142,8 @@ class _LoginPageState extends State<LoginPage> {
                           return;
                         }
 
-                        if (normalizedPhone.length != 12 || !normalizedPhone.startsWith('+84')) {
+                        if (normalizedPhone.length != 12 ||
+                            !normalizedPhone.startsWith('+84')) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text('Số điện thoại không hợp lệ'),
@@ -153,12 +157,17 @@ class _LoginPageState extends State<LoginPage> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => OtpPage(phoneNumber: normalizedPhone),
+                              builder: (_) =>
+                                  OtpPage(phoneNumber: normalizedPhone),
                             ),
                           );
                         } else if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Không thể gửi OTP. Kiểm tra API hoặc số điện thoại.')),
+                            const SnackBar(
+                              content: Text(
+                                'Không thể gửi OTP. Kiểm tra API hoặc số điện thoại.',
+                              ),
+                            ),
                           );
                         }
                       },
@@ -197,12 +206,26 @@ class _LoginPageState extends State<LoginPage> {
                         if (!context.mounted) return;
 
                         if (ok) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Đăng nhập Google thành công')),
+                          final Widget destination =
+                              switch (provider.nextStep) {
+                                AuthNextStep.completeProfile => EditProfilePage(
+                                  requiredCompletion: true,
+                                  phoneNumber: provider.phoneNumber,
+                                ),
+                                AuthNextStep.selectRole =>
+                                  const RoleSelectionPage(),
+                                AuthNextStep.customerHome =>
+                                  const CustomerHomePage(),
+                              };
+                          Navigator.of(context).pushAndRemoveUntil(
+                            MaterialPageRoute(builder: (_) => destination),
+                            (_) => false,
                           );
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Đăng nhập Google thất bại')),
+                            const SnackBar(
+                              content: Text('Đăng nhập Google thất bại'),
+                            ),
                           );
                         }
                       },
@@ -222,7 +245,10 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       label: const Text(
                         'Google',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     );
                   },

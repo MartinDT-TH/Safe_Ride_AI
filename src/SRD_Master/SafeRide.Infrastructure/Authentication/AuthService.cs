@@ -162,16 +162,21 @@ public sealed class AuthService : IAuthService
         var user = await _userManager.FindByLoginAsync(
             GoogleLoginProvider,
             googleUser.Subject);
+        var isNewUser = false;
 
         if (user == null)
         {
-            user = await FindOrCreateGoogleUserAsync(googleUser);
+            (user, isNewUser) = await FindOrCreateGoogleUserAsync(googleUser);
             await EnsureGoogleLoginAsync(user, googleUser.Subject);
         }
 
         EnsureUserActive(user);
         await EnsureCustomerRoleAsync(user);
-        return await GenerateTokenResponseAsync(user, request.DeviceId, request.DeviceName);
+        return await GenerateTokenResponseAsync(
+            user,
+            request.DeviceId,
+            request.DeviceName,
+            isNewUser);
     }
 
     public async Task<AuthResponse> RefreshTokenAsync(
@@ -324,7 +329,8 @@ public sealed class AuthService : IAuthService
         return (user, true);
     }
 
-    private async Task<AspNetUser> FindOrCreateGoogleUserAsync(GoogleUserInfo googleUser)
+    private async Task<(AspNetUser User, bool IsNewUser)> FindOrCreateGoogleUserAsync(
+        GoogleUserInfo googleUser)
     {
         var normalizedEmail = _userManager.NormalizeEmail(googleUser.Email);
         var users = await _userManager.Users
@@ -352,7 +358,7 @@ public sealed class AuthService : IAuthService
                 await _userManager.UpdateAsync(existing),
                 AuthErrorCodes.AccountConflict,
                 "Không thể cập nhật tài khoản Google.");
-            return existing;
+            return (existing, false);
         }
 
         var user = new AspNetUser
@@ -361,7 +367,7 @@ public sealed class AuthService : IAuthService
             UserName = $"google_{googleUser.Subject}",
             Email = googleUser.Email,
             EmailConfirmed = true,
-            FullName = googleUser.Name ?? googleUser.Email,
+            FullName = "Người dùng SafeRide",
             AvatarUrl = googleUser.Picture,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
@@ -370,7 +376,7 @@ public sealed class AuthService : IAuthService
             await _userManager.CreateAsync(user),
             AuthErrorCodes.AccountConflict,
             "Không thể tạo tài khoản Google.");
-        return user;
+        return (user, true);
     }
 
     private async Task EnsurePhoneLoginAsync(AspNetUser user, string phoneNumber)
