@@ -10,11 +10,16 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using SafeRide.Application.Features.Auth.Services;
+using SafeRide.Application.Common.Interfaces;
 using SafeRide.Domain.Entities;
 using SafeRide.Infrastructure.Authentication;
+using SafeRide.Infrastructure.BackgroundJobs;
 using SafeRide.Infrastructure.ExternalServices;
+using SafeRide.Infrastructure.ExternalServices.GoogleMaps;
 using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
+using SafeRide.Infrastructure.Repositories;
+using SafeRide.Infrastructure.Services;
 using System.Text;
 
 namespace SafeRide.Infrastructure;
@@ -52,12 +57,33 @@ public static class DependencyInjection
         services
             .AddOptions<CloudinaryOptions>()
             .Bind(configuration.GetSection(CloudinaryOptions.SectionName));
-        services.AddSingleton<IRedisService, RedisService>();
+        services
+            .AddOptions<GoogleMapsOptions>()
+            .Bind(configuration.GetSection(GoogleMapsOptions.SectionName));
+        services.AddSingleton<RedisService>();
+        services.AddSingleton<InMemoryRedisService>();
+        services.AddSingleton<IRedisService>(provider =>
+            new ResilientRedisService(
+                provider.GetRequiredService<RedisService>(),
+                provider.GetRequiredService<InMemoryRedisService>(),
+                provider.GetRequiredService<ILogger<ResilientRedisService>>()));
         services.AddSingleton<ICloudinaryImageService, CloudinaryImageService>();
+        services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IGoogleTokenVerifier, GoogleTokenVerifier>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IBookingRepository, BookingRepository>();
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<IBookingMatchingService, BookingMatchingService>();
         services.AddHttpClient<ISpeedSmsService, InfobipSmsService>();
+        services.AddHttpClient<IMapService, GoogleMapsService>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(15);
+        });
+        if (!environment.IsEnvironment("Testing"))
+        {
+            services.AddHostedService<ScheduledBookingMatchingJob>();
+        }
 
         services
             .AddAuthentication(options =>
