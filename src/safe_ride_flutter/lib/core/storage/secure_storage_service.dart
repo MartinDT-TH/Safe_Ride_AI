@@ -26,6 +26,10 @@ class SecureStorageService {
     return _storage.read(key: StorageKeys.accessToken);
   }
 
+  Future<String?> readAccessToken() {
+    return _storage.read(key: _accessTokenKey);
+  }
+
   Future<String?> readDeviceId() {
     return _storage.read(key: StorageKeys.deviceId);
   }

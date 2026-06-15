@@ -9,6 +9,7 @@ import 'features/auth/presentation/providers/auth_provider.dart';
 import 'features/onboarding/presentation/providers/role_provider.dart';
 import 'features/home/presentation/providers/home_provider.dart';
 import 'features/booking/presentation/providers/booking_provider.dart';
+import 'features/profile/presentation/providers/vehicle_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,13 +20,19 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => getIt<AuthProvider>()),
+        ChangeNotifierProvider(create: (_) => getIt<AuthProvider>()),
 
+        ChangeNotifierProvider(create: (_) => getIt<RoleProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<RoleProvider>()),
 
         ChangeNotifierProvider(create: (_) => getIt<HomeProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<BookingProvider>()),
+        ChangeNotifierProvider(create: (_) => getIt<HomeProvider>()),
+
+        ChangeNotifierProvider(create: (_) => getIt<VehicleProvider>()),
       ],
       child: const MyApp(),
     ),
   );
 }
+

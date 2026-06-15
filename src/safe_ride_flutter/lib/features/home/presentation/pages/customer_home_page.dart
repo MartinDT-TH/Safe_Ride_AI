@@ -7,6 +7,7 @@ import '../widgets/quick_action_item.dart';
 import '../widgets/recent_trip_card.dart';
 import '../widgets/promo_banner.dart';
 import '../../../profile/presentation/pages/profile_page.dart';
+import '../../../profile/presentation/pages/my_vehicles_page.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../booking/data/models/create_booking_request.dart';
 import '../../../booking/presentation/pages/route_search_page.dart';
@@ -301,7 +302,14 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                     title: HomeStrings.myVehicles,
                     backgroundColor: const Color(0xFFF2F2F2),
                     iconColor: Colors.black,
-                    onTap: () {},
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const MyVehiclesPage(),
+                        ),
+                      );
+                    },
                   ),
                   QuickActionItem(
                     icon: Icons.local_offer_rounded,

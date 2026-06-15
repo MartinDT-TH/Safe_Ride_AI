@@ -22,6 +22,10 @@ import '../features/booking/data/datasources/booking_remote_datasource.dart';
 import '../features/booking/data/repositories/booking_repository_impl.dart';
 import '../features/booking/domain/repositories/booking_repository.dart';
 import '../features/booking/presentation/providers/booking_provider.dart';
+import '../features/profile/data/datasources/vehicle_remote_datasource.dart';
+import '../features/profile/data/repositories/vehicle_repository_impl.dart';
+import '../features/profile/domain/repositories/vehicle_repository.dart';
+import '../features/profile/presentation/providers/vehicle_provider.dart';
 
 final getIt = GetIt.instance;
 
@@ -89,5 +93,20 @@ Future<void> setupDependencies() async {
   );
   getIt.registerFactory<BookingProvider>(
     () => BookingProvider(getIt<BookingRepository>(), getIt<LocationService>()),
+  );
+
+  getIt.registerLazySingleton<VehicleRemoteDatasource>(
+    () => VehicleRemoteDatasource(),
+  );
+
+  getIt.registerLazySingleton<VehicleRepository>(
+    () => VehicleRepositoryImpl(getIt<VehicleRemoteDatasource>()),
+  );
+
+  getIt.registerFactory<VehicleProvider>(
+    () => VehicleProvider(
+      getIt<VehicleRepository>(),
+      getIt<SecureStorageService>(),
+    ),
   );
 }

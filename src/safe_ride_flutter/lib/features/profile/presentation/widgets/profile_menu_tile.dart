@@ -24,7 +24,10 @@ class ProfileMenuTile extends StatelessWidget {
       children: [
         ListTile(
           onTap: onTap,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 0,
+          ),
           leading: Icon(icon, color: Colors.grey.shade600, size: 24),
           title: Text(
             title,
@@ -34,7 +37,8 @@ class ProfileMenuTile extends StatelessWidget {
               color: Color(0xFF333333),
             ),
           ),
-          trailing: trailingWidget ??
+          trailing:
+              trailingWidget ??
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -47,7 +51,11 @@ class ProfileMenuTile extends StatelessWidget {
                       ),
                     ),
                   const SizedBox(width: 4),
-                  Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 20),
+                  Icon(
+                    Icons.chevron_right,
+                    color: Colors.grey.shade400,
+                    size: 20,
+                  ),
                 ],
               ),
         ),

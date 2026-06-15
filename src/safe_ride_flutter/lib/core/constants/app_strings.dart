@@ -171,7 +171,7 @@ abstract final class AppConfig {
   static const apiBaseUrl = 'http://10.0.2.2:5026/api/';
   static const fontFamily = 'SFProDisplay';
   static const logoUrl =
-      'https://voca-land.sgp1.cdn.digitaloceanspaces.com/0/1757697945826/800e1725.jpg';
+      'https://res.cloudinary.com/dj7y3ikck/image/upload/v1781487774/logo_poxclo.png';
   static const googleLogoUrl =
       'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ2sSeQqjaUTuZ3gRgkKjidpaipF_l6s72lBw&s';
 }
