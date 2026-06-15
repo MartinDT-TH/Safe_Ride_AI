@@ -1,5 +1,3 @@
-import 'package:dio/dio.dart';
-
 // class OnboardingRemoteDatasource {
 //   final Dio dio;
 //
@@ -17,13 +15,7 @@ import 'package:dio/dio.dart';
 // }
 
 class OnboardingRemoteDatasource {
-
-  Future<void> selectRole(
-      String role,
-      ) async {
-
-    await Future.delayed(
-      const Duration(milliseconds: 500),
-    );
+  Future<void> selectRole(String role) async {
+    await Future.delayed(const Duration(milliseconds: 500));
   }
 }
