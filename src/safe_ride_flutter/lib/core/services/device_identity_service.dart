@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
+import '../constants/app_strings.dart';
 import '../storage/secure_storage_service.dart';
 
 class DeviceIdentity {
@@ -28,12 +29,12 @@ class DeviceIdentityService {
 
   String get _deviceName {
     return switch (defaultTargetPlatform) {
-      TargetPlatform.android => 'SafeRide Android',
-      TargetPlatform.iOS => 'SafeRide iOS',
-      TargetPlatform.macOS => 'SafeRide macOS',
-      TargetPlatform.windows => 'SafeRide Windows',
-      TargetPlatform.linux => 'SafeRide Linux',
-      TargetPlatform.fuchsia => 'SafeRide Fuchsia',
+      TargetPlatform.android => DeviceStrings.android,
+      TargetPlatform.iOS => DeviceStrings.ios,
+      TargetPlatform.macOS => DeviceStrings.macos,
+      TargetPlatform.windows => DeviceStrings.windows,
+      TargetPlatform.linux => DeviceStrings.linux,
+      TargetPlatform.fuchsia => DeviceStrings.fuchsia,
     };
   }
 
@@ -43,6 +44,7 @@ class DeviceIdentityService {
       16,
       (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
     ).join();
-    return 'saferide-${DateTime.now().microsecondsSinceEpoch}-$randomPart';
+    return '${DeviceStrings.idPrefix}-'
+        '${DateTime.now().microsecondsSinceEpoch}-$randomPart';
   }
 }

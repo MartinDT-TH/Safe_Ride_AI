@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
+import '../constants/app_strings.dart';
 
 class AppDialog extends StatelessWidget {
   final IconData icon;
@@ -19,8 +20,8 @@ class AppDialog extends StatelessWidget {
     this.iconBackgroundColor = const Color(0xFFFFEBEE),
     required this.title,
     required this.description,
-    this.confirmText = 'Xác nhận',
-    this.cancelText = 'Hủy',
+    this.confirmText = AppStrings.confirm,
+    this.cancelText = AppStrings.cancel,
     required this.onConfirm,
     this.onCancel,
   });
@@ -28,9 +29,7 @@ class AppDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       elevation: 0,
       backgroundColor: Colors.white,
       child: Padding(
@@ -45,11 +44,7 @@ class AppDialog extends StatelessWidget {
                 color: iconBackgroundColor,
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                icon,
-                color: iconColor,
-                size: 32,
-              ),
+              child: Icon(icon, color: iconColor, size: 32),
             ),
             const SizedBox(height: 24),
             // Tiêu đề
@@ -139,8 +134,8 @@ class AppDialog extends StatelessWidget {
     Color iconBackgroundColor = const Color(0xFFFFEBEE),
     required String title,
     required String description,
-    String confirmText = 'Xác nhận',
-    String cancelText = 'Hủy',
+    String confirmText = AppStrings.confirm,
+    String cancelText = AppStrings.cancel,
     required VoidCallback onConfirm,
     VoidCallback? onCancel,
   }) {

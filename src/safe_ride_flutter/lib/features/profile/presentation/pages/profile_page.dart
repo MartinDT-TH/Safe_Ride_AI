@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../core/constants/app_strings.dart';
 import '../../../../core/widgets/app_dialog.dart';
 import '../../../auth/presentation/pages/login_page.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -31,7 +32,7 @@ class _ProfilePageState extends State<ProfilePage> {
           onPressed: () {},
         ),
         title: const Text(
-          'Hồ sơ & Cài đặt',
+          ProfileStrings.profileAndSettings,
           style: TextStyle(
             color: Color(0xFF006B70),
             fontWeight: FontWeight.bold,
@@ -150,7 +151,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Chuyển sang chế độ Tài xế',
+                            ProfileStrings.switchToDriver,
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               color: Color(0xFF006B70),
@@ -158,7 +159,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             ),
                           ),
                           Text(
-                            'Bắt đầu nhận chuyến đi',
+                            ProfileStrings.startReceivingTrips,
                             style: TextStyle(
                               color: Color(0xFF666666),
                               fontSize: 13,
@@ -181,11 +182,11 @@ class _ProfilePageState extends State<ProfilePage> {
             const SizedBox(height: 24),
 
             // 3. Section: TÀI KHOẢN
-            _buildSectionLabel('TÀI KHOẢN'),
+            _buildSectionLabel(ProfileStrings.accountSection),
             _buildMenuContainer([
               ProfileMenuTile(
                 icon: Icons.person_outline_rounded,
-                title: 'Chỉnh sửa hồ sơ',
+                title: ProfileStrings.editProfile,
                 onTap: () async {
                   await Navigator.of(context).push(
                     MaterialPageRoute(
@@ -197,7 +198,7 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
               const ProfileMenuTile(
                 icon: Icons.link_rounded,
-                title: 'Tài khoản liên kết',
+                title: ProfileStrings.linkedAccounts,
                 showDivider: false,
               ),
             ]),
@@ -205,20 +206,20 @@ class _ProfilePageState extends State<ProfilePage> {
             const SizedBox(height: 24),
 
             // 4. Section: ỨNG DỤNG & THÔNG BÁO
-            _buildSectionLabel('ỨNG DỤNG & THÔNG BÁO'),
+            _buildSectionLabel(ProfileStrings.appAndNotifications),
             _buildMenuContainer([
               const ProfileMenuTile(
                 icon: Icons.notifications_none_rounded,
-                title: 'Cài đặt thông báo',
+                title: ProfileStrings.notificationSettings,
               ),
               const ProfileMenuTile(
                 icon: Icons.language_rounded,
-                title: 'Ngôn ngữ',
-                trailingText: 'Tiếng Việt',
+                title: ProfileStrings.language,
+                trailingText: ProfileStrings.vietnamese,
               ),
               ProfileMenuTile(
                 icon: Icons.nightlight_round_outlined,
-                title: 'Chế độ tối',
+                title: ProfileStrings.darkMode,
                 showDivider: false,
                 trailingWidget: Switch(
                   value: _isDarkMode,
@@ -232,26 +233,26 @@ class _ProfilePageState extends State<ProfilePage> {
             const SizedBox(height: 24),
 
             // 5. Section: HỖ TRỢ & PHÁP LÝ
-            _buildSectionLabel('HỖ TRỢ & PHÁP LÝ'),
+            _buildSectionLabel(ProfileStrings.supportAndLegal),
             _buildMenuContainer([
               const ProfileMenuTile(
                 icon: Icons.help_outline_rounded,
-                title: 'Trung tâm trợ giúp',
+                title: ProfileStrings.helpCenter,
               ),
               const ProfileMenuTile(
                 icon: Icons.shield_outlined,
-                title: 'Chính sách bảo mật',
+                title: AuthStrings.privacyPolicy,
               ),
               const ProfileMenuTile(
                 icon: Icons.description_outlined,
-                title: 'Điều khoản dịch vụ',
+                title: AuthStrings.termsOfService,
                 showDivider: false,
               ),
             ]),
 
             const SizedBox(height: 20),
             const Text(
-              'Phiên bản ứng dụng: 2.4.1',
+              ProfileStrings.appVersion,
               style: TextStyle(color: Color(0xFF666666), fontSize: 13),
             ),
             const SizedBox(height: 24),
@@ -267,11 +268,10 @@ class _ProfilePageState extends State<ProfilePage> {
                     AppDialog.show(
                       context: context,
                       icon: Icons.logout_rounded,
-                      title: 'Đăng xuất?',
-                      description:
-                          'Bạn có chắc chắn muốn đăng xuất khỏi ứng dụng?',
-                      confirmText: 'Đăng xuất',
-                      cancelText: 'Hủy',
+                      title: ProfileStrings.logoutQuestion,
+                      description: ProfileStrings.logoutDescription,
+                      confirmText: ProfileStrings.logout,
+                      cancelText: AppStrings.cancel,
                       onConfirm: () async {
                         // 1. Đóng Dialog bằng rootNavigator
                         Navigator.of(context, rootNavigator: true).pop();
@@ -284,9 +284,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         if (!loggedOut) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text(
-                                'Không thể đăng xuất. Vui lòng thử lại.',
-                              ),
+                              content: Text(ProfileStrings.logoutFailed),
                             ),
                           );
                           return;
@@ -307,7 +305,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   },
                   icon: const Icon(Icons.logout_rounded, color: Colors.red),
                   label: const Text(
-                    'Đăng xuất',
+                    ProfileStrings.logout,
                     style: TextStyle(
                       color: Colors.red,
                       fontWeight: FontWeight.bold,
@@ -364,14 +362,14 @@ class _ProfilePageState extends State<ProfilePage> {
 
   String _displayName(String? fullName) {
     final value = fullName?.trim() ?? '';
-    return value.isEmpty || value == 'Người dùng SafeRide'
-        ? 'Người dùng SafeRide'
+    return value.isEmpty || value == HomeStrings.defaultUser
+        ? HomeStrings.defaultUser
         : value;
   }
 
   String _initials(String? fullName) {
     final name = _displayName(fullName);
-    if (name == 'Người dùng SafeRide') return 'SR';
+    if (name == HomeStrings.defaultUser) return HomeStrings.defaultInitials;
     final words = name.split(RegExp(r'\s+'));
     return words.take(2).map((word) => word[0].toUpperCase()).join();
   }

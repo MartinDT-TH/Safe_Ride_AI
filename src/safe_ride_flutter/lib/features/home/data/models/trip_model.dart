@@ -1,5 +1,6 @@
-class TripModel {
+import '../../../../core/constants/app_strings.dart';
 
+class TripModel {
   final String pickup;
 
   final String destination;
@@ -12,13 +13,11 @@ class TripModel {
     required this.time,
   });
 
-  factory TripModel.fromJson(
-      Map<String, dynamic> json,
-      ) {
+  factory TripModel.fromJson(Map<String, dynamic> json) {
     return TripModel(
-      pickup: json['pickup'],
-      destination: json['destination'],
-      time: json['time'],
+      pickup: json[ApiKeys.pickup],
+      destination: json[ApiKeys.destination],
+      time: json[ApiKeys.time],
     );
   }
 }

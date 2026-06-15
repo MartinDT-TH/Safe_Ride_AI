@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../core/constants/app_strings.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../home/presentation/pages/customer_home_page.dart';
 
@@ -67,8 +68,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 ),
           title: Text(
             widget.requiredCompletion
-                ? 'Hoàn thiện thông tin'
-                : 'Chỉnh sửa hồ sơ',
+                ? ProfileStrings.completeProfile
+                : ProfileStrings.editProfile,
             style: const TextStyle(
               color: Color(0xFF006B70),
               fontSize: 18,
@@ -150,7 +151,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                       TextButton(
                         onPressed: _pickAvatar,
                         child: const Text(
-                          'Thay đổi ảnh đại diện',
+                          ProfileStrings.changeAvatar,
                           style: TextStyle(
                             color: Color(0xFF006B70),
                             fontWeight: FontWeight.bold,
@@ -186,7 +187,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Số điện thoại đã xác minh',
+                                    ProfileStrings.verifiedPhone,
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 14,
@@ -195,7 +196,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                   ),
                                   SizedBox(height: 2),
                                   Text(
-                                    'Vui lòng cập nhật thông tin cá nhân để tiếp tục.',
+                                    ProfileStrings.updateInformationHint,
                                     style: TextStyle(
                                       color: Color(0xFF6B7280),
                                       fontSize: 12,
@@ -211,7 +212,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
                       // Input Fields
                       _buildInputField(
-                        label: 'Họ và tên',
+                        label: ProfileStrings.fullName,
                         controller: _nameController,
                         suffixIcon: const Icon(
                           Icons.edit_outlined,
@@ -220,7 +221,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                       ),
                       const SizedBox(height: 24),
                       _buildInputField(
-                        label: 'Số điện thoại',
+                        label: AuthStrings.phoneNumber,
                         controller: _phoneController,
                         isReadOnly: true,
                         suffixIcon: const Icon(
@@ -230,7 +231,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                       ),
                       const SizedBox(height: 24),
                       _buildInputField(
-                        label: 'Email',
+                        label: ProfileStrings.email,
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
                       ),
@@ -263,8 +264,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
                             : const Icon(Icons.save, size: 20),
                         label: Text(
                           provider.isLoading
-                              ? 'Đang lưu...'
-                              : 'Lưu và tiếp tục',
+                              ? ProfileStrings.saving
+                              : ProfileStrings.saveAndContinue,
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -295,7 +296,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     final email = _emailController.text.trim();
     if (fullName.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vui lòng nhập họ và tên hợp lệ.')),
+        const SnackBar(content: Text(ProfileStrings.invalidFullName)),
       );
       return;
     }
@@ -303,7 +304,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     if (email.isNotEmpty &&
         !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Địa chỉ email không hợp lệ.')),
+        const SnackBar(content: Text(ProfileStrings.invalidEmail)),
       );
       return;
     }
@@ -313,7 +314,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       if (!mounted) return;
       if (!uploaded) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Không thể tải ảnh đại diện lên.')),
+          const SnackBar(content: Text(ProfileStrings.uploadAvatarFailed)),
         );
         return;
       }
@@ -327,7 +328,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
     if (!saved) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Không thể cập nhật thông tin.')),
+        const SnackBar(content: Text(ProfileStrings.updateProfileFailed)),
       );
       return;
     }
@@ -409,7 +410,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   String _initials(String fullName) {
     final value = fullName.trim();
-    if (value.isEmpty) return 'SR';
+    if (value.isEmpty) return HomeStrings.defaultInitials;
     final words = value.split(RegExp(r'\s+'));
     return words.take(2).map((word) => word[0].toUpperCase()).join();
   }
