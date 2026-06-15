@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
+using SafeRide.Infrastructure.Persistence.Configurations;
 
 namespace SafeRide.Infrastructure.Persistence;
 
@@ -112,71 +113,7 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
                     });
         });
 
-        modelBuilder.Entity<Booking>(entity =>
-        {
-            entity.HasKey(e => e.Id).HasName("PK__Bookings__3214EC073A8063CD");
-
-            entity.ToTable(tb =>
-            {
-                tb.HasCheckConstraint("CK_Bookings_BookingType", "[BookingType] IN ('Now', 'Scheduled')");
-                tb.HasCheckConstraint("CK_Bookings_BookingStatus", "[BookingStatus] IN ('SEARCHING_DRIVER', 'DRIVER_ASSIGNED', 'CUSTOMER_CANCELLED', 'DRIVER_CANCELLED', 'EXPIRED', 'CONVERTED_TO_TRIP')");
-                tb.HasCheckConstraint("CK_Bookings_BookingSource", "[BookingSource] IN ('Manual', 'VoiceCommand', 'Scheduled')");
-                tb.HasCheckConstraint("CK_Bookings_EstimatedDistanceKm", "[EstimatedDistanceKm] IS NULL OR [EstimatedDistanceKm] >= 0");
-                tb.HasCheckConstraint("CK_Bookings_EstimatedDurationMinutes", "[EstimatedDurationMinutes] IS NULL OR [EstimatedDurationMinutes] >= 0");
-                tb.HasCheckConstraint("CK_Bookings_EstimatedFare", "[EstimatedFare] IS NULL OR [EstimatedFare] >= 0");
-                tb.HasCheckConstraint("CK_Bookings_PickupLocation", "[PickupLocation].STSrid = 4326");
-                tb.HasCheckConstraint("CK_Bookings_DestinationLocation", "[DestinationLocation] IS NULL OR [DestinationLocation].STSrid = 4326");
-                tb.HasCheckConstraint("CK_Bookings_ScheduledAt", "([BookingType] = 'Now' AND [ScheduledAt] IS NULL) OR ([BookingType] = 'Scheduled' AND [ScheduledAt] IS NOT NULL)");
-            });
-
-
-
-            entity.Property(e => e.BookingSource)
-                .HasConversion<string>()
-                .HasMaxLength(20)
-                .HasDefaultValue(BookingSource.Manual);
-            entity.Property(e => e.BookingStatus)
-                .HasConversion<string>()
-                .HasMaxLength(30)
-                .HasDefaultValueSql("('SEARCHING_DRIVER')");
-            entity.Property(e => e.BookingType)
-                .HasConversion<string>()
-                .HasMaxLength(20)
-                .HasDefaultValueSql("('Now')");
-            entity.Property(e => e.CancellationReason).HasMaxLength(255);
-            entity.Property(e => e.DestinationAddress).HasMaxLength(255);
-            entity.Property(e => e.EstimatedDistanceKm).HasColumnType("decimal(10, 2)");
-            entity.Property(e => e.EstimatedFare).HasColumnType("decimal(18, 2)");
-            entity.Property(e => e.PickupAddress).HasMaxLength(255);
-            entity.Property(e => e.SpecialRequest).HasMaxLength(500);
-
-            entity.HasOne(d => d.CancelledByNavigation).WithMany(p => p.BookingCancelledByNavigations)
-                .HasForeignKey(d => d.CancelledBy)
-                .HasConstraintName("FK_Bookings_CancelledBy");
-
-            entity.HasOne(d => d.Customer).WithMany(p => p.BookingCustomers)
-                .HasForeignKey(d => d.CustomerId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_Bookings_AspNetUsers");
-
-            entity.HasOne(d => d.PricingRule).WithMany(p => p.Bookings)
-                .HasForeignKey(d => d.PricingRuleId)
-                .HasConstraintName("FK_Bookings_PricingRule");
-
-            entity.HasOne(d => d.ServiceType).WithMany(p => p.Bookings)
-                .HasForeignKey(d => d.ServiceTypeId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_Booking_ServiceType");
-
-            entity.HasOne(d => d.SurgePricingRule).WithMany(p => p.Bookings)
-                .HasForeignKey(d => d.SurgePricingRuleId)
-                .HasConstraintName("FK_Bookings_SurgeRule");
-
-            entity.HasOne(d => d.Vehicle).WithMany(p => p.Bookings)
-                .HasForeignKey(d => d.VehicleId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_Booking_Vehicle");
-        });
+        modelBuilder.ApplyConfiguration(new BookingConfiguration());
 
         modelBuilder.Entity<BookingPromotion>(entity =>
         {
