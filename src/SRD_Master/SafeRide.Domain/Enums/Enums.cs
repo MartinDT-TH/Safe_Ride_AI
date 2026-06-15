@@ -62,12 +62,7 @@ public enum RequiredLicenseClass
 {
     A1,
     A,
-    B,
-    C1,
-    C,
-    D1,
-    D2,
-    D
+    B
 }
 
 // ================================================================
@@ -105,12 +100,12 @@ public enum BookingType
 
 public enum BookingStatus
 {
-    SEARCHING_DRIVER,
-    DRIVER_ASSIGNED,
-    CUSTOMER_CANCELLED,
-    DRIVER_CANCELLED,
-    EXPIRED,
-    CONVERTED_TO_TRIP
+    PendingSchedule,
+    Searching,
+    DriverAssigned,
+    Cancelled,
+    Expired,
+    Completed
 }
 
 public enum BookingSource
@@ -130,6 +125,15 @@ public enum TripStatus
     CANCELLED
 }
 
+public enum HandoverStatus
+{
+    Pending,
+    CustomerConfirmed,
+    DriverConfirmed,
+    Disputed,
+    Resolved
+}
+
 // ================================================================
 // PAYMENT / WALLET
 // ================================================================
@@ -145,7 +149,10 @@ public enum PaymentStatus
     Pending,
     Success,
     Failed,
-    Cancelled
+    Unpaid,
+    Cancelled,
+    Disputed,
+    Refunded
 }
 
 public enum WalletTransactionType
