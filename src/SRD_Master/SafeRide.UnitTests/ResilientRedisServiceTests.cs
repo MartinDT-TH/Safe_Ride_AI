@@ -1,0 +1,140 @@
+using Microsoft.Extensions.Logging.Abstractions;
+using SafeRide.Infrastructure.Redis;
+
+namespace SafeRide.UnitTests;
+
+public sealed class ResilientRedisServiceTests
+{
+    [Fact]
+    public async Task SetAsync_PrimaryFails_PersistsInFallback()
+    {
+        var primary = new RedisServiceStub { ShouldFail = true };
+        var service = CreateService(primary);
+
+        await service.SetAsync("key", "value", TimeSpan.FromMinutes(1));
+
+        Assert.Equal("value", await service.GetAsync("key"));
+        Assert.Equal(1, primary.CallCount);
+    }
+
+    [Fact]
+    public async Task CircuitOpen_SkipsRepeatedPrimaryCalls()
+    {
+        var primary = new RedisServiceStub { ShouldFail = true };
+        var service = CreateService(primary);
+
+        await service.IncrementAsync("counter", TimeSpan.FromMinutes(1));
+        var count = await service.IncrementAsync(
+            "counter",
+            TimeSpan.FromMinutes(1));
+
+        Assert.Equal(2, count);
+        Assert.Equal(1, primary.CallCount);
+    }
+
+    [Fact]
+    public async Task VerifyOtp_PrimaryFails_UsesMirroredFallback()
+    {
+        var primary = new RedisServiceStub();
+        var service = CreateService(primary);
+        await service.SetAsync("otp", "expected", TimeSpan.FromMinutes(1));
+        primary.ShouldFail = true;
+
+        var result = await service.VerifyAndConsumeOtpAsync(
+            "otp",
+            "attempts",
+            "expected",
+            3);
+
+        Assert.Equal(OtpVerificationResult.Success, result);
+    }
+
+    [Fact]
+    public async Task IncrementAsync_PrimaryCountLags_ReturnsFallbackCount()
+    {
+        var primary = new RedisServiceStub { ShouldFail = true };
+        var service = new ResilientRedisService(
+            primary,
+            new InMemoryRedisService(),
+            NullLogger<ResilientRedisService>.Instance,
+            TimeSpan.Zero);
+
+        await service.IncrementAsync("counter", TimeSpan.FromMinutes(1));
+        primary.ShouldFail = false;
+        var count = await service.IncrementAsync(
+            "counter",
+            TimeSpan.FromMinutes(1));
+
+        Assert.Equal(2, count);
+    }
+
+    private static ResilientRedisService CreateService(
+        RedisServiceStub primary)
+    {
+        return new ResilientRedisService(
+            primary,
+            new InMemoryRedisService(),
+            NullLogger<ResilientRedisService>.Instance,
+            TimeSpan.FromMinutes(1));
+    }
+
+    private sealed class RedisServiceStub : IRedisService
+    {
+        private readonly InMemoryRedisService _storage = new();
+
+        public bool ShouldFail { get; set; }
+        public int CallCount { get; private set; }
+
+        public Task SetAsync(
+            string key,
+            string value,
+            TimeSpan expiration)
+        {
+            BeforeCall();
+            return _storage.SetAsync(key, value, expiration);
+        }
+
+        public Task<string?> GetAsync(string key)
+        {
+            BeforeCall();
+            return _storage.GetAsync(key);
+        }
+
+        public Task RemoveAsync(string key)
+        {
+            BeforeCall();
+            return _storage.RemoveAsync(key);
+        }
+
+        public Task<long> IncrementAsync(
+            string key,
+            TimeSpan expiration)
+        {
+            BeforeCall();
+            return _storage.IncrementAsync(key, expiration);
+        }
+
+        public Task<OtpVerificationResult> VerifyAndConsumeOtpAsync(
+            string otpKey,
+            string attemptsKey,
+            string expectedHash,
+            int maxAttempts)
+        {
+            BeforeCall();
+            return _storage.VerifyAndConsumeOtpAsync(
+                otpKey,
+                attemptsKey,
+                expectedHash,
+                maxAttempts);
+        }
+
+        private void BeforeCall()
+        {
+            CallCount++;
+            if (ShouldFail)
+            {
+                throw new InvalidOperationException("Redis unavailable.");
+            }
+        }
+    }
+}

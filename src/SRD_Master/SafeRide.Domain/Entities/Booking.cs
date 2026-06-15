@@ -9,14 +9,14 @@ namespace SafeRide.Domain.Entities;
 
 public partial class Booking
 {
-    public long Id { get; set; }
+    public long BookingId { get; set; }
 
     public Guid CustomerId { get; set; }
     public long VehicleId { get; set; }
     public long ServiceTypeId { get; set; }
 
     public BookingType BookingType { get; set; } = BookingType.Now;
-    public BookingStatus BookingStatus { get; set; } = BookingStatus.SEARCHING_DRIVER;
+    public BookingStatus BookingStatus { get; set; } = BookingStatus.Searching;
 
     public long? PricingRuleId { get; set; }
     public long? SurgePricingRuleId { get; set; }
@@ -31,7 +31,7 @@ public partial class Booking
 
     public decimal? EstimatedDistanceKm { get; set; }
     public int? EstimatedDurationMinutes { get; set; }
-    public decimal? EstimatedFare { get; set; }
+    public decimal EstimatedFare { get; set; }
 
     public DateTime? ScheduledAt { get; set; }
 
@@ -39,8 +39,8 @@ public partial class Booking
     public Guid? CancelledBy { get; set; }
     public string? CancellationReason { get; set; }
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public DateTime? UpdatedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
 
     public virtual ICollection<BookingPromotion> BookingPromotions { get; set; } = new List<BookingPromotion>();
 
