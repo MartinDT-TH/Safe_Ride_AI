@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using SafeRide.Application.Features.Auth.Services;
 using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
@@ -21,6 +22,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+        builder.ConfigureLogging(logging => logging.ClearProviders());
         builder.ConfigureAppConfiguration((_, configuration) =>
         {
             configuration.AddInMemoryCollection(new Dictionary<string, string?>
@@ -146,6 +148,20 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
                 RejectionReason TEXT NULL
             );
             CREATE INDEX IX_DriverKyc_DriverId ON DriverKyc (DriverId);
+            CREATE TABLE Vehicles (
+                Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                OwnerUserId TEXT NOT NULL,
+                PlateNumber TEXT NOT NULL,
+                BrandModel TEXT NOT NULL,
+                RequiredLicenseClass TEXT NOT NULL,
+                VehicleType TEXT NOT NULL,
+                EngineType TEXT NOT NULL,
+                TransmissionType TEXT NOT NULL,
+                Color TEXT NULL,
+                IsDeleted INTEGER NOT NULL DEFAULT 0,
+                CreatedAt TEXT NOT NULL
+            );
+            CREATE INDEX IX_Vehicles_OwnerUserId ON Vehicles (OwnerUserId);
             """);
     }
 
