@@ -14,7 +14,9 @@ class PromoBanner extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         image: const DecorationImage(
-          image: NetworkImage('https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&q=80&w=800'),
+          image: NetworkImage(
+            'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&q=80&w=800',
+          ),
           fit: BoxFit.cover,
         ),
       ),
@@ -25,7 +27,7 @@ class PromoBanner extends StatelessWidget {
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
             colors: [
-              const Color(0xFF006B70).withOpacity(0.8),
+              const Color(0xFF006B70).withValues(alpha: 0.8),
               Colors.transparent,
             ],
           ),
@@ -46,10 +48,7 @@ class PromoBanner extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               'Nhập mã: $code',
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 14,
-              ),
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
             ),
           ],
         ),

@@ -1,17 +1,39 @@
-# safe_ride
+# Safe Ride
 
-A new Flutter project.
+## Local configuration
 
-## Getting Started
+Create `env/api_keys.local.json` from `env/api_keys.example.json`, then run:
 
-This project is a starting point for a Flutter application.
+```powershell
+flutter run --dart-define-from-file=env/api_keys.local.json
+```
 
-A few resources to get you started if this is your first Flutter project:
+VS Code and Android Studio users can select the `Safe Ride (local)` run
+configuration. Stop the existing app process before changing configuration;
+hot reload and hot restart cannot add compile-time Dart defines.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+`GOOGLE_SERVER_CLIENT_ID` must be a Web OAuth client ID. Google Cloud must
+also contain an Android OAuth client configured with:
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- Package name: `com.android.safe_ride`
+- SHA-1 fingerprint of the key used to sign the app
+
+To print the debug SHA-1:
+
+```powershell
+keytool -list -v -alias androiddebugkey `
+  -keystore "$env:USERPROFILE\.android\debug.keystore" `
+  -storepass android -keypass android
+```
+
+## Google Maps Android
+
+Use a dedicated Android API key for `GOOGLE_MAPS_API_KEY`. In Google Cloud:
+
+1. Enable `Maps SDK for Android`.
+2. Enable billing for the project.
+3. Restrict the key to Android apps.
+4. Add package name `com.android.safe_ride`.
+5. Add the SHA-1 fingerprint of the signing key.
+
+Do not reuse a server-restricted Routes or Geocoding key for the Android map.

@@ -18,6 +18,7 @@
 import 'package:dio/dio.dart';
 import 'package:http_parser/http_parser.dart';
 
+import '../../../../core/constants/app_strings.dart';
 import '../../../../core/network/dio_client.dart';
 
 class AuthRemoteDatasource {
@@ -27,8 +28,8 @@ class AuthRemoteDatasource {
 
   Future<Map<String, dynamic>> login(String phone) async {
     final response = await _dio.post(
-      '/auth/send-otp',
-      data: {'phoneNumber': phone},
+      ApiEndpoints.sendOtp,
+      data: {ApiKeys.phoneNumber: phone},
     );
 
     return Map<String, dynamic>.from(response.data as Map);
@@ -41,12 +42,12 @@ class AuthRemoteDatasource {
     String deviceName,
   ) async {
     final response = await _dio.post(
-      '/auth/verify-otp',
+      ApiEndpoints.verifyOtp,
       data: {
-        'phoneNumber': phone,
-        'otpCode': otpCode,
-        'deviceId': deviceId,
-        'deviceName': deviceName,
+        ApiKeys.phoneNumber: phone,
+        ApiKeys.otpCode: otpCode,
+        ApiKeys.deviceId: deviceId,
+        ApiKeys.deviceName: deviceName,
       },
     );
 
@@ -59,11 +60,11 @@ class AuthRemoteDatasource {
     String deviceName,
   ) async {
     final response = await _dio.post(
-      '/auth/google-login',
+      ApiEndpoints.googleLogin,
       data: {
-        'googleIdToken': googleIdToken,
-        'deviceId': deviceId,
-        'deviceName': deviceName,
+        ApiKeys.googleIdToken: googleIdToken,
+        ApiKeys.deviceId: deviceId,
+        ApiKeys.deviceName: deviceName,
       },
     );
 
@@ -76,12 +77,14 @@ class AuthRemoteDatasource {
     String? email,
   ) async {
     final response = await _dio.put(
-      '/auth/profile',
+      ApiEndpoints.profile,
       data: {
-        'fullName': fullName,
-        'email': email?.trim().isEmpty == true ? null : email?.trim(),
+        ApiKeys.fullName: fullName,
+        ApiKeys.email: email?.trim().isEmpty == true ? null : email?.trim(),
       },
-      options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
+      options: Options(
+        headers: {ApiKeys.authorization: '${ApiKeys.bearer} $accessToken'},
+      ),
     );
 
     return Map<String, dynamic>.from(response.data as Map);
@@ -91,30 +94,33 @@ class AuthRemoteDatasource {
     final fileName = filePath.split(RegExp(r'[/\\]')).last;
     final extension = fileName.split('.').last.toLowerCase();
     final contentType = switch (extension) {
-      'png' => 'image/png',
-      'webp' => 'image/webp',
-      _ => 'image/jpeg',
+      AppValues.pngExtension => AppValues.pngMimeType,
+      AppValues.webpExtension => AppValues.webpMimeType,
+      _ => AppValues.jpegMimeType,
     };
     final response = await _dio.post(
-      '/auth/profile/avatar',
+      ApiEndpoints.profileAvatar,
       data: FormData.fromMap({
-        'file': await MultipartFile.fromFile(
+        ApiKeys.file: await MultipartFile.fromFile(
           filePath,
           filename: fileName,
           contentType: MediaType.parse(contentType),
         ),
       }),
       options: Options(
-        headers: {'Authorization': 'Bearer $accessToken'},
-        contentType: 'multipart/form-data',
+        headers: {ApiKeys.authorization: '${ApiKeys.bearer} $accessToken'},
+        contentType: AppValues.multipartFormData,
       ),
     );
 
     final data = Map<String, dynamic>.from(response.data as Map);
-    return data['avatarUrl']?.toString() ?? '';
+    return data[ApiKeys.avatarUrl]?.toString() ?? '';
   }
 
   Future<void> logout(String refreshToken) async {
-    await _dio.post('/auth/logout', data: {'refreshToken': refreshToken});
+    await _dio.post(
+      ApiEndpoints.logout,
+      data: {ApiKeys.refreshToken: refreshToken},
+    );
   }
 }

@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../core/constants/app_strings.dart';
 import '../providers/home_provider.dart';
 import '../widgets/quick_action_item.dart';
 import '../widgets/recent_trip_card.dart';
 import '../widgets/promo_banner.dart';
 import '../../../profile/presentation/pages/profile_page.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../booking/data/models/create_booking_request.dart';
+import '../../../booking/presentation/pages/route_search_page.dart';
 
 class CustomerHomePage extends StatefulWidget {
   const CustomerHomePage({super.key});
@@ -56,8 +59,8 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     final auth = context.watch<AuthProvider>();
     final List<Widget> pages = [
       _buildHomeContent(auth),
-      const Center(child: Text('Activity Page')),
-      const Center(child: Text('Wallet Page')),
+      const Center(child: Text(HomeStrings.activityPage)),
+      const Center(child: Text(HomeStrings.walletPage)),
       const ProfilePage(),
     ];
 
@@ -89,7 +92,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                 ),
               ),
               title: const Text(
-                'SafeRide',
+                AppStrings.appName,
                 style: TextStyle(
                   color: Color(0xFF006B70),
                   fontWeight: FontWeight.bold,
@@ -141,23 +144,28 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
         unselectedLabelStyle: const TextStyle(fontSize: 12),
         onTap: (index) => setState(() => _selectedIndex = index),
         items: [
-          _buildNavItem(Icons.home_outlined, Icons.home_filled, 'Trang chủ', 0),
+          _buildNavItem(
+            Icons.home_outlined,
+            Icons.home_filled,
+            HomeStrings.home,
+            0,
+          ),
           _buildNavItem(
             Icons.assignment_outlined,
             Icons.assignment_rounded,
-            'Hoạt động',
+            HomeStrings.activity,
             1,
           ),
           _buildNavItem(
             Icons.account_balance_wallet_outlined,
             Icons.account_balance_wallet_rounded,
-            'Ví',
+            HomeStrings.wallet,
             2,
           ),
           _buildNavItem(
             Icons.person_outline_rounded,
             Icons.person_rounded,
-            'Tài khoản',
+            HomeStrings.account,
             3,
           ),
         ],
@@ -178,7 +186,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Chào ${_displayName(auth.fullName)},',
+                HomeStrings.greeting(_displayName(auth.fullName)),
                 style: const TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
@@ -186,83 +194,94 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                 ),
               ),
               const Text(
-                'Bạn muốn đi đâu hôm nay?',
+                HomeStrings.destinationQuestion,
                 style: TextStyle(fontSize: 16, color: Color(0xFF666666)),
               ),
               const SizedBox(height: 24),
 
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF006B70),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Đặt ngay',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
+              InkWell(
+                onTap: () => _openBooking(context, BookingType.now),
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF006B70),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            HomeStrings.bookNow,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 26,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Có tài xế sau 2 phút',
-                          style: TextStyle(color: Colors.white70, fontSize: 14),
-                        ),
-                      ],
-                    ),
-                    Icon(
-                      Icons.directions_car_rounded,
-                      color: Colors.white,
-                      size: 54,
-                    ),
-                  ],
+                          SizedBox(height: 4),
+                          Text(
+                            HomeStrings.bookNowDescription,
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Icon(
+                        Icons.directions_car_rounded,
+                        color: Colors.white,
+                        size: 54,
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
 
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 18,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(
-                      Icons.calendar_month_outlined,
-                      color: Color(0xFF006B70),
-                      size: 28,
-                    ),
-                    SizedBox(width: 12),
-                    Text(
-                      'Đặt lịch trước',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1A1A1A),
+              InkWell(
+                onTap: () => _openBooking(context, BookingType.scheduled),
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 18,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(
+                        Icons.calendar_month_outlined,
+                        color: Color(0xFF006B70),
+                        size: 28,
                       ),
-                    ),
-                    Spacer(),
-                    Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      color: Colors.black,
-                      size: 16,
-                    ),
-                  ],
+                      SizedBox(width: 12),
+                      Text(
+                        HomeStrings.scheduleBooking,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1A1A1A),
+                        ),
+                      ),
+                      Spacer(),
+                      Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        color: Colors.black,
+                        size: 16,
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 32),
@@ -272,28 +291,28 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                 children: [
                   QuickActionItem(
                     icon: Icons.history_rounded,
-                    title: 'Lịch sử',
+                    title: HomeStrings.history,
                     backgroundColor: const Color(0xFFF2F2F2),
                     iconColor: Colors.black,
                     onTap: () {},
                   ),
                   QuickActionItem(
                     icon: Icons.directions_car_filled_rounded,
-                    title: 'Xe của tôi',
+                    title: HomeStrings.myVehicles,
                     backgroundColor: const Color(0xFFF2F2F2),
                     iconColor: Colors.black,
                     onTap: () {},
                   ),
                   QuickActionItem(
                     icon: Icons.local_offer_rounded,
-                    title: 'Khuyến mãi',
+                    title: HomeStrings.promotions,
                     backgroundColor: const Color(0xFFF2F2F2),
                     iconColor: Colors.black,
                     onTap: () {},
                   ),
                   QuickActionItem(
                     icon: Icons.star_rounded,
-                    title: 'SOS',
+                    title: HomeStrings.sos,
                     backgroundColor: const Color(0xFFFFE8E8),
                     iconColor: Colors.red,
                     textColor: Colors.red,
@@ -304,7 +323,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
               const SizedBox(height: 32),
 
               const Text(
-                'Chuyến đi gần đây',
+                HomeStrings.recentTrips,
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -313,14 +332,14 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
               ),
               const SizedBox(height: 16),
               const RecentTripCard(
-                pickup: '123 Nguyễn Văn Linh, Q.7',
-                destination: 'Sân bay Tân Sơn Nhất',
-                time: 'Hôm qua, 14:30',
+                pickup: HomeStrings.recentPickup,
+                destination: HomeStrings.recentDestination,
+                time: HomeStrings.recentTime,
               ),
               const SizedBox(height: 24),
               const PromoBanner(
-                title: 'Giảm 20% cho\nchuyến đi Tối',
-                code: 'SAFENIGHT',
+                title: HomeStrings.promotionTitle,
+                code: HomeStrings.promotionCode,
               ),
             ],
           ),
@@ -331,15 +350,15 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
   String _displayName(String? fullName) {
     final value = fullName?.trim() ?? '';
-    if (value.isEmpty || value == 'Người dùng SafeRide') {
-      return 'bạn';
+    if (value.isEmpty || value == HomeStrings.defaultUser) {
+      return HomeStrings.friendlyUser;
     }
     return value;
   }
 
   String _initials(String? fullName) {
     final name = _displayName(fullName);
-    if (name == 'bạn') return 'SR';
+    if (name == HomeStrings.friendlyUser) return HomeStrings.defaultInitials;
     final words = name.split(RegExp(r'\s+'));
     return words.take(2).map((word) => word[0].toUpperCase()).join();
   }
@@ -347,5 +366,13 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
   ImageProvider? _avatarImage(String? avatarUrl) {
     final value = avatarUrl?.trim() ?? '';
     return value.isEmpty ? null : NetworkImage(value);
+  }
+
+  void _openBooking(BuildContext context, BookingType bookingType) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => RouteSearchPage(bookingType: bookingType),
+      ),
+    );
   }
 }

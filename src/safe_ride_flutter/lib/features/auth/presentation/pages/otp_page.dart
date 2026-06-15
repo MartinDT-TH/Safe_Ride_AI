@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pin_code_fields/pin_code_fields.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../core/constants/app_strings.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../providers/auth_provider.dart';
 import '../../../onboarding/presentation/pages/role_selection_page.dart';
@@ -32,7 +33,7 @@ class _OtpPageState extends State<OtpPage> {
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          'SafeRide',
+          AppStrings.appName,
           style: TextStyle(
             color: Color(0xFF006B70),
             fontWeight: FontWeight.bold,
@@ -72,7 +73,7 @@ class _OtpPageState extends State<OtpPage> {
                       ),
                       const SizedBox(height: 32),
                       const Text(
-                        'Xác thực mã OTP',
+                        AuthStrings.otpTitle,
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
@@ -81,7 +82,7 @@ class _OtpPageState extends State<OtpPage> {
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'Vui lòng nhập mã gồm 6 chữ số đã được\ngửi đến ${widget.phoneNumber}.',
+                        AuthStrings.otpDescription(widget.phoneNumber),
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 15,
@@ -120,9 +121,9 @@ class _OtpPageState extends State<OtpPage> {
                         text: const TextSpan(
                           style: TextStyle(fontSize: 15, color: Colors.grey),
                           children: [
-                            TextSpan(text: 'Gửi lại sau '),
+                            TextSpan(text: AuthStrings.resendAfter),
                             TextSpan(
-                              text: '00:57',
+                              text: AuthStrings.resendTimer,
                               style: TextStyle(
                                 color: Color(0xFF006B70),
                                 fontWeight: FontWeight.bold,
@@ -141,14 +142,14 @@ class _OtpPageState extends State<OtpPage> {
                             SnackBar(
                               content: Text(
                                 ok
-                                    ? 'Đã gửi lại OTP.'
-                                    : 'Không thể gửi lại OTP.',
+                                    ? AuthStrings.otpResent
+                                    : AuthStrings.resendOtpFailed,
                               ),
                             ),
                           );
                         },
                         child: const Text(
-                          'Gửi lại OTP',
+                          AuthStrings.resendOtp,
                           style: TextStyle(color: Colors.grey, fontSize: 15),
                         ),
                       ),
@@ -159,13 +160,13 @@ class _OtpPageState extends State<OtpPage> {
               Consumer<AuthProvider>(
                 builder: (_, provider, child) {
                   return CustomButton(
-                    text: 'Xác nhận',
+                    text: AppStrings.confirm,
                     isLoading: provider.isLoading,
                     onPressed: () async {
                       if (otpCode.length != 6) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('Vui lòng nhập đủ 6 số OTP'),
+                            content: Text(AuthStrings.otpRequired),
                           ),
                         );
                         return;
@@ -193,9 +194,7 @@ class _OtpPageState extends State<OtpPage> {
                         );
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('OTP không đúng hoặc đã hết hạn'),
-                          ),
+                          const SnackBar(content: Text(AuthStrings.invalidOtp)),
                         );
                       }
                     },

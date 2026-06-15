@@ -29,6 +29,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../../../../core/config/api_keys_config.dart';
+import '../../../../core/constants/app_strings.dart';
 import '../../../../core/services/device_identity_service.dart';
 import '../../../../core/storage/secure_storage_service.dart';
 import '../../domain/repositories/auth_repository.dart';
@@ -74,10 +76,10 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
 
       final response = await repository.login(phone);
-      final message = response['message']?.toString() ?? '';
+      final message = response[ApiKeys.message]?.toString() ?? '';
 
-      if (message.toLowerCase().contains('thành công') ||
-          message.toLowerCase().contains('success')) {
+      if (message.toLowerCase().contains(AppValues.successVietnamese) ||
+          message.toLowerCase().contains(AppValues.success)) {
         return true;
       }
 
@@ -123,9 +125,16 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
+      if (!ApiKeysConfig.hasGoogleServerClientId) {
+        debugPrint(
+          'GOOGLE_SERVER_CLIENT_ID is missing. Start Flutter with '
+          '--dart-define-from-file=env/api_keys.local.json.',
+        );
+        return false;
+      }
+
       final googleSignIn = GoogleSignIn(
-        serverClientId:
-            '338143275422-vnecmih3efs2n9kfqtm0d44i81n6ceat.apps.googleusercontent.com',
+        serverClientId: ApiKeysConfig.googleServerClientId,
       );
 
       final account = await googleSignIn.signIn();
@@ -149,7 +158,6 @@ class AuthProvider extends ChangeNotifier {
         device.id,
         device.name,
       );
-      debugPrint('Google login response: $response');
 
       final saved = await _saveSession(response);
       if (saved) {
@@ -179,8 +187,8 @@ class AuthProvider extends ChangeNotifier {
         fullName.trim(),
         email,
       );
-      _fullName = response['fullName']?.toString();
-      _email = response['email']?.toString();
+      _fullName = response[ApiKeys.fullName]?.toString();
+      _email = response[ApiKeys.email]?.toString();
       _nextStep = AuthNextStep.customerHome;
       return true;
     } catch (e) {
@@ -241,13 +249,13 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<bool> _saveSession(Map<String, dynamic> response) async {
-    final accessToken = response['accessToken']?.toString();
-    final refreshToken = response['refreshToken']?.toString();
+    final accessToken = response[ApiKeys.accessToken]?.toString();
+    final refreshToken = response[ApiKeys.refreshToken]?.toString();
     if (accessToken == null ||
         accessToken.isEmpty ||
         refreshToken == null ||
         refreshToken.isEmpty) {
-      debugPrint('Auth response is missing tokens: $response');
+      debugPrint('Auth response is missing required tokens.');
       return false;
     }
 
@@ -260,13 +268,13 @@ class AuthProvider extends ChangeNotifier {
   }
 
   void _readAuthState(Map<String, dynamic> response) {
-    _fullName = response['fullName']?.toString();
-    _phoneNumber = response['phoneNumber']?.toString();
-    _email = response['email']?.toString();
-    _avatarUrl = response['avatarUrl']?.toString();
-    _nextStep = switch (response['nextStep']?.toString()) {
-      'completeProfile' => AuthNextStep.completeProfile,
-      'selectRole' => AuthNextStep.selectRole,
+    _fullName = response[ApiKeys.fullName]?.toString();
+    _phoneNumber = response[ApiKeys.phoneNumber]?.toString();
+    _email = response[ApiKeys.email]?.toString();
+    _avatarUrl = response[ApiKeys.avatarUrl]?.toString();
+    _nextStep = switch (response[ApiKeys.nextStep]?.toString()) {
+      AppValues.completeProfile => AuthNextStep.completeProfile,
+      AppValues.selectRole => AuthNextStep.selectRole,
       _ => AuthNextStep.customerHome,
     };
   }

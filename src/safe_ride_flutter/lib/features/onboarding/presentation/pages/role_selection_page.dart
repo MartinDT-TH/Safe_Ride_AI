@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../core/constants/app_strings.dart';
 import '../providers/role_provider.dart';
 import '../widgets/role_card.dart';
 import '../../../home/presentation/pages/customer_home_page.dart';
@@ -20,7 +21,7 @@ class RoleSelectionPage extends StatelessWidget {
                 constraints: BoxConstraints(minHeight: constraints.maxHeight),
                 child: IntrinsicHeight(
                   child: Consumer<RoleProvider>(
-                    builder: (_, provider, __) {
+                    builder: (context, provider, child) {
                       return Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 24),
                         child: Column(
@@ -43,7 +44,7 @@ class RoleSelectionPage extends StatelessWidget {
                             ),
                             const SizedBox(height: 32),
                             const Text(
-                              'Chào mừng bạn!',
+                              OnboardingStrings.welcome,
                               style: TextStyle(
                                 fontSize: 34,
                                 fontWeight: FontWeight.bold,
@@ -53,7 +54,7 @@ class RoleSelectionPage extends StatelessWidget {
                             ),
                             const SizedBox(height: 8),
                             const Text(
-                              'Bạn muốn bắt đầu với vai trò nào?',
+                              OnboardingStrings.selectRoleQuestion,
                               style: TextStyle(
                                 fontSize: 16,
                                 color: Color(0xFF666666),
@@ -62,20 +63,24 @@ class RoleSelectionPage extends StatelessWidget {
                             const SizedBox(height: 48),
                             RoleCard(
                               icon: Icons.directions_car_filled_rounded,
-                              title: 'Tôi là Khách hàng',
+                              title: OnboardingStrings.customerTitle,
                               description:
-                                  'Đặt xe nhanh chóng, an toàn và theo dõi hành trình trực tiếp.',
-                              isSelected: provider.selectedRole == 'customer',
-                              onTap: () => provider.selectRole('customer'),
+                                  OnboardingStrings.customerDescription,
+                              isSelected:
+                                  provider.selectedRole ==
+                                  AppValues.roleCustomer,
+                              onTap: () =>
+                                  provider.selectRole(AppValues.roleCustomer),
                             ),
                             const SizedBox(height: 16),
                             RoleCard(
                               icon: Icons.heat_pump_rounded,
-                              title: 'Tôi là Tài xế',
-                              description:
-                                  'Nhận việc linh hoạt, tăng thu nhập và quản lý chuyến đi dễ dàng.',
-                              isSelected: provider.selectedRole == 'driver',
-                              onTap: () => provider.selectRole('driver'),
+                              title: OnboardingStrings.driverTitle,
+                              description: OnboardingStrings.driverDescription,
+                              isSelected:
+                                  provider.selectedRole == AppValues.roleDriver,
+                              onTap: () =>
+                                  provider.selectRole(AppValues.roleDriver),
                             ),
                             const Spacer(),
                             Container(
@@ -93,14 +98,14 @@ class RoleSelectionPage extends StatelessWidget {
                                     scale: 0.85,
                                     child: Switch(
                                       value: provider.rememberRole,
-                                      activeColor: Colors.white,
+                                      activeThumbColor: Colors.white,
                                       activeTrackColor: const Color(0xFF2B61E1),
                                       onChanged: provider.setRememberRole,
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   const Text(
-                                    'Ghi nhớ lựa chọn cho lần sau',
+                                    OnboardingStrings.rememberRole,
                                     style: TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
@@ -119,7 +124,7 @@ class RoleSelectionPage extends StatelessWidget {
                                     ? null
                                     : () {
                                         if (provider.selectedRole ==
-                                            'customer') {
+                                            AppValues.roleCustomer) {
                                           Navigator.pushReplacement(
                                             context,
                                             MaterialPageRoute(
@@ -134,7 +139,7 @@ class RoleSelectionPage extends StatelessWidget {
                                   foregroundColor: const Color(0xFF666666),
                                   disabledBackgroundColor: const Color(
                                     0xFFEBE9E7,
-                                  ).withOpacity(0.5),
+                                  ).withValues(alpha: 0.5),
                                   elevation: 0,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(18),
@@ -144,7 +149,7 @@ class RoleSelectionPage extends StatelessWidget {
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     const Text(
-                                      'Tiếp tục',
+                                      OnboardingStrings.continueLabel,
                                       style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.bold,
