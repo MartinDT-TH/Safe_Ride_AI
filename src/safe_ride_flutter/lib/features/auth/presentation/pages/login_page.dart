@@ -71,7 +71,7 @@ class _LoginPageState extends State<LoginPage> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Image.network(
-                          'https://voca-land.sgp1.cdn.digitaloceanspaces.com/0/1757697945826/800e1725.jpg',
+                          'https://res.cloudinary.com/dj7y3ikck/image/upload/v1781487774/logo_poxclo.png',
                           height: 60,
                         ),
                         const SizedBox(height: 8),

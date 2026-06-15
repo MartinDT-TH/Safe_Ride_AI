@@ -16,6 +16,10 @@ import '../features/home/data/datasources/home_remote_datasource.dart';
 import '../features/home/data/repositories/home_repository_impl.dart';
 import '../features/home/domain/repositories/home_repository.dart';
 import '../features/home/presentation/providers/home_provider.dart';
+import '../features/profile/data/datasources/vehicle_remote_datasource.dart';
+import '../features/profile/data/repositories/vehicle_repository_impl.dart';
+import '../features/profile/domain/repositories/vehicle_repository.dart';
+import '../features/profile/presentation/providers/vehicle_provider.dart';
 
 final getIt = GetIt.instance;
 
@@ -66,5 +70,20 @@ Future<void> setupDependencies() async {
 
   getIt.registerFactory<HomeProvider>(
     () => HomeProvider(getIt<HomeRepository>()),
+  );
+
+  getIt.registerLazySingleton<VehicleRemoteDatasource>(
+    () => VehicleRemoteDatasource(),
+  );
+
+  getIt.registerLazySingleton<VehicleRepository>(
+    () => VehicleRepositoryImpl(getIt<VehicleRemoteDatasource>()),
+  );
+
+  getIt.registerFactory<VehicleProvider>(
+    () => VehicleProvider(
+      getIt<VehicleRepository>(),
+      getIt<SecureStorageService>(),
+    ),
   );
 }
