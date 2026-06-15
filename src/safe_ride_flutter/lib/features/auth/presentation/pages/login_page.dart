@@ -6,6 +6,7 @@ import '../../../onboarding/presentation/pages/role_selection_page.dart';
 import '../../../profile/presentation/pages/edit_profile_page.dart';
 
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_strings.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_textfield.dart';
 import '../providers/auth_provider.dart';
@@ -23,10 +24,10 @@ class _LoginPageState extends State<LoginPage> {
   String _normalizePhone(String value) {
     final digits = value.replaceAll(RegExp(r'\D'), '');
     if (digits.length == 9) {
-      return '+84$digits';
+      return '${AppValues.vietnamCountryCode}$digits';
     }
     if (digits.length == 10 && digits.startsWith('0')) {
-      return '+84${digits.substring(1)}';
+      return '${AppValues.vietnamCountryCode}${digits.substring(1)}';
     }
     return digits;
   }
@@ -70,10 +71,7 @@ class _LoginPageState extends State<LoginPage> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Image.network(
-                          'https://res.cloudinary.com/dj7y3ikck/image/upload/v1781487774/logo_poxclo.png',
-                          height: 60,
-                        ),
+                        Image.network(AppConfig.logoUrl, height: 60),
                         const SizedBox(height: 8),
                       ],
                     ),
@@ -82,7 +80,7 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 32),
 
                 const Text(
-                  'SafeRide',
+                  AppStrings.appName,
                   style: TextStyle(
                     fontSize: 42,
                     fontWeight: FontWeight.bold,
@@ -93,7 +91,7 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 8),
 
                 const Text(
-                  'Chuyến đi an toàn, tin cậy tuyệt đối', // Updated slogan
+                  AuthStrings.slogan,
                   style: TextStyle(
                     fontSize: 16,
                     color: AppColors.textSecondary,
@@ -105,7 +103,7 @@ class _LoginPageState extends State<LoginPage> {
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    'Số điện thoại',
+                    AuthStrings.phoneNumber,
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
@@ -117,9 +115,9 @@ class _LoginPageState extends State<LoginPage> {
 
                 CustomTextField(
                   controller: phoneController,
-                  hintText: 'Nhập số điện thoại',
+                  hintText: AuthStrings.phoneHint,
                   keyboardType: TextInputType.phone,
-                  prefixText: '+84 ',
+                  prefixText: AuthStrings.vietnamPhonePrefix,
                 ),
 
                 const SizedBox(height: 24),
@@ -127,7 +125,7 @@ class _LoginPageState extends State<LoginPage> {
                 Consumer<AuthProvider>(
                   builder: (context, provider, child) {
                     return CustomButton(
-                      text: 'Tiếp tục / Đăng ký',
+                      text: AuthStrings.continueOrRegister,
                       isLoading: provider.isLoading,
                       onPressed: () async {
                         final rawPhone = phoneController.text.trim();
@@ -136,17 +134,19 @@ class _LoginPageState extends State<LoginPage> {
                         if (rawPhone.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Vui lòng nhập số điện thoại'),
+                              content: Text(AuthStrings.phoneRequired),
                             ),
                           );
                           return;
                         }
 
                         if (normalizedPhone.length != 12 ||
-                            !normalizedPhone.startsWith('+84')) {
+                            !normalizedPhone.startsWith(
+                              AppValues.vietnamCountryCode,
+                            )) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Số điện thoại không hợp lệ'),
+                              content: Text(AuthStrings.invalidPhone),
                             ),
                           );
                           return;
@@ -164,9 +164,7 @@ class _LoginPageState extends State<LoginPage> {
                         } else if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text(
-                                'Không thể gửi OTP. Kiểm tra API hoặc số điện thoại.',
-                              ),
+                              content: Text(AuthStrings.sendOtpFailed),
                             ),
                           );
                         }
@@ -184,7 +182,7 @@ class _LoginPageState extends State<LoginPage> {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Text(
-                        'HOẶC',
+                        AuthStrings.or,
                         style: TextStyle(
                           color: AppColors.textSecondary,
                           fontWeight: FontWeight.w500,
@@ -224,7 +222,7 @@ class _LoginPageState extends State<LoginPage> {
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Đăng nhập Google thất bại'),
+                              content: Text(AuthStrings.googleLoginFailed),
                             ),
                           );
                         }
@@ -239,12 +237,9 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         elevation: 0,
                       ),
-                      icon: Image.network(
-                        'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ2sSeQqjaUTuZ3gRgkKjidpaipF_l6s72lBw&s',
-                        height: 24,
-                      ),
+                      icon: Image.network(AppConfig.googleLogoUrl, height: 24),
                       label: const Text(
-                        'Google',
+                        AuthStrings.google,
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
@@ -258,7 +253,7 @@ class _LoginPageState extends State<LoginPage> {
                 RichText(
                   textAlign: TextAlign.center,
                   text: TextSpan(
-                    text: 'Bằng việc tiếp tục, bạn đồng ý với ',
+                    text: AuthStrings.continueAgreement,
                     style: TextStyle(
                       fontSize: 14,
                       color: AppColors.textSecondary,
@@ -266,7 +261,7 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     children: [
                       TextSpan(
-                        text: 'Điều khoản dịch vụ',
+                        text: AuthStrings.termsOfService,
                         style: TextStyle(
                           color: AppColors.primary,
                           fontWeight: FontWeight.bold,
@@ -274,11 +269,11 @@ class _LoginPageState extends State<LoginPage> {
                         // Add onTap functionality for navigation if needed
                       ),
                       TextSpan(
-                        text: ' và ',
+                        text: AuthStrings.and,
                         style: TextStyle(color: AppColors.textSecondary),
                       ),
                       TextSpan(
-                        text: 'Chính sách bảo mật',
+                        text: AuthStrings.privacyPolicy,
                         style: TextStyle(
                           color: AppColors.primary,
                           fontWeight: FontWeight.bold,
@@ -286,7 +281,7 @@ class _LoginPageState extends State<LoginPage> {
                         // Add onTap functionality for navigation if needed
                       ),
                       TextSpan(
-                        text: ' của chúng tôi.',
+                        text: AuthStrings.agreementSuffix,
                         style: TextStyle(color: AppColors.textSecondary),
                       ),
                     ],

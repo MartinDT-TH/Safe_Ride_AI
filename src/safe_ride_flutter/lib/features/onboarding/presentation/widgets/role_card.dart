@@ -27,13 +27,15 @@ class RoleCard extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(28),
           border: Border.all(
-            color: isSelected ? const Color(0xFF006B70) : const Color(0xFFEEEEEE),
+            color: isSelected
+                ? const Color(0xFF006B70)
+                : const Color(0xFFEEEEEE),
             width: 1.5,
           ),
           boxShadow: [
             if (isSelected)
               BoxShadow(
-                color: const Color(0xFF006B70).withOpacity(0.1),
+                color: const Color(0xFF006B70).withValues(alpha: 0.1),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -48,11 +50,7 @@ class RoleCard extends StatelessWidget {
                 color: const Color(0xFFE8F2F2),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: Icon(
-                icon,
-                color: const Color(0xFF006B70),
-                size: 32,
-              ),
+              child: Icon(icon, color: const Color(0xFF006B70), size: 32),
             ),
             const SizedBox(height: 20),
             Text(

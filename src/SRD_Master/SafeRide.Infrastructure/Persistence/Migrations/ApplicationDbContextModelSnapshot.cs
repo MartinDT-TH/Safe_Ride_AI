@@ -253,11 +253,12 @@ namespace SafeRide.Infrastructure.Migrations
 
             modelBuilder.Entity("SafeRide.Domain.Entities.Booking", b =>
                 {
-                    b.Property<long>("Id")
+                    b.Property<long>("BookingId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("Id");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("BookingId"));
 
                     b.Property<string>("BookingSource")
                         .IsRequired()
@@ -268,17 +269,13 @@ namespace SafeRide.Infrastructure.Migrations
 
                     b.Property<string>("BookingStatus")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
                         .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)")
-                        .HasDefaultValueSql("('SEARCHING_DRIVER')");
+                        .HasColumnType("nvarchar(30)");
 
                     b.Property<string>("BookingType")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
                         .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)")
-                        .HasDefaultValueSql("('Now')");
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<string>("CancellationReason")
                         .HasMaxLength(255)
@@ -301,13 +298,13 @@ namespace SafeRide.Infrastructure.Migrations
                         .HasColumnType("geography");
 
                     b.Property<decimal?>("EstimatedDistanceKm")
-                        .HasColumnType("decimal(10, 2)");
+                        .HasColumnType("decimal(10,2)");
 
                     b.Property<int?>("EstimatedDurationMinutes")
                         .HasColumnType("int");
 
-                    b.Property<decimal?>("EstimatedFare")
-                        .HasColumnType("decimal(18, 2)");
+                    b.Property<decimal>("EstimatedFare")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("PickupAddress")
                         .IsRequired()
@@ -334,14 +331,18 @@ namespace SafeRide.Infrastructure.Migrations
                     b.Property<long?>("SurgePricingRuleId")
                         .HasColumnType("bigint");
 
-                    b.Property<DateTime?>("UpdatedAt")
+                    b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2");
 
                     b.Property<long>("VehicleId")
                         .HasColumnType("bigint");
 
-                    b.HasKey("Id")
+                    b.HasKey("BookingId")
                         .HasName("PK__Bookings__3214EC073A8063CD");
+
+                    b.HasIndex("BookingStatus");
+
+                    b.HasIndex("BookingType");
 
                     b.HasIndex("CancelledBy");
 
@@ -349,17 +350,19 @@ namespace SafeRide.Infrastructure.Migrations
 
                     b.HasIndex("PricingRuleId");
 
+                    b.HasIndex("ScheduledAt");
+
                     b.HasIndex("ServiceTypeId");
 
                     b.HasIndex("SurgePricingRuleId");
 
                     b.HasIndex("VehicleId");
 
-                    b.ToTable("Bookings", t =>
+                    b.ToTable("Bookings", null, t =>
                         {
                             t.HasCheckConstraint("CK_Bookings_BookingSource", "[BookingSource] IN ('Manual', 'VoiceCommand', 'Scheduled')");
 
-                            t.HasCheckConstraint("CK_Bookings_BookingStatus", "[BookingStatus] IN ('SEARCHING_DRIVER', 'DRIVER_ASSIGNED', 'CUSTOMER_CANCELLED', 'DRIVER_CANCELLED', 'EXPIRED', 'CONVERTED_TO_TRIP')");
+                            t.HasCheckConstraint("CK_Bookings_BookingStatus", "[BookingStatus] IN ('PendingSchedule', 'Searching', 'DriverAssigned', 'Cancelled', 'Expired', 'Completed')");
 
                             t.HasCheckConstraint("CK_Bookings_BookingType", "[BookingType] IN ('Now', 'Scheduled')");
 
@@ -369,7 +372,7 @@ namespace SafeRide.Infrastructure.Migrations
 
                             t.HasCheckConstraint("CK_Bookings_EstimatedDurationMinutes", "[EstimatedDurationMinutes] IS NULL OR [EstimatedDurationMinutes] >= 0");
 
-                            t.HasCheckConstraint("CK_Bookings_EstimatedFare", "[EstimatedFare] IS NULL OR [EstimatedFare] >= 0");
+                            t.HasCheckConstraint("CK_Bookings_EstimatedFare", "[EstimatedFare] >= 0");
 
                             t.HasCheckConstraint("CK_Bookings_PickupLocation", "[PickupLocation].STSrid = 4326");
 

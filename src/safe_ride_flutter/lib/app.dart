@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'core/constants/app_strings.dart';
 import 'core/theme/app_theme.dart';
 
 import 'features/auth/presentation/pages/login_page.dart';
@@ -11,7 +12,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'SafeRide',
+      title: AppStrings.appName,
       theme: AppTheme.lightTheme,
       home: const LoginPage(),
     );
