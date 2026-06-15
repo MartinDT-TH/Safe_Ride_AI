@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
 using SafeRide.Application.Features.Auth;
+using SafeRide.Application.Features.Bookings;
 
 namespace SafeRide.API.Middlewares;
 
@@ -22,6 +23,14 @@ public sealed class ApiExceptionMiddleware
             await _next(context);
         }
         catch (AuthException exception)
+        {
+            await WriteProblemAsync(
+                context,
+                exception.StatusCode,
+                exception.Code,
+                exception.Message);
+        }
+        catch (BookingException exception)
         {
             await WriteProblemAsync(
                 context,
