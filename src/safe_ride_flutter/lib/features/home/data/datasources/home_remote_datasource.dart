@@ -1,5 +1,3 @@
-import 'package:dio/dio.dart';
-
 // import '../models/home_response.dart';
 //
 // class HomeRemoteDatasource {
@@ -20,27 +18,22 @@ import 'package:dio/dio.dart';
 //   }
 // }
 
+import '../../../../core/constants/app_strings.dart';
 import '../models/home_response.dart';
 
 class HomeRemoteDatasource {
-
   Future<HomeResponse> getHomeData() async {
+    await Future.delayed(const Duration(seconds: 1));
 
-    await Future.delayed(
-      const Duration(seconds: 1),
-    );
-
-    return HomeResponse.fromJson(
-      {
-        "userName": "Alex",
-        "recentTrips": [
-          {
-            "pickup": "AEON Mall",
-            "destination": "Quận 1",
-            "time": "10:20"
-          }
-        ]
-      },
-    );
+    return HomeResponse.fromJson({
+      ApiKeys.userName: 'Alex',
+      ApiKeys.recentTrips: [
+        {
+          ApiKeys.pickup: 'AEON Mall',
+          ApiKeys.destination: 'Quận 1',
+          ApiKeys.time: '10:20',
+        },
+      ],
+    });
   }
 }
