@@ -16,3 +16,4 @@ abstract final class ApiKeysConfig {
   static bool get hasGoogleServerClientId =>
       googleServerClientId.trim().isNotEmpty || hasNativeAndroidConfig;
 }
+

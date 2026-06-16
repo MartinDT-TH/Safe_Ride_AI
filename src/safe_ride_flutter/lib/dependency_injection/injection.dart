@@ -8,25 +8,26 @@ import '../features/auth/data/repositories/auth_repository_impl.dart';
 import '../features/auth/domain/repositories/auth_repository.dart';
 import '../features/auth/presentation/providers/auth_provider.dart';
 
-import '../features/onboarding/data/datasources/onboarding_remote_datasource.dart';
-import '../features/onboarding/data/repositories/onboarding_repository_impl.dart';
-import '../features/onboarding/domain/repositories/onboarding_repository.dart';
-import '../features/onboarding/presentation/providers/role_provider.dart';
+import '../features/shared/onboarding/data/datasources/onboarding_remote_datasource.dart';
+import '../features/shared/onboarding/data/repositories/onboarding_repository_impl.dart';
+import '../features/shared/onboarding/domain/repositories/onboarding_repository.dart';
+import '../features/shared/onboarding/presentation/providers/role_provider.dart';
 
-import '../features/home/data/datasources/home_remote_datasource.dart';
-import '../features/home/data/repositories/home_repository_impl.dart';
-import '../features/home/domain/repositories/home_repository.dart';
-import '../features/home/presentation/providers/home_provider.dart';
-import '../features/booking/data/datasources/booking_catalog_datasource.dart';
-import '../features/booking/data/datasources/booking_remote_datasource.dart';
-import '../features/booking/data/repositories/booking_repository_impl.dart';
-import '../features/booking/domain/repositories/booking_repository.dart';
-import '../features/booking/presentation/providers/booking_provider.dart';
-import '../features/profile/data/datasources/vehicle_remote_datasource.dart';
-import '../features/profile/data/repositories/vehicle_repository_impl.dart';
-import '../features/profile/domain/repositories/vehicle_repository.dart';
-import '../features/profile/presentation/providers/vehicle_provider.dart';
-import '../features/activity/presentation/providers/activity_provider.dart';
+import '../features/customer/home/data/datasources/home_remote_datasource.dart';
+import '../features/customer/home/data/repositories/home_repository_impl.dart';
+import '../features/customer/home/domain/repositories/home_repository.dart';
+import '../features/customer/home/presentation/providers/home_provider.dart';
+import '../features/customer/booking/data/datasources/booking_catalog_datasource.dart';
+import '../features/customer/booking/data/datasources/booking_remote_datasource.dart';
+import '../features/customer/booking/data/repositories/booking_repository_impl.dart';
+import '../features/customer/booking/domain/repositories/booking_repository.dart';
+import '../features/customer/booking/presentation/providers/booking_provider.dart';
+import '../features/shared/profile/data/datasources/vehicle_remote_datasource.dart';
+import '../features/shared/profile/data/repositories/vehicle_repository_impl.dart';
+import '../features/shared/profile/domain/repositories/vehicle_repository.dart';
+import '../features/shared/profile/presentation/providers/vehicle_provider.dart';
+import '../features/shared/history/presentation/providers/history_provider.dart';
+import '../features/driver/dashboard/presentation/providers/driver_dashboard_provider.dart';
 
 final getIt = GetIt.instance;
 
@@ -111,5 +112,9 @@ Future<void> setupDependencies() async {
     ),
   );
 
-  getIt.registerFactory<ActivityProvider>(() => ActivityProvider());
+  getIt.registerFactory<HistoryProvider>(() => HistoryProvider());
+
+  getIt.registerFactory<DriverDashboardProvider>(
+    () => DriverDashboardProvider(),
+  );
 }

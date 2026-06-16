@@ -30,11 +30,11 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
-import '../../../../core/config/api_keys_config.dart';
-import '../../../../core/constants/app_strings.dart';
-import '../../../../core/network/auth_header.dart';
-import '../../../../core/services/device_identity_service.dart';
-import '../../../../core/storage/secure_storage_service.dart';
+import '../../../../../core/config/api_keys_config.dart';
+import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/network/auth_header.dart';
+import '../../../../../core/services/device_identity_service.dart';
+import '../../../../../core/storage/secure_storage_service.dart';
 import '../../domain/repositories/auth_repository.dart';
 
 enum AuthNextStep { completeProfile, customerHome, selectRole }
@@ -525,3 +525,4 @@ class AuthProvider extends ChangeNotifier {
     return null;
   }
 }
+

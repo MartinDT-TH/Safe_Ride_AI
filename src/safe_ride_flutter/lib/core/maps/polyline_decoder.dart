@@ -44,3 +44,4 @@ List<LatLng> decodePolyline(String encoded) {
   final delta = (result & 1) != 0 ? ~(result >> 1) : result >> 1;
   return (delta: delta, nextIndex: index);
 }
+

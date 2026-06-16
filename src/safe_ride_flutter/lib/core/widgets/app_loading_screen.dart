@@ -78,3 +78,4 @@ class AppLoadingScreen extends StatelessWidget {
     );
   }
 }
+

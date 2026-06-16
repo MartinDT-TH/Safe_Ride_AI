@@ -52,7 +52,7 @@ abstract final class OnboardingStrings {
 }
 
 abstract final class HomeStrings {
-  static const activityPage = 'Activity Page';
+  static const historyPage = 'History Page';
   static const walletPage = 'Wallet Page';
   static const home = 'Trang chủ';
   static const activity = 'Hoạt động';
@@ -79,7 +79,7 @@ abstract final class HomeStrings {
   static String greeting(String name) => 'Chào $name,';
 }
 
-abstract final class ActivityStrings {
+abstract final class HistoryStrings {
   static const tripHistory = 'Lịch sử chuyến đi';
   static const all = 'Tất cả';
   static const completed = 'Hoàn thành';
@@ -307,3 +307,4 @@ abstract final class DeviceStrings {
   static const fuchsia = 'SafeRide Fuchsia';
   static const idPrefix = 'saferide';
 }
+

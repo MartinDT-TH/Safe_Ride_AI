@@ -2,7 +2,7 @@ import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../constants/app_strings.dart';
-import '../../features/booking/data/models/booking_location.dart';
+import '../../features/customer/booking/data/models/booking_location.dart';
 
 class LocationService {
   Future<BookingLocation> getCurrentLocation() async {
@@ -94,3 +94,4 @@ class LocationServiceException implements Exception {
   @override
   String toString() => message;
 }
+
