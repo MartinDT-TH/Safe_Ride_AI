@@ -34,7 +34,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
   String? _emailError;
   String _selectedPhoneCountryCode = AppValues.vietnamCountryCode;
 
-  bool get _hasExistingPhone => (widget.phoneNumber ?? '').trim().isNotEmpty;
+  bool get _hasVerifiedPhone {
+    final auth = context.read<AuthProvider>();
+    final phone = (widget.phoneNumber ?? auth.phoneNumber ?? '').trim();
+    return phone.isNotEmpty && auth.phoneNumberConfirmed;
+  }
 
   @override
   void initState() {
@@ -232,10 +236,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
                       _buildInputField(
                         label: AuthStrings.phoneNumber,
                         controller: _phoneController,
-                        isReadOnly: _hasExistingPhone,
+                        isReadOnly: _hasVerifiedPhone,
                         keyboardType: TextInputType.phone,
                         errorText: _phoneError,
-                        prefixIcon: _hasExistingPhone
+                        prefixIcon: _hasVerifiedPhone
                             ? null
                             : _CountryCodePicker(
                                 value: _selectedPhoneCountryCode,
@@ -246,7 +250,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                   );
                                 },
                               ),
-                        suffixIcon: _hasExistingPhone
+                        suffixIcon: _hasVerifiedPhone
                             ? const Icon(
                                 Icons.check_circle,
                                 color: Color(0xFF006B70),
@@ -330,7 +334,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
             phoneNumber,
             countryCode: _selectedPhoneCountryCode,
           );
-    if (!_hasExistingPhone && normalizedPhone != null) {
+    if (!_hasVerifiedPhone && normalizedPhone != null) {
       final phoneVerified = await _verifyPhoneBeforeSave(
         provider,
         normalizedPhone,
@@ -481,7 +485,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       nameError = ProfileStrings.invalidFullName;
     }
 
-    if (!_hasExistingPhone &&
+    if (!_hasVerifiedPhone &&
         (widget.requiredCompletion || phoneNumber.isNotEmpty) &&
         !PhoneNumberValidator.isValidPhone(
           phoneNumber,
@@ -505,6 +509,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 
   bool _applyServerValidation(String? code) {
+    if (code == 'auth.email_conflict') {
+      setState(() {
+        _emailError = ProfileStrings.emailAlreadyUsed;
+      });
+      return true;
+    }
+
     final errorText = switch (code) {
       'auth.invalid_phone_number' => AuthStrings.invalidPhone,
       'auth.phone_number_conflict' => ProfileStrings.phoneNumberAlreadyUsed,

@@ -16,6 +16,8 @@ namespace SafeRide.API.Controllers;
 [Route("api/auth")]
 public class AuthController : ControllerBase
 {
+    private const string GoogleLoginProvider = "Google";
+
     private readonly IAuthService _authService;
     private readonly UserManager<AspNetUser> _userManager;
     private readonly IJwtTokenService _jwtTokenService;
@@ -321,13 +323,59 @@ public class AuthController : ControllerBase
             return NotFound();
         }
 
-        user.FullName = request.FullName.Trim();
-        user.Email = string.IsNullOrWhiteSpace(request.Email)
+        var requestedEmail = string.IsNullOrWhiteSpace(request.Email)
             ? null
             : request.Email.Trim();
-        user.NormalizedEmail = user.Email == null
+        var normalizedRequestedEmail = requestedEmail == null
             ? null
-            : _userManager.NormalizeEmail(user.Email);
+            : _userManager.NormalizeEmail(requestedEmail);
+        var emailChanged = !string.Equals(
+            user.NormalizedEmail,
+            normalizedRequestedEmail,
+            StringComparison.OrdinalIgnoreCase);
+        if (normalizedRequestedEmail != null)
+        {
+            var emailOwner = await _userManager.Users
+                .FirstOrDefaultAsync(x =>
+                    x.NormalizedEmail == normalizedRequestedEmail &&
+                    x.Id != user.Id);
+            if (emailOwner != null)
+            {
+                return Conflict(new
+                {
+                    code = "auth.email_conflict",
+                    message = "Email đã được sử dụng bởi tài khoản khác."
+                });
+            }
+        }
+
+        user.FullName = request.FullName.Trim();
+        if (emailChanged)
+        {
+            var googleLogins = (await _userManager.GetLoginsAsync(user))
+                .Where(x => x.LoginProvider == GoogleLoginProvider)
+                .ToList();
+            foreach (var login in googleLogins)
+            {
+                var removeResult = await _userManager.RemoveLoginAsync(
+                    user,
+                    login.LoginProvider,
+                    login.ProviderKey);
+                if (!removeResult.Succeeded)
+                {
+                    return Conflict(new
+                    {
+                        code = "auth.google_unlink_failed",
+                        errors = removeResult.Errors.Select(x => x.Description)
+                    });
+                }
+            }
+
+            user.EmailConfirmed = false;
+        }
+
+        user.Email = requestedEmail;
+        user.NormalizedEmail = normalizedRequestedEmail;
 
         var requestedPhoneNumber = NormalizePhoneNumber(request.PhoneNumber);
         if (!string.IsNullOrWhiteSpace(request.PhoneNumber) &&
@@ -476,11 +524,41 @@ public class AuthController : ControllerBase
 
     [Authorize]
     [HttpGet("me")]
-    public IActionResult Me()
+    public async Task<IActionResult> Me()
     {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var user = await _userManager.FindByIdAsync(userId.ToString());
+        if (user == null)
+        {
+            return NotFound();
+        }
+
+        var roles = await _userManager.GetRolesAsync(user);
+        var profileIncomplete =
+            string.IsNullOrWhiteSpace(user.FullName) ||
+            user.FullName == "Người dùng SafeRide" ||
+            string.IsNullOrWhiteSpace(user.PhoneNumber) ||
+            !user.PhoneNumberConfirmed;
+        var nextStep = profileIncomplete
+            ? AuthNextSteps.CompleteProfile
+            : roles.Any(role => role.Equals("Driver", StringComparison.OrdinalIgnoreCase))
+                ? AuthNextSteps.SelectRole
+                : AuthNextSteps.CustomerHome;
+
         return Ok(new
         {
-            message = "Token hợp lệ"
+            user.Id,
+            user.FullName,
+            user.PhoneNumber,
+            user.PhoneNumberConfirmed,
+            user.Email,
+            user.AvatarUrl,
+            Roles = roles,
+            NextStep = nextStep
         });
     }
 

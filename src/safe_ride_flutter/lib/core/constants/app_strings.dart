@@ -171,6 +171,7 @@ abstract final class ProfileStrings {
   static const saveAndContinue = 'Lưu và tiếp tục';
   static const invalidFullName = 'Vui lòng nhập họ và tên hợp lệ.';
   static const invalidEmail = 'Địa chỉ email không hợp lệ.';
+  static const emailAlreadyUsed = 'Email đã được sử dụng bởi tài khoản khác.';
   static const phoneNumberAlreadyUsed =
       'Số điện thoại đã được sử dụng bởi tài khoản khác.';
   static const phoneNumberChangeRequiresVerification =
@@ -203,6 +204,7 @@ abstract final class ApiEndpoints {
   static const sendOtp = '/auth/send-otp';
   static const verifyOtp = '/auth/verify-otp';
   static const googleLogin = '/auth/google-login';
+  static const me = '/auth/me';
   static const profile = '/auth/profile';
   static const profilePhoneSendOtp = '/auth/profile/phone/send-otp';
   static const profilePhoneVerifyOtp = '/auth/profile/phone/verify-otp';

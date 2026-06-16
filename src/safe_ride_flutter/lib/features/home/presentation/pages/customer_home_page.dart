@@ -22,28 +22,48 @@ class CustomerHomePage extends StatefulWidget {
 
 class _CustomerHomePageState extends State<CustomerHomePage> {
   int _selectedIndex = 0;
+  bool _handledAuthGate = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final auth = context.read<AuthProvider>();
-      if (auth.nextStep == AuthNextStep.completeProfile ||
-          !auth.isProfileComplete) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (_) => EditProfilePage(
-              requiredCompletion: true,
-              phoneNumber: auth.phoneNumber,
-            ),
-          ),
-          (_) => false,
-        );
-        return;
-      }
-      context.read<HomeProvider>().loadHomeData();
+      context.read<AuthProvider>().addListener(_handleAuthGate);
+      _handleAuthGate();
     });
+  }
+
+  @override
+  void dispose() {
+    context.read<AuthProvider>().removeListener(_handleAuthGate);
+    super.dispose();
+  }
+
+  void _handleAuthGate() {
+    if (!mounted || _handledAuthGate) return;
+
+    final auth = context.read<AuthProvider>();
+    if (auth.isRestoringSession) {
+      return;
+    }
+
+    _handledAuthGate = true;
+    if (auth.nextStep == AuthNextStep.completeProfile ||
+        !auth.isProfileComplete) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => EditProfilePage(
+            requiredCompletion: true,
+            phoneNumber: auth.phoneNumber,
+          ),
+        ),
+        (_) => false,
+      );
+      return;
+    }
+
+    context.read<HomeProvider>().loadHomeData();
   }
 
   // Hàm tiện ích để tạo item cho BottomNavigationBar với hiệu ứng pill background

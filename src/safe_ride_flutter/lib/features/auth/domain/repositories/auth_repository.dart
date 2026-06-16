@@ -18,6 +18,8 @@ abstract class AuthRepository {
     String deviceName,
   );
 
+  Future<Map<String, dynamic>> getCurrentUser(String accessToken);
+
   Future<Map<String, dynamic>> updateProfile(
     String accessToken,
     String fullName,

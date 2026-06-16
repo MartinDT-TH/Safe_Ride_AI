@@ -286,14 +286,26 @@ public sealed class AuthService : IAuthService
                 StatusCodes.Status409Conflict);
         }
 
-        await EnsureGoogleLoginAsync(user, googleUser.Subject);
-        if (string.IsNullOrWhiteSpace(user.Email) ||
-            user.NormalizedEmail == normalizedEmail)
+        var currentGoogleLogins = (await _userManager.GetLoginsAsync(user))
+            .Where(x =>
+                x.LoginProvider == GoogleLoginProvider &&
+                x.ProviderKey != googleUser.Subject)
+            .ToList();
+        foreach (var login in currentGoogleLogins)
         {
-            user.Email = googleUser.Email;
-            user.NormalizedEmail = normalizedEmail;
-            user.EmailConfirmed = true;
+            EnsureIdentityResult(
+                await _userManager.RemoveLoginAsync(
+                    user,
+                    login.LoginProvider,
+                    login.ProviderKey),
+                AuthErrorCodes.AccountConflict,
+                "Không thể thay thế liên kết Google cũ.");
         }
+
+        await EnsureGoogleLoginAsync(user, googleUser.Subject);
+        user.Email = googleUser.Email;
+        user.NormalizedEmail = normalizedEmail;
+        user.EmailConfirmed = true;
         user.AvatarUrl ??= googleUser.Picture;
         user.UpdatedAt = DateTime.UtcNow;
         EnsureIdentityResult(
@@ -327,6 +339,13 @@ public sealed class AuthService : IAuthService
                 AuthErrorCodes.AccountConflict,
                 "Không thể hủy liên kết Google.");
         }
+
+        user.EmailConfirmed = false;
+        user.UpdatedAt = DateTime.UtcNow;
+        EnsureIdentityResult(
+            await _userManager.UpdateAsync(user),
+            AuthErrorCodes.AccountConflict,
+            "Không thể cập nhật trạng thái email sau khi hủy liên kết Google.");
 
         return await CreateLinkedAccountsResponseAsync(user);
     }
@@ -762,13 +781,14 @@ public sealed class AuthService : IAuthService
         AspNetUser user)
     {
         var logins = await _userManager.GetLoginsAsync(user);
+        var googleLinked = logins.Any(x => x.LoginProvider == GoogleLoginProvider);
         return new LinkedAccountsResponse
         {
             PhoneLinked = user.PhoneNumberConfirmed &&
                 logins.Any(x => x.LoginProvider == PhoneLoginProvider),
             PhoneNumber = user.PhoneNumber,
-            GoogleLinked = logins.Any(x => x.LoginProvider == GoogleLoginProvider),
-            GoogleEmail = user.EmailConfirmed ? user.Email : null
+            GoogleLinked = googleLinked,
+            GoogleEmail = googleLinked && user.EmailConfirmed ? user.Email : null
         };
     }
 

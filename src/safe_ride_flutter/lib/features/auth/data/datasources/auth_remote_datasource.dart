@@ -72,6 +72,17 @@ class AuthRemoteDatasource {
     return Map<String, dynamic>.from(response.data as Map);
   }
 
+  Future<Map<String, dynamic>> getCurrentUser(String accessToken) async {
+    final response = await _dio.get(
+      ApiEndpoints.me,
+      options: Options(
+        headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+      ),
+    );
+
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
   Future<Map<String, dynamic>> updateProfile(
     String accessToken,
     String fullName,

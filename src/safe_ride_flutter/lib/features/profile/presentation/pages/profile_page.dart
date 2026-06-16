@@ -20,6 +20,15 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _isDriverMode = false;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<AuthProvider>().loadLinkedAccounts();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     return Scaffold(
@@ -196,10 +205,16 @@ class _ProfilePageState extends State<ProfilePage> {
                   );
                 },
               ),
-              const ProfileMenuTile(
+              ProfileMenuTile(
                 icon: Icons.link_rounded,
                 title: ProfileStrings.linkedAccounts,
                 showDivider: false,
+                trailingWidget: _buildLinkedAccountStatus(auth),
+                onTap: auth.isLoading
+                    ? null
+                    : () => auth.googleLinked
+                          ? _confirmUnlinkGoogle(context)
+                          : _linkGoogle(context),
               ),
             ]),
 
@@ -343,6 +358,62 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildLinkedAccountStatus(AuthProvider auth) {
+    final status = auth.googleLinked
+        ? auth.googleEmail ?? ProfileStrings.linked
+        : ProfileStrings.notLinked;
+    final color = auth.googleLinked
+        ? const Color(0xFF006B70)
+        : const Color(0xFFF59E0B);
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 150),
+          child: Text(
+            status,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 13,
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 20),
+      ],
+    );
+  }
+
+  Future<void> _linkGoogle(BuildContext context) async {
+    final ok = await context.read<AuthProvider>().linkGoogleAccount();
+    if (!context.mounted || ok) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text(ProfileStrings.linkGoogleFailed)),
+    );
+  }
+
+  void _confirmUnlinkGoogle(BuildContext context) {
+    AppDialog.show(
+      context: context,
+      icon: Icons.link_off_rounded,
+      title: ProfileStrings.unlinkGoogleQuestion,
+      description: ProfileStrings.unlinkGoogleDescription,
+      confirmText: ProfileStrings.unlinkAccount,
+      cancelText: AppStrings.cancel,
+      onConfirm: () async {
+        Navigator.of(context, rootNavigator: true).pop();
+        final ok = await context.read<AuthProvider>().unlinkGoogleAccount();
+        if (!context.mounted || ok) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(ProfileStrings.unlinkGoogleFailed)),
+        );
+      },
     );
   }
 
