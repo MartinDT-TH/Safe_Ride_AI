@@ -4,6 +4,7 @@ import '../../../../core/constants/app_strings.dart';
 import '../../../../core/services/location_service.dart';
 import '../../data/datasources/booking_remote_datasource.dart';
 import '../../data/models/booking_catalog.dart';
+import '../../data/models/booking_fare_estimate.dart';
 import '../../data/models/booking_location.dart';
 import '../../data/models/booking_response.dart';
 import '../../data/models/create_booking_request.dart';
@@ -16,17 +17,23 @@ class BookingProvider extends ChangeNotifier {
   final LocationService _locationService;
 
   bool _isLoading = false;
+  bool _isEstimating = false;
   String? _errorMessage;
   BookingCatalog? _catalog;
+  BookingFareEstimate? _fareEstimate;
+  int _estimateRequestId = 0;
 
   bool get isLoading => _isLoading;
+  bool get isEstimating => _isEstimating;
   String? get errorMessage => _errorMessage;
   BookingCatalog? get catalog => _catalog;
+  BookingFareEstimate? get fareEstimate => _fareEstimate;
 
-  Future<void> loadCatalog() async {
+  Future<void> loadCatalog(String accessToken) async {
     if (_catalog != null) return;
-    _catalog = await _repository.getCatalog();
-    notifyListeners();
+    await _run(() async {
+      _catalog = await _repository.getCatalog(accessToken);
+    });
   }
 
   Future<BookingLocation?> getCurrentLocation() async {
@@ -35,6 +42,62 @@ class BookingProvider extends ChangeNotifier {
 
   Future<BookingLocation?> resolveAddress(String address) async {
     return _run(() => _locationService.resolveAddress(address));
+  }
+
+  Future<BookingLocation?> resolveCoordinates(
+    double latitude,
+    double longitude,
+  ) async {
+    return _run(() => _locationService.resolveCoordinates(latitude, longitude));
+  }
+
+  Future<BookingFareEstimate?> estimateFare(
+    String accessToken, {
+    required int vehicleId,
+    required int serviceTypeId,
+    required BookingLocation pickup,
+    required BookingLocation destination,
+  }) async {
+    final requestId = ++_estimateRequestId;
+    _isEstimating = true;
+    _fareEstimate = null;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final estimate = await _repository.estimateFare(
+        accessToken,
+        vehicleId: vehicleId,
+        serviceTypeId: serviceTypeId,
+        pickup: pickup,
+        destination: destination,
+      );
+      if (requestId != _estimateRequestId) return null;
+      _fareEstimate = estimate;
+      return estimate;
+    } on BookingApiException catch (exception) {
+      if (requestId == _estimateRequestId) {
+        _errorMessage = exception.message;
+      }
+      return null;
+    } catch (_) {
+      if (requestId == _estimateRequestId) {
+        _errorMessage = AppStrings.genericError;
+      }
+      return null;
+    } finally {
+      if (requestId == _estimateRequestId) {
+        _isEstimating = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  void clearFareEstimate() {
+    _estimateRequestId++;
+    _fareEstimate = null;
+    _isEstimating = false;
+    notifyListeners();
   }
 
   Future<BookingResponse?> createBooking(

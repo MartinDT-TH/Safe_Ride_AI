@@ -2,7 +2,7 @@ using SafeRide.Application.Common.Models;
 
 namespace SafeRide.Application.Common.Interfaces;
 
-public interface IMapService
+public interface IGoogleMapsService
 {
     Task<RouteEstimateResult> GetRouteEstimateAsync(
         LocationPoint pickup,

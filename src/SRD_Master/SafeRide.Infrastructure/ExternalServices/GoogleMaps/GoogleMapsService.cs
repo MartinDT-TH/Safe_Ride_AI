@@ -9,7 +9,7 @@ using SafeRide.Application.Common.Models;
 
 namespace SafeRide.Infrastructure.ExternalServices.GoogleMaps;
 
-public sealed class GoogleMapsService : IMapService
+public sealed class GoogleMapsService : IGoogleMapsService
 {
     private const string FieldMask =
         "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline";
@@ -39,12 +39,20 @@ public sealed class GoogleMapsService : IMapService
                 "Dịch vụ bản đồ chưa được cấu hình. Vui lòng liên hệ quản trị viên.");
         }
 
+        if (string.IsNullOrWhiteSpace(_options.RoutesApiUrl))
+        {
+            throw new MapServiceException(
+                "Dịch vụ bản đồ chưa được cấu hình URL tuyến đường.");
+        }
+
         var requestBody = new
         {
             origin = CreateWaypoint(pickup),
             destination = CreateWaypoint(destination),
             travelMode = "DRIVE",
-            routingPreference = "TRAFFIC_AWARE"
+            routingPreference = "TRAFFIC_AWARE",
+            languageCode = "vi-VN",
+            units = "METRIC"
         };
 
         using var request = new HttpRequestMessage(HttpMethod.Post, _options.RoutesApiUrl)
@@ -69,7 +77,7 @@ public sealed class GoogleMapsService : IMapService
                     (int)response.StatusCode,
                     errorBody);
                 throw new MapServiceException(
-                    "Không thể tính toán tuyến đường. Vui lòng kiểm tra địa điểm và thử lại.");
+                    "Không thể tính tuyến đường. Vui lòng kiểm tra lại điểm đón và điểm đến.");
             }
 
             var result = await response.Content.ReadFromJsonAsync<GoogleRoutesResponse>(
@@ -78,16 +86,17 @@ public sealed class GoogleMapsService : IMapService
 
             if (route is null
                 || route.DistanceMeters <= 0
-                || !TryParseDurationMinutes(route.Duration, out var durationMinutes))
+                || !TryParseDurationMinutes(route.Duration, out var durationMinutes)
+                || string.IsNullOrWhiteSpace(route.Polyline?.EncodedPolyline))
             {
                 throw new MapServiceException(
-                    "Không tìm thấy tuyến đường phù hợp giữa điểm đón và điểm đến.");
+                    "Không thể tính tuyến đường. Vui lòng kiểm tra lại điểm đón và điểm đến.");
             }
 
             return new RouteEstimateResult(
-                route.DistanceMeters / 1000d,
+                Math.Round(route.DistanceMeters / 1000d, 2, MidpointRounding.AwayFromZero),
                 durationMinutes,
-                route.Polyline?.EncodedPolyline);
+                route.Polyline.EncodedPolyline);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -98,14 +107,14 @@ public sealed class GoogleMapsService : IMapService
         {
             _logger.LogError(exception, "Could not call Google Routes API.");
             throw new MapServiceException(
-                "Không thể kết nối dịch vụ bản đồ. Vui lòng thử lại.",
+                "Không thể tính tuyến đường. Vui lòng kiểm tra lại điểm đón và điểm đến.",
                 exception);
         }
         catch (JsonException exception)
         {
             _logger.LogError(exception, "Google Routes API returned invalid JSON.");
             throw new MapServiceException(
-                "Dịch vụ bản đồ trả về dữ liệu không hợp lệ.",
+                "Không thể tính tuyến đường. Vui lòng kiểm tra lại điểm đón và điểm đến.",
                 exception);
         }
     }

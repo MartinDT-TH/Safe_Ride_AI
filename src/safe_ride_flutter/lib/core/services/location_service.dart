@@ -58,6 +58,17 @@ class LocationService {
     }
   }
 
+  Future<BookingLocation> resolveCoordinates(
+    double latitude,
+    double longitude,
+  ) async {
+    return BookingLocation(
+      address: await _reverseGeocode(latitude, longitude),
+      latitude: latitude,
+      longitude: longitude,
+    );
+  }
+
   Future<String> _reverseGeocode(double latitude, double longitude) async {
     try {
       final placemarks = await placemarkFromCoordinates(latitude, longitude);

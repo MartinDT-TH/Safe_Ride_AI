@@ -61,6 +61,8 @@ public sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
             .HasColumnType("decimal(18,2)");
         builder.Property(booking => booking.EstimatedDistanceKm)
             .HasColumnType("decimal(10,2)");
+        builder.Property(booking => booking.RoutePolyline)
+            .HasColumnType("nvarchar(max)");
         builder.Property(booking => booking.DestinationLocation)
             .IsRequired(false);
         builder.Property(booking => booking.PickupAddress)

@@ -5,8 +5,10 @@ import 'package:provider/provider.dart';
 import '../../../../core/config/api_keys_config.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
+import '../../../../core/maps/polyline_decoder.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/models/booking_catalog.dart';
+import '../../data/models/booking_fare_estimate.dart';
 import '../../data/models/booking_location.dart';
 import '../../data/models/booking_response.dart';
 import '../../data/models/create_booking_request.dart';
@@ -38,14 +40,22 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final token = context.read<AuthProvider>().token;
+      if (token == null || token.isEmpty) {
+        _showMessage(BookingStrings.sessionExpired);
+        return;
+      }
+
       final provider = context.read<BookingProvider>();
-      await provider.loadCatalog();
+      provider.clearFareEstimate();
+      await provider.loadCatalog(token);
       if (!mounted) return;
       final catalog = provider.catalog;
       setState(() {
         _service = catalog?.services.firstOrNull;
         _vehicle = catalog?.vehicles.firstOrNull;
       });
+      await _refreshEstimate();
     });
   }
 
@@ -88,6 +98,23 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
     }
 
     setState(() => _scheduledAt = scheduledAt);
+  }
+
+  Future<void> _refreshEstimate() async {
+    final token = context.read<AuthProvider>().token;
+    final service = _service;
+    final vehicle = _vehicle;
+    if (token == null || token.isEmpty || service == null || vehicle == null) {
+      return;
+    }
+
+    await context.read<BookingProvider>().estimateFare(
+      token,
+      vehicleId: vehicle.id,
+      serviceTypeId: service.id,
+      pickup: widget.pickup,
+      destination: widget.destination,
+    );
   }
 
   Future<void> _confirmBooking() async {
@@ -192,6 +219,7 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
               child: _MapPreview(
                 pickup: widget.pickup,
                 destination: widget.destination,
+                estimate: provider.fareEstimate,
                 onBack: () => Navigator.pop(context),
               ),
             ),
@@ -220,7 +248,16 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                     _RouteSummary(
                       pickup: widget.pickup.address,
                       destination: widget.destination.address,
+                      estimate: provider.fareEstimate,
+                      isLoading: provider.isEstimating,
                     ),
+                    if (provider.errorMessage != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        provider.errorMessage!,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    ],
                     const SizedBox(height: 18),
                     if (widget.bookingType == BookingType.scheduled)
                       _ScheduleCard(
@@ -231,12 +268,16 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                       const SizedBox(height: 16),
                     if (catalog == null)
                       const Center(child: CircularProgressIndicator())
+                    else if (catalog.services.isEmpty ||
+                        catalog.vehicles.isEmpty)
+                      const _EmptyCatalogMessage()
                     else ...[
                       _ServiceSelector(
                         services: catalog.services,
                         selected: _service,
                         onSelected: (service) {
                           setState(() => _service = service);
+                          _refreshEstimate();
                         },
                       ),
                       const SizedBox(height: 18),
@@ -252,7 +293,10 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                         (vehicle) => _VehicleCard(
                           vehicle: vehicle,
                           selected: vehicle.id == _vehicle?.id,
-                          onTap: () => setState(() => _vehicle = vehicle),
+                          onTap: () {
+                            setState(() => _vehicle = vehicle);
+                            _refreshEstimate();
+                          },
                         ),
                       ),
                     ],
@@ -285,7 +329,12 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
           child: SizedBox(
             height: 58,
             child: FilledButton(
-              onPressed: provider.isLoading ? null : _confirmBooking,
+              onPressed:
+                  provider.isLoading ||
+                      provider.isEstimating ||
+                      provider.fareEstimate == null
+                  ? null
+                  : _confirmBooking,
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 shape: RoundedRectangleBorder(
@@ -321,15 +370,40 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
   }
 }
 
+class _EmptyCatalogMessage extends StatelessWidget {
+  const _EmptyCatalogMessage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF4E5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFFCC80)),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.directions_car_filled_outlined, color: Color(0xFFB26A00)),
+          SizedBox(width: 12),
+          Expanded(child: Text(BookingStrings.noBookableVehicles)),
+        ],
+      ),
+    );
+  }
+}
+
 class _MapPreview extends StatefulWidget {
   const _MapPreview({
     required this.pickup,
     required this.destination,
+    required this.estimate,
     required this.onBack,
   });
 
   final BookingLocation pickup;
   final BookingLocation destination;
+  final BookingFareEstimate? estimate;
   final VoidCallback onBack;
 
   @override
@@ -338,6 +412,17 @@ class _MapPreview extends StatefulWidget {
 
 class _MapPreviewState extends State<_MapPreview> {
   GoogleMapController? _controller;
+
+  List<LatLng> get _routePoints {
+    final encoded = widget.estimate?.encodedPolyline;
+    if (encoded == null || encoded.isEmpty) return const [];
+
+    try {
+      return decodePolyline(encoded);
+    } on FormatException {
+      return const [];
+    }
+  }
 
   LatLng get _pickup => LatLng(widget.pickup.latitude, widget.pickup.longitude);
 
@@ -350,26 +435,41 @@ class _MapPreviewState extends State<_MapPreview> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(covariant _MapPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.estimate?.encodedPolyline !=
+        widget.estimate?.encodedPolyline) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fitRoute());
+    }
+  }
+
   Future<void> _fitRoute() async {
     final controller = _controller;
     if (controller == null) return;
 
-    final southWest = LatLng(
-      _pickup.latitude < _destination.latitude
-          ? _pickup.latitude
-          : _destination.latitude,
-      _pickup.longitude < _destination.longitude
-          ? _pickup.longitude
-          : _destination.longitude,
-    );
-    final northEast = LatLng(
-      _pickup.latitude > _destination.latitude
-          ? _pickup.latitude
-          : _destination.latitude,
-      _pickup.longitude > _destination.longitude
-          ? _pickup.longitude
-          : _destination.longitude,
-    );
+    final routePoints = _routePoints;
+    final boundsPoints = routePoints.isEmpty
+        ? [_pickup, _destination]
+        : routePoints;
+    var minLatitude = boundsPoints.first.latitude;
+    var maxLatitude = boundsPoints.first.latitude;
+    var minLongitude = boundsPoints.first.longitude;
+    var maxLongitude = boundsPoints.first.longitude;
+
+    for (final point in boundsPoints.skip(1)) {
+      minLatitude = point.latitude < minLatitude ? point.latitude : minLatitude;
+      maxLatitude = point.latitude > maxLatitude ? point.latitude : maxLatitude;
+      minLongitude = point.longitude < minLongitude
+          ? point.longitude
+          : minLongitude;
+      maxLongitude = point.longitude > maxLongitude
+          ? point.longitude
+          : maxLongitude;
+    }
+
+    final southWest = LatLng(minLatitude, minLongitude);
+    final northEast = LatLng(maxLatitude, maxLongitude);
 
     if (southWest == northEast) {
       await controller.animateCamera(CameraUpdate.newLatLngZoom(_pickup, 16));
@@ -389,6 +489,8 @@ class _MapPreviewState extends State<_MapPreview> {
     if (!ApiKeysConfig.hasGoogleMapsKey) {
       return _MapConfigurationError(onBack: widget.onBack);
     }
+
+    final routePoints = _routePoints;
 
     return Stack(
       fit: StackFit.expand,
@@ -416,14 +518,16 @@ class _MapPreviewState extends State<_MapPreview> {
               ),
             ),
           },
-          polylines: {
-            Polyline(
-              polylineId: const PolylineId('route'),
-              points: [_pickup, _destination],
-              color: AppColors.primary,
-              width: 5,
-            ),
-          },
+          polylines: routePoints.isEmpty
+              ? {}
+              : {
+                  Polyline(
+                    polylineId: const PolylineId('route'),
+                    points: routePoints,
+                    color: AppColors.primary,
+                    width: 5,
+                  ),
+                },
           zoomControlsEnabled: false,
           mapToolbarEnabled: false,
           myLocationButtonEnabled: false,
@@ -487,10 +591,17 @@ class _MapConfigurationError extends StatelessWidget {
 }
 
 class _RouteSummary extends StatelessWidget {
-  const _RouteSummary({required this.pickup, required this.destination});
+  const _RouteSummary({
+    required this.pickup,
+    required this.destination,
+    required this.estimate,
+    required this.isLoading,
+  });
 
   final String pickup;
   final String destination;
+  final BookingFareEstimate? estimate;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -516,8 +627,71 @@ class _RouteSummary extends StatelessWidget {
             label: BookingStrings.destinationLabel,
             value: destination,
           ),
+          const Divider(height: 22),
+          if (isLoading)
+            const Row(
+              children: [
+                SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 10),
+                Text('Đang tính tuyến đường và giá dự kiến...'),
+              ],
+            )
+          else if (estimate != null)
+            Row(
+              children: [
+                Expanded(
+                  child: _EstimateValue(
+                    icon: Icons.route,
+                    value:
+                        '${estimate!.estimatedDistanceKm.toStringAsFixed(1)} km',
+                  ),
+                ),
+                Expanded(
+                  child: _EstimateValue(
+                    icon: Icons.schedule,
+                    value: '${estimate!.estimatedDurationMinutes} phút',
+                  ),
+                ),
+                Expanded(
+                  child: _EstimateValue(
+                    icon: Icons.payments_outlined,
+                    value: _formatEstimateCurrency(estimate!.estimatedFare),
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
+    );
+  }
+
+  static String _formatEstimateCurrency(double value) {
+    final digits = value.round().toString();
+    return '${digits.replaceAllMapped(RegExp(r'(?=(\d{3})+(?!\d))'), (_) => '.')}đ';
+  }
+}
+
+class _EstimateValue extends StatelessWidget {
+  const _EstimateValue({required this.icon, required this.value});
+
+  final IconData icon;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Icon(icon, color: AppColors.primary, size: 20),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ],
     );
   }
 }

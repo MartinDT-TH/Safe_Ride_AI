@@ -11,6 +11,14 @@ public interface IBookingRepository
         Guid customerId,
         CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<Vehicle>> GetCustomerVehiclesAsync(
+        Guid customerId,
+        CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<PricingRule>> GetBookablePricingRulesAsync(
+        Guid customerId,
+        CancellationToken cancellationToken);
+
     Task<PricingRule?> GetPricingRuleAsync(
         long serviceTypeId,
         long vehicleId,
