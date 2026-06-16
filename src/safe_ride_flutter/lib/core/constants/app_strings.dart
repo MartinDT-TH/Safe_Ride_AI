@@ -247,6 +247,7 @@ abstract final class ApiKeys {
   static const estimatedDistanceKm = 'estimatedDistanceKm';
   static const estimatedDurationMinutes = 'estimatedDurationMinutes';
   static const encodedPolyline = 'encodedPolyline';
+  static const estimatedHours = 'estimatedHours';
   static const vehicleId = 'vehicleId';
   static const serviceTypeId = 'serviceTypeId';
   static const pickupAddress = 'pickupAddress';

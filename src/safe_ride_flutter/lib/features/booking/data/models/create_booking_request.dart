@@ -9,9 +9,10 @@ class CreateBookingRequest {
     required this.serviceTypeId,
     required this.bookingType,
     required this.pickup,
-    required this.destination,
+    this.destination,
     this.scheduledAt,
     this.specialRequest,
+    this.estimatedHours,
   });
 
   final int vehicleId;
@@ -19,8 +20,9 @@ class CreateBookingRequest {
   final BookingType bookingType;
   final DateTime? scheduledAt;
   final BookingLocation pickup;
-  final BookingLocation destination;
+  final BookingLocation? destination;
   final String? specialRequest;
+  final int? estimatedHours;
 
   Map<String, dynamic> toJson() {
     return {
@@ -33,12 +35,13 @@ class CreateBookingRequest {
       ApiKeys.pickupAddress: pickup.address,
       ApiKeys.pickupLatitude: pickup.latitude,
       ApiKeys.pickupLongitude: pickup.longitude,
-      ApiKeys.destinationAddress: destination.address,
-      ApiKeys.destinationLatitude: destination.latitude,
-      ApiKeys.destinationLongitude: destination.longitude,
+      ApiKeys.destinationAddress: destination?.address,
+      ApiKeys.destinationLatitude: destination?.latitude ?? pickup.latitude,
+      ApiKeys.destinationLongitude: destination?.longitude ?? pickup.longitude,
       ApiKeys.specialRequest: specialRequest?.trim().isEmpty == true
           ? null
           : specialRequest?.trim(),
+      ApiKeys.estimatedHours: estimatedHours,
     };
   }
 }

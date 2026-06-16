@@ -12,7 +12,8 @@ public sealed record CreateBookingCommand(
     string PickupAddress,
     double PickupLatitude,
     double PickupLongitude,
-    string DestinationAddress,
+    string? DestinationAddress,
     double DestinationLatitude,
     double DestinationLongitude,
-    string? SpecialRequest) : IRequest<CreateBookingResponse>;
+    string? SpecialRequest,
+    int? EstimatedHours) : IRequest<CreateBookingResponse>;

@@ -26,7 +26,7 @@ public sealed class EstimateBookingFareQueryHandler
         EstimateBookingFareQuery request,
         CancellationToken cancellationToken)
     {
-        ValidateCoordinates(request);
+        ValidatePickupCoordinate(request);
 
         var vehicle = await _bookingRepository.GetCustomerVehicleAsync(
             request.VehicleId,
@@ -51,6 +51,32 @@ public sealed class EstimateBookingFareQueryHandler
                 "Không tìm thấy cấu hình giá phù hợp cho dịch vụ và xe đã chọn.",
                 400);
         }
+
+        if (pricingRule.PricePerHour.HasValue)
+        {
+            var estimatedHours = request.EstimatedHours;
+            if (!estimatedHours.HasValue || estimatedHours is < 1 or > 24)
+            {
+                throw new BookingException(
+                    "booking.invalid_estimated_hours",
+                    "Số giờ thuê dự kiến phải từ 1 đến 24 giờ.",
+                    400);
+            }
+
+            var durationMinutes = estimatedHours.Value * 60;
+            var hourlyEstimatedFare = _fareEstimationService.CalculateFare(
+                pricingRule,
+                0m,
+                durationMinutes);
+
+            return new EstimateBookingFareResult(
+                0,
+                durationMinutes,
+                null,
+                hourlyEstimatedFare);
+        }
+
+        ValidateDestinationCoordinates(request);
 
         RouteEstimateResult route;
         try
@@ -96,9 +122,13 @@ public sealed class EstimateBookingFareQueryHandler
             estimatedFare);
     }
 
-    private static void ValidateCoordinates(EstimateBookingFareQuery request)
+    private static void ValidatePickupCoordinate(EstimateBookingFareQuery request)
     {
         ValidateCoordinate(request.PickupLatitude, request.PickupLongitude);
+    }
+
+    private static void ValidateDestinationCoordinates(EstimateBookingFareQuery request)
+    {
         ValidateCoordinate(
             request.DestinationLatitude,
             request.DestinationLongitude);

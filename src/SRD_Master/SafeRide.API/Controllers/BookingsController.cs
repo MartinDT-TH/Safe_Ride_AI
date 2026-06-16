@@ -77,7 +77,8 @@ public sealed class BookingsController : ControllerBase
                 request.PickupLatitude,
                 request.PickupLongitude,
                 request.DestinationLatitude,
-                request.DestinationLongitude),
+                request.DestinationLongitude,
+                request.EstimatedHours),
             cancellationToken);
 
         return Ok(new BookingFareEstimateResponse(
@@ -114,7 +115,8 @@ public sealed class BookingsController : ControllerBase
                 request.DestinationAddress,
                 request.DestinationLatitude,
                 request.DestinationLongitude,
-                request.SpecialRequest),
+                request.SpecialRequest,
+                request.EstimatedHours),
             cancellationToken);
 
         var response = new BookingResponse(

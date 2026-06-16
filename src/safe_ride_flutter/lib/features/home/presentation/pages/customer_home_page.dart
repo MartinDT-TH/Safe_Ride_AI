@@ -11,7 +11,8 @@ import '../../../profile/presentation/pages/my_vehicles_page.dart';
 import '../../../profile/presentation/pages/edit_profile_page.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../booking/data/models/create_booking_request.dart';
-import '../../../booking/presentation/pages/route_search_page.dart';
+import '../../../booking/data/models/booking_catalog.dart';
+import '../../../booking/presentation/pages/booking_options_page.dart';
 
 class CustomerHomePage extends StatefulWidget {
   const CustomerHomePage({super.key});
@@ -414,7 +415,10 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
   void _openBooking(BuildContext context, BookingType bookingType) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => RouteSearchPage(bookingType: bookingType),
+        builder: (_) => BookingOptionsPage(
+          initialMode: BookingServiceMode.perTrip,
+          showSchedule: bookingType == BookingType.scheduled,
+        ),
       ),
     );
   }

@@ -9,4 +9,5 @@ public sealed record EstimateBookingFareQuery(
     double PickupLatitude,
     double PickupLongitude,
     double DestinationLatitude,
-    double DestinationLongitude) : IRequest<EstimateBookingFareResult>;
+    double DestinationLongitude,
+    int? EstimatedHours) : IRequest<EstimateBookingFareResult>;

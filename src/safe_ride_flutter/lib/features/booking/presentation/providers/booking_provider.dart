@@ -56,7 +56,8 @@ class BookingProvider extends ChangeNotifier {
     required int vehicleId,
     required int serviceTypeId,
     required BookingLocation pickup,
-    required BookingLocation destination,
+    BookingLocation? destination,
+    int? estimatedHours,
   }) async {
     final requestId = ++_estimateRequestId;
     _isEstimating = true;
@@ -71,6 +72,7 @@ class BookingProvider extends ChangeNotifier {
         serviceTypeId: serviceTypeId,
         pickup: pickup,
         destination: destination,
+        estimatedHours: estimatedHours,
       );
       if (requestId != _estimateRequestId) return null;
       _fareEstimate = estimate;

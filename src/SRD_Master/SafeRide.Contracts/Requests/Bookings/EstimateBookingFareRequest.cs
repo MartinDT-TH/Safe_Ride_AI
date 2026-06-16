@@ -21,4 +21,7 @@ public sealed class EstimateBookingFareRequest
 
     [Range(-180, 180)]
     public double DestinationLongitude { get; init; }
+
+    [Range(1, 24)]
+    public int? EstimatedHours { get; init; }
 }
