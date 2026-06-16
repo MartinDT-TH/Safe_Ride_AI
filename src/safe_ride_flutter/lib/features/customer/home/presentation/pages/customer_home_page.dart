@@ -9,7 +9,7 @@ import '../widgets/promo_banner.dart';
 import '../../../../shared/profile/presentation/pages/profile_page.dart';
 import '../../../../shared/profile/presentation/pages/my_vehicles_page.dart';
 import '../../../../shared/profile/presentation/pages/edit_profile_page.dart';
-import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../customer/booking/data/models/create_booking_request.dart';
 import '../../../../customer/booking/data/models/booking_catalog.dart';
 import '../../../../customer/booking/presentation/pages/booking_options_page.dart';

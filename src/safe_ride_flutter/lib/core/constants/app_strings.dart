@@ -132,6 +132,9 @@ abstract final class BookingStrings {
   static const demoVehicleName = 'Toyota Vios 2020';
   static const demoPlateNumber = '30F - 987.65';
   static const demoVehicleColor = 'Trắng';
+  static const searchingDriver = 'Đang tìm tài xế cho bạn...';
+  static const estimatedWaitTime = 'Thời gian chờ dự kiến: ~2 phút';
+  static const cancelBooking = 'Huỷ chuyến';
 
   static String plateNumber(String value) => 'Biển số: $value';
   static String vehicleColor(String value) => 'Màu: $value';
@@ -307,4 +310,3 @@ abstract final class DeviceStrings {
   static const fuchsia = 'SafeRide Fuchsia';
   static const idPrefix = 'saferide';
 }
-

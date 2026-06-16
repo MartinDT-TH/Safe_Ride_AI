@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../../core/constants/app_colors.dart';
-import '../../../../core/constants/app_strings.dart';
-import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../../../core/constants/app_colors.dart';
+import '../../../../../core/constants/app_strings.dart';
+import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/history_provider.dart';
 import '../widgets/trip_history_card.dart';
 import '../widgets/interactive_button.dart';

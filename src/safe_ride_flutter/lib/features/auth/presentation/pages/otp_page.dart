@@ -5,9 +5,9 @@ import 'package:provider/provider.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/widgets/custom_button.dart';
 import '../providers/auth_provider.dart';
-import '../../../../shared/onboarding/presentation/pages/role_selection_page.dart';
-import '../../../../customer/home/presentation/pages/customer_home_page.dart';
-import '../../../../shared/profile/presentation/pages/edit_profile_page.dart';
+import '../../../shared/onboarding/presentation/pages/role_selection_page.dart';
+import '../../../customer/home/presentation/pages/customer_home_page.dart';
+import '../../../shared/profile/presentation/pages/edit_profile_page.dart';
 
 class OtpPage extends StatefulWidget {
   final String phoneNumber;
