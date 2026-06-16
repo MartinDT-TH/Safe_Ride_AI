@@ -21,8 +21,29 @@ abstract class AuthRepository {
   Future<Map<String, dynamic>> updateProfile(
     String accessToken,
     String fullName,
+    String? phoneNumber,
     String? email,
   );
+
+  Future<Map<String, dynamic>> sendProfilePhoneOtp(
+    String accessToken,
+    String phoneNumber,
+  );
+
+  Future<Map<String, dynamic>> verifyProfilePhoneOtp(
+    String accessToken,
+    String phoneNumber,
+    String otpCode,
+  );
+
+  Future<Map<String, dynamic>> getLinkedAccounts(String accessToken);
+
+  Future<Map<String, dynamic>> linkGoogleAccount(
+    String accessToken,
+    String googleIdToken,
+  );
+
+  Future<Map<String, dynamic>> unlinkGoogleAccount(String accessToken);
 
   Future<String> uploadAvatar(String accessToken, String filePath);
 

@@ -83,6 +83,7 @@ app.UseMiddleware<ApiExceptionMiddleware>();
 app.UseHttpsRedirection();
 app.UseMiddleware<AuthRateLimitMiddleware>();
 app.UseAuthentication();
+app.UseMiddleware<SafeRide.API.Middlewares.ProfileCompletionMiddleware>();
 app.UseAuthorization();
 
 await app.Services.SeedIdentityAsync();

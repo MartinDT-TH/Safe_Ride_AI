@@ -31,6 +31,8 @@ abstract final class AuthStrings {
   static const resendOtpFailed = 'Không thể gửi lại OTP.';
   static const otpRequired = 'Vui lòng nhập đủ 6 số OTP';
   static const invalidOtp = 'OTP không đúng hoặc đã hết hạn';
+  static const otpAttemptsExceeded =
+      'Bạn đã nhập sai OTP quá nhiều lần. Vui lòng yêu cầu mã mới.';
 
   static String otpDescription(String phoneNumber) =>
       'Vui lòng nhập mã gồm 6 chữ số đã được\ngửi đến $phoneNumber.';
@@ -132,6 +134,19 @@ abstract final class ProfileStrings {
   static const accountSection = 'TÀI KHOẢN';
   static const editProfile = 'Chỉnh sửa hồ sơ';
   static const linkedAccounts = 'Tài khoản liên kết';
+  static const phoneLogin = 'Số điện thoại';
+  static const googleAccount = 'Google';
+  static const linked = 'Đã liên kết';
+  static const notLinked = 'Chưa liên kết';
+  static const linkAccount = 'Liên kết';
+  static const unlinkAccount = 'Hủy liên kết';
+  static const unlinkGoogleQuestion = 'Hủy liên kết Google?';
+  static const unlinkGoogleDescription =
+      'Bạn vẫn có thể đăng nhập bằng số điện thoại đã xác thực.';
+  static const linkGoogleFailed = 'Không thể liên kết Google.';
+  static const unlinkGoogleFailed = 'Không thể hủy liên kết Google.';
+  static const linkedAccountsLoadFailed =
+      'Không thể tải trạng thái tài khoản liên kết.';
   static const appAndNotifications = 'ỨNG DỤNG & THÔNG BÁO';
   static const notificationSettings = 'Cài đặt thông báo';
   static const language = 'Ngôn ngữ';
@@ -156,6 +171,12 @@ abstract final class ProfileStrings {
   static const saveAndContinue = 'Lưu và tiếp tục';
   static const invalidFullName = 'Vui lòng nhập họ và tên hợp lệ.';
   static const invalidEmail = 'Địa chỉ email không hợp lệ.';
+  static const phoneNumberAlreadyUsed =
+      'Số điện thoại đã được sử dụng bởi tài khoản khác.';
+  static const phoneNumberChangeRequiresVerification =
+      'Không thể thay đổi số điện thoại đã liên kết tại màn hình này.';
+  static const phoneVerificationRequired =
+      'Vui lòng xác thực OTP trước khi thêm số điện thoại.';
   static const uploadAvatarFailed = 'Không thể tải ảnh đại diện lên.';
   static const updateProfileFailed = 'Không thể cập nhật thông tin.';
 }
@@ -183,6 +204,10 @@ abstract final class ApiEndpoints {
   static const verifyOtp = '/auth/verify-otp';
   static const googleLogin = '/auth/google-login';
   static const profile = '/auth/profile';
+  static const profilePhoneSendOtp = '/auth/profile/phone/send-otp';
+  static const profilePhoneVerifyOtp = '/auth/profile/phone/verify-otp';
+  static const linkedAccounts = '/auth/linked-accounts';
+  static const linkedGoogleAccount = '/auth/linked-accounts/google';
   static const profileAvatar = '/auth/profile/avatar';
   static const logout = '/auth/logout';
   static const bookings = '/bookings';
@@ -207,6 +232,11 @@ abstract final class ApiKeys {
   static const message = 'message';
   static const nextStep = 'nextStep';
   static const detail = 'detail';
+  static const code = 'code';
+  static const phoneNumberConfirmed = 'phoneNumberConfirmed';
+  static const phoneLinked = 'phoneLinked';
+  static const googleLinked = 'googleLinked';
+  static const googleEmail = 'googleEmail';
   static const bookingId = 'bookingId';
   static const bookingType = 'bookingType';
   static const bookingStatus = 'bookingStatus';

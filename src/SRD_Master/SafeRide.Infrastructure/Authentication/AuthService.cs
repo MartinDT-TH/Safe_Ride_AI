@@ -64,30 +64,32 @@ public sealed class AuthService : IAuthService
                 StatusCodes.Status400BadRequest);
         }
 
-        // var otpCode = Random.Shared.Next(100000, 999999).ToString();
-        var otpCode = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
-        var otpKey = RedisKeys.Otp(phoneNumber);
-        var attemptsKey = RedisKeys.OtpAttempts(phoneNumber);
+        await SendOtpToPhoneAsync(phoneNumber);
+    }
 
-        try
+    public async Task SendProfilePhoneOtpAsync(Guid userId, SendOtpRequest request)
+    {
+        var user = await _userManager.FindByIdAsync(userId.ToString());
+        if (user == null)
         {
-            await _redisService.SetAsync(
-                otpKey,
-                ComputeOtpHash(phoneNumber, otpCode),
-                TimeSpan.FromMinutes(5));
-            await _redisService.RemoveAsync(attemptsKey);
-            await _smsService.SendOtpAsync(phoneNumber, otpCode);
-        }
-        catch (Exception exception)
-        {
-            await TryRemoveCacheAsync(otpKey);
-            await TryRemoveCacheAsync(attemptsKey);
-            _logger.LogError(exception, "Could not send OTP to {PhoneNumber}.", phoneNumber);
             throw new AuthException(
-                AuthErrorCodes.OtpUnavailable,
-                "Dịch vụ OTP tạm thời không khả dụng.",
-                StatusCodes.Status503ServiceUnavailable);
+                AuthErrorCodes.AccountConflict,
+                "Không tìm thấy tài khoản.",
+                StatusCodes.Status404NotFound);
         }
+
+        EnsureUserActive(user);
+        var phoneNumber = NormalizePhoneNumber(request.PhoneNumber);
+        if (string.IsNullOrWhiteSpace(phoneNumber))
+        {
+            throw new AuthException(
+                AuthErrorCodes.InvalidPhoneNumber,
+                "Số điện thoại không hợp lệ.",
+                StatusCodes.Status400BadRequest);
+        }
+
+        await EnsurePhoneAvailableForUserAsync(user, phoneNumber);
+        await SendOtpToPhoneAsync(phoneNumber);
     }
 
     public async Task<AuthResponse> VerifyOtpAsync(
@@ -152,6 +154,76 @@ public sealed class AuthService : IAuthService
             isNewUser);
     }
 
+    public async Task VerifyProfilePhoneOtpAsync(Guid userId, VerifyOtpRequest request)
+    {
+        var user = await _userManager.FindByIdAsync(userId.ToString());
+        if (user == null)
+        {
+            throw new AuthException(
+                AuthErrorCodes.AccountConflict,
+                "Không tìm thấy tài khoản.",
+                StatusCodes.Status404NotFound);
+        }
+
+        EnsureUserActive(user);
+        var phoneNumber = NormalizePhoneNumber(request.PhoneNumber);
+        if (string.IsNullOrWhiteSpace(phoneNumber))
+        {
+            throw new AuthException(
+                AuthErrorCodes.InvalidPhoneNumber,
+                "Số điện thoại không hợp lệ.",
+                StatusCodes.Status400BadRequest);
+        }
+
+        await EnsurePhoneAvailableForUserAsync(user, phoneNumber);
+
+        OtpVerificationResult verification;
+        try
+        {
+            verification = await _redisService.VerifyAndConsumeOtpAsync(
+                RedisKeys.Otp(phoneNumber),
+                RedisKeys.OtpAttempts(phoneNumber),
+                ComputeOtpHash(phoneNumber, request.OtpCode),
+                MaxOtpAttempts);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Redis unavailable while verifying profile phone OTP.");
+            throw new AuthException(
+                AuthErrorCodes.OtpUnavailable,
+                "Dịch vụ OTP tạm thời không khả dụng.",
+                StatusCodes.Status503ServiceUnavailable);
+        }
+
+        switch (verification)
+        {
+            case OtpVerificationResult.Missing:
+                throw new AuthException(
+                    AuthErrorCodes.OtpExpired,
+                    "Mã OTP không tồn tại hoặc đã hết hạn.",
+                    StatusCodes.Status401Unauthorized);
+            case OtpVerificationResult.Invalid:
+                throw new AuthException(
+                    AuthErrorCodes.InvalidOtp,
+                    "Mã OTP không chính xác.",
+                    StatusCodes.Status401Unauthorized);
+            case OtpVerificationResult.AttemptsExceeded:
+                throw new AuthException(
+                    AuthErrorCodes.OtpAttemptsExceeded,
+                    "Bạn đã nhập sai OTP quá nhiều lần. Vui lòng yêu cầu mã mới.",
+                    StatusCodes.Status429TooManyRequests);
+        }
+
+        user.PhoneNumber = phoneNumber;
+        user.PhoneNumberConfirmed = true;
+        user.UpdatedAt = DateTime.UtcNow;
+        EnsureIdentityResult(
+            await _userManager.UpdateAsync(user),
+            AuthErrorCodes.AccountConflict,
+            "Không thể cập nhật số điện thoại.");
+        await EnsurePhoneLoginAsync(user, phoneNumber);
+    }
+
 
     public async Task<AuthResponse> GoogleLoginAsync(
         GoogleLoginRequest request,
@@ -177,6 +249,86 @@ public sealed class AuthService : IAuthService
             request.DeviceId,
             request.DeviceName,
             isNewUser);
+    }
+
+    public async Task<LinkedAccountsResponse> GetLinkedAccountsAsync(Guid userId)
+    {
+        var user = await FindActiveUserAsync(userId);
+        return await CreateLinkedAccountsResponseAsync(user);
+    }
+
+    public async Task<LinkedAccountsResponse> LinkGoogleAccountAsync(
+        Guid userId,
+        LinkGoogleAccountRequest request)
+    {
+        var user = await FindActiveUserAsync(userId);
+        var googleUser = await _googleTokenVerifier.VerifyAsync(request.GoogleIdToken);
+
+        var linkedUser = await _userManager.FindByLoginAsync(
+            GoogleLoginProvider,
+            googleUser.Subject);
+        if (linkedUser != null && linkedUser.Id != user.Id)
+        {
+            throw new AuthException(
+                AuthErrorCodes.AccountConflict,
+                "Tài khoản Google đã liên kết với người dùng khác.",
+                StatusCodes.Status409Conflict);
+        }
+
+        var normalizedEmail = _userManager.NormalizeEmail(googleUser.Email);
+        var emailOwner = await _userManager.Users
+            .FirstOrDefaultAsync(x => x.NormalizedEmail == normalizedEmail);
+        if (emailOwner != null && emailOwner.Id != user.Id)
+        {
+            throw new AuthException(
+                AuthErrorCodes.AccountConflict,
+                "Email Google đang thuộc tài khoản khác.",
+                StatusCodes.Status409Conflict);
+        }
+
+        await EnsureGoogleLoginAsync(user, googleUser.Subject);
+        if (string.IsNullOrWhiteSpace(user.Email) ||
+            user.NormalizedEmail == normalizedEmail)
+        {
+            user.Email = googleUser.Email;
+            user.NormalizedEmail = normalizedEmail;
+            user.EmailConfirmed = true;
+        }
+        user.AvatarUrl ??= googleUser.Picture;
+        user.UpdatedAt = DateTime.UtcNow;
+        EnsureIdentityResult(
+            await _userManager.UpdateAsync(user),
+            AuthErrorCodes.AccountConflict,
+            "Không thể cập nhật liên kết Google.");
+
+        return await CreateLinkedAccountsResponseAsync(user);
+    }
+
+    public async Task<LinkedAccountsResponse> UnlinkGoogleAccountAsync(Guid userId)
+    {
+        var user = await FindActiveUserAsync(userId);
+        if (!user.PhoneNumberConfirmed || string.IsNullOrWhiteSpace(user.PhoneNumber))
+        {
+            throw new AuthException(
+                AuthErrorCodes.AccountConflict,
+                "Không thể hủy liên kết Google khi chưa có số điện thoại đã xác thực.",
+                StatusCodes.Status409Conflict);
+        }
+
+        var googleLogin = (await _userManager.GetLoginsAsync(user))
+            .FirstOrDefault(x => x.LoginProvider == GoogleLoginProvider);
+        if (googleLogin != null)
+        {
+            EnsureIdentityResult(
+                await _userManager.RemoveLoginAsync(
+                    user,
+                    googleLogin.LoginProvider,
+                    googleLogin.ProviderKey),
+                AuthErrorCodes.AccountConflict,
+                "Không thể hủy liên kết Google.");
+        }
+
+        return await CreateLinkedAccountsResponseAsync(user);
     }
 
     public async Task<AuthResponse> RefreshTokenAsync(
@@ -367,7 +519,9 @@ public sealed class AuthService : IAuthService
             UserName = $"google_{googleUser.Subject}",
             Email = googleUser.Email,
             EmailConfirmed = true,
-            FullName = "Người dùng SafeRide",
+            FullName = string.IsNullOrWhiteSpace(googleUser.Name)
+                ? "Người dùng SafeRide"
+                : googleUser.Name,
             AvatarUrl = googleUser.Picture,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
@@ -398,6 +552,32 @@ public sealed class AuthService : IAuthService
                     new UserLoginInfo(PhoneLoginProvider, phoneNumber, PhoneLoginProvider)),
                 AuthErrorCodes.AccountConflict,
                 "Không thể liên kết số điện thoại.");
+        }
+    }
+
+    private async Task EnsurePhoneAvailableForUserAsync(
+        AspNetUser user,
+        string phoneNumber)
+    {
+        var existingPhoneUser = await _userManager.Users
+            .FirstOrDefaultAsync(x => x.PhoneNumber == phoneNumber);
+        if (existingPhoneUser != null && existingPhoneUser.Id != user.Id)
+        {
+            throw new AuthException(
+                AuthErrorCodes.PhoneNumberConflict,
+                "Số điện thoại đã được sử dụng bởi tài khoản khác.",
+                StatusCodes.Status409Conflict);
+        }
+
+        var linkedUser = await _userManager.FindByLoginAsync(
+            PhoneLoginProvider,
+            phoneNumber);
+        if (linkedUser != null && linkedUser.Id != user.Id)
+        {
+            throw new AuthException(
+                AuthErrorCodes.PhoneNumberConflict,
+                "Số điện thoại đã liên kết với tài khoản khác.",
+                StatusCodes.Status409Conflict);
         }
     }
 
@@ -481,7 +661,9 @@ public sealed class AuthService : IAuthService
             await _dbContext.DriverKycs.AnyAsync(x => x.DriverId == user.Id);
         var profileIncomplete =
             string.IsNullOrWhiteSpace(user.FullName) ||
-            user.FullName == "Người dùng SafeRide";
+            user.FullName == "Người dùng SafeRide" ||
+            string.IsNullOrWhiteSpace(user.PhoneNumber) ||
+            !user.PhoneNumberConfirmed;
         var nextStep = hasDriverRegistration
             ? AuthNextSteps.SelectRole
             : isNewUser || profileIncomplete
@@ -561,6 +743,62 @@ public sealed class AuthService : IAuthService
         }
     }
 
+    private async Task<AspNetUser> FindActiveUserAsync(Guid userId)
+    {
+        var user = await _userManager.FindByIdAsync(userId.ToString());
+        if (user == null)
+        {
+            throw new AuthException(
+                AuthErrorCodes.AccountConflict,
+                "Không tìm thấy tài khoản.",
+                StatusCodes.Status404NotFound);
+        }
+
+        EnsureUserActive(user);
+        return user;
+    }
+
+    private async Task<LinkedAccountsResponse> CreateLinkedAccountsResponseAsync(
+        AspNetUser user)
+    {
+        var logins = await _userManager.GetLoginsAsync(user);
+        return new LinkedAccountsResponse
+        {
+            PhoneLinked = user.PhoneNumberConfirmed &&
+                logins.Any(x => x.LoginProvider == PhoneLoginProvider),
+            PhoneNumber = user.PhoneNumber,
+            GoogleLinked = logins.Any(x => x.LoginProvider == GoogleLoginProvider),
+            GoogleEmail = user.EmailConfirmed ? user.Email : null
+        };
+    }
+
+    private async Task SendOtpToPhoneAsync(string phoneNumber)
+    {
+        var otpCode = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
+        var otpKey = RedisKeys.Otp(phoneNumber);
+        var attemptsKey = RedisKeys.OtpAttempts(phoneNumber);
+
+        try
+        {
+            await _redisService.SetAsync(
+                otpKey,
+                ComputeOtpHash(phoneNumber, otpCode),
+                TimeSpan.FromMinutes(5));
+            await _redisService.RemoveAsync(attemptsKey);
+            await _smsService.SendOtpAsync(phoneNumber, otpCode);
+        }
+        catch (Exception exception)
+        {
+            await TryRemoveCacheAsync(otpKey);
+            await TryRemoveCacheAsync(attemptsKey);
+            _logger.LogError(exception, "Could not send OTP to {PhoneNumber}.", phoneNumber);
+            throw new AuthException(
+                AuthErrorCodes.OtpUnavailable,
+                "Dịch vụ OTP tạm thời không khả dụng.",
+                StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+
     private string ComputeOtpHash(string phoneNumber, string otpCode)
     {
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(_jwtOptions.SecretKey));
@@ -570,16 +808,7 @@ public sealed class AuthService : IAuthService
 
     private static string NormalizePhoneNumber(string phoneNumber)
     {
-        var digits = new string((phoneNumber ?? string.Empty).Where(char.IsDigit).ToArray());
-        if (digits.Length < 9 || digits.Length > 15)
-        {
-            return string.Empty;
-        }
-        if (digits.StartsWith("84"))
-        {
-            return $"+{digits}";
-        }
-        return digits.StartsWith('0') ? $"+84{digits[1..]}" : $"+{digits}";
+        return PhoneNumberNormalizer.Normalize(phoneNumber);
     }
 
     private static string? NormalizeDeviceMetadata(string? value)
@@ -602,6 +831,7 @@ public sealed class AuthService : IAuthService
             UserId = user.Id,
             FullName = user.FullName ?? user.UserName ?? string.Empty,
             PhoneNumber = user.PhoneNumber,
+            PhoneNumberConfirmed = user.PhoneNumberConfirmed,
             Email = user.Email,
             AvatarUrl = user.AvatarUrl,
             Roles = roles,

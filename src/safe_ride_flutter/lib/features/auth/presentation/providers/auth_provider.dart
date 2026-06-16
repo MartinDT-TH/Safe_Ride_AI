@@ -27,6 +27,7 @@
 // }
 
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../../../core/config/api_keys_config.dart';
@@ -65,17 +66,33 @@ class AuthProvider extends ChangeNotifier {
   String? _phoneNumber;
   String? get phoneNumber => _phoneNumber;
 
+  bool _phoneNumberConfirmed = false;
+  bool get phoneNumberConfirmed => _phoneNumberConfirmed;
+
   String? _email;
   String? get email => _email;
 
   String? _avatarUrl;
   String? get avatarUrl => _avatarUrl;
 
+  String? _lastErrorCode;
+  String? get lastErrorCode => _lastErrorCode;
+
+  bool get isProfileComplete {
+    final name = _fullName?.trim() ?? '';
+    final phone = _phoneNumber?.trim() ?? '';
+    return name.isNotEmpty &&
+        name != HomeStrings.defaultUser &&
+        phone.isNotEmpty &&
+        _phoneNumberConfirmed;
+  }
+
   Future<bool> login(String phone) async {
     _lastPhone = phone;
 
     try {
       _isLoading = true;
+      _lastErrorCode = null;
       notifyListeners();
 
       final response = await repository.login(phone);
@@ -177,7 +194,11 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> updateProfile(String fullName, String? email) async {
+  Future<bool> updateProfile(
+    String fullName,
+    String? phoneNumber,
+    String? email,
+  ) async {
     final accessToken = _token;
     if (accessToken == null || accessToken.isEmpty) {
       return false;
@@ -189,14 +210,70 @@ class AuthProvider extends ChangeNotifier {
       final response = await repository.updateProfile(
         accessToken,
         fullName.trim(),
+        phoneNumber,
         email,
       );
       _fullName = response[ApiKeys.fullName]?.toString();
+      _phoneNumber = response[ApiKeys.phoneNumber]?.toString();
+      _phoneNumberConfirmed =
+          response[ApiKeys.phoneNumberConfirmed] == true;
       _email = response[ApiKeys.email]?.toString();
       _nextStep = AuthNextStep.customerHome;
       return true;
     } catch (e) {
+      _lastErrorCode = _extractErrorCode(e);
       debugPrint('Update profile error: $e');
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> sendProfilePhoneOtp(String phoneNumber) async {
+    final accessToken = _token;
+    if (accessToken == null || accessToken.isEmpty) {
+      return false;
+    }
+
+    try {
+      _isLoading = true;
+      _lastErrorCode = null;
+      notifyListeners();
+      await repository.sendProfilePhoneOtp(accessToken, phoneNumber);
+      return true;
+    } catch (e) {
+      _lastErrorCode = _extractErrorCode(e);
+      debugPrint('Send profile phone OTP error: $e');
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> verifyProfilePhoneOtp(String phoneNumber, String otpCode) async {
+    final accessToken = _token;
+    if (accessToken == null || accessToken.isEmpty) {
+      return false;
+    }
+
+    try {
+      _isLoading = true;
+      _lastErrorCode = null;
+      notifyListeners();
+      final response = await repository.verifyProfilePhoneOtp(
+        accessToken,
+        phoneNumber,
+        otpCode,
+      );
+      _phoneNumber = response[ApiKeys.phoneNumber]?.toString() ?? phoneNumber;
+      _phoneNumberConfirmed =
+          response[ApiKeys.phoneNumberConfirmed] == true;
+      return true;
+    } catch (e) {
+      _lastErrorCode = _extractErrorCode(e);
+      debugPrint('Verify profile phone OTP error: $e');
       return false;
     } finally {
       _isLoading = false;
@@ -294,6 +371,7 @@ class AuthProvider extends ChangeNotifier {
   void _readAuthState(Map<String, dynamic> response) {
     _fullName = response[ApiKeys.fullName]?.toString();
     _phoneNumber = response[ApiKeys.phoneNumber]?.toString();
+    _phoneNumberConfirmed = response[ApiKeys.phoneNumberConfirmed] == true;
     _email = response[ApiKeys.email]?.toString();
     _avatarUrl = response[ApiKeys.avatarUrl]?.toString();
     _nextStep = switch (response[ApiKeys.nextStep]?.toString()) {
@@ -301,5 +379,16 @@ class AuthProvider extends ChangeNotifier {
       AppValues.selectRole => AuthNextStep.selectRole,
       _ => AuthNextStep.customerHome,
     };
+  }
+
+  String? _extractErrorCode(Object error) {
+    if (error is! DioException) {
+      return null;
+    }
+    final data = error.response?.data;
+    if (data is Map && data[ApiKeys.code] != null) {
+      return data[ApiKeys.code].toString();
+    }
+    return null;
   }
 }

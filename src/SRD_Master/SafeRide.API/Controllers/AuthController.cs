@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SafeRide.Application.Features.Auth.DTOs;
 using SafeRide.Application.Features.Auth.Services;
+using SafeRide.Application.Features.Auth;
 using SafeRide.Domain.Entities;
 using SafeRide.Infrastructure.Authentication;
 using SafeRide.Infrastructure.ExternalServices;
@@ -168,6 +169,7 @@ public class AuthController : ControllerBase
             UserId = user.Id,
             FullName = user.FullName ?? user.UserName ?? string.Empty,
             PhoneNumber = user.PhoneNumber,
+            PhoneNumberConfirmed = user.PhoneNumberConfirmed,
             Email = user.Email,
             AvatarUrl = user.AvatarUrl,
             Roles = roles
@@ -233,11 +235,82 @@ public class AuthController : ControllerBase
     }
 
     [Authorize]
+    [HttpGet("linked-accounts")]
+    public async Task<IActionResult> GetLinkedAccounts()
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        return Ok(await _authService.GetLinkedAccountsAsync(userId));
+    }
+
+    [Authorize]
+    [HttpPost("linked-accounts/google")]
+    public async Task<IActionResult> LinkGoogleAccount(
+        [FromBody] LinkGoogleAccountRequest request)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        return Ok(await _authService.LinkGoogleAccountAsync(userId, request));
+    }
+
+    [Authorize]
+    [HttpDelete("linked-accounts/google")]
+    public async Task<IActionResult> UnlinkGoogleAccount()
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        return Ok(await _authService.UnlinkGoogleAccountAsync(userId));
+    }
+
+    [Authorize]
+    [HttpPost("profile/phone/send-otp")]
+    public async Task<IActionResult> SendProfilePhoneOtp([FromBody] SendOtpRequest request)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        await _authService.SendProfilePhoneOtpAsync(userId, request);
+
+        return Ok(new
+        {
+            message = "Mã OTP đã được gửi thành công."
+        });
+    }
+
+    [Authorize]
+    [HttpPost("profile/phone/verify-otp")]
+    public async Task<IActionResult> VerifyProfilePhoneOtp([FromBody] VerifyOtpRequest request)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        await _authService.VerifyProfilePhoneOtpAsync(userId, request);
+
+        return Ok(new
+        {
+            phoneNumber = NormalizePhoneNumber(request.PhoneNumber),
+            phoneNumberConfirmed = true
+        });
+    }
+
+    [Authorize]
     [HttpPut("profile")]
     public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
     {
-        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!Guid.TryParse(userIdValue, out var userId))
+        if (!TryGetCurrentUserId(out var userId))
         {
             return Unauthorized();
         }
@@ -255,6 +328,51 @@ public class AuthController : ControllerBase
         user.NormalizedEmail = user.Email == null
             ? null
             : _userManager.NormalizeEmail(user.Email);
+
+        var requestedPhoneNumber = NormalizePhoneNumber(request.PhoneNumber);
+        if (!string.IsNullOrWhiteSpace(request.PhoneNumber) &&
+            string.IsNullOrWhiteSpace(requestedPhoneNumber))
+        {
+            return BadRequest(new
+            {
+                code = "auth.invalid_phone_number",
+                message = "Số điện thoại không hợp lệ."
+            });
+        }
+
+        if (!string.IsNullOrWhiteSpace(requestedPhoneNumber))
+        {
+            var existingPhoneUser = await _userManager.Users
+                .FirstOrDefaultAsync(x =>
+                    x.PhoneNumber == requestedPhoneNumber &&
+                    x.Id != user.Id);
+            if (existingPhoneUser != null)
+            {
+                return Conflict(new
+                {
+                    code = "auth.phone_number_conflict",
+                    message = "Số điện thoại đã được sử dụng bởi tài khoản khác."
+                });
+            }
+
+            if (string.IsNullOrWhiteSpace(user.PhoneNumber))
+            {
+                return Conflict(new
+                {
+                    code = "auth.phone_verification_required",
+                    message = "Vui lòng xác thực OTP trước khi thêm số điện thoại."
+                });
+            }
+            else if (user.PhoneNumber != requestedPhoneNumber)
+            {
+                return Conflict(new
+                {
+                    code = "auth.phone_number_change_requires_verification",
+                    message = "Không thể thay đổi số điện thoại đã liên kết tại màn hình này."
+                });
+            }
+        }
+
         user.UpdatedAt = DateTime.UtcNow;
 
         var result = await _userManager.UpdateAsync(user);
@@ -272,6 +390,7 @@ public class AuthController : ControllerBase
             user.Id,
             user.FullName,
             user.PhoneNumber,
+            user.PhoneNumberConfirmed,
             user.Email,
             user.AvatarUrl
         });
@@ -363,5 +482,16 @@ public class AuthController : ControllerBase
         {
             message = "Token hợp lệ"
         });
+    }
+
+    private static string NormalizePhoneNumber(string? phoneNumber)
+    {
+        return PhoneNumberNormalizer.Normalize(phoneNumber);
+    }
+
+    private bool TryGetCurrentUserId(out Guid userId)
+    {
+        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(userIdValue, out userId);
     }
 }

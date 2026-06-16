@@ -58,9 +58,54 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<Map<String, dynamic>> updateProfile(
     String accessToken,
     String fullName,
+    String? phoneNumber,
     String? email,
   ) {
-    return remoteDatasource.updateProfile(accessToken, fullName, email);
+    return remoteDatasource.updateProfile(
+      accessToken,
+      fullName,
+      phoneNumber,
+      email,
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> sendProfilePhoneOtp(
+    String accessToken,
+    String phoneNumber,
+  ) {
+    return remoteDatasource.sendProfilePhoneOtp(accessToken, phoneNumber);
+  }
+
+  @override
+  Future<Map<String, dynamic>> verifyProfilePhoneOtp(
+    String accessToken,
+    String phoneNumber,
+    String otpCode,
+  ) {
+    return remoteDatasource.verifyProfilePhoneOtp(
+      accessToken,
+      phoneNumber,
+      otpCode,
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> getLinkedAccounts(String accessToken) {
+    return remoteDatasource.getLinkedAccounts(accessToken);
+  }
+
+  @override
+  Future<Map<String, dynamic>> linkGoogleAccount(
+    String accessToken,
+    String googleIdToken,
+  ) {
+    return remoteDatasource.linkGoogleAccount(accessToken, googleIdToken);
+  }
+
+  @override
+  Future<Map<String, dynamic>> unlinkGoogleAccount(String accessToken) {
+    return remoteDatasource.unlinkGoogleAccount(accessToken);
   }
 
   @override

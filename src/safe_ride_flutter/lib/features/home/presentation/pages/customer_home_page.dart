@@ -8,6 +8,7 @@ import '../widgets/recent_trip_card.dart';
 import '../widgets/promo_banner.dart';
 import '../../../profile/presentation/pages/profile_page.dart';
 import '../../../profile/presentation/pages/my_vehicles_page.dart';
+import '../../../profile/presentation/pages/edit_profile_page.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../booking/data/models/create_booking_request.dart';
 import '../../../booking/presentation/pages/route_search_page.dart';
@@ -27,6 +28,20 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      final auth = context.read<AuthProvider>();
+      if (auth.nextStep == AuthNextStep.completeProfile ||
+          !auth.isProfileComplete) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => EditProfilePage(
+              requiredCompletion: true,
+              phoneNumber: auth.phoneNumber,
+            ),
+          ),
+          (_) => false,
+        );
+        return;
+      }
       context.read<HomeProvider>().loadHomeData();
     });
   }

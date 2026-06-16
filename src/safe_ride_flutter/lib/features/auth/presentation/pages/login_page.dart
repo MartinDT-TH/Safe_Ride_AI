@@ -7,6 +7,7 @@ import '../../../profile/presentation/pages/edit_profile_page.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
+import '../../../../core/utils/validators.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_textfield.dart';
 import '../providers/auth_provider.dart';
@@ -20,17 +21,7 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final phoneController = TextEditingController();
-
-  String _normalizePhone(String value) {
-    final digits = value.replaceAll(RegExp(r'\D'), '');
-    if (digits.length == 9) {
-      return '${AppValues.vietnamCountryCode}$digits';
-    }
-    if (digits.length == 10 && digits.startsWith('0')) {
-      return '${AppValues.vietnamCountryCode}${digits.substring(1)}';
-    }
-    return digits;
-  }
+  String _selectedCountryCode = AppValues.vietnamCountryCode;
 
   @override
   void dispose() {
@@ -117,7 +108,13 @@ class _LoginPageState extends State<LoginPage> {
                   controller: phoneController,
                   hintText: AuthStrings.phoneHint,
                   keyboardType: TextInputType.phone,
-                  prefixText: AuthStrings.vietnamPhonePrefix,
+                  prefixIcon: _CountryCodePicker(
+                    value: _selectedCountryCode,
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _selectedCountryCode = value);
+                    },
+                  ),
                 ),
 
                 const SizedBox(height: 24),
@@ -129,7 +126,11 @@ class _LoginPageState extends State<LoginPage> {
                       isLoading: provider.isLoading,
                       onPressed: () async {
                         final rawPhone = phoneController.text.trim();
-                        final normalizedPhone = _normalizePhone(rawPhone);
+                        final normalizedPhone =
+                            PhoneNumberValidator.normalizePhone(
+                              rawPhone,
+                              countryCode: _selectedCountryCode,
+                            );
 
                         if (rawPhone.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -140,10 +141,7 @@ class _LoginPageState extends State<LoginPage> {
                           return;
                         }
 
-                        if (normalizedPhone.length != 12 ||
-                            !normalizedPhone.startsWith(
-                              AppValues.vietnamCountryCode,
-                            )) {
+                        if (normalizedPhone.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text(AuthStrings.invalidPhone),
@@ -290,6 +288,33 @@ class _LoginPageState extends State<LoginPage> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CountryCodePicker extends StatelessWidget {
+  final String value;
+  final ValueChanged<String?> onChanged;
+
+  const _CountryCodePicker({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 12, right: 8),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          isDense: true,
+          items: PhoneNumberValidator.supportedCountryCodes
+              .map(
+                (code) =>
+                    DropdownMenuItem<String>(value: code, child: Text(code)),
+              )
+              .toList(),
+          onChanged: onChanged,
         ),
       ),
     );
