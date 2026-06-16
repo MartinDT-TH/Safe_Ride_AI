@@ -95,6 +95,10 @@ public sealed class VehicleApiTests
             UserName = email,
             Email = email,
             FullName = email,
+            PhoneNumber = email == "owner@example.test"
+                ? "+84901234591"
+                : "+84901234592",
+            PhoneNumberConfirmed = true,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };

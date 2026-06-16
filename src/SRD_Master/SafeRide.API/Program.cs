@@ -83,6 +83,7 @@ app.UseMiddleware<ApiExceptionMiddleware>();
 app.UseHttpsRedirection();
 app.UseMiddleware<AuthRateLimitMiddleware>();
 app.UseAuthentication();
+app.UseMiddleware<ProfileCompletionMiddleware>();
 app.UseAuthorization();
 
 await app.Services.SeedIdentityAsync();

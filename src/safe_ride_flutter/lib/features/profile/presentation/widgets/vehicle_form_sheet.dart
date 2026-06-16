@@ -36,15 +36,18 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
   late TextEditingController _plateController;
   late TextEditingController _colorController;
   bool _isSaving = false;
-  String? _validationMessage;
+  String? _nameError;
+  String? _plateError;
+  String? _colorError;
 
   @override
   void initState() {
     super.initState();
     _selectedType = widget.vehicle?.type ?? VehicleType.motorbike;
     _nameController = TextEditingController(text: widget.vehicle?.name ?? '');
-    _licenseController =
-        TextEditingController(text: widget.vehicle?.licenseType ?? '');
+    _licenseController = TextEditingController(
+      text: widget.vehicle?.licenseType ?? '',
+    );
     _plateController = TextEditingController(
       text: widget.vehicle?.plateNumber ?? '',
     );
@@ -76,7 +79,6 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -99,7 +101,6 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
           const Divider(height: 1, color: Color(0xFFF3F4F6)),
           const SizedBox(height: 24),
 
-          // Vehicle Type
           const Text(
             'Loại phương tiện',
             style: TextStyle(
@@ -132,11 +133,11 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
           ),
           const SizedBox(height: 24),
 
-          // Inputs
           _buildInputField(
             label: 'Tên phương tiện',
             controller: _nameController,
             hint: 'Ví dụ: Honda Vision',
+            errorText: _nameError,
           ),
           const SizedBox(height: 20),
           _buildInputField(
@@ -149,65 +150,22 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
             label: 'Biển số xe',
             controller: _plateController,
             hint: 'Ví dụ: 29A1 - 123.45',
+            errorText: _plateError,
           ),
           const SizedBox(height: 20),
           _buildInputField(
             label: 'Màu sắc',
             controller: _colorController,
             hint: 'Ví dụ: Xanh dương',
+            errorText: _colorError,
           ),
           const SizedBox(height: 32),
-          if (_validationMessage != null) ...[
-            Text(
-              _validationMessage!,
-              style: const TextStyle(
-                color: Colors.red,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
 
-          // Actions
           SizedBox(
             width: double.infinity,
             height: 56,
             child: ElevatedButton(
-              onPressed: _isSaving
-                  ? null
-                  : () async {
-                      final name = _nameController.text.trim();
-                      final license = _licenseController.text.trim();
-                      final plateNumber = _plateController.text.trim();
-                      if (name.length < 2 || plateNumber.length < 4) {
-                        setState(() {
-                          _validationMessage =
-                              'Vui lòng nhập tên và biển số xe hợp lệ.';
-                        });
-                        return;
-                      }
-
-                      setState(() {
-                        _isSaving = true;
-                        _validationMessage = null;
-                      });
-                      final vehicle = VehicleModel(
-                        id: widget.vehicle?.id ?? 0,
-                        name: name,
-                        licenseType: license,
-                        plateNumber: plateNumber,
-                        color: _colorController.text.trim(),
-                        type: _selectedType,
-                      );
-                      final saved = await widget.onSave(vehicle);
-                      if (!context.mounted) return;
-                      if (saved) {
-                        Navigator.pop(context);
-                      } else {
-                        setState(() => _isSaving = false);
-                      }
-                    },
+              onPressed: _isSaving ? null : _saveVehicle,
               style: ElevatedButton.styleFrom(
                 backgroundColor: tealColor,
                 foregroundColor: Colors.white,
@@ -254,6 +212,34 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
     );
   }
 
+  Future<void> _saveVehicle() async {
+    final name = _nameController.text.trim();
+    final license = _licenseController.text.trim();
+    final plateNumber = _plateController.text.trim();
+    final color = _colorController.text.trim();
+
+    if (!_validateForm(name: name, plateNumber: plateNumber, color: color)) {
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    final vehicle = VehicleModel(
+      id: widget.vehicle?.id ?? 0,
+      name: name,
+      licenseType: license,
+      plateNumber: plateNumber,
+      color: color,
+      type: _selectedType,
+    );
+    final saved = await widget.onSave(vehicle);
+    if (!mounted) return;
+    if (saved) {
+      Navigator.pop(context);
+    } else {
+      setState(() => _isSaving = false);
+    }
+  }
+
   Widget _buildTypeButton(String label, IconData icon, VehicleType type) {
     final isSelected = _selectedType == type;
     const tealColor = Color(0xFF006B70);
@@ -295,6 +281,7 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
     required String label,
     required TextEditingController controller,
     required String hint,
+    String? errorText,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -310,9 +297,11 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
         const SizedBox(height: 8),
         TextField(
           controller: controller,
+          onChanged: (_) => _clearErrorFor(controller),
           style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
           decoration: InputDecoration(
             hintText: hint,
+            errorText: errorText,
             hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 15),
             filled: true,
             fillColor: const Color(0xFFF9FAFB),
@@ -328,9 +317,62 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: Color(0xFF006B70), width: 1),
             ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Colors.redAccent, width: 1),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Colors.redAccent, width: 1),
+            ),
           ),
         ),
       ],
     );
+  }
+
+  void _clearErrorFor(TextEditingController controller) {
+    if (_nameError == null && _plateError == null && _colorError == null) {
+      return;
+    }
+
+    setState(() {
+      if (controller == _nameController) _nameError = null;
+      if (controller == _plateController) _plateError = null;
+      if (controller == _colorController) _colorError = null;
+    });
+  }
+
+  bool _validateForm({
+    required String name,
+    required String plateNumber,
+    required String color,
+  }) {
+    String? nameError;
+    String? plateError;
+    String? colorError;
+
+    if (name.length < 2 || name.length > 100) {
+      nameError = 'Tên phương tiện phải từ 2 đến 100 ký tự.';
+    }
+
+    if (plateNumber.length < 4 || plateNumber.length > 20) {
+      plateError = 'Biển số xe phải từ 4 đến 20 ký tự.';
+    } else if (!RegExp(r'^[A-Za-z0-9 .-]+$').hasMatch(plateNumber)) {
+      plateError =
+          'Biển số chỉ được chứa chữ cái, chữ số, dấu chấm, khoảng trắng và gạch ngang.';
+    }
+
+    if (color.length > 30) {
+      colorError = 'Màu sắc không được vượt quá 30 ký tự.';
+    }
+
+    setState(() {
+      _nameError = nameError;
+      _plateError = plateError;
+      _colorError = colorError;
+    });
+
+    return nameError == null && plateError == null && colorError == null;
   }
 }

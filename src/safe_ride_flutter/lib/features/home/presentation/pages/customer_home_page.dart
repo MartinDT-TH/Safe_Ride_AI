@@ -8,6 +8,7 @@ import '../widgets/recent_trip_card.dart';
 import '../widgets/promo_banner.dart';
 import '../../../profile/presentation/pages/profile_page.dart';
 import '../../../profile/presentation/pages/my_vehicles_page.dart';
+import '../../../profile/presentation/pages/edit_profile_page.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../booking/data/models/create_booking_request.dart';
 import '../../../booking/presentation/pages/route_search_page.dart';
@@ -21,14 +22,48 @@ class CustomerHomePage extends StatefulWidget {
 
 class _CustomerHomePageState extends State<CustomerHomePage> {
   int _selectedIndex = 0;
+  bool _handledAuthGate = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      context.read<HomeProvider>().loadHomeData();
+      context.read<AuthProvider>().addListener(_handleAuthGate);
+      _handleAuthGate();
     });
+  }
+
+  @override
+  void dispose() {
+    context.read<AuthProvider>().removeListener(_handleAuthGate);
+    super.dispose();
+  }
+
+  void _handleAuthGate() {
+    if (!mounted || _handledAuthGate) return;
+
+    final auth = context.read<AuthProvider>();
+    if (auth.isRestoringSession) {
+      return;
+    }
+
+    _handledAuthGate = true;
+    if (auth.nextStep == AuthNextStep.completeProfile ||
+        !auth.isProfileComplete) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => EditProfilePage(
+            requiredCompletion: true,
+            phoneNumber: auth.phoneNumber,
+          ),
+        ),
+        (_) => false,
+      );
+      return;
+    }
+
+    context.read<HomeProvider>().loadHomeData();
   }
 
   // Hàm tiện ích để tạo item cho BottomNavigationBar với hiệu ứng pill background

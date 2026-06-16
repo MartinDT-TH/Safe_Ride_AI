@@ -8,6 +8,8 @@ public static class AuthErrorCodes
     public const string RefreshTokenExpired = "auth.refresh_token_expired";
     public const string RefreshTokenReused = "auth.refresh_token_reused";
     public const string InvalidPhoneNumber = "auth.invalid_phone_number";
+    public const string PhoneNumberConflict = "auth.phone_number_conflict";
+    public const string PhoneVerificationRequired = "auth.phone_verification_required";
     public const string InvalidOtp = "auth.invalid_otp";
     public const string OtpExpired = "auth.otp_expired";
     public const string OtpAttemptsExceeded = "auth.otp_attempts_exceeded";

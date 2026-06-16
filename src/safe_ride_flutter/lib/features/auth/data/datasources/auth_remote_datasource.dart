@@ -72,17 +72,100 @@ class AuthRemoteDatasource {
     return Map<String, dynamic>.from(response.data as Map);
   }
 
+  Future<Map<String, dynamic>> getCurrentUser(String accessToken) async {
+    final response = await _dio.get(
+      ApiEndpoints.me,
+      options: Options(
+        headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+      ),
+    );
+
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
   Future<Map<String, dynamic>> updateProfile(
     String accessToken,
     String fullName,
+    String? phoneNumber,
     String? email,
   ) async {
     final response = await _dio.put(
       ApiEndpoints.profile,
       data: {
         ApiKeys.fullName: fullName,
+        ApiKeys.phoneNumber: phoneNumber?.trim().isEmpty == true
+            ? null
+            : phoneNumber?.trim(),
         ApiKeys.email: email?.trim().isEmpty == true ? null : email?.trim(),
       },
+      options: Options(
+        headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+      ),
+    );
+
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<Map<String, dynamic>> sendProfilePhoneOtp(
+    String accessToken,
+    String phoneNumber,
+  ) async {
+    final response = await _dio.post(
+      ApiEndpoints.profilePhoneSendOtp,
+      data: {ApiKeys.phoneNumber: phoneNumber},
+      options: Options(
+        headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+      ),
+    );
+
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<Map<String, dynamic>> verifyProfilePhoneOtp(
+    String accessToken,
+    String phoneNumber,
+    String otpCode,
+  ) async {
+    final response = await _dio.post(
+      ApiEndpoints.profilePhoneVerifyOtp,
+      data: {ApiKeys.phoneNumber: phoneNumber, ApiKeys.otpCode: otpCode},
+      options: Options(
+        headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+      ),
+    );
+
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<Map<String, dynamic>> getLinkedAccounts(String accessToken) async {
+    final response = await _dio.get(
+      ApiEndpoints.linkedAccounts,
+      options: Options(
+        headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+      ),
+    );
+
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<Map<String, dynamic>> linkGoogleAccount(
+    String accessToken,
+    String googleIdToken,
+  ) async {
+    final response = await _dio.post(
+      ApiEndpoints.linkedGoogleAccount,
+      data: {ApiKeys.googleIdToken: googleIdToken},
+      options: Options(
+        headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+      ),
+    );
+
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<Map<String, dynamic>> unlinkGoogleAccount(String accessToken) async {
+    final response = await _dio.delete(
+      ApiEndpoints.linkedGoogleAccount,
       options: Options(
         headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
       ),

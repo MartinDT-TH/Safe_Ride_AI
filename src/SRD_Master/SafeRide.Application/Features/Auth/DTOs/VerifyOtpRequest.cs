@@ -5,8 +5,8 @@ namespace SafeRide.Application.Features.Auth.DTOs;
 public sealed class VerifyOtpRequest
 {
     [Required]
-    [Phone]
     [MaxLength(20)]
+    [RegularExpression(@"^\+?[0-9\s().-]{9,20}$")]
     public string PhoneNumber { get; set; } = string.Empty;
 
     [Required]

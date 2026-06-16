@@ -27,6 +27,7 @@
 // }
 
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../../../core/config/api_keys_config.dart';
@@ -50,6 +51,9 @@ class AuthProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
+  bool _isRestoringSession = true;
+  bool get isRestoringSession => _isRestoringSession;
+
   String? _token;
   String? get token => _token;
 
@@ -65,17 +69,42 @@ class AuthProvider extends ChangeNotifier {
   String? _phoneNumber;
   String? get phoneNumber => _phoneNumber;
 
+  bool _phoneNumberConfirmed = false;
+  bool get phoneNumberConfirmed => _phoneNumberConfirmed;
+
   String? _email;
   String? get email => _email;
 
   String? _avatarUrl;
   String? get avatarUrl => _avatarUrl;
 
+  bool _phoneLinked = false;
+  bool get phoneLinked => _phoneLinked;
+
+  bool _googleLinked = false;
+  bool get googleLinked => _googleLinked;
+
+  String? _googleEmail;
+  String? get googleEmail => _googleEmail;
+
+  String? _lastErrorCode;
+  String? get lastErrorCode => _lastErrorCode;
+
+  bool get isProfileComplete {
+    final name = _fullName?.trim() ?? '';
+    final phone = _phoneNumber?.trim() ?? '';
+    return name.isNotEmpty &&
+        name != HomeStrings.defaultUser &&
+        phone.isNotEmpty &&
+        _phoneNumberConfirmed;
+  }
+
   Future<bool> login(String phone) async {
     _lastPhone = phone;
 
     try {
       _isLoading = true;
+      _lastErrorCode = null;
       notifyListeners();
 
       final response = await repository.login(phone);
@@ -177,7 +206,102 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> updateProfile(String fullName, String? email) async {
+  Future<bool> loadLinkedAccounts() async {
+    final accessToken = _token;
+    if (accessToken == null || accessToken.isEmpty) {
+      return false;
+    }
+
+    try {
+      _isLoading = true;
+      _lastErrorCode = null;
+      notifyListeners();
+      final response = await repository.getLinkedAccounts(accessToken);
+      _readLinkedAccounts(response);
+      return true;
+    } catch (e) {
+      _lastErrorCode = _extractErrorCode(e);
+      debugPrint('Load linked accounts error: $e');
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> linkGoogleAccount() async {
+    final accessToken = _token;
+    if (accessToken == null || accessToken.isEmpty) {
+      return false;
+    }
+
+    try {
+      _isLoading = true;
+      _lastErrorCode = null;
+      notifyListeners();
+
+      if (!ApiKeysConfig.hasGoogleServerClientId) {
+        return false;
+      }
+
+      final configuredClientId = ApiKeysConfig.googleServerClientId.trim();
+      final googleSignIn = GoogleSignIn(
+        serverClientId: configuredClientId.isEmpty ? null : configuredClientId,
+      );
+      await googleSignIn.signOut();
+      final account = await googleSignIn.signIn();
+      if (account == null) {
+        return false;
+      }
+
+      final googleAuth = await account.authentication;
+      final idToken = googleAuth.idToken;
+      if (idToken == null || idToken.isEmpty) {
+        return false;
+      }
+
+      final response = await repository.linkGoogleAccount(accessToken, idToken);
+      _readLinkedAccounts(response);
+      _email = response[ApiKeys.googleEmail]?.toString() ?? _email;
+      return true;
+    } catch (e) {
+      _lastErrorCode = _extractErrorCode(e);
+      debugPrint('Link Google account error: $e');
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> unlinkGoogleAccount() async {
+    final accessToken = _token;
+    if (accessToken == null || accessToken.isEmpty) {
+      return false;
+    }
+
+    try {
+      _isLoading = true;
+      _lastErrorCode = null;
+      notifyListeners();
+      final response = await repository.unlinkGoogleAccount(accessToken);
+      _readLinkedAccounts(response);
+      return true;
+    } catch (e) {
+      _lastErrorCode = _extractErrorCode(e);
+      debugPrint('Unlink Google account error: $e');
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> updateProfile(
+    String fullName,
+    String? phoneNumber,
+    String? email,
+  ) async {
     final accessToken = _token;
     if (accessToken == null || accessToken.isEmpty) {
       return false;
@@ -189,14 +313,68 @@ class AuthProvider extends ChangeNotifier {
       final response = await repository.updateProfile(
         accessToken,
         fullName.trim(),
+        phoneNumber,
         email,
       );
       _fullName = response[ApiKeys.fullName]?.toString();
+      _phoneNumber = response[ApiKeys.phoneNumber]?.toString();
+      _phoneNumberConfirmed = response[ApiKeys.phoneNumberConfirmed] == true;
       _email = response[ApiKeys.email]?.toString();
       _nextStep = AuthNextStep.customerHome;
       return true;
     } catch (e) {
+      _lastErrorCode = _extractErrorCode(e);
       debugPrint('Update profile error: $e');
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> sendProfilePhoneOtp(String phoneNumber) async {
+    final accessToken = _token;
+    if (accessToken == null || accessToken.isEmpty) {
+      return false;
+    }
+
+    try {
+      _isLoading = true;
+      _lastErrorCode = null;
+      notifyListeners();
+      await repository.sendProfilePhoneOtp(accessToken, phoneNumber);
+      return true;
+    } catch (e) {
+      _lastErrorCode = _extractErrorCode(e);
+      debugPrint('Send profile phone OTP error: $e');
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> verifyProfilePhoneOtp(String phoneNumber, String otpCode) async {
+    final accessToken = _token;
+    if (accessToken == null || accessToken.isEmpty) {
+      return false;
+    }
+
+    try {
+      _isLoading = true;
+      _lastErrorCode = null;
+      notifyListeners();
+      final response = await repository.verifyProfilePhoneOtp(
+        accessToken,
+        phoneNumber,
+        otpCode,
+      );
+      _phoneNumber = response[ApiKeys.phoneNumber]?.toString() ?? phoneNumber;
+      _phoneNumberConfirmed = response[ApiKeys.phoneNumberConfirmed] == true;
+      return true;
+    } catch (e) {
+      _lastErrorCode = _extractErrorCode(e);
+      debugPrint('Verify profile phone OTP error: $e');
       return false;
     } finally {
       _isLoading = false;
@@ -242,6 +420,7 @@ class AuthProvider extends ChangeNotifier {
       await repository.logout(refreshToken);
       await _storage.clearTokens();
       _token = null;
+      _clearAuthState();
       return true;
     } catch (e) {
       debugPrint('Logout error: $e');
@@ -275,25 +454,37 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> _restoreSession() async {
-    final savedToken = await _storage.readAccessToken();
-    if (savedToken == null || savedToken.trim().isEmpty) {
-      return;
-    }
+    try {
+      final savedToken = await _storage.readAccessToken();
+      if (savedToken == null || savedToken.trim().isEmpty) {
+        return;
+      }
 
-    final accessToken = AuthHeader.normalizeAccessToken(savedToken);
-    if (!AuthHeader.isCompactJwt(accessToken)) {
-      debugPrint('Discarding malformed saved access token.');
+      final accessToken = AuthHeader.normalizeAccessToken(savedToken);
+      if (!AuthHeader.isCompactJwt(accessToken)) {
+        debugPrint('Discarding malformed saved access token.');
+        await _storage.clearTokens();
+        return;
+      }
+
+      _token = accessToken;
+      final response = await repository.getCurrentUser(accessToken);
+      _readAuthState(response);
+    } catch (e) {
+      debugPrint('Restore session error: $e');
       await _storage.clearTokens();
-      return;
+      _token = null;
+      _clearAuthState();
+    } finally {
+      _isRestoringSession = false;
+      notifyListeners();
     }
-
-    _token = accessToken;
-    notifyListeners();
   }
 
   void _readAuthState(Map<String, dynamic> response) {
     _fullName = response[ApiKeys.fullName]?.toString();
     _phoneNumber = response[ApiKeys.phoneNumber]?.toString();
+    _phoneNumberConfirmed = response[ApiKeys.phoneNumberConfirmed] == true;
     _email = response[ApiKeys.email]?.toString();
     _avatarUrl = response[ApiKeys.avatarUrl]?.toString();
     _nextStep = switch (response[ApiKeys.nextStep]?.toString()) {
@@ -301,5 +492,36 @@ class AuthProvider extends ChangeNotifier {
       AppValues.selectRole => AuthNextStep.selectRole,
       _ => AuthNextStep.customerHome,
     };
+  }
+
+  void _readLinkedAccounts(Map<String, dynamic> response) {
+    _phoneLinked = response[ApiKeys.phoneLinked] == true;
+    _googleLinked = response[ApiKeys.googleLinked] == true;
+    _googleEmail = response[ApiKeys.googleEmail]?.toString();
+    _phoneNumber = response[ApiKeys.phoneNumber]?.toString() ?? _phoneNumber;
+  }
+
+  void _clearAuthState() {
+    _nextStep = AuthNextStep.customerHome;
+    _fullName = null;
+    _phoneNumber = null;
+    _phoneNumberConfirmed = false;
+    _email = null;
+    _avatarUrl = null;
+    _phoneLinked = false;
+    _googleLinked = false;
+    _googleEmail = null;
+    _lastErrorCode = null;
+  }
+
+  String? _extractErrorCode(Object error) {
+    if (error is! DioException) {
+      return null;
+    }
+    final data = error.response?.data;
+    if (data is Map && data[ApiKeys.code] != null) {
+      return data[ApiKeys.code].toString();
+    }
+    return null;
   }
 }

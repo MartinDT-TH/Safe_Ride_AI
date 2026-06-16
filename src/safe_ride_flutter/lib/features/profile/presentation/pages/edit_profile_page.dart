@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/constants/app_strings.dart';
+import '../../../../core/utils/validators.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../home/presentation/pages/customer_home_page.dart';
 
@@ -28,13 +29,24 @@ class _EditProfilePageState extends State<EditProfilePage> {
   late TextEditingController _emailController;
   final ImagePicker _imagePicker = ImagePicker();
   XFile? _selectedAvatar;
+  String? _nameError;
+  String? _phoneError;
+  String? _emailError;
+  String _selectedPhoneCountryCode = AppValues.vietnamCountryCode;
+
+  bool get _hasVerifiedPhone {
+    final auth = context.read<AuthProvider>();
+    final phone = (widget.phoneNumber ?? auth.phoneNumber ?? '').trim();
+    return phone.isNotEmpty && auth.phoneNumberConfirmed;
+  }
 
   @override
   void initState() {
     super.initState();
     final auth = context.read<AuthProvider>();
+    final currentName = auth.fullName?.trim() ?? '';
     _nameController = TextEditingController(
-      text: widget.requiredCompletion ? '' : auth.fullName,
+      text: currentName == HomeStrings.defaultUser ? '' : currentName,
     );
     _phoneController = TextEditingController(
       text: widget.phoneNumber ?? auth.phoneNumber ?? '',
@@ -214,6 +226,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                       _buildInputField(
                         label: ProfileStrings.fullName,
                         controller: _nameController,
+                        errorText: _nameError,
                         suffixIcon: const Icon(
                           Icons.edit_outlined,
                           color: Color(0xFFBDBDBD),
@@ -223,17 +236,33 @@ class _EditProfilePageState extends State<EditProfilePage> {
                       _buildInputField(
                         label: AuthStrings.phoneNumber,
                         controller: _phoneController,
-                        isReadOnly: true,
-                        suffixIcon: const Icon(
-                          Icons.check_circle,
-                          color: Color(0xFF006B70),
-                        ),
+                        isReadOnly: _hasVerifiedPhone,
+                        keyboardType: TextInputType.phone,
+                        errorText: _phoneError,
+                        prefixIcon: _hasVerifiedPhone
+                            ? null
+                            : _CountryCodePicker(
+                                value: _selectedPhoneCountryCode,
+                                onChanged: (value) {
+                                  if (value == null) return;
+                                  setState(
+                                    () => _selectedPhoneCountryCode = value,
+                                  );
+                                },
+                              ),
+                        suffixIcon: _hasVerifiedPhone
+                            ? const Icon(
+                                Icons.check_circle,
+                                color: Color(0xFF006B70),
+                              )
+                            : null,
                       ),
                       const SizedBox(height: 24),
                       _buildInputField(
                         label: ProfileStrings.email,
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
+                        errorText: _emailError,
                       ),
                       const SizedBox(height: 40),
                     ],
@@ -293,20 +322,28 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   Future<void> _saveProfile(AuthProvider provider) async {
     final fullName = _nameController.text.trim();
+    final phoneNumber = _phoneController.text.trim();
     final email = _emailController.text.trim();
-    if (fullName.length < 2) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(ProfileStrings.invalidFullName)),
-      );
+    if (!_validateForm(fullName, phoneNumber, email)) {
       return;
     }
 
-    if (email.isNotEmpty &&
-        !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(ProfileStrings.invalidEmail)),
+    final normalizedPhone = phoneNumber.isEmpty
+        ? null
+        : PhoneNumberValidator.normalizePhone(
+            phoneNumber,
+            countryCode: _selectedPhoneCountryCode,
+          );
+    if (!_hasVerifiedPhone && normalizedPhone != null) {
+      final phoneVerified = await _verifyPhoneBeforeSave(
+        provider,
+        normalizedPhone,
       );
-      return;
+      if (!mounted) return;
+      if (!phoneVerified) {
+        return;
+      }
+      _phoneController.text = normalizedPhone;
     }
 
     if (_selectedAvatar != null) {
@@ -322,11 +359,15 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
     final saved = await provider.updateProfile(
       fullName,
+      normalizedPhone,
       email.isEmpty ? null : email,
     );
     if (!mounted) return;
 
     if (!saved) {
+      if (_applyServerValidation(provider.lastErrorCode)) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text(ProfileStrings.updateProfileFailed)),
       );
@@ -358,6 +399,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
     required String label,
     required TextEditingController controller,
     Widget? suffixIcon,
+    Widget? prefixIcon,
+    String? errorText,
     bool isReadOnly = false,
     TextInputType? keyboardType,
   }) {
@@ -377,9 +420,25 @@ class _EditProfilePageState extends State<EditProfilePage> {
           controller: controller,
           readOnly: isReadOnly,
           keyboardType: keyboardType,
-          onChanged: controller == _nameController
-              ? (_) => setState(() {})
-              : null,
+          onChanged: (_) {
+            if (controller == _nameController) {
+              setState(() {
+                _nameError = null;
+              });
+              return;
+            }
+            if (controller == _phoneController) {
+              setState(() {
+                _phoneError = null;
+              });
+              return;
+            }
+            if (controller == _emailController) {
+              setState(() {
+                _emailError = null;
+              });
+            }
+          },
           style: const TextStyle(
             fontSize: 15,
             color: Color(0xFF2D3132),
@@ -388,10 +447,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
           decoration: InputDecoration(
             filled: true,
             fillColor: const Color(0xFFF9FAFB),
+            errorText: errorText,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
               vertical: 16,
             ),
+            prefixIcon: prefixIcon,
             suffixIcon: suffixIcon,
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
@@ -413,5 +474,193 @@ class _EditProfilePageState extends State<EditProfilePage> {
     if (value.isEmpty) return HomeStrings.defaultInitials;
     final words = value.split(RegExp(r'\s+'));
     return words.take(2).map((word) => word[0].toUpperCase()).join();
+  }
+
+  bool _validateForm(String fullName, String phoneNumber, String email) {
+    String? nameError;
+    String? phoneError;
+    String? emailError;
+
+    if (fullName.length < 2) {
+      nameError = ProfileStrings.invalidFullName;
+    }
+
+    if (!_hasVerifiedPhone &&
+        (widget.requiredCompletion || phoneNumber.isNotEmpty) &&
+        !PhoneNumberValidator.isValidPhone(
+          phoneNumber,
+          countryCode: _selectedPhoneCountryCode,
+        )) {
+      phoneError = AuthStrings.invalidPhone;
+    }
+
+    if (email.isNotEmpty &&
+        !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+      emailError = ProfileStrings.invalidEmail;
+    }
+
+    setState(() {
+      _nameError = nameError;
+      _phoneError = phoneError;
+      _emailError = emailError;
+    });
+
+    return nameError == null && phoneError == null && emailError == null;
+  }
+
+  bool _applyServerValidation(String? code) {
+    if (code == 'auth.email_conflict') {
+      setState(() {
+        _emailError = ProfileStrings.emailAlreadyUsed;
+      });
+      return true;
+    }
+
+    final errorText = switch (code) {
+      'auth.invalid_phone_number' => AuthStrings.invalidPhone,
+      'auth.phone_number_conflict' => ProfileStrings.phoneNumberAlreadyUsed,
+      'auth.phone_number_change_requires_verification' =>
+        ProfileStrings.phoneNumberChangeRequiresVerification,
+      'auth.phone_verification_required' =>
+        ProfileStrings.phoneVerificationRequired,
+      _ => null,
+    };
+
+    if (errorText == null) {
+      return false;
+    }
+
+    setState(() {
+      _phoneError = errorText;
+    });
+    return true;
+  }
+
+  Future<bool> _verifyPhoneBeforeSave(
+    AuthProvider provider,
+    String phoneNumber,
+  ) async {
+    final sent = await provider.sendProfilePhoneOtp(phoneNumber);
+    if (!mounted) return false;
+    if (!sent) {
+      if (_applyServerValidation(provider.lastErrorCode)) {
+        return false;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text(AuthStrings.sendOtpFailed)));
+      return false;
+    }
+
+    final verified = await _showPhoneOtpDialog(provider, phoneNumber);
+    return verified ?? false;
+  }
+
+  Future<bool?> _showPhoneOtpDialog(AuthProvider provider, String phoneNumber) {
+    final otpController = TextEditingController();
+    String? otpError;
+
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text(AuthStrings.otpTitle),
+              content: TextField(
+                controller: otpController,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                decoration: InputDecoration(
+                  hintText: '123456',
+                  errorText: otpError,
+                  counterText: '',
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: provider.isLoading
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(false),
+                  child: const Text(AppStrings.cancel),
+                ),
+                TextButton(
+                  onPressed: provider.isLoading
+                      ? null
+                      : () async {
+                          final otp = otpController.text.trim();
+                          if (!RegExp(r'^\d{6}$').hasMatch(otp)) {
+                            setDialogState(() {
+                              otpError = AuthStrings.otpRequired;
+                            });
+                            return;
+                          }
+
+                          final verified = await provider.verifyProfilePhoneOtp(
+                            phoneNumber,
+                            otp,
+                          );
+                          if (!context.mounted) return;
+                          if (verified) {
+                            Navigator.of(dialogContext).pop(true);
+                            return;
+                          }
+
+                          setDialogState(() {
+                            otpError = _otpErrorText(provider.lastErrorCode);
+                          });
+                        },
+                  child: provider.isLoading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text(AppStrings.confirm),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ).whenComplete(otpController.dispose);
+  }
+
+  String _otpErrorText(String? code) {
+    return switch (code) {
+      'auth.otp_attempts_exceeded' => AuthStrings.otpAttemptsExceeded,
+      'auth.otp_expired' => AuthStrings.invalidOtp,
+      'auth.invalid_otp' => AuthStrings.invalidOtp,
+      'auth.phone_number_conflict' => ProfileStrings.phoneNumberAlreadyUsed,
+      _ => AuthStrings.invalidOtp,
+    };
+  }
+}
+
+class _CountryCodePicker extends StatelessWidget {
+  final String value;
+  final ValueChanged<String?> onChanged;
+
+  const _CountryCodePicker({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 12, right: 8),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          isDense: true,
+          items: PhoneNumberValidator.supportedCountryCodes
+              .map(
+                (code) =>
+                    DropdownMenuItem<String>(value: code, child: Text(code)),
+              )
+              .toList(),
+          onChanged: onChanged,
+        ),
+      ),
+    );
   }
 }

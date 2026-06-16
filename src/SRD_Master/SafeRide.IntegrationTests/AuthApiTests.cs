@@ -46,6 +46,78 @@ public sealed class AuthApiTests
     }
 
     [Fact]
+    public async Task GoogleLogin_FirstSignupRequiresPhoneBeforeCustomerHome()
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateClient();
+
+        var firstResponse = await client.PostAsJsonAsync(
+            "/api/auth/google-login",
+            new GoogleLoginRequest { GoogleIdToken = "valid-google-token" });
+
+        Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
+        var firstLogin = await firstResponse.Content.ReadFromJsonAsync<AuthResponse>();
+        Assert.NotNull(firstLogin);
+        Assert.Equal(AuthNextSteps.CompleteProfile, firstLogin.NextStep);
+        Assert.Null(firstLogin.PhoneNumber);
+
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", firstLogin.AccessToken);
+        var unverifiedProfileResponse = await client.PutAsJsonAsync(
+            "/api/auth/profile",
+            new UpdateProfileRequest
+            {
+                FullName = "Google Customer",
+                Email = "google@example.test",
+                PhoneNumber = "0901234598"
+            });
+        Assert.Equal(HttpStatusCode.Conflict, unverifiedProfileResponse.StatusCode);
+        Assert.Equal(
+            "auth.phone_verification_required",
+            await ReadProblemCodeAsync(unverifiedProfileResponse));
+
+        var profilePhoneCode = await SendProfilePhoneOtpAndGetCodeAsync(
+            factory,
+            client,
+            "0901234598");
+        var verifyPhoneResponse = await client.PostAsJsonAsync(
+            "/api/auth/profile/phone/verify-otp",
+            new VerifyOtpRequest
+            {
+                PhoneNumber = "0901234598",
+                OtpCode = profilePhoneCode
+            });
+        Assert.Equal(HttpStatusCode.OK, verifyPhoneResponse.StatusCode);
+
+        var profileResponse = await client.PutAsJsonAsync(
+            "/api/auth/profile",
+            new UpdateProfileRequest
+            {
+                FullName = "Google Customer",
+                Email = "google@example.test",
+                PhoneNumber = "0901234598"
+            });
+        Assert.Equal(HttpStatusCode.OK, profileResponse.StatusCode);
+
+        client.DefaultRequestHeaders.Authorization = null;
+        var secondResponse = await client.PostAsJsonAsync(
+            "/api/auth/google-login",
+            new GoogleLoginRequest { GoogleIdToken = "valid-google-token" });
+
+        Assert.Equal(HttpStatusCode.OK, secondResponse.StatusCode);
+        var secondLogin = await secondResponse.Content.ReadFromJsonAsync<AuthResponse>();
+        Assert.NotNull(secondLogin);
+        Assert.Equal(AuthNextSteps.CustomerHome, secondLogin.NextStep);
+        Assert.Equal("+84901234598", secondLogin.PhoneNumber);
+
+        using var scope = factory.Services.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AspNetUser>>();
+        var user = await userManager.FindByLoginAsync("Google", "google-subject");
+        Assert.NotNull(user);
+        Assert.True(user.PhoneNumberConfirmed);
+    }
+
+    [Fact]
     public async Task GoogleLogin_LinksExistingAccountByVerifiedEmail()
     {
         using var factory = new AuthApiFactory();
@@ -60,6 +132,7 @@ public sealed class AuthApiTests
                 Id = Guid.NewGuid(),
                 UserName = "+84901234599",
                 PhoneNumber = "+84901234599",
+                PhoneNumberConfirmed = true,
                 Email = "google@example.test",
                 FullName = "Existing User",
                 IsActive = true,
@@ -86,6 +159,88 @@ public sealed class AuthApiTests
             "Google",
             "google-subject");
         Assert.Equal(existingUserId, linked?.Id);
+    }
+
+    [Fact]
+    public async Task LinkedAccounts_CanLinkAndUnlinkGoogleWhenPhoneIsVerified()
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateClient();
+
+        var login = await LoginAsync(factory, client, "0901234597");
+        await SetFullNameAsync(factory, "+84901234597", "Linked Customer");
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", login.AccessToken);
+
+        var linked = await client.GetFromJsonAsync<LinkedAccountsResponse>(
+            "/api/auth/linked-accounts");
+        Assert.NotNull(linked);
+        Assert.True(linked.PhoneLinked);
+        Assert.False(linked.GoogleLinked);
+
+        var linkResponse = await client.PostAsJsonAsync(
+            "/api/auth/linked-accounts/google",
+            new LinkGoogleAccountRequest { GoogleIdToken = "valid-google-token" });
+        Assert.Equal(HttpStatusCode.OK, linkResponse.StatusCode);
+        var afterLink = await linkResponse.Content
+            .ReadFromJsonAsync<LinkedAccountsResponse>();
+        Assert.NotNull(afterLink);
+        Assert.True(afterLink.GoogleLinked);
+        Assert.Equal("google@example.test", afterLink.GoogleEmail);
+
+        var unlinkResponse = await client.DeleteAsync(
+            "/api/auth/linked-accounts/google");
+        Assert.Equal(HttpStatusCode.OK, unlinkResponse.StatusCode);
+        var afterUnlink = await unlinkResponse.Content
+            .ReadFromJsonAsync<LinkedAccountsResponse>();
+        Assert.NotNull(afterUnlink);
+        Assert.False(afterUnlink.GoogleLinked);
+        Assert.Null(afterUnlink.GoogleEmail);
+    }
+
+    [Fact]
+    public async Task UpdateProfile_EmailChangeRemovesGoogleLogin()
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateClient();
+
+        var login = await LoginAsync(factory, client, "0901234598");
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", login.AccessToken);
+
+        var linkResponse = await client.PostAsJsonAsync(
+            "/api/auth/linked-accounts/google",
+            new LinkGoogleAccountRequest { GoogleIdToken = "valid-google-token" });
+        Assert.Equal(HttpStatusCode.OK, linkResponse.StatusCode);
+
+        var profileResponse = await client.PutAsJsonAsync(
+            "/api/auth/profile",
+            new UpdateProfileRequest
+            {
+                FullName = "Changed Email Customer",
+                PhoneNumber = login.PhoneNumber,
+                Email = "manual@example.test"
+            });
+        Assert.Equal(HttpStatusCode.OK, profileResponse.StatusCode);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AspNetUser>>();
+            var oldGoogleLogin = await userManager.FindByLoginAsync(
+                "Google",
+                "google-subject");
+            Assert.Null(oldGoogleLogin);
+        }
+
+        client.DefaultRequestHeaders.Authorization = null;
+        var googleLoginResponse = await client.PostAsJsonAsync(
+            "/api/auth/google-login",
+            new GoogleLoginRequest { GoogleIdToken = "valid-google-token" });
+        Assert.Equal(HttpStatusCode.OK, googleLoginResponse.StatusCode);
+        var googleLogin = await googleLoginResponse.Content
+            .ReadFromJsonAsync<AuthResponse>();
+        Assert.NotNull(googleLogin);
+        Assert.NotEqual(login.UserId, googleLogin.UserId);
     }
 
     [Fact]
@@ -150,7 +305,23 @@ public sealed class AuthApiTests
 
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", login.AccessToken);
-        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/auth/me")).StatusCode);
+        var profileResponse = await client.PutAsJsonAsync(
+            "/api/auth/profile",
+            new UpdateProfileRequest
+            {
+                FullName = "Restored Customer",
+                PhoneNumber = login.PhoneNumber
+            });
+        Assert.Equal(HttpStatusCode.OK, profileResponse.StatusCode);
+
+        var meResponse = await client.GetAsync("/api/auth/me");
+        Assert.Equal(HttpStatusCode.OK, meResponse.StatusCode);
+        var me = await meResponse.Content.ReadFromJsonAsync<AuthResponse>();
+        Assert.NotNull(me);
+        Assert.Equal("+84901234567", me.PhoneNumber);
+        Assert.True(me.PhoneNumberConfirmed);
+        Assert.Equal("Restored Customer", me.FullName);
+        Assert.Equal(AuthNextSteps.CustomerHome, me.NextStep);
 
         var refreshResponse = await client.PostAsJsonAsync(
             "/api/auth/refresh-token",
@@ -241,6 +412,22 @@ public sealed class AuthApiTests
 
         Assert.Equal(AuthNextSteps.CompleteProfile, login.NextStep);
         Assert.Equal(new[] { "Customer" }, login.Roles);
+    }
+
+    [Fact]
+    public async Task IncompleteProfile_CannotUseAuthenticatedFeatures()
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateClient();
+
+        var login = await LoginAsync(factory, client, "0901234583");
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", login.AccessToken);
+
+        var response = await client.GetAsync("/api/vehicles");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("auth.profile_incomplete", await ReadProblemCodeAsync(response));
     }
 
     [Fact]
@@ -494,6 +681,22 @@ public sealed class AuthApiTests
     {
         var response = await client.PostAsJsonAsync(
             "/api/auth/send-otp",
+            new SendOtpRequest { PhoneNumber = phone });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var normalized = phone.StartsWith('0') ? $"+84{phone[1..]}" : phone;
+        var sms = factory.Services.GetRequiredService<FakeSmsService>();
+        Assert.True(sms.Codes.TryGetValue(normalized, out var code));
+        return code;
+    }
+
+    private static async Task<string> SendProfilePhoneOtpAndGetCodeAsync(
+        AuthApiFactory factory,
+        HttpClient client,
+        string phone)
+    {
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/profile/phone/send-otp",
             new SendOtpRequest { PhoneNumber = phone });
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
