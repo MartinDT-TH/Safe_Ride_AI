@@ -1,3 +1,4 @@
+import groovy.json.JsonSlurper
 import java.util.Base64
 
 plugins {
@@ -18,6 +19,21 @@ val dartDefines = if (project.hasProperty("dart-defines")) {
         }
 } else {
     emptyMap()
+}
+
+val localApiKeysFile = rootProject.file("../env/api_keys.local.json")
+val localApiKeys = if (localApiKeysFile.exists()) {
+    @Suppress("UNCHECKED_CAST")
+    JsonSlurper().parse(localApiKeysFile) as Map<String, Any?>
+} else {
+    emptyMap()
+}
+
+fun apiKey(name: String): String {
+    return dartDefines[name]
+        ?.takeIf { it.isNotBlank() }
+        ?: localApiKeys[name]?.toString()?.takeIf { it.isNotBlank() }
+        ?: ""
 }
 
 android {
@@ -43,8 +59,12 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        manifestPlaceholders["googleMapsApiKey"] =
-            dartDefines["GOOGLE_MAPS_API_KEY"] ?: ""
+        manifestPlaceholders["googleMapsApiKey"] = apiKey("GOOGLE_MAPS_API_KEY")
+        resValue(
+            "string",
+            "default_web_client_id",
+            apiKey("GOOGLE_SERVER_CLIENT_ID"),
+        )
     }
 
     buildTypes {

@@ -93,6 +93,8 @@ abstract final class BookingStrings {
   static const sessionExpired =
       'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
   static const selectServiceAndVehicle = 'Vui lòng chọn dịch vụ và xe.';
+  static const noBookableVehicles =
+      'Bạn chưa có xe hợp lệ để đặt chuyến. Vui lòng thêm xe trước khi đặt.';
   static const selectPickupTimeRequired = 'Vui lòng chọn thời gian đón.';
   static const bookingFailed =
       'Không thể đặt chuyến lúc này. Vui lòng thử lại.';
@@ -184,6 +186,8 @@ abstract final class ApiEndpoints {
   static const profileAvatar = '/auth/profile/avatar';
   static const logout = '/auth/logout';
   static const bookings = '/bookings';
+  static const bookingCatalog = '/bookings/catalog';
+  static const bookingEstimate = '/bookings/estimate';
 }
 
 abstract final class ApiKeys {
@@ -208,6 +212,9 @@ abstract final class ApiKeys {
   static const bookingStatus = 'bookingStatus';
   static const scheduledAt = 'scheduledAt';
   static const estimatedFare = 'estimatedFare';
+  static const estimatedDistanceKm = 'estimatedDistanceKm';
+  static const estimatedDurationMinutes = 'estimatedDurationMinutes';
+  static const encodedPolyline = 'encodedPolyline';
   static const vehicleId = 'vehicleId';
   static const serviceTypeId = 'serviceTypeId';
   static const pickupAddress = 'pickupAddress';
