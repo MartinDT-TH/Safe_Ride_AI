@@ -37,6 +37,8 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
                     [EstimatedFare] = COALESCE([EstimatedFare], 0);
                 """);
 
+            DropLegacyBookingIndexes(migrationBuilder);
+
             migrationBuilder.AlterColumn<DateTime>(
                 name: "UpdatedAt",
                 table: "Bookings",
@@ -103,6 +105,8 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
                 name: "CK_Bookings_EstimatedFare",
                 table: "Bookings",
                 sql: "[EstimatedFare] >= 0");
+
+            CreateLegacyBookingIndexes(migrationBuilder);
         }
 
         /// <inheritdoc />
@@ -141,6 +145,8 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
                     ELSE [BookingStatus]
                 END;
                 """);
+
+            DropLegacyBookingIndexes(migrationBuilder);
 
             migrationBuilder.AlterColumn<DateTime>(
                 name: "UpdatedAt",
@@ -189,6 +195,37 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
                 name: "CK_Bookings_EstimatedFare",
                 table: "Bookings",
                 sql: "[EstimatedFare] IS NULL OR [EstimatedFare] >= 0");
+
+            CreateLegacyBookingIndexes(migrationBuilder);
+        }
+
+        private static void DropLegacyBookingIndexes(
+            MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.Sql(
+                """
+                DROP INDEX IF EXISTS [IX_Bookings_BookingStatus_CreatedAt]
+                    ON [Bookings];
+                DROP INDEX IF EXISTS [IX_Bookings_CustomerId_BookingStatus_CreatedAt]
+                    ON [Bookings];
+                """);
+        }
+
+        private static void CreateLegacyBookingIndexes(
+            MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.Sql(
+                """
+                CREATE INDEX [IX_Bookings_BookingStatus_CreatedAt]
+                    ON [Bookings] ([BookingStatus], [CreatedAt])
+                    INCLUDE ([Id], [CustomerId], [VehicleId], [ServiceTypeId],
+                        [PickupAddress], [EstimatedFare]);
+
+                CREATE INDEX [IX_Bookings_CustomerId_BookingStatus_CreatedAt]
+                    ON [Bookings] ([CustomerId], [BookingStatus], [CreatedAt])
+                    INCLUDE ([Id], [VehicleId], [ServiceTypeId], [PickupAddress],
+                        [DestinationAddress], [EstimatedFare]);
+                """);
         }
     }
 }

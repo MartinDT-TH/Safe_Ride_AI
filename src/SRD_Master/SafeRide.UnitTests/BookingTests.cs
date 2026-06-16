@@ -2,6 +2,7 @@ using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
 using SafeRide.Application.Features.Bookings;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
+using SafeRide.Application.Features.Bookings.Queries.EstimateBookingFare;
 using SafeRide.Application.Features.Bookings.Services;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
@@ -47,6 +48,33 @@ public sealed class BookingTests
         Assert.Equal(42, result.BookingId);
         Assert.Equal(1, fixture.UnitOfWork.SaveCount);
         Assert.Equal([42L], fixture.MatchingService.BookingIds);
+        Assert.Equal("polyline", fixture.Repository.AddedBooking?.RoutePolyline);
+    }
+
+    [Fact]
+    public async Task EstimateFare_ReturnsRouteAndCalculatedFare()
+    {
+        var fixture = new HandlerFixture();
+        var handler = new EstimateBookingFareQueryHandler(
+            fixture.Repository,
+            new MapServiceFake(),
+            new FareEstimationService());
+
+        var result = await handler.Handle(
+            new EstimateBookingFareQuery(
+                HandlerFixture.CustomerId,
+                1,
+                2,
+                10.762622,
+                106.660172,
+                10.818797,
+                106.651856),
+            CancellationToken.None);
+
+        Assert.Equal(5.2, result.EstimatedDistanceKm);
+        Assert.Equal(30, result.EstimatedDurationMinutes);
+        Assert.Equal("polyline", result.EncodedPolyline);
+        Assert.Equal(72_000m, result.EstimatedFare);
     }
 
     [Fact]
@@ -111,7 +139,7 @@ public sealed class BookingTests
                 MatchingService);
         }
 
-        private static readonly Guid CustomerId =
+        public static readonly Guid CustomerId =
             Guid.Parse("11111111-1111-1111-1111-111111111111");
 
         public BookingRepositoryFake Repository { get; }
@@ -143,10 +171,12 @@ public sealed class BookingTests
     {
         public Vehicle? Vehicle { get; init; }
         public PricingRule? PricingRule { get; init; }
+        public Booking? AddedBooking { get; private set; }
 
         public Task AddAsync(Booking booking, CancellationToken cancellationToken)
         {
             booking.BookingId = 42;
+            AddedBooking = booking;
             return Task.CompletedTask;
         }
 
@@ -156,6 +186,28 @@ public sealed class BookingTests
             CancellationToken cancellationToken)
         {
             return Task.FromResult(Vehicle);
+        }
+
+        public Task<IReadOnlyList<Vehicle>> GetCustomerVehiclesAsync(
+            Guid customerId,
+            CancellationToken cancellationToken)
+        {
+            IReadOnlyList<Vehicle> vehicles = Vehicle is null
+                ? []
+                : [Vehicle];
+
+            return Task.FromResult(vehicles);
+        }
+
+        public Task<IReadOnlyList<PricingRule>> GetBookablePricingRulesAsync(
+            Guid customerId,
+            CancellationToken cancellationToken)
+        {
+            IReadOnlyList<PricingRule> pricingRules = PricingRule is null
+                ? []
+                : [PricingRule];
+
+            return Task.FromResult(pricingRules);
         }
 
         public Task<PricingRule?> GetPricingRuleAsync(
@@ -195,7 +247,7 @@ public sealed class BookingTests
         public DateTime UtcNow { get; }
     }
 
-    private sealed class MapServiceFake : IMapService
+    private sealed class MapServiceFake : IGoogleMapsService
     {
         public Task<RouteEstimateResult> GetRouteEstimateAsync(
             LocationPoint pickup,

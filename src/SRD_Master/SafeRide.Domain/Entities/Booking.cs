@@ -32,6 +32,7 @@ public partial class Booking
     public decimal? EstimatedDistanceKm { get; set; }
     public int? EstimatedDurationMinutes { get; set; }
     public decimal EstimatedFare { get; set; }
+    public string? RoutePolyline { get; set; }
 
     public DateTime? ScheduledAt { get; set; }
 
