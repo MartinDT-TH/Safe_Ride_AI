@@ -238,6 +238,65 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _showVehiclePicker(List<BookingVehicleOption> vehicles) async {
+    final selected = await showModalBottomSheet<BookingVehicleOption>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 38,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD8DCDD),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              BookingStrings.selectVehicle,
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 16),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.6,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  children: vehicles
+                      .map(
+                        (vehicle) => _VehicleCard(
+                          vehicle: vehicle,
+                          selected: vehicle.id == _vehicle?.id,
+                          onTap: () => Navigator.pop(context, vehicle),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (selected != null && mounted) {
+      setState(() => _vehicle = selected);
+      await _refreshEstimate();
+    }
+  }
+
   Future<void> _showSuccess(BookingResponse result) async {
     await showDialog<void>(
       context: context,
@@ -400,16 +459,13 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    ...catalog.vehicles.map(
-                      (vehicle) => _VehicleCard(
-                        vehicle: vehicle,
-                        selected: vehicle.id == _vehicle?.id,
-                        onTap: () async {
-                          setState(() => _vehicle = vehicle);
-                          await _refreshEstimate();
-                        },
+                    if (_vehicle != null)
+                      _VehicleCard(
+                        vehicle: _vehicle!,
+                        selected: true,
+                        isDropdown: true,
+                        onTap: () => _showVehiclePicker(catalog.vehicles),
                       ),
-                    ),
                   ],
                   const SizedBox(height: 12),
                   _PromoTile(onTap: _showPromoStub),
@@ -982,11 +1038,13 @@ class _VehicleCard extends StatelessWidget {
     required this.vehicle,
     required this.selected,
     required this.onTap,
+    this.isDropdown = false,
   });
 
   final BookingVehicleOption vehicle;
   final bool selected;
   final VoidCallback onTap;
+  final bool isDropdown;
 
   @override
   Widget build(BuildContext context) {
@@ -1030,7 +1088,9 @@ class _VehicleCard extends StatelessWidget {
                 ],
               ),
             ),
-            if (selected)
+            if (isDropdown)
+              const Icon(Icons.keyboard_arrow_down, color: Color(0xFF626A6C))
+            else if (selected)
               const Icon(Icons.check_circle, color: AppColors.primary),
           ],
         ),
