@@ -31,6 +31,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../../../core/config/api_keys_config.dart';
 import '../../../../core/constants/app_strings.dart';
+import '../../../../core/network/auth_header.dart';
 import '../../../../core/services/device_identity_service.dart';
 import '../../../../core/storage/secure_storage_service.dart';
 import '../../domain/repositories/auth_repository.dart';
@@ -42,7 +43,9 @@ class AuthProvider extends ChangeNotifier {
   final SecureStorageService _storage;
   final DeviceIdentityService _deviceIdentityService;
 
-  AuthProvider(this.repository, this._storage, this._deviceIdentityService);
+  AuthProvider(this.repository, this._storage, this._deviceIdentityService) {
+    _restoreSession();
+  }
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -133,8 +136,9 @@ class AuthProvider extends ChangeNotifier {
         return false;
       }
 
+      final configuredClientId = ApiKeysConfig.googleServerClientId.trim();
       final googleSignIn = GoogleSignIn(
-        serverClientId: ApiKeysConfig.googleServerClientId,
+        serverClientId: configuredClientId.isEmpty ? null : configuredClientId,
       );
 
       final account = await googleSignIn.signIn();
@@ -249,10 +253,13 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<bool> _saveSession(Map<String, dynamic> response) async {
-    final accessToken = response[ApiKeys.accessToken]?.toString();
+    final rawAccessToken = response[ApiKeys.accessToken]?.toString();
     final refreshToken = response[ApiKeys.refreshToken]?.toString();
+    final accessToken = rawAccessToken == null
+        ? null
+        : AuthHeader.normalizeAccessToken(rawAccessToken);
     if (accessToken == null ||
-        accessToken.isEmpty ||
+        !AuthHeader.isCompactJwt(accessToken) ||
         refreshToken == null ||
         refreshToken.isEmpty) {
       debugPrint('Auth response is missing required tokens.');
@@ -265,6 +272,23 @@ class AuthProvider extends ChangeNotifier {
     );
     _token = accessToken;
     return true;
+  }
+
+  Future<void> _restoreSession() async {
+    final savedToken = await _storage.readAccessToken();
+    if (savedToken == null || savedToken.trim().isEmpty) {
+      return;
+    }
+
+    final accessToken = AuthHeader.normalizeAccessToken(savedToken);
+    if (!AuthHeader.isCompactJwt(accessToken)) {
+      debugPrint('Discarding malformed saved access token.');
+      await _storage.clearTokens();
+      return;
+    }
+
+    _token = accessToken;
+    notifyListeners();
   }
 
   void _readAuthState(Map<String, dynamic> response) {

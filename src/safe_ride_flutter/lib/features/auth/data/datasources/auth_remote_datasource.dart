@@ -19,6 +19,7 @@ import 'package:dio/dio.dart';
 import 'package:http_parser/http_parser.dart';
 
 import '../../../../core/constants/app_strings.dart';
+import '../../../../core/network/auth_header.dart';
 import '../../../../core/network/dio_client.dart';
 
 class AuthRemoteDatasource {
@@ -83,7 +84,7 @@ class AuthRemoteDatasource {
         ApiKeys.email: email?.trim().isEmpty == true ? null : email?.trim(),
       },
       options: Options(
-        headers: {ApiKeys.authorization: '${ApiKeys.bearer} $accessToken'},
+        headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
       ),
     );
 
@@ -108,7 +109,7 @@ class AuthRemoteDatasource {
         ),
       }),
       options: Options(
-        headers: {ApiKeys.authorization: '${ApiKeys.bearer} $accessToken'},
+        headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
         contentType: AppValues.multipartFormData,
       ),
     );
