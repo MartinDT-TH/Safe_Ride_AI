@@ -16,6 +16,9 @@ if (builder.Environment.IsDevelopment())
         reloadOnChange: true);
 }
 
+const string mapRoutingProvider = "OpenRouteService"; // Use "OpenRouteService" to switch provider. Google
+builder.Configuration["MapRouting:Provider"] = mapRoutingProvider;
+
 builder.Services
     .AddControllers()
     .AddJsonOptions(options =>

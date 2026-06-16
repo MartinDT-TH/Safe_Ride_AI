@@ -16,6 +16,7 @@ using SafeRide.Infrastructure.Authentication;
 using SafeRide.Infrastructure.BackgroundJobs;
 using SafeRide.Infrastructure.ExternalServices;
 using SafeRide.Infrastructure.ExternalServices.GoogleMaps;
+using SafeRide.Infrastructure.ExternalServices.OpenRouteService;
 using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
 using SafeRide.Infrastructure.Repositories;
@@ -59,7 +60,33 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(CloudinaryOptions.SectionName));
         services
             .AddOptions<GoogleMapsOptions>()
-            .Bind(configuration.GetSection(GoogleMapsOptions.SectionName));
+            .Bind(configuration.GetSection(GoogleMapsOptions.SectionName))
+            .ValidateDataAnnotations()
+            .Validate(
+                options => Uri.IsWellFormedUriString(
+                    options.RoutesApiUrl,
+                    UriKind.Absolute),
+                "GoogleMaps:RoutesApiUrl must be an absolute URL.")
+            .Validate(
+                options => Uri.IsWellFormedUriString(
+                    options.GeocodingApiUrl,
+                    UriKind.Absolute),
+                "GoogleMaps:GeocodingApiUrl must be an absolute URL.")
+            .ValidateOnStart();
+        services
+            .AddOptions<OpenRouteServiceOptions>()
+            .Bind(configuration.GetSection(OpenRouteServiceOptions.SectionName))
+            .Validate(
+                options => Uri.IsWellFormedUriString(
+                    options.DirectionsApiUrl,
+                    UriKind.Absolute),
+                "OpenRouteService:DirectionsApiUrl must be an absolute URL.")
+            .Validate(
+                options => Uri.IsWellFormedUriString(
+                    options.MatrixApiUrl,
+                    UriKind.Absolute),
+                "OpenRouteService:MatrixApiUrl must be an absolute URL.")
+            .ValidateOnStart();
         services.AddSingleton<RedisService>();
         services.AddSingleton<InMemoryRedisService>();
         services.AddSingleton<IRedisService>(provider =>
@@ -76,10 +103,25 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IBookingMatchingService, BookingMatchingService>();
         services.AddHttpClient<ISpeedSmsService, InfobipSmsService>();
-        services.AddHttpClient<IMapService, GoogleMapsService>(client =>
+        var mapRoutingProvider = configuration["MapRouting:Provider"];
+        if (string.Equals(
+                mapRoutingProvider,
+                "OpenRouteService",
+                StringComparison.OrdinalIgnoreCase))
         {
-            client.Timeout = TimeSpan.FromSeconds(15);
-        });
+            services.AddHttpClient<IGoogleMapsService, OpenRouteServiceRoutingService>(
+                client =>
+                {
+                    client.Timeout = TimeSpan.FromSeconds(20);
+                });
+        }
+        else
+        {
+            services.AddHttpClient<IGoogleMapsService, GoogleMapsService>(client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(15);
+            });
+        }
         if (!environment.IsEnvironment("Testing"))
         {
             services.AddHostedService<ScheduledBookingMatchingJob>();
