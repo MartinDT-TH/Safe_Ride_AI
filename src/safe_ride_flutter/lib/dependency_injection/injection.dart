@@ -26,6 +26,7 @@ import '../features/profile/data/datasources/vehicle_remote_datasource.dart';
 import '../features/profile/data/repositories/vehicle_repository_impl.dart';
 import '../features/profile/domain/repositories/vehicle_repository.dart';
 import '../features/profile/presentation/providers/vehicle_provider.dart';
+import '../features/activity/presentation/providers/activity_provider.dart';
 
 final getIt = GetIt.instance;
 
@@ -109,4 +110,6 @@ Future<void> setupDependencies() async {
       getIt<SecureStorageService>(),
     ),
   );
+
+  getIt.registerFactory<ActivityProvider>(() => ActivityProvider());
 }
