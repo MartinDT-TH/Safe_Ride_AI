@@ -48,3 +48,4 @@ class DeviceIdentityService {
         '${DateTime.now().microsecondsSinceEpoch}-$randomPart';
   }
 }
+

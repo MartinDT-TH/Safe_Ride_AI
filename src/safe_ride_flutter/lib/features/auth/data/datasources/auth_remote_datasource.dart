@@ -18,9 +18,9 @@
 import 'package:dio/dio.dart';
 import 'package:http_parser/http_parser.dart';
 
-import '../../../../core/constants/app_strings.dart';
-import '../../../../core/network/auth_header.dart';
-import '../../../../core/network/dio_client.dart';
+import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/network/auth_header.dart';
+import '../../../../../core/network/dio_client.dart';
 
 class AuthRemoteDatasource {
   final Dio _dio;
@@ -208,3 +208,4 @@ class AuthRemoteDatasource {
     );
   }
 }
+

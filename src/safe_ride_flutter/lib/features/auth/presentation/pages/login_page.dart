@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'otp_page.dart';
-import '../../../home/presentation/pages/customer_home_page.dart';
-import '../../../onboarding/presentation/pages/role_selection_page.dart';
-import '../../../profile/presentation/pages/edit_profile_page.dart';
+import '../../../../customer/home/presentation/pages/customer_home_page.dart';
+import '../../../../shared/onboarding/presentation/pages/role_selection_page.dart';
+import '../../../../shared/profile/presentation/pages/edit_profile_page.dart';
 
-import '../../../../core/constants/app_colors.dart';
-import '../../../../core/constants/app_strings.dart';
-import '../../../../core/utils/validators.dart';
-import '../../../../core/widgets/custom_button.dart';
-import '../../../../core/widgets/custom_textfield.dart';
+import '../../../../../core/constants/app_colors.dart';
+import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/utils/validators.dart';
+import '../../../../../core/widgets/custom_button.dart';
+import '../../../../../core/widgets/custom_textfield.dart';
 import '../providers/auth_provider.dart';
 
 class LoginPage extends StatefulWidget {
@@ -320,3 +320,4 @@ class _CountryCodePicker extends StatelessWidget {
     );
   }
 }
+

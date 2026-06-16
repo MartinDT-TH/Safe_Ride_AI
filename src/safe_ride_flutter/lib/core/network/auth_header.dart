@@ -28,3 +28,4 @@ class AuthHeader {
     return parts.length == 3 && parts.every((part) => part.isNotEmpty);
   }
 }
+
