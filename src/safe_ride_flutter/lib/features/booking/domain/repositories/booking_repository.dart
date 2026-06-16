@@ -12,7 +12,8 @@ abstract class BookingRepository {
     required int vehicleId,
     required int serviceTypeId,
     required BookingLocation pickup,
-    required BookingLocation destination,
+    BookingLocation? destination,
+    int? estimatedHours,
   });
 
   Future<BookingResponse> createBooking(

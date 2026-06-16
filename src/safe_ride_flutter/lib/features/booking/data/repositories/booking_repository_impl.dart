@@ -24,7 +24,8 @@ class BookingRepositoryImpl implements BookingRepository {
     required int vehicleId,
     required int serviceTypeId,
     required BookingLocation pickup,
-    required BookingLocation destination,
+    BookingLocation? destination,
+    int? estimatedHours,
   }) {
     return _remoteDatasource.estimateFare(
       accessToken,
@@ -32,6 +33,7 @@ class BookingRepositoryImpl implements BookingRepository {
       serviceTypeId: serviceTypeId,
       pickup: pickup,
       destination: destination,
+      estimatedHours: estimatedHours,
     );
   }
 

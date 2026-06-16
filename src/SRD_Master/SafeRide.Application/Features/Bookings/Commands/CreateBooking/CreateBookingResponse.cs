@@ -10,5 +10,5 @@ public sealed record CreateBookingResponse(
     double EstimatedDistanceKm,
     int EstimatedDurationMinutes,
     decimal EstimatedFare,
-    string EncodedPolyline,
+    string? EncodedPolyline,
     string Message);

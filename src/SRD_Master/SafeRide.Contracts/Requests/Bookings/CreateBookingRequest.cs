@@ -23,8 +23,8 @@ public sealed class CreateBookingRequest
     [Range(-180, 180)]
     public double PickupLongitude { get; init; }
 
-    [Required, MaxLength(255)]
-    public string DestinationAddress { get; init; } = string.Empty;
+    [MaxLength(255)]
+    public string? DestinationAddress { get; init; }
 
     [Range(-90, 90)]
     public double DestinationLatitude { get; init; }
@@ -34,4 +34,7 @@ public sealed class CreateBookingRequest
 
     [MaxLength(500)]
     public string? SpecialRequest { get; init; }
+
+    [Range(1, 24)]
+    public int? EstimatedHours { get; init; }
 }

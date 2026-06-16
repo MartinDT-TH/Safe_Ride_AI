@@ -18,7 +18,8 @@ class BookingRemoteDatasource {
     required int vehicleId,
     required int serviceTypeId,
     required BookingLocation pickup,
-    required BookingLocation destination,
+    BookingLocation? destination,
+    int? estimatedHours,
   }) async {
     try {
       final response = await _dio.post(
@@ -28,8 +29,10 @@ class BookingRemoteDatasource {
           ApiKeys.serviceTypeId: serviceTypeId,
           ApiKeys.pickupLatitude: pickup.latitude,
           ApiKeys.pickupLongitude: pickup.longitude,
-          ApiKeys.destinationLatitude: destination.latitude,
-          ApiKeys.destinationLongitude: destination.longitude,
+          ApiKeys.destinationLatitude: destination?.latitude ?? pickup.latitude,
+          ApiKeys.destinationLongitude:
+              destination?.longitude ?? pickup.longitude,
+          ApiKeys.estimatedHours: estimatedHours,
         },
         options: Options(
           headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},

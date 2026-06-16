@@ -40,7 +40,7 @@ public sealed class CreateBookingCommandHandler
     {
         var utcNow = _dateTimeProvider.UtcNow;
         ValidateSchedule(request.BookingType, request.ScheduledAt, utcNow);
-        ValidateCoordinates(request);
+        ValidatePickup(request);
 
         var vehicle = await _bookingRepository.GetCustomerVehicleAsync(
             request.VehicleId,
@@ -66,30 +66,72 @@ public sealed class CreateBookingCommandHandler
                 400);
         }
 
-        RouteEstimateResult route;
-        try
+        var isHourly = pricingRule.PricePerHour.HasValue;
+        decimal estimatedDistanceKm;
+        int estimatedDurationMinutes;
+        decimal estimatedFare;
+        string? routePolyline;
+        string? destinationAddress;
+        Point? destinationLocation;
+
+        if (isHourly)
         {
-            route = await _googleMapsService.GetRouteEstimateAsync(
-                new LocationPoint(request.PickupLatitude, request.PickupLongitude),
-                new LocationPoint(request.DestinationLatitude, request.DestinationLongitude),
-                cancellationToken);
+            var estimatedHours = request.EstimatedHours;
+            if (!estimatedHours.HasValue || estimatedHours is < 1 or > 24)
+            {
+                throw new BookingException(
+                    "booking.invalid_estimated_hours",
+                    "Số giờ thuê dự kiến phải từ 1 đến 24 giờ.",
+                    400);
+            }
+
+            estimatedDistanceKm = 0m;
+            estimatedDurationMinutes = estimatedHours.Value * 60;
+            estimatedFare = _fareEstimationService.CalculateFare(
+                pricingRule,
+                estimatedDistanceKm,
+                estimatedDurationMinutes);
+            routePolyline = null;
+            destinationAddress = null;
+            destinationLocation = null;
         }
-        catch (MapServiceException exception)
+        else
         {
-            throw new BookingException(
-                "booking.route_estimation_failed",
-                exception.Message,
-                502);
+            ValidateDestination(request);
+            RouteEstimateResult route;
+            try
+            {
+                route = await _googleMapsService.GetRouteEstimateAsync(
+                    new LocationPoint(request.PickupLatitude, request.PickupLongitude),
+                    new LocationPoint(
+                        request.DestinationLatitude,
+                        request.DestinationLongitude),
+                    cancellationToken);
+            }
+            catch (MapServiceException exception)
+            {
+                throw new BookingException(
+                    "booking.route_estimation_failed",
+                    exception.Message,
+                    502);
+            }
+
+            estimatedDistanceKm = decimal.Round(
+                (decimal)route.DistanceKm,
+                2,
+                MidpointRounding.AwayFromZero);
+            estimatedDurationMinutes = route.DurationMinutes;
+            estimatedFare = _fareEstimationService.CalculateFare(
+                pricingRule,
+                estimatedDistanceKm,
+                estimatedDurationMinutes);
+            routePolyline = route.EncodedPolyline;
+            destinationAddress = request.DestinationAddress!.Trim();
+            destinationLocation = CreatePoint(
+                request.DestinationLatitude,
+                request.DestinationLongitude);
         }
 
-        var estimatedDistanceKm = decimal.Round(
-            (decimal)route.DistanceKm,
-            2,
-            MidpointRounding.AwayFromZero);
-        var estimatedFare = _fareEstimationService.CalculateFare(
-            pricingRule,
-            estimatedDistanceKm,
-            route.DurationMinutes);
         var bookingStatus = request.BookingType == BookingType.Now
             ? BookingStatus.Searching
             : BookingStatus.PendingSchedule;
@@ -104,14 +146,12 @@ public sealed class CreateBookingCommandHandler
             ScheduledAt = request.ScheduledAt,
             PickupAddress = request.PickupAddress.Trim(),
             PickupLocation = CreatePoint(request.PickupLatitude, request.PickupLongitude),
-            DestinationAddress = request.DestinationAddress.Trim(),
-            DestinationLocation = CreatePoint(
-                request.DestinationLatitude,
-                request.DestinationLongitude),
+            DestinationAddress = destinationAddress,
+            DestinationLocation = destinationLocation,
             EstimatedDistanceKm = estimatedDistanceKm,
-            EstimatedDurationMinutes = route.DurationMinutes,
+            EstimatedDurationMinutes = estimatedDurationMinutes,
             EstimatedFare = estimatedFare,
-            RoutePolyline = route.EncodedPolyline,
+            RoutePolyline = routePolyline,
             SpecialRequest = NormalizeOptionalText(request.SpecialRequest),
             PricingRuleId = pricingRule.Id,
             CreatedAt = utcNow,
@@ -130,7 +170,9 @@ public sealed class CreateBookingCommandHandler
 
         var message = request.BookingType == BookingType.Now
             ? "Đặt chuyến thành công. Hệ thống đang tìm tài xế."
-            : "Đặt trước chuyến đi thành công.";
+            : isHourly
+                ? "Tạo yêu cầu thuê theo giờ thành công."
+                : "Đặt trước chuyến đi thành công.";
 
         return new CreateBookingResponse(
             booking.BookingId,
@@ -138,9 +180,9 @@ public sealed class CreateBookingCommandHandler
             booking.BookingStatus,
             booking.ScheduledAt,
             (double)estimatedDistanceKm,
-            route.DurationMinutes,
+            estimatedDurationMinutes,
             booking.EstimatedFare,
-            route.EncodedPolyline,
+            routePolyline,
             message);
     }
 
@@ -183,23 +225,34 @@ public sealed class CreateBookingCommandHandler
         }
     }
 
-    private static void ValidateCoordinates(CreateBookingCommand request)
+    private static void ValidatePickup(CreateBookingCommand request)
     {
         ValidateCoordinate(
             request.PickupLatitude,
             request.PickupLongitude,
             "Điểm đón");
+
+        if (string.IsNullOrWhiteSpace(request.PickupAddress))
+        {
+            throw new BookingException(
+                "booking.pickup_required",
+                "Địa chỉ điểm đón là bắt buộc.",
+                400);
+        }
+    }
+
+    private static void ValidateDestination(CreateBookingCommand request)
+    {
         ValidateCoordinate(
             request.DestinationLatitude,
             request.DestinationLongitude,
             "Điểm đến");
 
-        if (string.IsNullOrWhiteSpace(request.PickupAddress)
-            || string.IsNullOrWhiteSpace(request.DestinationAddress))
+        if (string.IsNullOrWhiteSpace(request.DestinationAddress))
         {
             throw new BookingException(
-                "booking.address_required",
-                "Địa chỉ điểm đón và điểm đến là bắt buộc.",
+                "booking.destination_required",
+                "Địa chỉ điểm đến là bắt buộc.",
                 400);
         }
 

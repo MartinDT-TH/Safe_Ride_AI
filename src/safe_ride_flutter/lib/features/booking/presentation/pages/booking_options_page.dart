@@ -6,6 +6,7 @@ import '../../../../core/config/api_keys_config.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/maps/polyline_decoder.dart';
+import '../../../../core/widgets/app_loading_screen.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/models/booking_catalog.dart';
 import '../../data/models/booking_fare_estimate.dart';
@@ -13,50 +14,37 @@ import '../../data/models/booking_location.dart';
 import '../../data/models/booking_response.dart';
 import '../../data/models/create_booking_request.dart';
 import '../providers/booking_provider.dart';
+import 'location_picker_page.dart';
 
 class BookingOptionsPage extends StatefulWidget {
   const BookingOptionsPage({
     super.key,
-    required this.bookingType,
-    required this.pickup,
-    required this.destination,
+    this.initialMode = BookingServiceMode.perTrip,
+    this.showSchedule = false,
   });
 
-  final BookingType bookingType;
-  final BookingLocation pickup;
-  final BookingLocation destination;
+  final BookingServiceMode initialMode;
+  final bool showSchedule;
 
   @override
   State<BookingOptionsPage> createState() => _BookingOptionsPageState();
 }
 
 class _BookingOptionsPageState extends State<BookingOptionsPage> {
+  BookingLocation? _pickup;
+  BookingLocation? _destination;
   BookingServiceOption? _service;
   BookingVehicleOption? _vehicle;
   DateTime? _scheduledAt;
+  int _estimatedHours = 2;
   final _specialRequestController = TextEditingController();
+
+  bool get _isHourly => _service?.mode == BookingServiceMode.hourly;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final token = context.read<AuthProvider>().token;
-      if (token == null || token.isEmpty) {
-        _showMessage(BookingStrings.sessionExpired);
-        return;
-      }
-
-      final provider = context.read<BookingProvider>();
-      provider.clearFareEstimate();
-      await provider.loadCatalog(token);
-      if (!mounted) return;
-      final catalog = provider.catalog;
-      setState(() {
-        _service = catalog?.services.firstOrNull;
-        _vehicle = catalog?.vehicles.firstOrNull;
-      });
-      await _refreshEstimate();
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadInitialData());
   }
 
   @override
@@ -65,10 +53,72 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
     super.dispose();
   }
 
+  Future<void> _loadInitialData() async {
+    final token = context.read<AuthProvider>().token;
+    if (token == null || token.isEmpty) {
+      _showMessage(BookingStrings.sessionExpired);
+      return;
+    }
+
+    final provider = context.read<BookingProvider>();
+    provider.clearFareEstimate();
+    final currentLocation = await provider.getCurrentLocation();
+    await provider.loadCatalog(token);
+    if (!mounted) return;
+
+    final catalog = provider.catalog;
+    setState(() {
+      _pickup = currentLocation;
+      _service = _selectInitialService(catalog?.services ?? const []);
+      _vehicle = catalog?.vehicles.firstOrNull;
+      if (widget.showSchedule) {
+        _scheduledAt = DateTime.now().add(const Duration(minutes: 31));
+      }
+    });
+    await _refreshEstimate();
+  }
+
+  BookingServiceOption? _selectInitialService(
+    List<BookingServiceOption> services,
+  ) {
+    final matching = services
+        .where((service) => service.mode == widget.initialMode)
+        .firstOrNull;
+    return matching ?? services.firstOrNull;
+  }
+
+  Future<void> _pickLocation(LocationPickerType type) async {
+    final selected = type == LocationPickerType.pickup ? _pickup : _destination;
+    final location = await Navigator.of(context).push<BookingLocation>(
+      MaterialPageRoute(
+        builder: (_) => LocationPickerPage(
+          type: type,
+          initialLocation: selected,
+          initialCameraLocation: selected ?? _pickup,
+        ),
+      ),
+    );
+    if (!mounted || location == null) return;
+
+    setState(() {
+      if (type == LocationPickerType.pickup) {
+        _pickup = location;
+      } else {
+        _destination = location;
+      }
+    });
+    await _refreshEstimate();
+  }
+
   Future<void> _selectSchedule() async {
     final now = DateTime.now();
-    // TimeOfDay drops seconds, so use a one-minute buffer for backend validation.
-    final initial = now.add(const Duration(minutes: 31));
+    final initial =
+        (_scheduledAt ?? now.add(const Duration(minutes: 31))).isBefore(
+          now.add(const Duration(minutes: 31)),
+        )
+        ? now.add(const Duration(minutes: 31))
+        : _scheduledAt ?? now.add(const Duration(minutes: 31));
+
     final date = await showDatePicker(
       context: context,
       firstDate: now,
@@ -96,15 +146,23 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
       _showMessage(BookingStrings.invalidSchedule);
       return;
     }
-
     setState(() => _scheduledAt = scheduledAt);
   }
 
   Future<void> _refreshEstimate() async {
     final token = context.read<AuthProvider>().token;
+    final pickup = _pickup;
     final service = _service;
     final vehicle = _vehicle;
-    if (token == null || token.isEmpty || service == null || vehicle == null) {
+    if (token == null ||
+        token.isEmpty ||
+        pickup == null ||
+        service == null ||
+        vehicle == null) {
+      return;
+    }
+    if (service.mode == BookingServiceMode.perTrip && _destination == null) {
+      context.read<BookingProvider>().clearFareEstimate();
       return;
     }
 
@@ -112,24 +170,34 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
       token,
       vehicleId: vehicle.id,
       serviceTypeId: service.id,
-      pickup: widget.pickup,
-      destination: widget.destination,
+      pickup: pickup,
+      destination: _isHourly ? null : _destination,
+      estimatedHours: _isHourly ? _estimatedHours : null,
     );
   }
 
   Future<void> _confirmBooking() async {
     final token = context.read<AuthProvider>().token;
+    final pickup = _pickup;
     final service = _service;
     final vehicle = _vehicle;
     if (token == null || token.isEmpty) {
       _showMessage(BookingStrings.sessionExpired);
       return;
     }
+    if (pickup == null) {
+      _showMessage('Vui lòng chọn điểm đón.');
+      return;
+    }
     if (service == null || vehicle == null) {
       _showMessage(BookingStrings.selectServiceAndVehicle);
       return;
     }
-    if (widget.bookingType == BookingType.scheduled && _scheduledAt == null) {
+    if (!_isHourly && _destination == null) {
+      _showMessage('Vui lòng chọn điểm đến.');
+      return;
+    }
+    if (widget.showSchedule && _scheduledAt == null) {
       _showMessage(BookingStrings.selectPickupTimeRequired);
       return;
     }
@@ -139,15 +207,17 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
       CreateBookingRequest(
         vehicleId: vehicle.id,
         serviceTypeId: service.id,
-        bookingType: widget.bookingType,
-        scheduledAt: _scheduledAt,
-        pickup: widget.pickup,
-        destination: widget.destination,
+        bookingType: widget.showSchedule
+            ? BookingType.scheduled
+            : BookingType.now,
+        scheduledAt: widget.showSchedule ? _scheduledAt : null,
+        pickup: pickup,
+        destination: _isHourly ? null : _destination,
+        estimatedHours: _isHourly ? _estimatedHours : null,
         specialRequest: _specialRequestController.text,
       ),
     );
     if (!mounted) return;
-
     if (result == null) {
       _showMessage(
         context.read<BookingProvider>().errorMessage ??
@@ -155,8 +225,11 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
       );
       return;
     }
-
     await _showSuccess(result);
+  }
+
+  void _showPromoStub() {
+    _showMessage('Chức năng mã khuyến mãi sẽ được cập nhật sau.');
   }
 
   void _showMessage(String message) {
@@ -209,47 +282,90 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
     final provider = context.watch<BookingProvider>();
     final catalog = provider.catalog;
 
+    if (catalog == null || _service == null || _vehicle == null) {
+      return const AppLoadingScreen(message: 'Đang tải thông tin dịch vụ...');
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF7FAFA),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              flex: 4,
-              child: _MapPreview(
-                pickup: widget.pickup,
-                destination: widget.destination,
-                estimate: provider.fareEstimate,
-                onBack: () => Navigator.pop(context),
-              ),
+      body: Stack(
+        children: [
+          // Lớp dưới cùng: Bản đồ
+          Positioned.fill(
+            bottom: MediaQuery.of(context).size.height * 0.55, // Để bản đồ không bị che hết bởi panel
+            child: _MapPreview(
+              pickup: _pickup,
+              destination: _isHourly ? null : _destination,
+              estimate: provider.fareEstimate,
+              onBack: () => Navigator.pop(context),
             ),
-            Expanded(
-              flex: 7,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-                ),
-                child: ListView(
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 38,
-                        height: 5,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFD8DCDD),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+          ),
+          
+          // Lớp trên: Panel trắng bo tròn
+          Positioned(
+            top: MediaQuery.of(context).size.height * 0.36, // Vị trí bắt đầu của panel trắng
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(32)), // Tăng độ bo tròn
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 15,
+                    offset: Offset(0, -5),
+                  ),
+                ],
+              ),
+              child: ListView(
+                children: [
+                  Center(
+                    child: Container(
+                      width: 38,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD8DCDD),
+                        borderRadius: BorderRadius.circular(8),
                       ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  if (catalog.services.isEmpty ||
+                      catalog.vehicles.isEmpty)
+                    const _EmptyCatalogMessage()
+                  else ...[
+                    _ServiceSelector(
+                      services: catalog.services,
+                      selected: _selectedServiceOrFirst(catalog.services),
+                      onSelected: (service) async {
+                        setState(() {
+                          _service = service;
+                          if (widget.showSchedule) {
+                            _scheduledAt ??= DateTime.now().add(
+                              const Duration(minutes: 31),
+                            );
+                          }
+                        });
+                        await _refreshEstimate();
+                      },
                     ),
                     const SizedBox(height: 18),
                     _RouteSummary(
-                      pickup: widget.pickup.address,
-                      destination: widget.destination.address,
+                      pickup: _pickup,
+                      destination: _isHourly ? null : _destination,
                       estimate: provider.fareEstimate,
                       isLoading: provider.isEstimating,
+                      onPickupTap: () =>
+                          _pickLocation(LocationPickerType.pickup),
+                      onDestinationTap: _isHourly
+                          ? null
+                          : () =>
+                                _pickLocation(LocationPickerType.destination),
+                      estimatedHours: _isHourly ? _estimatedHours : null,
                     ),
                     if (provider.errorMessage != null) ...[
                       const SizedBox(height: 10),
@@ -258,70 +374,67 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                         style: const TextStyle(color: Colors.red),
                       ),
                     ],
-                    const SizedBox(height: 18),
-                    if (widget.bookingType == BookingType.scheduled)
+                    if (_isHourly) ...[
+                      const SizedBox(height: 16),
+                      _HourInput(
+                        value: _estimatedHours,
+                        onChanged: (value) async {
+                          setState(() => _estimatedHours = value);
+                          await _refreshEstimate();
+                        },
+                      ),
+                    ],
+                    if (widget.showSchedule) ...[
+                      const SizedBox(height: 16),
                       _ScheduleCard(
                         scheduledAt: _scheduledAt,
                         onTap: _selectSchedule,
                       ),
-                    if (widget.bookingType == BookingType.scheduled)
-                      const SizedBox(height: 16),
-                    if (catalog == null)
-                      const Center(child: CircularProgressIndicator())
-                    else if (catalog.services.isEmpty ||
-                        catalog.vehicles.isEmpty)
-                      const _EmptyCatalogMessage()
-                    else ...[
-                      _ServiceSelector(
-                        services: catalog.services,
-                        selected: _service,
-                        onSelected: (service) {
-                          setState(() => _service = service);
-                          _refreshEstimate();
+                    ],
+                    const SizedBox(height: 18),
+                    const Text(
+                      BookingStrings.selectVehicle,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    ...catalog.vehicles.map(
+                      (vehicle) => _VehicleCard(
+                        vehicle: vehicle,
+                        selected: vehicle.id == _vehicle?.id,
+                        onTap: () async {
+                          setState(() => _vehicle = vehicle);
+                          await _refreshEstimate();
                         },
                       ),
-                      const SizedBox(height: 18),
-                      const Text(
-                        BookingStrings.selectVehicle,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      ...catalog.vehicles.map(
-                        (vehicle) => _VehicleCard(
-                          vehicle: vehicle,
-                          selected: vehicle.id == _vehicle?.id,
-                          onTap: () {
-                            setState(() => _vehicle = vehicle);
-                            _refreshEstimate();
-                          },
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _specialRequestController,
-                      maxLength: 500,
-                      decoration: InputDecoration(
-                        hintText: BookingStrings.specialRequest,
-                        prefixIcon: const Icon(Icons.notes),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                    const Text(
-                      BookingStrings.fareCalculationNote,
-                      style: TextStyle(color: Color(0xFF667174), fontSize: 13),
                     ),
                   ],
-                ),
+                  const SizedBox(height: 12),
+                  _PromoTile(onTap: _showPromoStub),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _specialRequestController,
+                    maxLength: 500,
+                    decoration: InputDecoration(
+                      hintText: BookingStrings.specialRequest,
+                      prefixIcon: const Icon(Icons.notes),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  const Text(
+                    BookingStrings.fareCalculationNote,
+                    style: TextStyle(color: Color(0xFF667174), fontSize: 13),
+                  ),
+                  const SizedBox(height: 100), // Khoảng trống cho nút bấm phía dưới
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
       bottomNavigationBar: SafeArea(
         child: Padding(
@@ -344,9 +457,11 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
               child: provider.isLoading
                   ? const CircularProgressIndicator(color: Colors.white)
                   : Text(
-                      widget.bookingType == BookingType.now
-                          ? BookingStrings.confirmNow
-                          : BookingStrings.confirmScheduled,
+                      widget.showSchedule
+                          ? BookingStrings.confirmScheduled
+                          : _isHourly
+                          ? 'Xác nhận thuê theo giờ'
+                          : BookingStrings.confirmNow,
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
@@ -368,27 +483,13 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
     }
     return '$bufferđ';
   }
-}
 
-class _EmptyCatalogMessage extends StatelessWidget {
-  const _EmptyCatalogMessage();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF4E5),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFFFCC80)),
-      ),
-      child: const Row(
-        children: [
-          Icon(Icons.directions_car_filled_outlined, color: Color(0xFFB26A00)),
-          SizedBox(width: 12),
-          Expanded(child: Text(BookingStrings.noBookableVehicles)),
-        ],
-      ),
+  BookingServiceOption _selectedServiceOrFirst(
+    List<BookingServiceOption> services,
+  ) {
+    return services.firstWhere(
+      (service) => service.id == _service?.id,
+      orElse: () => services.first,
     );
   }
 }
@@ -401,8 +502,8 @@ class _MapPreview extends StatefulWidget {
     required this.onBack,
   });
 
-  final BookingLocation pickup;
-  final BookingLocation destination;
+  final BookingLocation? pickup;
+  final BookingLocation? destination;
   final BookingFareEstimate? estimate;
   final VoidCallback onBack;
 
@@ -411,12 +512,12 @@ class _MapPreview extends StatefulWidget {
 }
 
 class _MapPreviewState extends State<_MapPreview> {
+  static const _fallback = LatLng(10.7769, 106.7009);
   GoogleMapController? _controller;
 
   List<LatLng> get _routePoints {
     final encoded = widget.estimate?.encodedPolyline;
     if (encoded == null || encoded.isEmpty) return const [];
-
     try {
       return decodePolyline(encoded);
     } on FormatException {
@@ -424,10 +525,13 @@ class _MapPreviewState extends State<_MapPreview> {
     }
   }
 
-  LatLng get _pickup => LatLng(widget.pickup.latitude, widget.pickup.longitude);
+  LatLng get _pickup => widget.pickup == null
+      ? _fallback
+      : LatLng(widget.pickup!.latitude, widget.pickup!.longitude);
 
-  LatLng get _destination =>
-      LatLng(widget.destination.latitude, widget.destination.longitude);
+  LatLng? get _destination => widget.destination == null
+      ? null
+      : LatLng(widget.destination!.latitude, widget.destination!.longitude);
 
   @override
   void dispose() {
@@ -439,7 +543,9 @@ class _MapPreviewState extends State<_MapPreview> {
   void didUpdateWidget(covariant _MapPreview oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.estimate?.encodedPolyline !=
-        widget.estimate?.encodedPolyline) {
+            widget.estimate?.encodedPolyline ||
+        oldWidget.pickup != widget.pickup ||
+        oldWidget.destination != widget.destination) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _fitRoute());
     }
   }
@@ -448,15 +554,23 @@ class _MapPreviewState extends State<_MapPreview> {
     final controller = _controller;
     if (controller == null) return;
 
+    final destination = _destination;
     final routePoints = _routePoints;
-    final boundsPoints = routePoints.isEmpty
-        ? [_pickup, _destination]
-        : routePoints;
+    final boundsPoints = routePoints.isNotEmpty
+        ? routePoints
+        : destination == null
+        ? [_pickup]
+        : [_pickup, destination];
+
+    if (boundsPoints.length == 1) {
+      await controller.animateCamera(CameraUpdate.newLatLngZoom(_pickup, 15));
+      return;
+    }
+
     var minLatitude = boundsPoints.first.latitude;
     var maxLatitude = boundsPoints.first.latitude;
     var minLongitude = boundsPoints.first.longitude;
     var maxLongitude = boundsPoints.first.longitude;
-
     for (final point in boundsPoints.skip(1)) {
       minLatitude = point.latitude < minLatitude ? point.latitude : minLatitude;
       maxLatitude = point.latitude > maxLatitude ? point.latitude : maxLatitude;
@@ -468,17 +582,12 @@ class _MapPreviewState extends State<_MapPreview> {
           : maxLongitude;
     }
 
-    final southWest = LatLng(minLatitude, minLongitude);
-    final northEast = LatLng(maxLatitude, maxLongitude);
-
-    if (southWest == northEast) {
-      await controller.animateCamera(CameraUpdate.newLatLngZoom(_pickup, 16));
-      return;
-    }
-
     await controller.animateCamera(
       CameraUpdate.newLatLngBounds(
-        LatLngBounds(southwest: southWest, northeast: northEast),
+        LatLngBounds(
+          southwest: LatLng(minLatitude, minLongitude),
+          northeast: LatLng(maxLatitude, maxLongitude),
+        ),
         54,
       ),
     );
@@ -490,33 +599,35 @@ class _MapPreviewState extends State<_MapPreview> {
       return _MapConfigurationError(onBack: widget.onBack);
     }
 
+    final destination = _destination;
     final routePoints = _routePoints;
-
     return Stack(
       fit: StackFit.expand,
       children: [
         GoogleMap(
           initialCameraPosition: CameraPosition(target: _pickup, zoom: 14),
           markers: {
-            Marker(
-              markerId: const MarkerId('pickup'),
-              position: _pickup,
-              infoWindow: InfoWindow(
-                title: BookingStrings.pickupLabel,
-                snippet: widget.pickup.address,
+            if (widget.pickup != null)
+              Marker(
+                markerId: const MarkerId('pickup'),
+                position: _pickup,
+                infoWindow: InfoWindow(
+                  title: BookingStrings.pickupLabel,
+                  snippet: widget.pickup!.address,
+                ),
               ),
-            ),
-            Marker(
-              markerId: const MarkerId('destination'),
-              position: _destination,
-              icon: BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueRed,
+            if (destination != null)
+              Marker(
+                markerId: const MarkerId('destination'),
+                position: destination,
+                icon: BitmapDescriptor.defaultMarkerWithHue(
+                  BitmapDescriptor.hueRed,
+                ),
+                infoWindow: InfoWindow(
+                  title: BookingStrings.destinationLabel,
+                  snippet: widget.destination!.address,
+                ),
               ),
-              infoWindow: InfoWindow(
-                title: BookingStrings.destinationLabel,
-                snippet: widget.destination.address,
-              ),
-            ),
           },
           polylines: routePoints.isEmpty
               ? {}
@@ -537,55 +648,24 @@ class _MapPreviewState extends State<_MapPreview> {
             WidgetsBinding.instance.addPostFrameCallback((_) => _fitRoute());
           },
         ),
+        // Nút quay lại được bọc trong SafeArea để tránh bị lấp bởi Status Bar
         Positioned(
           left: 20,
-          top: 18,
-          child: CircleAvatar(
-            backgroundColor: Colors.white,
-            child: IconButton(
-              onPressed: widget.onBack,
-              icon: const Icon(Icons.arrow_back, color: Color(0xFF263334)),
+          top: 0,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: CircleAvatar(
+                backgroundColor: Colors.white,
+                child: IconButton(
+                  onPressed: widget.onBack,
+                  icon: const Icon(Icons.arrow_back, color: Color(0xFF263334)),
+                ),
+              ),
             ),
           ),
         ),
       ],
-    );
-  }
-}
-
-class _MapConfigurationError extends StatelessWidget {
-  const _MapConfigurationError({required this.onBack});
-
-  final VoidCallback onBack;
-
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: const Color(0xFFE7EEEE),
-      child: Stack(
-        children: [
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.all(32),
-              child: Text(
-                'Thiếu GOOGLE_MAPS_API_KEY. Hãy chạy app bằng cấu hình local.',
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-          Positioned(
-            left: 20,
-            top: 18,
-            child: CircleAvatar(
-              backgroundColor: Colors.white,
-              child: IconButton(
-                onPressed: onBack,
-                icon: const Icon(Icons.arrow_back),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -596,12 +676,18 @@ class _RouteSummary extends StatelessWidget {
     required this.destination,
     required this.estimate,
     required this.isLoading,
+    required this.onPickupTap,
+    required this.onDestinationTap,
+    required this.estimatedHours,
   });
 
-  final String pickup;
-  final String destination;
+  final BookingLocation? pickup;
+  final BookingLocation? destination;
   final BookingFareEstimate? estimate;
   final bool isLoading;
+  final VoidCallback onPickupTap;
+  final VoidCallback? onDestinationTap;
+  final int? estimatedHours;
 
   @override
   Widget build(BuildContext context) {
@@ -618,15 +704,19 @@ class _RouteSummary extends StatelessWidget {
             icon: Icons.my_location,
             color: AppColors.primary,
             label: BookingStrings.pickupLabel,
-            value: pickup,
+            value: pickup?.address ?? 'Chọn điểm đón',
+            onTap: onPickupTap,
           ),
-          const Divider(height: 22),
-          _RouteRow(
-            icon: Icons.location_on,
-            color: Color(0xFFC61E27),
-            label: BookingStrings.destinationLabel,
-            value: destination,
-          ),
+          if (onDestinationTap != null) ...[
+            const Divider(height: 22),
+            _RouteRow(
+              icon: Icons.location_on,
+              color: const Color(0xFFC61E27),
+              label: BookingStrings.destinationLabel,
+              value: destination?.address ?? 'Chọn điểm đến',
+              onTap: onDestinationTap!,
+            ),
+          ],
           const Divider(height: 22),
           if (isLoading)
             const Row(
@@ -636,7 +726,7 @@ class _RouteSummary extends StatelessWidget {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
                 SizedBox(width: 10),
-                Text('Đang tính tuyến đường và giá dự kiến...'),
+                Text('Đang tính giá dự kiến...'),
               ],
             )
           else if (estimate != null)
@@ -645,14 +735,17 @@ class _RouteSummary extends StatelessWidget {
                 Expanded(
                   child: _EstimateValue(
                     icon: Icons.route,
-                    value:
-                        '${estimate!.estimatedDistanceKm.toStringAsFixed(1)} km',
+                    value: estimatedHours == null
+                        ? '${estimate!.estimatedDistanceKm.toStringAsFixed(1)} km'
+                        : '$estimatedHours giờ',
                   ),
                 ),
                 Expanded(
                   child: _EstimateValue(
                     icon: Icons.schedule,
-                    value: '${estimate!.estimatedDurationMinutes} phút',
+                    value: estimatedHours == null
+                        ? '${estimate!.estimatedDurationMinutes} phút'
+                        : '${estimate!.estimatedDurationMinutes} phút',
                   ),
                 ),
                 Expanded(
@@ -670,29 +763,12 @@ class _RouteSummary extends StatelessWidget {
 
   static String _formatEstimateCurrency(double value) {
     final digits = value.round().toString();
-    return '${digits.replaceAllMapped(RegExp(r'(?=(\d{3})+(?!\d))'), (_) => '.')}đ';
-  }
-}
-
-class _EstimateValue extends StatelessWidget {
-  const _EstimateValue({required this.icon, required this.value});
-
-  final IconData icon;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Icon(icon, color: AppColors.primary, size: 20),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
-      ],
-    );
+    final buffer = StringBuffer();
+    for (var index = 0; index < digits.length; index++) {
+      if (index > 0 && (digits.length - index) % 3 == 0) buffer.write('.');
+      buffer.write(digits[index]);
+    }
+    return '$bufferđ';
   }
 }
 
@@ -702,37 +778,118 @@ class _RouteRow extends StatelessWidget {
     required this.color,
     required this.label,
     required this.value,
+    required this.onTap,
   });
 
   final IconData icon;
   final Color color;
   final String label;
   final String value;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, color: color),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
+    return InkWell(
+      onTap: onTap,
+      child: Row(
+        children: [
+          Icon(icon, color: color),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF626A6C),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(value, maxLines: 2, overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right, size: 18),
+        ],
+      ),
+    );
+  }
+}
+
+class _HourInput extends StatelessWidget {
+  const _HourInput({required this.value, required this.onChanged});
+
+  final int value;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 58,
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF4F4),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: value > 1 ? () => onChanged(value - 1) : null,
+            icon: const Icon(Icons.remove_circle_outline),
+          ),
+          Expanded(
+            child: Center(
+              child: Text(
+                '$value giờ thuê dự kiến',
                 style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF626A6C),
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(height: 3),
-              Text(value, maxLines: 2, overflow: TextOverflow.ellipsis),
-            ],
+            ),
           ),
+          IconButton(
+            onPressed: value < 24 ? () => onChanged(value + 1) : null,
+            icon: const Icon(Icons.add_circle_outline),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PromoTile extends StatelessWidget {
+  const _PromoTile({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8F6F6),
+          borderRadius: BorderRadius.circular(12),
         ),
-      ],
+        child: const Row(
+          children: [
+            Icon(Icons.local_offer, color: AppColors.primary),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Thêm mã khuyến mãi',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+            ),
+            Icon(Icons.chevron_right),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -790,6 +947,10 @@ class _ServiceSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final selectedId = services.any((service) => service.id == selected?.id)
+        ? selected!.id
+        : services.first.id;
+
     return SegmentedButton<int>(
       segments: services
           .map(
@@ -797,9 +958,13 @@ class _ServiceSelector extends StatelessWidget {
                 ButtonSegment(value: service.id, label: Text(service.name)),
           )
           .toList(),
-      selected: selected == null ? <int>{} : {selected!.id},
+      selected: {selectedId},
       onSelectionChanged: (selection) {
-        onSelected(services.firstWhere((item) => item.id == selection.first));
+        final selectedService = services.firstWhere(
+          (item) => item.id == selection.first,
+          orElse: () => services.first,
+        );
+        onSelected(selectedService);
       },
       style: ButtonStyle(
         backgroundColor: WidgetStateProperty.resolveWith(
@@ -869,6 +1034,88 @@ class _VehicleCard extends StatelessWidget {
               const Icon(Icons.check_circle, color: AppColors.primary),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _EstimateValue extends StatelessWidget {
+  const _EstimateValue({required this.icon, required this.value});
+
+  final IconData icon;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Icon(icon, color: AppColors.primary, size: 20),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ],
+    );
+  }
+}
+
+class _EmptyCatalogMessage extends StatelessWidget {
+  const _EmptyCatalogMessage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF4E5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFFCC80)),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.directions_car_filled_outlined, color: Color(0xFFB26A00)),
+          SizedBox(width: 12),
+          Expanded(child: Text(BookingStrings.noBookableVehicles)),
+        ],
+      ),
+    );
+  }
+}
+
+class _MapConfigurationError extends StatelessWidget {
+  const _MapConfigurationError({required this.onBack});
+
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: const Color(0xFFE7EEEE),
+      child: Stack(
+        children: [
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.all(32),
+              child: Text(
+                'Thiếu GOOGLE_MAPS_API_KEY. Hãy chạy app bằng cấu hình local.',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+          Positioned(
+            left: 20,
+            top: 18,
+            child: CircleAvatar(
+              backgroundColor: Colors.white,
+              child: IconButton(
+                onPressed: onBack,
+                icon: const Icon(Icons.arrow_back),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
