@@ -7,11 +7,12 @@ import 'app.dart';
 import 'dependency_injection/injection.dart';
 
 import 'features/auth/presentation/providers/auth_provider.dart';
-import 'features/onboarding/presentation/providers/role_provider.dart';
-import 'features/home/presentation/providers/home_provider.dart';
-import 'features/booking/presentation/providers/booking_provider.dart';
-import 'features/profile/presentation/providers/vehicle_provider.dart';
-import 'features/activity/presentation/providers/activity_provider.dart';
+import 'features/shared/onboarding/presentation/providers/role_provider.dart';
+import 'features/customer/home/presentation/providers/home_provider.dart';
+import 'features/customer/booking/presentation/providers/booking_provider.dart';
+import 'features/shared/profile/presentation/providers/vehicle_provider.dart';
+import 'features/shared/history/presentation/providers/history_provider.dart';
+import 'features/driver/dashboard/presentation/providers/driver_dashboard_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,7 +34,8 @@ void main() async {
         ChangeNotifierProvider(create: (_) => getIt<HomeProvider>()),
 
         ChangeNotifierProvider(create: (_) => getIt<VehicleProvider>()),
-        ChangeNotifierProvider(create: (_) => getIt<ActivityProvider>()),
+        ChangeNotifierProvider(create: (_) => getIt<HistoryProvider>()),
+        ChangeNotifierProvider(create: (_) => getIt<DriverDashboardProvider>()),
       ],
       child: const MyApp(),
     ),
