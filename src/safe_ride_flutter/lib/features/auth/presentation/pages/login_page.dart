@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'otp_page.dart';
-import '../../../../customer/home/presentation/pages/customer_home_page.dart';
-import '../../../../shared/onboarding/presentation/pages/role_selection_page.dart';
-import '../../../../shared/profile/presentation/pages/edit_profile_page.dart';
+import '../../../customer/home/presentation/pages/customer_home_page.dart';
+import '../../../shared/onboarding/presentation/pages/role_selection_page.dart';
+import '../../../shared/profile/presentation/pages/edit_profile_page.dart';
 
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';

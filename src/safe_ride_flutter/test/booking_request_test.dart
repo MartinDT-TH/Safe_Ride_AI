@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:safe_ride/features/booking/data/models/booking_location.dart';
-import 'package:safe_ride/features/booking/data/models/create_booking_request.dart';
+import 'package:safe_ride/features/customer/booking/data/models/booking_location.dart';
+import 'package:safe_ride/features/customer/booking/data/models/create_booking_request.dart';
 
 void main() {
   test('scheduled booking request serializes backend contract', () {
