@@ -79,6 +79,16 @@ abstract final class HomeStrings {
   static String greeting(String name) => 'Chào $name,';
 }
 
+abstract final class ActivityStrings {
+  static const tripHistory = 'Lịch sử chuyến đi';
+  static const all = 'Tất cả';
+  static const completed = 'Hoàn thành';
+  static const cancelled = 'Đã hủy';
+  static const rebook = 'Đặt lại';
+  static const cancelledByCustomer = 'Đã hủy bởi khách hàng';
+  static const driverRating = '★';
+}
+
 abstract final class BookingStrings {
   static const routeSearch = 'Tìm tuyến đường';
   static const locatingCurrentPosition = 'Đang xác định vị trí hiện tại...';

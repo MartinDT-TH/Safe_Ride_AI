@@ -13,6 +13,7 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../booking/data/models/create_booking_request.dart';
 import '../../../booking/data/models/booking_catalog.dart';
 import '../../../booking/presentation/pages/booking_options_page.dart';
+import '../../../activity/presentation/pages/activity_page.dart';
 
 class CustomerHomePage extends StatefulWidget {
   const CustomerHomePage({super.key});
@@ -96,7 +97,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     final auth = context.watch<AuthProvider>();
     final List<Widget> pages = [
       _buildHomeContent(auth),
-      const Center(child: Text(HomeStrings.activityPage)),
+      const ActivityPage(),
       const Center(child: Text(HomeStrings.walletPage)),
       const ProfilePage(),
     ];
