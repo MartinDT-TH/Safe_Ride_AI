@@ -7,5 +7,8 @@ public sealed record BookingResponse(
     BookingType BookingType,
     BookingStatus BookingStatus,
     DateTime? ScheduledAt,
+    double EstimatedDistanceKm,
+    int EstimatedDurationMinutes,
     decimal EstimatedFare,
+    string EncodedPolyline,
     string Message);

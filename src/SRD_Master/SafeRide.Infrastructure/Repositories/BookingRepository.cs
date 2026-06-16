@@ -36,6 +36,35 @@ public sealed class BookingRepository : IBookingRepository
                 cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Vehicle>> GetCustomerVehiclesAsync(
+        Guid customerId,
+        CancellationToken cancellationToken)
+    {
+        return await _dbContext.Vehicles
+            .AsNoTracking()
+            .Where(vehicle => vehicle.OwnerUserId == customerId
+                && !vehicle.IsDeleted)
+            .OrderBy(vehicle => vehicle.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<PricingRule>> GetBookablePricingRulesAsync(
+        Guid customerId,
+        CancellationToken cancellationToken)
+    {
+        return await (
+            from pricingRule in _dbContext.PricingRules
+                .AsNoTracking()
+                .Include(rule => rule.ServiceType)
+            join vehicle in _dbContext.Vehicles.AsNoTracking()
+                on pricingRule.VehicleClass equals vehicle.RequiredLicenseClass
+            where vehicle.OwnerUserId == customerId
+                && !vehicle.IsDeleted
+                && pricingRule.IsActive
+            select pricingRule)
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<PricingRule?> GetPricingRuleAsync(
         long serviceTypeId,
         long vehicleId,

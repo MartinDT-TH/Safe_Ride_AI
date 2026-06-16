@@ -12,4 +12,8 @@ public sealed class GoogleMapsOptions
     [Required]
     public string RoutesApiUrl { get; init; }
         = "https://routes.googleapis.com/directions/v2:computeRoutes";
+
+    [Required]
+    public string GeocodingApiUrl { get; init; }
+        = "https://maps.googleapis.com/maps/api/geocode/json";
 }

@@ -14,7 +14,7 @@ public sealed class CreateBookingCommandHandler
     private readonly IBookingRepository _bookingRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IDateTimeProvider _dateTimeProvider;
-    private readonly IMapService _mapService;
+    private readonly IGoogleMapsService _googleMapsService;
     private readonly IFareEstimationService _fareEstimationService;
     private readonly IBookingMatchingService _matchingService;
 
@@ -22,14 +22,14 @@ public sealed class CreateBookingCommandHandler
         IBookingRepository bookingRepository,
         IUnitOfWork unitOfWork,
         IDateTimeProvider dateTimeProvider,
-        IMapService mapService,
+        IGoogleMapsService googleMapsService,
         IFareEstimationService fareEstimationService,
         IBookingMatchingService matchingService)
     {
         _bookingRepository = bookingRepository;
         _unitOfWork = unitOfWork;
         _dateTimeProvider = dateTimeProvider;
-        _mapService = mapService;
+        _googleMapsService = googleMapsService;
         _fareEstimationService = fareEstimationService;
         _matchingService = matchingService;
     }
@@ -69,7 +69,7 @@ public sealed class CreateBookingCommandHandler
         RouteEstimateResult route;
         try
         {
-            route = await _mapService.GetRouteEstimateAsync(
+            route = await _googleMapsService.GetRouteEstimateAsync(
                 new LocationPoint(request.PickupLatitude, request.PickupLongitude),
                 new LocationPoint(request.DestinationLatitude, request.DestinationLongitude),
                 cancellationToken);
@@ -111,6 +111,7 @@ public sealed class CreateBookingCommandHandler
             EstimatedDistanceKm = estimatedDistanceKm,
             EstimatedDurationMinutes = route.DurationMinutes,
             EstimatedFare = estimatedFare,
+            RoutePolyline = route.EncodedPolyline,
             SpecialRequest = NormalizeOptionalText(request.SpecialRequest),
             PricingRuleId = pricingRule.Id,
             CreatedAt = utcNow,
@@ -136,7 +137,10 @@ public sealed class CreateBookingCommandHandler
             booking.BookingType,
             booking.BookingStatus,
             booking.ScheduledAt,
+            (double)estimatedDistanceKm,
+            route.DurationMinutes,
             booking.EstimatedFare,
+            route.EncodedPolyline,
             message);
     }
 
@@ -196,6 +200,15 @@ public sealed class CreateBookingCommandHandler
             throw new BookingException(
                 "booking.address_required",
                 "Địa chỉ điểm đón và điểm đến là bắt buộc.",
+                400);
+        }
+
+        if (request.PickupLatitude == request.DestinationLatitude
+            && request.PickupLongitude == request.DestinationLongitude)
+        {
+            throw new BookingException(
+                "booking.same_locations",
+                "Điểm đón và điểm đến phải khác nhau.",
                 400);
         }
     }
