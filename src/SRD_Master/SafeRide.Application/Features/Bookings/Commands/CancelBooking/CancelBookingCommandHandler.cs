@@ -1,5 +1,6 @@
 using MediatR;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Common.Realtime;
 using SafeRide.Domain.Enums;
 
 namespace SafeRide.Application.Features.Bookings.Commands.CancelBooking;
@@ -10,15 +11,18 @@ public sealed class CancelBookingCommandHandler
     private readonly IBookingRepository _bookingRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly IRealtimeNotificationService _realtimeNotificationService;
 
     public CancelBookingCommandHandler(
         IBookingRepository bookingRepository,
         IUnitOfWork unitOfWork,
-        IDateTimeProvider dateTimeProvider)
+        IDateTimeProvider dateTimeProvider,
+        IRealtimeNotificationService realtimeNotificationService)
     {
         _bookingRepository = bookingRepository;
         _unitOfWork = unitOfWork;
         _dateTimeProvider = dateTimeProvider;
+        _realtimeNotificationService = realtimeNotificationService;
     }
 
     public async Task<CancelBookingResponse> Handle(
@@ -62,6 +66,13 @@ public sealed class CancelBookingCommandHandler
             cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await _realtimeNotificationService.PublishBookingStatusChangedAsync(
+            new BookingStatusChangedEvent(
+                booking.BookingId,
+                booking.CustomerId,
+                booking.BookingStatus,
+                utcNow),
+            cancellationToken);
 
         return ToResponse(booking, "Đã hủy chuyến thành công.");
     }

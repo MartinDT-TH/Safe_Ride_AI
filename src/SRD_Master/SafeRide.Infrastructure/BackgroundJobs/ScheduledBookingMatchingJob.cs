@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Common.Realtime;
 using SafeRide.Domain.Enums;
 
 namespace SafeRide.Infrastructure.BackgroundJobs;
@@ -42,6 +43,8 @@ public sealed class ScheduledBookingMatchingJob : BackgroundService
             var clock = scope.ServiceProvider.GetRequiredService<IDateTimeProvider>();
             var matchingService =
                 scope.ServiceProvider.GetRequiredService<IBookingMatchingService>();
+            var realtimeNotificationService =
+                scope.ServiceProvider.GetRequiredService<IRealtimeNotificationService>();
 
             var bookings = await repository.GetScheduledBookingsReadyForMatchingAsync(
                 clock.UtcNow.AddMinutes(15),
@@ -62,6 +65,13 @@ public sealed class ScheduledBookingMatchingJob : BackgroundService
                         booking.BookingId,
                         cancellationToken);
                     await unitOfWork.SaveChangesAsync(cancellationToken);
+                    await realtimeNotificationService.PublishBookingStatusChangedAsync(
+                        new BookingStatusChangedEvent(
+                            booking.BookingId,
+                            booking.CustomerId,
+                            booking.BookingStatus,
+                            booking.UpdatedAt),
+                        cancellationToken);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
