@@ -22,6 +22,8 @@ public partial class DriverProfile
 
     public virtual AspNetUser Driver { get; set; } = null!;
 
+    public virtual ICollection<BookingDriverOffer> BookingDriverOffers { get; set; } = new List<BookingDriverOffer>();
+
     public virtual DriverWallet? DriverWallet { get; set; }
 
     public virtual ICollection<Rating> Ratings { get; set; } = new List<Rating>();
