@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -37,7 +38,7 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
   GoogleMapController? _controller;
   static const _tealColor = Color(0xFF006B70);
   Offset? _markerScreenOffset;
-  BitmapDescriptor? _driverIcon;
+  StreamSubscription? _timerSubscription;
 
   List<LatLng> get _routePoints {
     final encoded = widget.fareEstimate?.encodedPolyline;
@@ -52,12 +53,12 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
   @override
   void initState() {
     super.initState();
-    _loadMarkerIcons();
     _startNearbyDriversTimer();
   }
 
   @override
   void dispose() {
+    _timerSubscription?.cancel();
     _controller?.dispose();
     super.dispose();
   }
@@ -71,30 +72,27 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
   }
 
   void _startNearbyDriversTimer() {
-    // Refresh nearby drivers every 10 seconds while on this page
-    Stream.periodic(const Duration(seconds: 10)).listen((_) {
+    // Refresh nearby drivers every 5 seconds while on this page for better real-time feel
+    _timerSubscription =
+        Stream.periodic(const Duration(seconds: 5)).listen((_) {
       if (mounted) _fetchNearbyDrivers();
     });
   }
 
-  Future<void> _loadMarkerIcons() async {
-    _driverIcon = await BitmapDescriptor.asset(
-      const ImageConfiguration(size: Size(32, 32)),
-      'assets/icons/car_marker.png',
-    );
-    if (mounted) setState(() {});
-  }
 
   void _fetchNearbyDrivers() {
     final auth = context.read<AuthProvider>();
     final booking = context.read<BookingProvider>();
     final token = auth.token;
     if (token != null) {
+      debugPrint('Fetching nearby drivers for: ${widget.pickup.latitude}, ${widget.pickup.longitude}');
       booking.fetchNearbyDrivers(
         token,
         latitude: widget.pickup.latitude,
         longitude: widget.pickup.longitude,
       );
+    } else {
+      debugPrint('Nearby drivers fetch skipped: Token is null');
     }
   }
 
@@ -210,10 +208,9 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
                   (driver) => Marker(
                     markerId: MarkerId('driver_${driver.driverId}'),
                     position: LatLng(driver.latitude, driver.longitude),
-                    icon: _driverIcon ??
-                        BitmapDescriptor.defaultMarkerWithHue(
-                          BitmapDescriptor.hueOrange,
-                        ),
+                    icon: BitmapDescriptor.defaultMarkerWithHue(
+                      BitmapDescriptor.hueOrange,
+                    ),
                     anchor: const Offset(0.5, 0.5),
                   ),
                 ),

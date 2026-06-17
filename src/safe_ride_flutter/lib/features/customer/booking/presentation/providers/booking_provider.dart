@@ -146,6 +146,7 @@ class BookingProvider extends ChangeNotifier {
         latitude: latitude,
         longitude: longitude,
       );
+      debugPrint('Found ${_nearbyDrivers.length} nearby drivers');
       notifyListeners();
     } catch (e) {
       debugPrint('Error fetching nearby drivers: $e');
