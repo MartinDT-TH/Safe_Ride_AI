@@ -4,6 +4,7 @@ using SafeRide.Application;
 using SafeRide.API.Middlewares;
 using SafeRide.Infrastructure;
 using SafeRide.Infrastructure.Persistence;
+using SafeRide.Realtime;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -44,6 +45,7 @@ builder.Services
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
+builder.Services.AddSafeRideRealtime();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -88,6 +90,7 @@ app.UseAuthorization();
 
 await app.Services.SeedIdentityAsync();
 app.MapControllers();
+app.MapHub<SafeRideHub>("/hubs/saferide");
 app.Run();
 
 public partial class Program;
