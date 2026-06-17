@@ -6,6 +6,8 @@ using SafeRide.Application.Features.Bookings.DTOs;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
 using SafeRide.Infrastructure.Persistence;
+using SafeRide.Infrastructure.Redis;
+using System.Text.Json;
 
 namespace SafeRide.Infrastructure.Services;
 
@@ -15,17 +17,20 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly ILicenseCompatibilityService _licenseCompatibilityService;
     private readonly IVehicleLicenseRequirementService _vehicleLicenseRequirementService;
+    private readonly IRedisService _redisService;
 
     public BookingAssignmentService(
         ApplicationDbContext dbContext,
         IDateTimeProvider dateTimeProvider,
         ILicenseCompatibilityService licenseCompatibilityService,
-        IVehicleLicenseRequirementService vehicleLicenseRequirementService)
+        IVehicleLicenseRequirementService vehicleLicenseRequirementService,
+        IRedisService redisService)
     {
         _dbContext = dbContext;
         _dateTimeProvider = dateTimeProvider;
         _licenseCompatibilityService = licenseCompatibilityService;
         _vehicleLicenseRequirementService = vehicleLicenseRequirementService;
+        _redisService = redisService;
     }
 
     public async Task<CreateBookingResponse> ConfirmDriverAsync(
@@ -125,7 +130,10 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         var hasActiveTrip = await _dbContext.Trips
             .AnyAsync(
                 x => x.DriverId == offer.DriverId
-                    && IsActiveTripStatus(x.TripStatus),
+                    && (x.TripStatus == TripStatus.ACCEPTED
+                        || x.TripStatus == TripStatus.DRIVER_ARRIVING
+                        || x.TripStatus == TripStatus.ARRIVED
+                        || x.TripStatus == TripStatus.IN_PROGRESS),
                 cancellationToken);
         if (hasActiveTrip)
         {
@@ -154,6 +162,8 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
 
         await _dbContext.Trips.AddAsync(trip, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await CacheTripLiveAsync(trip, booking.CustomerId);
+        await RemoveMatchingKeysAsync(booking.BookingId, offer.DriverId);
         await transaction.CommitAsync(cancellationToken);
 
         var driverOffer = await GetOfferDtoAsync(offer.Id, cancellationToken);
@@ -169,6 +179,33 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             booking.RoutePolyline,
             "Đã xác nhận tài xế cho chuyến đi.",
             driverOffer);
+    }
+
+    private async Task CacheTripLiveAsync(
+        Trip trip,
+        Guid customerId)
+    {
+        var cache = new TripLiveCache(
+            trip.Id,
+            trip.BookingId,
+            trip.DriverId,
+            customerId,
+            trip.TripStatus,
+            trip.DriverAssignedAt ?? _dateTimeProvider.UtcNow);
+
+        await _redisService.SetAsync(
+            RedisKeys.TripLive(trip.Id),
+            JsonSerializer.Serialize(cache),
+            TimeSpan.FromHours(12));
+    }
+
+    private async Task RemoveMatchingKeysAsync(
+        long bookingId,
+        Guid driverId)
+    {
+        await _redisService.RemoveAsync(RedisKeys.MatchingBooking(bookingId));
+        await _redisService.RemoveAsync(RedisKeys.MatchingOffer(bookingId, driverId));
+        await _redisService.RemoveAsync(RedisKeys.MatchingDriverLock(driverId));
     }
 
     private async Task<BookingDriverOfferDto?> GetOfferDtoAsync(
@@ -213,7 +250,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             .GroupBy(x => x.DriverId)
             .Select(group => new
             {
-                Rating = Math.Round(group.Average(x => x.RatingScore), 1),
+                Rating = Math.Round(group.Average(x => (double)x.RatingScore), 1),
                 TripCount = group.Count()
             })
             .FirstOrDefaultAsync(cancellationToken);

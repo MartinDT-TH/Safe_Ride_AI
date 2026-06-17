@@ -13,11 +13,29 @@ namespace SafeRide.Infrastructure.Redis
             string value,
             TimeSpan expiration);
 
+        Task<bool> SetIfNotExistsAsync(
+            string key,
+            string value,
+            TimeSpan expiration);
+
         Task<string?> GetAsync(string key);
 
         Task RemoveAsync(string key);
 
         Task<long> IncrementAsync(string key, TimeSpan expiration);
+
+        Task GeoAddAsync(
+            string key,
+            double longitude,
+            double latitude,
+            string member);
+
+        Task<IReadOnlyList<string>> GeoRadiusAsync(
+            string key,
+            double longitude,
+            double latitude,
+            double radiusKm,
+            int count);
 
         Task<OtpVerificationResult> VerifyAndConsumeOtpAsync(
             string otpKey,
