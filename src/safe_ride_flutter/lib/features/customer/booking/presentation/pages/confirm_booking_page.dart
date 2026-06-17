@@ -1,121 +1,171 @@
 import 'package:flutter/material.dart';
+
 import '../../../../../core/constants/app_colors.dart';
-import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/widgets/custom_button.dart';
-import '../../data/models/booking_location.dart';
+import '../../data/models/booking_catalog.dart';
 import '../../data/models/booking_fare_estimate.dart';
+import '../../data/models/booking_location.dart';
+import '../../data/models/booking_response.dart';
+import '../../data/models/create_booking_request.dart';
+import '../widgets/booking_cancel_flow.dart';
 
 class ConfirmBookingPage extends StatelessWidget {
   const ConfirmBookingPage({
     super.key,
     required this.pickup,
-    required this.destination,
-    required this.estimate,
-    this.vehicleName = 'Toyota Vios',
-    this.plateNumber = '30F - 987.65',
-    this.driverName = 'Nguyễn Văn A',
+    this.booking,
+    this.destination,
+    BookingFareEstimate? fareEstimate,
+    BookingFareEstimate? estimate,
+    CreateBookingRequest? request,
+    BookingServiceOption? service,
+    this.vehicle,
+    int? estimatedHours,
+    this.driverName = 'Nguyễn Văn An',
     this.driverRating = 4.9,
-    this.driverExperience = 5,
-  });
+    this.driverTripCount = 1200,
+    this.driverExperienceYears = 5,
+  }) : fareEstimate = fareEstimate ?? estimate;
 
+  final BookingResponse? booking;
   final BookingLocation pickup;
   final BookingLocation? destination;
-  final BookingFareEstimate estimate;
-  final String vehicleName;
-  final String plateNumber;
+  final BookingFareEstimate? fareEstimate;
+  final BookingVehicleOption? vehicle;
   final String driverName;
   final double driverRating;
-  final int driverExperience;
+  final int driverTripCount;
+  final int driverExperienceYears;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        leading: const BackButton(color: Colors.black),
-        title: const Text(
-          'Xác nhận thuê tài xế',
-          style: TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
+    final fare = booking?.estimatedFare ?? fareEstimate?.estimatedFare;
+    final distance =
+        booking?.estimatedDistanceKm ?? fareEstimate?.estimatedDistanceKm;
+    final duration =
+        booking?.estimatedDurationMinutes ??
+        fareEstimate?.estimatedDurationMinutes;
+
+    return PopScope(
+      canPop: true,
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.black),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: const Text(
+            'Xác nhận thuê tài xế',
+            style: TextStyle(
+              color: Colors.black,
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+            ),
+          ),
+          centerTitle: true,
+          elevation: 0,
+          backgroundColor: Colors.white,
+        ),
+        body: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 16),
+              _DriverCard(
+                name: driverName,
+                rating: driverRating,
+                tripCount: driverTripCount,
+                experienceYears: driverExperienceYears,
+              ),
+              const SizedBox(height: 18),
+              if (vehicle != null) ...[
+                _VehicleCard(vehicle: vehicle!),
+                const SizedBox(height: 18),
+              ],
+              _RouteTimeline(
+                pickup: pickup.address,
+                destination: destination?.address ?? 'Thuê theo giờ',
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Chi tiết chuyến đi',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              _InfoRow(
+                label: 'Mã chuyến',
+                value: booking == null ? 'Chưa tạo' : '#${booking!.bookingId}',
+              ),
+              _InfoRow(
+                label: 'Trạng thái',
+                value: booking?.bookingStatus ?? 'Chờ xác nhận',
+              ),
+              if (distance != null)
+                _InfoRow(
+                  label: 'Quãng đường',
+                  value: '${distance.toStringAsFixed(1)} km',
+                ),
+              if (duration != null)
+                _InfoRow(label: 'Thời gian dự kiến', value: '$duration phút'),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Divider(thickness: 1, color: Color(0xFFEEEEEE)),
+              ),
+              _InfoRow(
+                label: 'Tổng dự kiến',
+                value: fare == null ? 'Đang cập nhật' : _formatCurrency(fare),
+                isTotal: true,
+              ),
+              const SizedBox(height: 24),
+              const _NoticeCard(),
+              const SizedBox(height: 40),
+            ],
           ),
         ),
-        centerTitle: true,
-        elevation: 0,
-        backgroundColor: Colors.white,
-      ),
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 16),
-            _VehicleCard(
-              title: 'Xe của bạn: $vehicleName - $plateNumber',
-              subtitle:
-                  '${estimate.estimatedDurationMinutes} phút • ${estimate.estimatedDistanceKm} km',
-              onTapChange: () {},
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Tài xế đã chọn',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            _DriverCard(
-              name: driverName,
-              rating: driverRating,
-              experience: driverExperience,
-              onTapChange: () {},
-            ),
-            const SizedBox(height: 32),
-            _RouteTimeline(
-              pickup: pickup.address,
-              destination: destination?.address ?? 'Thuê theo giờ',
-            ),
-            const SizedBox(height: 32),
-            const Text(
-              'Chi tiết thanh toán',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            _PaymentRow(
-              label: 'Giá cước',
-              value: _formatCurrency(estimate.estimatedFare),
-            ),
-            _PaymentRow(label: 'Phí nền tảng', value: '2.000đ'),
-            _PaymentRow(
-              label: 'Khuyến mãi',
-              value: '-15.000đ',
-              valueColor: const Color(0xFF007A87),
-            ),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Divider(thickness: 1, color: Color(0xFFEEEEEE)),
-            ),
-            _PaymentRow(
-              label: 'Tổng cộng',
-              value: _formatCurrency(estimate.estimatedFare + 2000 - 15000),
-              isTotal: true,
-            ),
-            const SizedBox(height: 40),
-          ],
+        bottomNavigationBar: Container(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(top: BorderSide(color: Color(0xFFF5F5F5))),
+          ),
+          child: CustomButton(
+            text: 'Xác nhận thuê tài xế',
+            onPressed: () => _confirmDriver(context),
+          ),
         ),
       ),
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(top: BorderSide(color: Color(0xFFF5F5F5))),
+    );
+  }
+
+  Future<void> _confirmDriver(BuildContext context) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(
+          Icons.check_circle,
+          color: AppColors.primary,
+          size: 52,
         ),
-        child: CustomButton(
-          text: 'Xác nhận →',
-          onPressed: () {
-            // Logic điều hướng tới SearchingDriverPage hoặc gọi API
-          },
+        title: const Text('Đã xác nhận tài xế'),
+        content: Text(
+          booking == null
+              ? '$driverName đã được chọn cho chuyến đi.'
+              : '$driverName sẽ nhận chuyến #${booking!.bookingId}.',
+          textAlign: TextAlign.center,
         ),
+        actions: [
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              Navigator.of(context).popUntil((route) => route.isFirst);
+            },
+            child: const Text('Về trang chủ'),
+          ),
+        ],
       ),
     );
   }
@@ -129,98 +179,35 @@ class ConfirmBookingPage extends StatelessWidget {
   }
 }
 
-class _VehicleCard extends StatelessWidget {
-  const _VehicleCard({
-    required this.title,
-    required this.subtitle,
-    required this.onTapChange,
-  });
-
-  final String title;
-  final String subtitle;
-  final VoidCallback onTapChange;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: const TextStyle(color: Colors.grey, fontSize: 13),
-                ),
-                const SizedBox(height: 12),
-                _SmallChangeButton(onPressed: onTapChange),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF3F3F3),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.directions_car_filled_outlined,
-              size: 40,
-              color: Color(0xFF4A4A4A),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _DriverCard extends StatelessWidget {
   const _DriverCard({
     required this.name,
     required this.rating,
-    required this.experience,
-    required this.onTapChange,
+    required this.tripCount,
+    required this.experienceYears,
   });
 
   final String name;
   final double rating;
-  final int experience;
-  final VoidCallback onTapChange;
+  final int tripCount;
+  final int experienceYears;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFFEAF4F4),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
       ),
       child: Row(
         children: [
           const CircleAvatar(
             radius: 28,
-            backgroundColor: Color(0xFFF0F0F0),
-            child: Icon(Icons.person_outline, color: Colors.grey, size: 30),
+            backgroundColor: AppColors.primary,
+            child: Icon(Icons.person, color: Colors.white, size: 30),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -228,69 +215,54 @@ class _DriverCard extends StatelessWidget {
                 Text(
                   name,
                   style: const TextStyle(
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w800,
                     fontSize: 16,
                   ),
                 ),
                 const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Text(
-                      rating.toString(),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.star, color: AppColors.primary, size: 14),
-                    Text(
-                      ' • $experience năm kinh nghiệm',
-                      style: const TextStyle(color: Colors.grey, fontSize: 13),
-                    ),
-                  ],
+                Text(
+                  '${rating.toStringAsFixed(1)} sao • $tripCount chuyến • $experienceYears năm',
+                  style: const TextStyle(color: Color(0xFF667174)),
                 ),
               ],
             ),
           ),
-          _SmallChangeButton(onPressed: onTapChange),
+          const Icon(Icons.verified, color: AppColors.primary),
         ],
       ),
     );
   }
 }
 
-class _SmallChangeButton extends StatelessWidget {
-  const _SmallChangeButton({required this.onPressed});
-  final VoidCallback onPressed;
+class _VehicleCard extends StatelessWidget {
+  const _VehicleCard({required this.vehicle});
+
+  final BookingVehicleOption vehicle;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onPressed,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: const Color(0xFFE0ECEE),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Thay đổi',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-                color: Color(0xFF2D2D2D),
-              ),
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            vehicle.isMotorbike
+                ? Icons.directions_bike_rounded
+                : Icons.directions_car_rounded,
+            color: AppColors.primary,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              '${vehicle.name} • ${vehicle.plateNumber}',
+              style: const TextStyle(fontWeight: FontWeight.w700),
             ),
-            SizedBox(width: 4),
-            Icon(Icons.change_history, size: 10),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -298,6 +270,7 @@ class _SmallChangeButton extends StatelessWidget {
 
 class _RouteTimeline extends StatelessWidget {
   const _RouteTimeline({required this.pickup, required this.destination});
+
   final String pickup;
   final String destination;
 
@@ -309,13 +282,13 @@ class _RouteTimeline extends StatelessWidget {
           icon: Icons.location_searching,
           label: 'Điểm đón',
           address: pickup,
-          isFirst: true,
         ),
+        const SizedBox(height: 12),
         _RouteItem(
           icon: Icons.near_me,
           label: 'Điểm đến',
           address: destination,
-          isLast: true,
+          filled: true,
         ),
       ],
     );
@@ -327,88 +300,60 @@ class _RouteItem extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.address,
-    this.isFirst = false,
-    this.isLast = false,
+    this.filled = false,
   });
 
   final IconData icon;
   final String label;
   final String address;
-  final bool isFirst;
-  final bool isLast;
+  final bool filled;
 
   @override
   Widget build(BuildContext context) {
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Column(
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CircleAvatar(
+          radius: 18,
+          backgroundColor: filled ? AppColors.primary : const Color(0xFFF0F0F0),
+          child: Icon(
+            icon,
+            size: 18,
+            color: filled ? Colors.white : Colors.black,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: isFirst ? const Color(0xFFF0F0F0) : AppColors.primary,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  icon,
-                  size: 18,
-                  color: isFirst ? Colors.black : Colors.white,
-                ),
+              Text(
+                label,
+                style: const TextStyle(color: Color(0xFF667174), fontSize: 12),
               ),
-              if (!isLast)
-                Expanded(
-                  child: Container(
-                    width: 1,
-                    margin: const EdgeInsets.symmetric(vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(1),
-                    ),
-                  ),
-                ),
+              Text(
+                address,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
             ],
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                ),
-                Text(
-                  address,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 15,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (!isLast) const SizedBox(height: 24),
-              ],
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
-class _PaymentRow extends StatelessWidget {
-  const _PaymentRow({
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({
     required this.label,
     required this.value,
-    this.valueColor,
     this.isTotal = false,
   });
 
   final String label;
   final String value;
-  final Color? valueColor;
   final bool isTotal;
 
   @override
@@ -418,20 +363,41 @@ class _PaymentRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: isTotal ? 17 : 15,
-              fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
-              color: isTotal ? Colors.black : Colors.grey[700],
-            ),
-          ),
+          Text(label, style: const TextStyle(color: Color(0xFF667174))),
           Text(
             value,
             style: TextStyle(
-              fontSize: isTotal ? 20 : 15,
-              fontWeight: FontWeight.bold,
-              color: isTotal ? AppColors.primary : (valueColor ?? Colors.black),
+              color: isTotal ? AppColors.primary : Colors.black,
+              fontSize: isTotal ? 18 : 15,
+              fontWeight: isTotal ? FontWeight.w800 : FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NoticeCard extends StatelessWidget {
+  const _NoticeCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8E1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, color: Color(0xFFFFA000), size: 20),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Bước này xác nhận lựa chọn tài xế. Khi backend có API nhận chuyến/assign driver, nút này sẽ gọi API đó.',
+              style: TextStyle(color: Color(0xFF6B5B00), height: 1.35),
             ),
           ),
         ],

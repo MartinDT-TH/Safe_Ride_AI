@@ -22,6 +22,18 @@ public sealed class BookingRepository : IBookingRepository
         await _dbContext.Bookings.AddAsync(booking, cancellationToken);
     }
 
+    public Task<Booking?> GetCustomerBookingAsync(
+        long bookingId,
+        Guid customerId,
+        CancellationToken cancellationToken)
+    {
+        return _dbContext.Bookings
+            .FirstOrDefaultAsync(
+                booking => booking.BookingId == bookingId
+                    && booking.CustomerId == customerId,
+                cancellationToken);
+    }
+
     public Task<Vehicle?> GetCustomerVehicleAsync(
         long vehicleId,
         Guid customerId,
