@@ -16,6 +16,7 @@ import '../../data/models/create_booking_request.dart';
 import '../providers/booking_provider.dart';
 import 'location_picker_page.dart';
 import 'promotion_page.dart';
+import 'searching_driver_page.dart';
 
 class BookingOptionsPage extends StatefulWidget {
   const BookingOptionsPage({
@@ -177,11 +178,13 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
     );
   }
 
-  Future<void> _confirmBooking() async {
+  Future<void> _startDriverSearch() async {
     final token = context.read<AuthProvider>().token;
     final pickup = _pickup;
     final service = _service;
     final vehicle = _vehicle;
+    final estimate = context.read<BookingProvider>().fareEstimate;
+
     if (token == null || token.isEmpty) {
       _showMessage(BookingStrings.sessionExpired);
       return;
@@ -202,6 +205,12 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
       _showMessage(BookingStrings.selectPickupTimeRequired);
       return;
     }
+    if (!widget.showSchedule && estimate == null) {
+      _showMessage('Chưa có giá dự kiến. Vui lòng kiểm tra lại tuyến đường.');
+      return;
+    }
+
+    final destination = _isHourly ? null : _destination;
 
     final result = await context.read<BookingProvider>().createBooking(
       token,
@@ -213,11 +222,12 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
             : BookingType.now,
         scheduledAt: widget.showSchedule ? _scheduledAt : null,
         pickup: pickup,
-        destination: _isHourly ? null : _destination,
+        destination: destination,
         estimatedHours: _isHourly ? _estimatedHours : null,
         specialRequest: _specialRequestController.text,
       ),
     );
+
     if (!mounted) return;
     if (result == null) {
       _showMessage(
@@ -226,7 +236,24 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
       );
       return;
     }
-    await _showSuccess(result);
+
+    if (widget.showSchedule) {
+      _showMessage(BookingStrings.bookingSuccess);
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      return;
+    }
+
+    await Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => SearchingDriverPage(
+          booking: result,
+          pickup: pickup,
+          destination: destination,
+          fareEstimate: estimate,
+          vehicle: vehicle,
+        ),
+      ),
+    );
   }
 
   void _showPromoStub() {
@@ -303,45 +330,6 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
     }
   }
 
-  Future<void> _showSuccess(BookingResponse result) async {
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        icon: const Icon(
-          Icons.check_circle,
-          color: AppColors.primary,
-          size: 52,
-        ),
-        title: const Text(BookingStrings.bookingSuccess),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(result.message, textAlign: TextAlign.center),
-            const SizedBox(height: 12),
-            Text(
-              _formatCurrency(result.estimatedFare),
-              style: const TextStyle(
-                color: AppColors.primary,
-                fontSize: 26,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(dialogContext);
-              Navigator.of(context).popUntil((route) => route.isFirst);
-            },
-            child: const Text(BookingStrings.backToHome),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<BookingProvider>();
@@ -357,7 +345,9 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
         children: [
           // Lớp dưới cùng: Bản đồ
           Positioned.fill(
-            bottom: MediaQuery.of(context).size.height * 0.55, // Để bản đồ không bị che hết bởi panel
+            bottom:
+                MediaQuery.of(context).size.height *
+                0.55, // Để bản đồ không bị che hết bởi panel
             child: _MapPreview(
               pickup: _pickup,
               destination: _isHourly ? null : _destination,
@@ -368,7 +358,9 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
           
           // Lớp trên: Panel trắng bo tròn
           Positioned(
-            top: MediaQuery.of(context).size.height * 0.36, // Vị trí bắt đầu của panel trắng
+            top:
+                MediaQuery.of(context).size.height *
+                0.36, // Vị trí bắt đầu của panel trắng
             left: 0,
             right: 0,
             bottom: 0,
@@ -377,7 +369,9 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
               decoration: const BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(32)), // Tăng độ bo tròn
+                borderRadius: BorderRadius.vertical(
+                  top: Radius.circular(32),
+                ), // Tăng độ bo tròn
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black12,
@@ -428,8 +422,7 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                           _pickLocation(LocationPickerType.pickup),
                       onDestinationTap: _isHourly
                           ? null
-                          : () =>
-                                _pickLocation(LocationPickerType.destination),
+                          : () => _pickLocation(LocationPickerType.destination),
                       estimatedHours: _isHourly ? _estimatedHours : null,
                     ),
                     if (provider.errorMessage != null) ...[
@@ -509,7 +502,7 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                       provider.isEstimating ||
                       provider.fareEstimate == null
                   ? null
-                  : _confirmBooking,
+                  : _startDriverSearch,
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 shape: RoundedRectangleBorder(
