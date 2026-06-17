@@ -33,7 +33,12 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
                 ["Jwt:Audience"] = "SafeRide.Tests.Client",
                 ["Jwt:SecretKey"] = "integration-test-secret-key-that-is-long-enough-123456",
                 ["Jwt:AccessTokenMinutes"] = "15",
-                ["Jwt:RefreshTokenDays"] = "30"
+                ["Jwt:RefreshTokenDays"] = "30",
+                ["GoogleMaps:ApiKey"] = "test-google-maps-key",
+                ["GoogleMaps:RoutesApiUrl"] = "https://routes.googleapis.com/directions/v2:computeRoutes",
+                ["GoogleMaps:GeocodingApiUrl"] = "https://maps.googleapis.com/maps/api/geocode/json",
+                ["OpenRouteService:DirectionsApiUrl"] = "https://api.openrouteservice.org/v2/directions/driving-car",
+                ["OpenRouteService:MatrixApiUrl"] = "https://api.openrouteservice.org/v2/matrix/driving-car"
             });
         });
 
@@ -157,6 +162,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
                 VehicleType TEXT NOT NULL,
                 EngineType TEXT NOT NULL,
                 TransmissionType TEXT NOT NULL,
+                EngineCapacityCc INTEGER NULL,
                 Color TEXT NULL,
                 IsDeleted INTEGER NOT NULL DEFAULT 0,
                 CreatedAt TEXT NOT NULL

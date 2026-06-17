@@ -4,7 +4,16 @@ import '../../data/models/driver_rating_summary_model.dart';
 import '../../data/models/driver_review_model.dart';
 
 class DriverReviewsPage extends StatelessWidget {
-  const DriverReviewsPage({super.key});
+  const DriverReviewsPage({
+    super.key,
+    this.driverName = 'Tài xế',
+    this.rating = 4.9,
+    this.reviewCount = 1248,
+  });
+
+  final String driverName;
+  final double rating;
+  final int reviewCount;
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +57,12 @@ class DriverReviewsPage extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 20),
         children: [
           const SizedBox(height: 24),
-          const _RatingSummaryCard(summary: summary),
+          // Rating Summary Card
+          _RatingSummaryCard(
+            driverName: driverName,
+            rating: rating,
+            reviewCount: reviewCount,
+          ),
           const SizedBox(height: 24),
           const _ReviewFilters(),
           const SizedBox(height: 16),
@@ -61,8 +75,15 @@ class DriverReviewsPage extends StatelessWidget {
 }
 
 class _RatingSummaryCard extends StatelessWidget {
-  final DriverRatingSummaryModel summary;
-  const _RatingSummaryCard({required this.summary});
+  const _RatingSummaryCard({
+    required this.driverName,
+    required this.rating,
+    required this.reviewCount,
+  });
+
+  final String driverName;
+  final double rating;
+  final int reviewCount;
 
   @override
   Widget build(BuildContext context) {
@@ -89,7 +110,7 @@ class _RatingSummaryCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  summary.averageRating.toString(),
+                  rating.toStringAsFixed(1),
                   style: const TextStyle(
                     fontSize: 48,
                     fontWeight: FontWeight.w800,
@@ -154,7 +175,9 @@ class _RatingSummaryCard extends StatelessWidget {
                 value: percent,
                 minHeight: 6,
                 backgroundColor: const Color(0xFFF0F0F0),
-                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                 valueColor: const AlwaysStoppedAnimation<Color>(
+                  AppColors.primary,
+                ),
               ),
             ),
           ),
