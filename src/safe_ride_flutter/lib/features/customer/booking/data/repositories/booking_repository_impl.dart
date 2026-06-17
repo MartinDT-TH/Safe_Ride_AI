@@ -57,4 +57,12 @@ class BookingRepositoryImpl implements BookingRepository {
       reason: reason,
     );
   }
+
+  @override
+  Future<BookingResponse> confirmDriver(
+    String accessToken, {
+    required int bookingId,
+  }) {
+    return _remoteDatasource.confirmDriver(accessToken, bookingId: bookingId);
+  }
 }

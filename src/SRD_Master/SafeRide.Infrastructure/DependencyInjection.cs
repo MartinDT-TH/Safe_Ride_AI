@@ -102,6 +102,7 @@ public static class DependencyInjection
         services.AddScoped<IBookingRepository, BookingRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IBookingMatchingService, BookingMatchingService>();
+        services.AddScoped<IBookingAssignmentService, BookingAssignmentService>();
         services.AddHttpClient<ISpeedSmsService, InfobipSmsService>();
         var mapRoutingProvider = configuration["MapRouting:Provider"];
         if (string.Equals(
