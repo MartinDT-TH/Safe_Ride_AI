@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'core/constants/app_strings.dart';
 import 'core/theme/app_theme.dart';
 
-import 'features/auth/presentation/pages/login_page.dart';
+import 'features/shared/onboarding/presentation/pages/splash_page.dart';
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -14,7 +14,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: AppStrings.appName,
       theme: AppTheme.lightTheme,
-      home: const LoginPage(),
+      home: const SplashPage(),
     );
   }
 }
