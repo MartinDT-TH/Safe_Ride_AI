@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using SafeRide.Application.Features.Bookings.Commands.CancelBooking;
 using SafeRide.Application.Features.Bookings.Commands.ConfirmDriver;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
+using SafeRide.Application.Features.Bookings.Commands.RejectDriver;
 using SafeRide.Application.Features.Bookings.DTOs;
 using SafeRide.Application.Features.Bookings.Queries.EstimateBookingFare;
 using SafeRide.Application.Features.Bookings.Queries.GetBookingCatalog;
@@ -154,6 +155,38 @@ public sealed class BookingsController : ControllerBase
 
         var result = await _sender.Send(
             new ConfirmDriverCommand(customerId, bookingId),
+            cancellationToken);
+
+        return Ok(ToResponse(
+            result.BookingId,
+            result.BookingType,
+            result.BookingStatus,
+            result.ScheduledAt,
+            result.EstimatedDistanceKm,
+            result.EstimatedDurationMinutes,
+            result.EstimatedFare,
+            result.EncodedPolyline,
+            result.Message,
+            result.DriverOffer));
+    }
+
+    [HttpPost("{bookingId:long}/reject-driver")]
+    [ProducesResponseType<BookingResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<BookingResponse>> RejectDriver(
+        long bookingId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCustomerId(out var customerId))
+        {
+            return Unauthorized(CreateUnauthorizedProblem());
+        }
+
+        var result = await _sender.Send(
+            new RejectDriverCommand(customerId, bookingId),
             cancellationToken);
 
         return Ok(ToResponse(
