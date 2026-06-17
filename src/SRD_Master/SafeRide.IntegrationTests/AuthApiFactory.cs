@@ -185,11 +185,14 @@ public sealed class FakeRedisService : IRedisService
 {
     private readonly ConcurrentDictionary<string, string> _values = new();
     private readonly ConcurrentDictionary<string, long> _counters = new();
+    private readonly InMemoryRedisService _geoStorage = new();
     public Task SetAsync(string key, string value, TimeSpan expiration)
     {
         _values[key] = value;
         return Task.CompletedTask;
     }
+    public Task<bool> SetIfNotExistsAsync(string key, string value, TimeSpan expiration) =>
+        Task.FromResult(_values.TryAdd(key, value));
     public Task<string?> GetAsync(string key) =>
         Task.FromResult(_values.TryGetValue(key, out var value) ? value : null);
     public Task RemoveAsync(string key)
@@ -199,6 +202,26 @@ public sealed class FakeRedisService : IRedisService
     }
     public Task<long> IncrementAsync(string key, TimeSpan expiration) =>
         Task.FromResult(_counters.AddOrUpdate(key, 1, (_, count) => count + 1));
+
+    public Task GeoAddAsync(
+        string key,
+        double longitude,
+        double latitude,
+        string member) =>
+        _geoStorage.GeoAddAsync(key, longitude, latitude, member);
+
+    public Task<IReadOnlyList<string>> GeoRadiusAsync(
+        string key,
+        double longitude,
+        double latitude,
+        double radiusKm,
+        int count) =>
+        _geoStorage.GeoRadiusAsync(
+            key,
+            longitude,
+            latitude,
+            radiusKm,
+            count);
 
     public Task<OtpVerificationResult> VerifyAndConsumeOtpAsync(
         string otpKey,

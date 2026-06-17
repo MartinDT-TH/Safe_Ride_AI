@@ -32,6 +32,16 @@ public sealed class RedisService : IRedisService, IDisposable
     public Task SetAsync(string key, string value, TimeSpan expiration) =>
         Database.StringSetAsync(key, value, expiration);
 
+    public Task<bool> SetIfNotExistsAsync(
+        string key,
+        string value,
+        TimeSpan expiration) =>
+        Database.StringSetAsync(
+            key,
+            value,
+            expiration,
+            When.NotExists);
+
     public async Task<string?> GetAsync(string key)
     {
         var value = await Database.StringGetAsync(key);
@@ -55,6 +65,34 @@ public sealed class RedisService : IRedisService, IDisposable
             new RedisKey[] { key },
             new RedisValue[] { (long)expiration.TotalMilliseconds });
         return (long)result;
+    }
+
+    public Task GeoAddAsync(
+        string key,
+        double longitude,
+        double latitude,
+        string member) =>
+        Database.GeoAddAsync(key, longitude, latitude, member);
+
+    public async Task<IReadOnlyList<string>> GeoRadiusAsync(
+        string key,
+        double longitude,
+        double latitude,
+        double radiusKm,
+        int count)
+    {
+        var results = await Database.GeoRadiusAsync(
+            key,
+            longitude,
+            latitude,
+            radiusKm,
+            GeoUnit.Kilometers,
+            count);
+
+        return results
+            .Select(x => x.Member.ToString())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToList();
     }
 
     public async Task<OtpVerificationResult> VerifyAndConsumeOtpAsync(

@@ -94,6 +94,15 @@ public sealed class ResilientRedisServiceTests
             return _storage.SetAsync(key, value, expiration);
         }
 
+        public Task<bool> SetIfNotExistsAsync(
+            string key,
+            string value,
+            TimeSpan expiration)
+        {
+            BeforeCall();
+            return _storage.SetIfNotExistsAsync(key, value, expiration);
+        }
+
         public Task<string?> GetAsync(string key)
         {
             BeforeCall();
@@ -112,6 +121,32 @@ public sealed class ResilientRedisServiceTests
         {
             BeforeCall();
             return _storage.IncrementAsync(key, expiration);
+        }
+
+        public Task GeoAddAsync(
+            string key,
+            double longitude,
+            double latitude,
+            string member)
+        {
+            BeforeCall();
+            return _storage.GeoAddAsync(key, longitude, latitude, member);
+        }
+
+        public Task<IReadOnlyList<string>> GeoRadiusAsync(
+            string key,
+            double longitude,
+            double latitude,
+            double radiusKm,
+            int count)
+        {
+            BeforeCall();
+            return _storage.GeoRadiusAsync(
+                key,
+                longitude,
+                latitude,
+                radiusKm,
+                count);
         }
 
         public Task<OtpVerificationResult> VerifyAndConsumeOtpAsync(

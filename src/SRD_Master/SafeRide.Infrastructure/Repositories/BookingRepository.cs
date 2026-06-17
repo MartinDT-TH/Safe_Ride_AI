@@ -3,16 +3,23 @@ using SafeRide.Application.Common.Interfaces;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
 using SafeRide.Infrastructure.Persistence;
+using SafeRide.Infrastructure.Redis;
+using System.Text.Json;
 
 namespace SafeRide.Infrastructure.Repositories;
 
 public sealed class BookingRepository : IBookingRepository
 {
     private readonly ApplicationDbContext _dbContext;
+    private readonly IRedisService _redisService;
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public BookingRepository(ApplicationDbContext dbContext)
+    public BookingRepository(
+        ApplicationDbContext dbContext,
+        IRedisService redisService)
     {
         _dbContext = dbContext;
+        _redisService = redisService;
     }
 
     public async Task AddAsync(
@@ -64,34 +71,88 @@ public sealed class BookingRepository : IBookingRepository
         Guid customerId,
         CancellationToken cancellationToken)
     {
-        return await (
-            from pricingRule in _dbContext.PricingRules
-                .AsNoTracking()
-                .Include(rule => rule.ServiceType)
-            join vehicle in _dbContext.Vehicles.AsNoTracking()
-                on pricingRule.VehicleClass equals vehicle.RequiredLicenseClass
-            where vehicle.OwnerUserId == customerId
-                && !vehicle.IsDeleted
-                && pricingRule.IsActive
-            select pricingRule)
+        var customerVehicleClasses = await _dbContext.Vehicles
+            .AsNoTracking()
+            .Where(vehicle => vehicle.OwnerUserId == customerId
+                && !vehicle.IsDeleted)
+            .Select(vehicle => vehicle.RequiredLicenseClass)
+            .Distinct()
             .ToListAsync(cancellationToken);
+
+        if (customerVehicleClasses.Count == 0)
+        {
+            return [];
+        }
+
+        var activeRules = await GetActivePricingRulesAsync(cancellationToken);
+        return activeRules
+            .Where(rule => customerVehicleClasses.Contains(rule.VehicleClass))
+            .ToList();
     }
 
-    public Task<PricingRule?> GetPricingRuleAsync(
+    public async Task<PricingRule?> GetPricingRuleAsync(
         long serviceTypeId,
         long vehicleId,
         CancellationToken cancellationToken)
     {
-        return (
-            from pricingRule in _dbContext.PricingRules.AsNoTracking()
-            join vehicle in _dbContext.Vehicles.AsNoTracking()
-                on pricingRule.VehicleClass equals vehicle.RequiredLicenseClass
-            where pricingRule.ServiceTypeId == serviceTypeId
-                && vehicle.Id == vehicleId
-                && pricingRule.IsActive
-            select pricingRule)
-            .OrderByDescending(pricingRule => pricingRule.CreatedAt)
+        var vehicleClass = await _dbContext.Vehicles
+            .AsNoTracking()
+            .Where(vehicle => vehicle.Id == vehicleId)
+            .Select(vehicle => (RequiredLicenseClass?)vehicle.RequiredLicenseClass)
             .FirstOrDefaultAsync(cancellationToken);
+        if (!vehicleClass.HasValue)
+        {
+            return null;
+        }
+
+        var activeRules = await GetActivePricingRulesAsync(cancellationToken);
+        return activeRules
+            .Where(rule => rule.ServiceTypeId == serviceTypeId
+                && rule.VehicleClass == vehicleClass.Value)
+            .OrderByDescending(pricingRule => pricingRule.CreatedAt)
+            .FirstOrDefault();
+    }
+
+    private async Task<IReadOnlyList<PricingRule>> GetActivePricingRulesAsync(
+        CancellationToken cancellationToken)
+    {
+        var cached = await _redisService.GetAsync(RedisKeys.ActivePricingRules);
+        if (!string.IsNullOrWhiteSpace(cached))
+        {
+            try
+            {
+                var cachedItems = JsonSerializer.Deserialize<List<PricingRuleCacheItem>>(
+                    cached,
+                    JsonOptions);
+                if (cachedItems is not null)
+                {
+                    return cachedItems
+                        .Select(item => item.ToEntity())
+                        .ToList();
+                }
+            }
+            catch (JsonException)
+            {
+                await _redisService.RemoveAsync(RedisKeys.ActivePricingRules);
+            }
+        }
+
+        var rules = await _dbContext.PricingRules
+            .AsNoTracking()
+            .Include(rule => rule.ServiceType)
+            .Where(rule => rule.IsActive)
+            .OrderByDescending(rule => rule.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        var cacheItems = rules
+            .Select(rule => rule.ToCacheItem())
+            .ToList();
+        await _redisService.SetAsync(
+            RedisKeys.ActivePricingRules,
+            JsonSerializer.Serialize(cacheItems, JsonOptions),
+            TimeSpan.FromMinutes(10));
+
+        return rules;
     }
 
     public async Task<IReadOnlyList<Booking>> GetScheduledBookingsReadyForMatchingAsync(
@@ -120,6 +181,12 @@ public sealed class BookingRepository : IBookingRepository
         {
             offer.OfferStatus = DriverOfferStatus.Cancelled;
             offer.CancelledAt = cancelledAt;
+            await _redisService.RemoveAsync(
+                RedisKeys.MatchingOffer(offer.BookingId, offer.DriverId));
+            await _redisService.RemoveAsync(
+                RedisKeys.MatchingDriverLock(offer.DriverId));
         }
+
+        await _redisService.RemoveAsync(RedisKeys.MatchingBooking(bookingId));
     }
 }
