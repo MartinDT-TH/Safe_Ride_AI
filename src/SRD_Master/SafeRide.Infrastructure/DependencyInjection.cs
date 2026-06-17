@@ -102,6 +102,9 @@ public static class DependencyInjection
         services.AddScoped<IBookingRepository, BookingRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IBookingMatchingService, BookingMatchingService>();
+        services.AddScoped<IBookingAssignmentService, BookingAssignmentService>();
+        services.AddScoped<IDriverRealtimeService, DriverRealtimeService>();
+        services.AddScoped<ITripStatusService, TripStatusService>();
         services.AddHttpClient<ISpeedSmsService, InfobipSmsService>();
         var mapRoutingProvider = configuration["MapRouting:Provider"];
         if (string.Equals(
@@ -147,6 +150,18 @@ public static class DependencyInjection
                             context.Exception,
                             "JWT authentication failed for {Path}.",
                             context.Request.Path);
+                        return Task.CompletedTask;
+                    },
+                    OnMessageReceived = context =>
+                    {
+                        var accessToken = context.Request.Query["access_token"];
+                        var path = context.HttpContext.Request.Path;
+                        if (!string.IsNullOrWhiteSpace(accessToken)
+                            && path.StartsWithSegments("/hubs"))
+                        {
+                            context.Token = accessToken;
+                        }
+
                         return Task.CompletedTask;
                     },
                     OnChallenge = async context =>

@@ -2,7 +2,10 @@ using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SafeRide.Application.Features.Bookings.Commands.CancelBooking;
+using SafeRide.Application.Features.Bookings.Commands.ConfirmDriver;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
+using SafeRide.Application.Features.Bookings.DTOs;
 using SafeRide.Application.Features.Bookings.Queries.EstimateBookingFare;
 using SafeRide.Application.Features.Bookings.Queries.GetBookingCatalog;
 using SafeRide.Contracts.Requests.Bookings;
@@ -119,7 +122,7 @@ public sealed class BookingsController : ControllerBase
                 request.EstimatedHours),
             cancellationToken);
 
-        var response = new BookingResponse(
+        var response = ToResponse(
             result.BookingId,
             result.BookingType,
             result.BookingStatus,
@@ -128,9 +131,114 @@ public sealed class BookingsController : ControllerBase
             result.EstimatedDurationMinutes,
             result.EstimatedFare,
             result.EncodedPolyline,
-            result.Message);
+            result.Message,
+            result.DriverOffer);
 
         return StatusCode(StatusCodes.Status201Created, response);
+    }
+
+    [HttpPost("{bookingId:long}/confirm-driver")]
+    [ProducesResponseType<BookingResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<BookingResponse>> ConfirmDriver(
+        long bookingId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCustomerId(out var customerId))
+        {
+            return Unauthorized(CreateUnauthorizedProblem());
+        }
+
+        var result = await _sender.Send(
+            new ConfirmDriverCommand(customerId, bookingId),
+            cancellationToken);
+
+        return Ok(ToResponse(
+            result.BookingId,
+            result.BookingType,
+            result.BookingStatus,
+            result.ScheduledAt,
+            result.EstimatedDistanceKm,
+            result.EstimatedDurationMinutes,
+            result.EstimatedFare,
+            result.EncodedPolyline,
+            result.Message,
+            result.DriverOffer));
+    }
+
+    [HttpPost("{bookingId:long}/cancel")]
+    [ProducesResponseType<BookingResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<BookingResponse>> CancelBooking(
+        long bookingId,
+        [FromBody] CancelBookingRequest? request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCustomerId(out var customerId))
+        {
+            return Unauthorized(CreateUnauthorizedProblem());
+        }
+
+        var result = await _sender.Send(
+            new CancelBookingCommand(
+                customerId,
+                bookingId,
+                request?.Reason),
+            cancellationToken);
+
+        return Ok(ToResponse(
+            result.BookingId,
+            result.BookingType,
+            result.BookingStatus,
+            result.ScheduledAt,
+            result.EstimatedDistanceKm,
+            result.EstimatedDurationMinutes,
+            result.EstimatedFare,
+            result.EncodedPolyline,
+            result.Message,
+            result.DriverOffer));
+    }
+
+    private static BookingResponse ToResponse(
+        long bookingId,
+        Domain.Enums.BookingType bookingType,
+        Domain.Enums.BookingStatus bookingStatus,
+        DateTime? scheduledAt,
+        double estimatedDistanceKm,
+        int estimatedDurationMinutes,
+        decimal estimatedFare,
+        string? encodedPolyline,
+        string message,
+        BookingDriverOfferDto? driverOffer)
+    {
+        return new BookingResponse(
+            bookingId,
+            bookingType,
+            bookingStatus,
+            scheduledAt,
+            estimatedDistanceKm,
+            estimatedDurationMinutes,
+            estimatedFare,
+            encodedPolyline,
+            message,
+            driverOffer is null
+                ? null
+                : new BookingDriverOfferResponse(
+                    driverOffer.OfferId,
+                    driverOffer.DriverId,
+                    driverOffer.DriverName,
+                    driverOffer.DriverAvatarUrl,
+                    driverOffer.Rating,
+                    driverOffer.TripCount,
+                    driverOffer.ExperienceYears,
+                    driverOffer.LicenseClass,
+                    driverOffer.ExpiresAt));
     }
 
     private bool TryGetCustomerId(out Guid customerId)

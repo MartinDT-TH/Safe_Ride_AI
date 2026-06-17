@@ -52,6 +52,19 @@ public sealed class AuthRateLimitMiddlewareTests
         public Task<string?> GetAsync(string key) => Task.FromResult<string?>(null);
         public Task RemoveAsync(string key) => Task.CompletedTask;
         public Task SetAsync(string key, string value, TimeSpan expiration) => Task.CompletedTask;
+        public Task<bool> SetIfNotExistsAsync(string key, string value, TimeSpan expiration) =>
+            Task.FromResult(true);
+        public Task GeoAddAsync(
+            string key,
+            double longitude,
+            double latitude,
+            string member) => Task.CompletedTask;
+        public Task<IReadOnlyList<string>> GeoRadiusAsync(
+            string key,
+            double longitude,
+            double latitude,
+            double radiusKm,
+            int count) => Task.FromResult<IReadOnlyList<string>>([]);
         public Task<OtpVerificationResult> VerifyAndConsumeOtpAsync(
             string otpKey,
             string attemptsKey,

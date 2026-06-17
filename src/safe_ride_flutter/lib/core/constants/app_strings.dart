@@ -271,6 +271,16 @@ abstract final class ApiKeys {
   static const estimatedDistanceKm = 'estimatedDistanceKm';
   static const estimatedDurationMinutes = 'estimatedDurationMinutes';
   static const encodedPolyline = 'encodedPolyline';
+  static const driverOffer = 'driverOffer';
+  static const offerId = 'offerId';
+  static const driverId = 'driverId';
+  static const driverName = 'driverName';
+  static const driverAvatarUrl = 'driverAvatarUrl';
+  static const rating = 'rating';
+  static const tripCount = 'tripCount';
+  static const experienceYears = 'experienceYears';
+  static const licenseClass = 'licenseClass';
+  static const expiresAt = 'expiresAt';
   static const estimatedHours = 'estimatedHours';
   static const vehicleId = 'vehicleId';
   static const serviceTypeId = 'serviceTypeId';

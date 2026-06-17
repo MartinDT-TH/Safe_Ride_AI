@@ -5,6 +5,7 @@ namespace SafeRide.Infrastructure.Redis;
 public sealed class InMemoryRedisService : IRedisService
 {
     private readonly ConcurrentDictionary<string, CacheEntry> _entries = new();
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, GeoEntry>> _geoEntries = new();
     private readonly object _sync = new();
 
     public Task SetAsync(string key, string value, TimeSpan expiration)
@@ -13,6 +14,23 @@ public sealed class InMemoryRedisService : IRedisService
         {
             _entries[key] = new CacheEntry(value, GetExpiration(expiration));
             return Task.CompletedTask;
+        }
+    }
+
+    public Task<bool> SetIfNotExistsAsync(
+        string key,
+        string value,
+        TimeSpan expiration)
+    {
+        lock (_sync)
+        {
+            if (GetValue(key) is not null)
+            {
+                return Task.FromResult(false);
+            }
+
+            _entries[key] = new CacheEntry(value, GetExpiration(expiration));
+            return Task.FromResult(true);
         }
     }
 
@@ -50,6 +68,72 @@ public sealed class InMemoryRedisService : IRedisService
             return Task.FromResult(count);
         }
     }
+
+    public Task GeoAddAsync(
+        string key,
+        double longitude,
+        double latitude,
+        string member)
+    {
+        var members = _geoEntries.GetOrAdd(
+            key,
+            _ => new ConcurrentDictionary<string, GeoEntry>());
+        members[member] = new GeoEntry(longitude, latitude);
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<string>> GeoRadiusAsync(
+        string key,
+        double longitude,
+        double latitude,
+        double radiusKm,
+        int count)
+    {
+        if (!_geoEntries.TryGetValue(key, out var members))
+        {
+            return Task.FromResult<IReadOnlyList<string>>([]);
+        }
+
+        var results = members
+            .Select(x => new
+            {
+                Member = x.Key,
+                DistanceKm = CalculateDistanceKm(
+                    latitude,
+                    longitude,
+                    x.Value.Latitude,
+                    x.Value.Longitude)
+            })
+            .Where(x => x.DistanceKm <= radiusKm)
+            .OrderBy(x => x.DistanceKm)
+            .Take(count)
+            .Select(x => x.Member)
+            .ToList();
+
+        return Task.FromResult<IReadOnlyList<string>>(results);
+    }
+
+    private static double CalculateDistanceKm(
+        double latitude1,
+        double longitude1,
+        double latitude2,
+        double longitude2)
+    {
+        const double earthRadiusKm = 6371.0;
+        var dLat = DegreesToRadians(latitude2 - latitude1);
+        var dLon = DegreesToRadians(longitude2 - longitude1);
+        var lat1 = DegreesToRadians(latitude1);
+        var lat2 = DegreesToRadians(latitude2);
+
+        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2)
+            + Math.Cos(lat1) * Math.Cos(lat2)
+            * Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+        var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+        return earthRadiusKm * c;
+    }
+
+    private static double DegreesToRadians(double degrees) =>
+        degrees * Math.PI / 180;
 
     public Task<OtpVerificationResult> VerifyAndConsumeOtpAsync(
         string otpKey,
@@ -123,4 +207,6 @@ public sealed class InMemoryRedisService : IRedisService
     }
 
     private sealed record CacheEntry(string Value, DateTimeOffset ExpiresAt);
+
+    private sealed record GeoEntry(double Longitude, double Latitude);
 }

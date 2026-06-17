@@ -36,6 +36,41 @@ public sealed class ResilientRedisService : IRedisService
             () => _primary.SetAsync(key, value, expiration));
     }
 
+    public async Task<bool> SetIfNotExistsAsync(
+        string key,
+        string value,
+        TimeSpan expiration)
+    {
+        var fallbackAcquired = await _fallback.SetIfNotExistsAsync(
+            key,
+            value,
+            expiration);
+        if (!fallbackAcquired || !CanTryPrimary())
+        {
+            return fallbackAcquired;
+        }
+
+        try
+        {
+            var primaryAcquired = await _primary.SetIfNotExistsAsync(
+                key,
+                value,
+                expiration);
+            MarkPrimaryAvailable();
+            if (!primaryAcquired)
+            {
+                await _fallback.RemoveAsync(key);
+            }
+
+            return primaryAcquired;
+        }
+        catch (Exception exception)
+        {
+            MarkPrimaryUnavailable(exception);
+            return fallbackAcquired;
+        }
+    }
+
     public async Task<string?> GetAsync(string key)
     {
         if (CanTryPrimary())
@@ -82,6 +117,54 @@ public sealed class ResilientRedisService : IRedisService
             MarkPrimaryUnavailable(exception);
             return fallbackCount;
         }
+    }
+
+    public async Task GeoAddAsync(
+        string key,
+        double longitude,
+        double latitude,
+        string member)
+    {
+        await _fallback.GeoAddAsync(key, longitude, latitude, member);
+        await TryPrimaryAsync(
+            () => _primary.GeoAddAsync(key, longitude, latitude, member));
+    }
+
+    public async Task<IReadOnlyList<string>> GeoRadiusAsync(
+        string key,
+        double longitude,
+        double latitude,
+        double radiusKm,
+        int count)
+    {
+        if (CanTryPrimary())
+        {
+            try
+            {
+                var results = await _primary.GeoRadiusAsync(
+                    key,
+                    longitude,
+                    latitude,
+                    radiusKm,
+                    count);
+                MarkPrimaryAvailable();
+                if (results.Count > 0)
+                {
+                    return results;
+                }
+            }
+            catch (Exception exception)
+            {
+                MarkPrimaryUnavailable(exception);
+            }
+        }
+
+        return await _fallback.GeoRadiusAsync(
+            key,
+            longitude,
+            latitude,
+            radiusKm,
+            count);
     }
 
     public async Task<OtpVerificationResult> VerifyAndConsumeOtpAsync(

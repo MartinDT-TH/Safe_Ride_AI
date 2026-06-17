@@ -1,33 +1,44 @@
-﻿﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
 namespace SafeRide.Infrastructure.Redis;
 
 public static class RedisKeys
 {
-    public static string Otp(string phoneNumber)
-        => $"otp:{phoneNumber}";
+    public static string Otp(string phoneNumber) =>
+        $"auth:otp:{phoneNumber}";
 
-    public static string OtpAttempts(string phoneNumber)
-        => $"otp:attempts:{phoneNumber}";
+    public static string OtpAttempts(string phoneNumber) =>
+        $"auth:otp:attempts:{phoneNumber}";
 
-    public static string RefreshToken(string tokenHash)
-        => $"auth:refresh:{tokenHash}";
+    public static string RefreshToken(string tokenHash) =>
+        $"auth:refresh-token:{tokenHash}";
 
-    public static string UserConnection(Guid userId)
-        => $"signalr:user:{userId}";
+    public static string DriverLocation(Guid driverId) =>
+        $"sr:driver:location:{driverId}";
 
-    public static string DriverOnline(Guid driverId)
-        => $"online:driver:{driverId}";
+    public static string DriverOnline(Guid driverId) =>
+        $"sr:driver:online:{driverId}";
 
-    public static string DriverLocation(Guid driverId)
-        => $"driver:location:{driverId}";
+    public static string DriverStatus(Guid driverId) =>
+        $"sr:driver:status:{driverId}";
 
-    public static string DispatchLock(Guid bookingId)
-        => $"dispatch:booking:{bookingId}";
+    public const string OnlineDriversGeo = "sr:geo:drivers:online";
 
-    public const string DriverGeoKey = "geo:drivers";
+    public static string MatchingBooking(long bookingId) =>
+        $"sr:matching:booking:{bookingId}";
+
+    public static string MatchingOffer(long bookingId, Guid driverId) =>
+        $"sr:matching:offer:{bookingId}:{driverId}";
+
+    public static string MatchingDriverLock(Guid driverId) =>
+        $"sr:matching:driver-lock:{driverId}";
+
+    public static string TripLive(long tripId) =>
+        $"sr:trip:live:{tripId}";
+
+    public const string ActivePricingRules = "sr:pricing:rules:active";
+
+    public static string SignalRUser(Guid userId) =>
+        $"sr:signalr:user:{userId}";
+
+    public static string SignalRDriver(Guid driverId) =>
+        $"sr:signalr:driver:{driverId}";
 }
