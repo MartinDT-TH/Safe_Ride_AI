@@ -7,6 +7,7 @@ import '../models/booking_response.dart';
 import '../models/booking_fare_estimate.dart';
 import '../models/booking_location.dart';
 import '../models/create_booking_request.dart';
+import '../models/nearby_driver.dart';
 
 class BookingRemoteDatasource {
   BookingRemoteDatasource({Dio? dio}) : _dio = dio ?? DioClient().dio;
@@ -137,6 +138,33 @@ class BookingRemoteDatasource {
       throw const BookingApiException(
         'Không thể xác nhận tài xế. Vui lòng thử lại.',
       );
+    }
+  }
+
+  Future<List<NearbyDriver>> getNearbyDrivers(
+    String accessToken, {
+    required double latitude,
+    required double longitude,
+  }) async {
+    try {
+      final response = await _dio.get(
+        ApiEndpoints.nearbyDrivers,
+        queryParameters: {
+          'latitude': latitude,
+          'longitude': longitude,
+          'radiusKm': 5,
+        },
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+        ),
+      );
+
+      final List data = response.data as List;
+      return data
+          .map((item) => NearbyDriver.fromJson(Map<String, dynamic>.from(item)))
+          .toList();
+    } on DioException {
+      return const [];
     }
   }
 }

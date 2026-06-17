@@ -1,12 +1,15 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:provider/provider.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
+import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/models/booking_catalog.dart';
 import '../../data/models/booking_fare_estimate.dart';
 import '../../data/models/booking_location.dart';
 import '../../data/models/booking_response.dart';
+import '../providers/booking_provider.dart';
 import '../widgets/booking_cancel_flow.dart';
 import 'driver_profile_page.dart';
 
@@ -34,6 +37,7 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
   GoogleMapController? _controller;
   static const _tealColor = Color(0xFF006B70);
   Offset? _markerScreenOffset;
+  BitmapDescriptor? _driverIcon;
 
   List<LatLng> get _routePoints {
     final encoded = widget.fareEstimate?.encodedPolyline;
@@ -43,6 +47,13 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
     } on FormatException {
       return const [];
     }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMarkerIcons();
+    _startNearbyDriversTimer();
   }
 
   @override
@@ -56,6 +67,35 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
     _fitRoute();
     // Delay slightly to ensure map is fully rendered before getting coordinates
     Future.delayed(const Duration(milliseconds: 300), _updateMarkerOffset);
+    _fetchNearbyDrivers();
+  }
+
+  void _startNearbyDriversTimer() {
+    // Refresh nearby drivers every 10 seconds while on this page
+    Stream.periodic(const Duration(seconds: 10)).listen((_) {
+      if (mounted) _fetchNearbyDrivers();
+    });
+  }
+
+  Future<void> _loadMarkerIcons() async {
+    _driverIcon = await BitmapDescriptor.asset(
+      const ImageConfiguration(size: Size(32, 32)),
+      'assets/icons/car_marker.png',
+    );
+    if (mounted) setState(() {});
+  }
+
+  void _fetchNearbyDrivers() {
+    final auth = context.read<AuthProvider>();
+    final booking = context.read<BookingProvider>();
+    final token = auth.token;
+    if (token != null) {
+      booking.fetchNearbyDrivers(
+        token,
+        latitude: widget.pickup.latitude,
+        longitude: widget.pickup.longitude,
+      );
+    }
   }
 
   Future<void> _updateMarkerOffset() async {
@@ -128,6 +168,8 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
         ? LatLng(widget.destination!.latitude, widget.destination!.longitude)
         : null;
 
+    final nearbyDrivers = context.watch<BookingProvider>().nearbyDrivers;
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
@@ -164,6 +206,17 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
                       BitmapDescriptor.hueRed,
                     ),
                   ),
+                ...nearbyDrivers.map(
+                  (driver) => Marker(
+                    markerId: MarkerId('driver_${driver.driverId}'),
+                    position: LatLng(driver.latitude, driver.longitude),
+                    icon: _driverIcon ??
+                        BitmapDescriptor.defaultMarkerWithHue(
+                          BitmapDescriptor.hueOrange,
+                        ),
+                    anchor: const Offset(0.5, 0.5),
+                  ),
+                ),
               },
               polylines: _routePoints.isEmpty
                   ? {}

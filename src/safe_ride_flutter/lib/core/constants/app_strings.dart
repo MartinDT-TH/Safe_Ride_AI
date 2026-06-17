@@ -239,6 +239,7 @@ abstract final class ApiEndpoints {
   static const bookings = '/bookings';
   static const bookingCatalog = '/bookings/catalog';
   static const bookingEstimate = '/bookings/estimate';
+  static const nearbyDrivers = '/drivers/nearby';
 }
 
 abstract final class ApiKeys {

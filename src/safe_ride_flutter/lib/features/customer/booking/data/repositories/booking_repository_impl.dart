@@ -1,4 +1,5 @@
 import '../../domain/repositories/booking_repository.dart';
+import '../models/nearby_driver.dart';
 import '../datasources/booking_catalog_datasource.dart';
 import '../datasources/booking_remote_datasource.dart';
 import '../models/booking_catalog.dart';
@@ -64,5 +65,18 @@ class BookingRepositoryImpl implements BookingRepository {
     required int bookingId,
   }) {
     return _remoteDatasource.confirmDriver(accessToken, bookingId: bookingId);
+  }
+
+  @override
+  Future<List<NearbyDriver>> getNearbyDrivers(
+    String accessToken, {
+    required double latitude,
+    required double longitude,
+  }) {
+    return _remoteDatasource.getNearbyDrivers(
+      accessToken,
+      latitude: latitude,
+      longitude: longitude,
+    );
   }
 }

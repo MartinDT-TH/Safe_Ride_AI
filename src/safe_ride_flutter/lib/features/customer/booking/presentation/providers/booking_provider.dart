@@ -8,6 +8,7 @@ import '../../data/models/booking_fare_estimate.dart';
 import '../../data/models/booking_location.dart';
 import '../../data/models/booking_response.dart';
 import '../../data/models/create_booking_request.dart';
+import '../../data/models/nearby_driver.dart';
 import '../../domain/repositories/booking_repository.dart';
 
 class BookingProvider extends ChangeNotifier {
@@ -21,6 +22,7 @@ class BookingProvider extends ChangeNotifier {
   String? _errorMessage;
   BookingCatalog? _catalog;
   BookingFareEstimate? _fareEstimate;
+  List<NearbyDriver> _nearbyDrivers = [];
   int _estimateRequestId = 0;
 
   bool get isLoading => _isLoading;
@@ -28,6 +30,7 @@ class BookingProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   BookingCatalog? get catalog => _catalog;
   BookingFareEstimate? get fareEstimate => _fareEstimate;
+  List<NearbyDriver> get nearbyDrivers => _nearbyDrivers;
 
   Future<void> loadCatalog(String accessToken) async {
     if (_catalog != null) return;
@@ -130,6 +133,23 @@ class BookingProvider extends ChangeNotifier {
         reason: reason,
       ),
     );
+  }
+
+  Future<void> fetchNearbyDrivers(
+    String accessToken, {
+    required double latitude,
+    required double longitude,
+  }) async {
+    try {
+      _nearbyDrivers = await _repository.getNearbyDrivers(
+        accessToken,
+        latitude: latitude,
+        longitude: longitude,
+      );
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error fetching nearby drivers: $e');
+    }
   }
 
   Future<T?> _run<T>(Future<T> Function() action) async {
