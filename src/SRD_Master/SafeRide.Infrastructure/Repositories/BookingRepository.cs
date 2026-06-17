@@ -22,6 +22,18 @@ public sealed class BookingRepository : IBookingRepository
         await _dbContext.Bookings.AddAsync(booking, cancellationToken);
     }
 
+    public Task<Booking?> GetCustomerBookingAsync(
+        long bookingId,
+        Guid customerId,
+        CancellationToken cancellationToken)
+    {
+        return _dbContext.Bookings
+            .FirstOrDefaultAsync(
+                booking => booking.BookingId == bookingId
+                    && booking.CustomerId == customerId,
+                cancellationToken);
+    }
+    
     public Task<Vehicle?> GetCustomerVehicleAsync(
         long vehicleId,
         Guid customerId,
@@ -92,5 +104,22 @@ public sealed class BookingRepository : IBookingRepository
                 && booking.ScheduledAt <= matchingCutoffUtc)
             .OrderBy(booking => booking.ScheduledAt)
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task CancelActiveDriverOffersAsync(
+        long bookingId,
+        DateTime cancelledAt,
+        CancellationToken cancellationToken)
+    {
+        var offers = await _dbContext.BookingDriverOffers
+            .Where(offer => offer.BookingId == bookingId
+                && offer.OfferStatus == DriverOfferStatus.Offered)
+            .ToListAsync(cancellationToken);
+
+        foreach (var offer in offers)
+        {
+            offer.OfferStatus = DriverOfferStatus.Cancelled;
+            offer.CancelledAt = cancelledAt;
+        }
     }
 }

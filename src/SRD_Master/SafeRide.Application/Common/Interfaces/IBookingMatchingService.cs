@@ -1,6 +1,8 @@
+using SafeRide.Application.Features.Bookings.DTOs;
+
 namespace SafeRide.Application.Common.Interfaces;
 
 public interface IBookingMatchingService
 {
-    Task StartMatchingAsync(long bookingId, CancellationToken cancellationToken);
+    Task<BookingDriverOfferDto?> StartMatchingAsync(long bookingId, CancellationToken cancellationToken);
 }

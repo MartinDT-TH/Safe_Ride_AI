@@ -26,4 +26,9 @@ abstract class BookingRepository {
     required int bookingId,
     required String reason,
   });
+
+  Future<BookingResponse> confirmDriver(
+    String accessToken, {
+    required int bookingId,
+  });
 }
