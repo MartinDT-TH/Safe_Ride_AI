@@ -68,7 +68,8 @@ public sealed class BookingTests
                 10.762622,
                 106.660172,
                 10.818797,
-                106.651856),
+                106.651856,
+                null),
             CancellationToken.None);
 
         Assert.Equal(5.2, result.EstimatedDistanceKm);
@@ -163,6 +164,7 @@ public sealed class BookingTests
                 "Điểm đến",
                 10.818797,
                 106.651856,
+                null,
                 null);
         }
     }

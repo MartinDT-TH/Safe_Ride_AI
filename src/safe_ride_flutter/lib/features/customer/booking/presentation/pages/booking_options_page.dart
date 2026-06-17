@@ -15,6 +15,7 @@ import '../../data/models/booking_response.dart';
 import '../../data/models/create_booking_request.dart';
 import '../providers/booking_provider.dart';
 import 'location_picker_page.dart';
+import 'promotion_page.dart';
 
 class BookingOptionsPage extends StatefulWidget {
   const BookingOptionsPage({
@@ -229,7 +230,12 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
   }
 
   void _showPromoStub() {
-    _showMessage('Chức năng mã khuyến mãi sẽ được cập nhật sau.');
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const PromotionPage(),
+    );
   }
 
   void _showMessage(String message) {
@@ -1010,8 +1016,10 @@ class _ServiceSelector extends StatelessWidget {
     return SegmentedButton<int>(
       segments: services
           .map(
-            (service) =>
-                ButtonSegment(value: service.id, label: Text(service.name)),
+            (service) => ButtonSegment(
+              value: service.id,
+              label: Text(_translateServiceName(service)),
+            ),
           )
           .toList(),
       selected: {selectedId},
@@ -1030,6 +1038,17 @@ class _ServiceSelector extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _translateServiceName(BookingServiceOption service) {
+    if (service.name.toLowerCase() == 'pertrip') {
+      return BookingStrings.tripService;
+    }
+    if (service.name.toLowerCase() == 'hourly') {
+      return BookingStrings.hourlyService;
+    }
+    // Fallback if the name is already Vietnamese or something else
+    return service.name;
   }
 }
 

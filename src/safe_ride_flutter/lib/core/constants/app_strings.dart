@@ -79,6 +79,16 @@ abstract final class HomeStrings {
   static String greeting(String name) => 'Chào $name,';
 }
 
+abstract final class PromotionStrings {
+  static const selectPromotion = 'Chọn mã khuyến mãi';
+  static const enterPromoCode = 'Nhập mã khuyến mãi';
+  static const apply = 'Áp dụng';
+  static const useNow = 'Dùng\nngay';
+  static const expiresToday = 'Hết hạn hôm nay';
+  static const expiresAfter = 'Hết hạn sau';
+  static const days = 'ngày';
+}
+
 abstract final class HistoryStrings {
   static const tripHistory = 'Lịch sử chuyến đi';
   static const all = 'Tất cả';
@@ -217,6 +227,7 @@ abstract final class ApiEndpoints {
   static const sendOtp = '/auth/send-otp';
   static const verifyOtp = '/auth/verify-otp';
   static const googleLogin = '/auth/google-login';
+  static const refreshToken = '/auth/refresh-token';
   static const me = '/auth/me';
   static const profile = '/auth/profile';
   static const profilePhoneSendOtp = '/auth/profile/phone/send-otp';
