@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../../core/constants/app_colors.dart';
+import '../../data/models/driver_rating_summary_model.dart';
+import '../../data/models/driver_review_model.dart';
 
 class DriverReviewsPage extends StatelessWidget {
   const DriverReviewsPage({
@@ -15,6 +17,12 @@ class DriverReviewsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const summary = DriverRatingSummaryModel(
+      averageRating: 4.9,
+      totalReviews: 1248,
+      ratingPercentages: {5: 0.85, 4: 0.10, 3: 0.03, 2: 0.01, 1: 0.01},
+    );
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -56,10 +64,8 @@ class DriverReviewsPage extends StatelessWidget {
             reviewCount: reviewCount,
           ),
           const SizedBox(height: 24),
-          // Filters
           const _ReviewFilters(),
           const SizedBox(height: 16),
-          // Review List
           const _ReviewList(),
           const SizedBox(height: 32),
         ],
@@ -116,16 +122,16 @@ class _RatingSummaryCard extends StatelessWidget {
                 Row(
                   children: List.generate(5, (index) {
                     return Icon(
-                      index < 4 ? Icons.star : Icons.star_half,
-                      color: const Color(0xFF9E5425), // Bronze color from image
+                      index < summary.averageRating.floor() ? Icons.star : Icons.star_half,
+                      color: const Color(0xFF9E5425),
                       size: 20,
                     );
                   }),
                 ),
                 const SizedBox(height: 6),
-                const Text(
-                  '1,248 đánh giá',
-                  style: TextStyle(
+                Text(
+                  '${summary.totalReviews.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')} đánh giá',
+                  style: const TextStyle(
                     fontSize: 13,
                     color: Color(0xFF6B6B6B),
                     fontWeight: FontWeight.w600,
@@ -138,13 +144,9 @@ class _RatingSummaryCard extends StatelessWidget {
           Expanded(
             flex: 6,
             child: Column(
-              children: [
-                _buildStarLine(5, 0.85),
-                _buildStarLine(4, 0.10),
-                _buildStarLine(3, 0.03),
-                _buildStarLine(2, 0.01),
-                _buildStarLine(1, 0.01),
-              ],
+              children: [5, 4, 3, 2, 1].map((star) {
+                return _buildStarLine(star, summary.ratingPercentages[star] ?? 0);
+              }).toList(),
             ),
           ),
         ],
@@ -241,29 +243,33 @@ class _ReviewList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final reviews = [
-      const _ReviewItem(
+    const reviews = [
+      DriverReviewModel(
         initial: 'L',
         name: 'Lê T***',
         date: '20/10/2023',
+        rating: 5,
         comment: 'Tài xế lái xe rất cẩn thận và lịch sự. Tôi cảm thấy rất an tâm trong suốt chuyến đi.',
       ),
-      const _ReviewItem(
+      DriverReviewModel(
         initial: 'N',
         name: 'Nguyễn V***',
         date: '18/10/2023',
+        rating: 5,
         comment: 'Xe sạch sẽ, thơm. Tài xế nói chuyện rất nhã nhặn. Sẽ tiếp tục đặt xe!',
       ),
-      const _ReviewItem(
+      DriverReviewModel(
         initial: 'H',
         name: 'Hoàng A***',
         date: '15/10/2023',
+        rating: 5,
         comment: 'Tài xế đến rất đúng giờ, xe mới và vận hành êm ái.',
       ),
-      const _ReviewItem(
+      DriverReviewModel(
         initial: 'P',
         name: 'Phạm M***',
         date: '12/10/2023',
+        rating: 5,
         comment: 'Dịch vụ 5 sao, không có gì để phàn nàn.',
       ),
     ];
@@ -274,22 +280,8 @@ class _ReviewList extends StatelessWidget {
   }
 }
 
-class _ReviewItem {
-  final String initial;
-  final String name;
-  final String date;
-  final String comment;
-
-  const _ReviewItem({
-    required this.initial,
-    required this.name,
-    required this.date,
-    required this.comment,
-  });
-}
-
 class _ReviewCard extends StatelessWidget {
-  final _ReviewItem review;
+  final DriverReviewModel review;
   const _ReviewCard({required this.review});
 
   @override
@@ -298,7 +290,7 @@ class _ReviewCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9F9F9), // Lightest grey from image
+        color: const Color(0xFFF9F9F9),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -309,7 +301,7 @@ class _ReviewCard extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 22,
-                backgroundColor: const Color(0xFFE0EAEB), // Light teal background for avatar
+                backgroundColor: const Color(0xFFE0EAEB),
                 child: Text(
                   review.initial,
                   style: const TextStyle(
