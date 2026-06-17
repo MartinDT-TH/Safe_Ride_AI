@@ -2,7 +2,16 @@ import 'package:flutter/material.dart';
 import '../../../../../core/constants/app_colors.dart';
 
 class DriverReviewsPage extends StatelessWidget {
-  const DriverReviewsPage({super.key});
+  const DriverReviewsPage({
+    super.key,
+    this.driverName = 'Tài xế',
+    this.rating = 4.9,
+    this.reviewCount = 1248,
+  });
+
+  final String driverName;
+  final double rating;
+  final int reviewCount;
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +50,11 @@ class DriverReviewsPage extends StatelessWidget {
         children: [
           const SizedBox(height: 24),
           // Rating Summary Card
-          const _RatingSummaryCard(),
+          _RatingSummaryCard(
+            driverName: driverName,
+            rating: rating,
+            reviewCount: reviewCount,
+          ),
           const SizedBox(height: 24),
           // Filters
           const _ReviewFilters(),
@@ -56,7 +69,15 @@ class DriverReviewsPage extends StatelessWidget {
 }
 
 class _RatingSummaryCard extends StatelessWidget {
-  const _RatingSummaryCard();
+  const _RatingSummaryCard({
+    required this.driverName,
+    required this.rating,
+    required this.reviewCount,
+  });
+
+  final String driverName;
+  final double rating;
+  final int reviewCount;
 
   @override
   Widget build(BuildContext context) {
@@ -82,9 +103,9 @@ class _RatingSummaryCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  '4.9',
-                  style: TextStyle(
+                Text(
+                  rating.toStringAsFixed(1),
+                  style: const TextStyle(
                     fontSize: 48,
                     fontWeight: FontWeight.w800,
                     color: Color(0xFF1F1F1F),
@@ -152,7 +173,9 @@ class _RatingSummaryCard extends StatelessWidget {
                 value: percent,
                 minHeight: 6,
                 backgroundColor: const Color(0xFFF0F0F0),
-                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                 valueColor: const AlwaysStoppedAnimation<Color>(
+                  AppColors.primary,
+                ),
               ),
             ),
           ),

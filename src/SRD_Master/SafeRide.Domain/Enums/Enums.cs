@@ -39,24 +39,25 @@ public enum KycStatus
 
 /// <summary>
 /// Dùng cho DriverKyc.LicenseClass.
-/// Có cả bằng cũ vì SQL đang cho phép Old_B1, Old_B2, Old_A1, Old_A2.
+/// Có cả bằng cũ vì tài xế hiện hữu có thể vẫn dùng giấy phép cấp trước 2025.
 /// </summary>
 public enum LicenseClass
 {
+    // Current SafeRide-supported licenses.
     A1,
     A,
-    B1,
     B,
 
-    Old_B1,
-    Old_B2,
+     // Legacy licenses issued before the 2025 license classification.
     Old_A1,
-    Old_A2
+    Old_A2,
+    Old_B1,
+    Old_B2
 }
 
 /// <summary>
 /// Dùng cho Vehicles.RequiredLicenseClass và PricingRules.VehicleClass.
-/// Không gồm B1 / Old_* vì SQL của RequiredLicenseClass và VehicleClass không cho phép.
+/// SafeRide chỉ hỗ trợ xe máy và xe con, nên không gồm hạng xe tải/bus/đầu kéo.
 /// </summary>
 public enum RequiredLicenseClass
 {
@@ -106,6 +107,14 @@ public enum BookingStatus
     Cancelled,
     Expired,
     Completed
+}
+
+public enum DriverOfferStatus
+{
+    Offered,
+    Confirmed,
+    Expired,
+    Cancelled
 }
 
 public enum BookingSource
