@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Common.Realtime;
 using SafeRide.Application.Features.Bookings;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
 using SafeRide.Application.Features.Bookings.DTOs;
@@ -18,19 +19,25 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
     private readonly ILicenseCompatibilityService _licenseCompatibilityService;
     private readonly IVehicleLicenseRequirementService _vehicleLicenseRequirementService;
     private readonly IRedisService _redisService;
+    private readonly IRealtimeNotificationService _realtimeNotificationService;
+    private readonly IBookingMatchingService _bookingMatchingService;
 
     public BookingAssignmentService(
         ApplicationDbContext dbContext,
         IDateTimeProvider dateTimeProvider,
         ILicenseCompatibilityService licenseCompatibilityService,
         IVehicleLicenseRequirementService vehicleLicenseRequirementService,
-        IRedisService redisService)
+        IRedisService redisService,
+        IRealtimeNotificationService realtimeNotificationService,
+        IBookingMatchingService bookingMatchingService)
     {
         _dbContext = dbContext;
         _dateTimeProvider = dateTimeProvider;
         _licenseCompatibilityService = licenseCompatibilityService;
         _vehicleLicenseRequirementService = vehicleLicenseRequirementService;
         _redisService = redisService;
+        _realtimeNotificationService = realtimeNotificationService;
+        _bookingMatchingService = bookingMatchingService;
     }
 
     public async Task<CreateBookingResponse> ConfirmDriverAsync(
@@ -165,6 +172,31 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         await CacheTripLiveAsync(trip, booking.CustomerId);
         await RemoveMatchingKeysAsync(booking.BookingId, offer.DriverId);
         await transaction.CommitAsync(cancellationToken);
+        await _realtimeNotificationService.PublishBookingStatusChangedAsync(
+            new BookingStatusChangedEvent(
+                booking.BookingId,
+                booking.CustomerId,
+                booking.BookingStatus,
+                utcNow),
+            cancellationToken);
+        await _realtimeNotificationService.PublishTripCreatedAsync(
+            new TripCreatedEvent(
+                trip.Id,
+                booking.BookingId,
+                booking.CustomerId,
+                trip.DriverId,
+                trip.TripStatus,
+                trip.DriverAssignedAt ?? utcNow),
+            cancellationToken);
+        await _realtimeNotificationService.PublishTripStatusChangedAsync(
+            new TripStatusChangedEvent(
+                trip.Id,
+                booking.BookingId,
+                booking.CustomerId,
+                trip.DriverId,
+                trip.TripStatus,
+                utcNow),
+            cancellationToken);
 
         var driverOffer = await GetOfferDtoAsync(offer.Id, cancellationToken);
 
@@ -179,6 +211,87 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             booking.RoutePolyline,
             "Đã xác nhận tài xế cho chuyến đi.",
             driverOffer);
+    }
+
+    public async Task<CreateBookingResponse> RejectDriverAsync(
+        Guid customerId,
+        long bookingId,
+        CancellationToken cancellationToken)
+    {
+        var utcNow = _dateTimeProvider.UtcNow;
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        var booking = await _dbContext.Bookings
+            .FirstOrDefaultAsync(
+                x => x.BookingId == bookingId && x.CustomerId == customerId,
+                cancellationToken);
+        if (booking is null)
+        {
+            throw new BookingException(
+                "booking.not_found",
+                "Khong tim thay chuyen cua ban.",
+                404);
+        }
+
+        if (booking.BookingStatus != BookingStatus.Searching)
+        {
+            throw new BookingException(
+                "booking.cannot_reject_driver",
+                "Chuyen nay khong con o trang thai tim tai xe.",
+                409);
+        }
+
+        var offer = await _dbContext.BookingDriverOffers
+            .Where(x => x.BookingId == bookingId
+                && x.OfferStatus == DriverOfferStatus.Offered)
+            .OrderByDescending(x => x.OfferedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (offer is null)
+        {
+            throw new BookingException(
+                "booking.driver_offer_not_found",
+                "Chua co tai xe de tu choi.",
+                409);
+        }
+
+        offer.OfferStatus = DriverOfferStatus.Cancelled;
+        offer.CancelledAt = utcNow;
+        booking.UpdatedAt = utcNow;
+
+        await _redisService.RemoveAsync(
+            RedisKeys.MatchingOffer(offer.BookingId, offer.DriverId));
+        await _redisService.RemoveAsync(
+            RedisKeys.MatchingDriverLock(offer.DriverId));
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        await _realtimeNotificationService.PublishDriverOfferRejectedAsync(
+            new DriverOfferRejectedEvent(
+                booking.BookingId,
+                booking.CustomerId,
+                offer.DriverId,
+                offer.Id,
+                utcNow),
+            cancellationToken);
+
+        var nextOffer = await _bookingMatchingService.StartMatchingAsync(
+            booking.BookingId,
+            cancellationToken);
+
+        return new CreateBookingResponse(
+            booking.BookingId,
+            booking.BookingType,
+            booking.BookingStatus,
+            booking.ScheduledAt,
+            (double)(booking.EstimatedDistanceKm ?? 0m),
+            booking.EstimatedDurationMinutes ?? 0,
+            booking.EstimatedFare,
+            booking.RoutePolyline,
+            nextOffer is null
+                ? "Da tu choi tai xe. Hien chua tim thay tai xe tiep theo."
+                : "Da tu choi tai xe. He thong da goi y tai xe tiep theo.",
+            nextOffer);
     }
 
     private async Task CacheTripLiveAsync(

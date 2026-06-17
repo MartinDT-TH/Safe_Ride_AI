@@ -1,5 +1,6 @@
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
+using SafeRide.Application.Common.Realtime;
 using SafeRide.Application.Features.Bookings;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
 using SafeRide.Application.Features.Bookings.Queries.EstimateBookingFare;
@@ -147,7 +148,8 @@ public sealed class BookingTests
                 new MapServiceFake(),
                 new FareEstimationService(),
                 MatchingService,
-                new VehicleLicenseRequirementService());
+                new VehicleLicenseRequirementService(),
+                new RealtimeNotificationServiceFake());
         }
 
         public static readonly Guid CustomerId =
@@ -297,5 +299,44 @@ public sealed class BookingTests
             BookingIds.Add(bookingId);
             return Task.FromResult<Application.Features.Bookings.DTOs.BookingDriverOfferDto?>(null);
         }
+    }
+
+    private sealed class RealtimeNotificationServiceFake
+        : IRealtimeNotificationService
+    {
+        public Task PublishBookingStatusChangedAsync(
+            BookingStatusChangedEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task PublishTripCreatedAsync(
+            TripCreatedEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task PublishTripStatusChangedAsync(
+            TripStatusChangedEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task PublishDriverLocationUpdatedAsync(
+            DriverLocationUpdatedEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task PublishDriverOfferCreatedAsync(
+            DriverOfferCreatedEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task PublishDriverOfferRejectedAsync(
+            DriverOfferRejectedEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task PublishDriverMatchedAsync(
+            DriverMatchedEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 }
