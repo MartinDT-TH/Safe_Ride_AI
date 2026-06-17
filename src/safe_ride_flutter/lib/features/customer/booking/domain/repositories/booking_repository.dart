@@ -20,5 +20,10 @@ abstract class BookingRepository {
     String accessToken,
     CreateBookingRequest request,
   );
-}
 
+  Future<BookingResponse> cancelBooking(
+    String accessToken, {
+    required int bookingId,
+    required String reason,
+  });
+}

@@ -23,4 +23,7 @@ public sealed class SaveVehicleRequest
     [EnumDataType(typeof(VehicleType))]
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public VehicleType VehicleType { get; set; }
+
+    [Range(1, 10000)]
+    public int? EngineCapacityCc { get; set; }
 }

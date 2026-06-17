@@ -143,7 +143,7 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
             entity.ToTable("DriverKyc", tb =>
             {
                 tb.HasCheckConstraint("CK_DriverKyc_DocumentType", "[DocumentType] IN ('ID_CARD', 'DRIVING_LICENSE', 'CRIMINAL_RECORD')");
-                tb.HasCheckConstraint("CK_DriverKyc_LicenseClass", "[LicenseClass] IS NULL OR [LicenseClass] IN ('A1', 'A', 'B1', 'B', 'C1', 'C', 'D1', 'D2', 'D', 'Old_B1', 'Old_B2', 'Old_A1', 'Old_A2')");
+                tb.HasCheckConstraint("CK_DriverKyc_LicenseClass", "[LicenseClass] IS NULL OR [LicenseClass] IN ('Old_A1', 'Old_A2', 'Old_B1', 'Old_B2', 'A1', 'A', 'B')");
                 tb.HasCheckConstraint("CK_DriverKyc_KycStatus", "[KycStatus] IN ('Pending', 'Approved', 'Rejected')");
                 tb.HasCheckConstraint("CK_DriverKyc_DocumentFile", "[FrontImageUrl] IS NOT NULL OR [BackImageUrl] IS NOT NULL OR [FileUrl] IS NOT NULL");
                 tb.HasCheckConstraint("CK_DriverKyc_DrivingLicense", "[DocumentType] <> 'DRIVING_LICENSE' OR ([DocumentNumber] IS NOT NULL AND [LicenseClass] IS NOT NULL)");
@@ -284,7 +284,7 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
 
             entity.ToTable(tb =>
             {
-                tb.HasCheckConstraint("CK_PricingRules_VehicleClass", "[VehicleClass] IN ('A1', 'A', 'B', 'C1', 'C', 'D1', 'D2', 'D')");
+                tb.HasCheckConstraint("CK_PricingRules_VehicleClass", "[VehicleClass] IN ('A1', 'A', 'B')");
                 tb.HasCheckConstraint("CK_PricingRules_BaseFare", "[BaseFare] >= 0");
                 tb.HasCheckConstraint("CK_PricingRules_MinFare", "[MinFare] >= 0");
                 tb.HasCheckConstraint("CK_PricingRules_PricePerKm", "[PricePerKm] IS NULL OR [PricePerKm] >= 0");
@@ -561,10 +561,11 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
 
             entity.ToTable(tb =>
             {
-                tb.HasCheckConstraint("CK_Vehicles_RequiredLicenseClass", "[RequiredLicenseClass] IN ('A1', 'A', 'B', 'C1', 'C', 'D1', 'D2', 'D')");
+                tb.HasCheckConstraint("CK_Vehicles_RequiredLicenseClass", "[RequiredLicenseClass] IN ('A1', 'A', 'B')");
                 tb.HasCheckConstraint("CK_Vehicles_VehicleType", "[VehicleType] IN ('Motorbike', 'Car')");
                 tb.HasCheckConstraint("CK_Vehicles_EngineType", "[EngineType] IN ('ICE', 'EV')");
                 tb.HasCheckConstraint("CK_Vehicles_TransmissionType", "[TransmissionType] IN ('Manual', 'Automatic', 'None')");
+                tb.HasCheckConstraint("CK_Vehicles_EngineCapacityCc", "[EngineCapacityCc] IS NULL OR [EngineCapacityCc] > 0");
             });
 
 
@@ -573,6 +574,7 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
             entity.Property(e => e.EngineType)
                 .HasConversion<string>()
                 .HasMaxLength(20);
+            entity.Property(e => e.EngineCapacityCc);
             entity.Property(e => e.IsDeleted).HasDefaultValue(false);
             entity.Property(e => e.PlateNumber)
                 .HasMaxLength(20)
