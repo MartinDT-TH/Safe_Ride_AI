@@ -4,6 +4,7 @@ using SafeRide.Application.Features.Bookings;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
 using SafeRide.Application.Features.Bookings.Queries.EstimateBookingFare;
 using SafeRide.Application.Features.Bookings.Services;
+using SafeRide.Application.Features.Vehicles.Services;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
 
@@ -58,7 +59,8 @@ public sealed class BookingTests
         var handler = new EstimateBookingFareQueryHandler(
             fixture.Repository,
             new MapServiceFake(),
-            new FareEstimationService());
+            new FareEstimationService(),
+            new VehicleLicenseRequirementService());
 
         var result = await handler.Handle(
             new EstimateBookingFareQuery(
@@ -126,7 +128,14 @@ public sealed class BookingTests
         {
             Repository = new BookingRepositoryFake
             {
-                Vehicle = new Vehicle { Id = 1, OwnerUserId = CustomerId },
+                Vehicle = new Vehicle
+                {
+                    Id = 1,
+                    OwnerUserId = CustomerId,
+                    VehicleType = VehicleType.Motorbike,
+                    EngineCapacityCc = 110,
+                    RequiredLicenseClass = RequiredLicenseClass.A1
+                },
                 PricingRule = CreatePricingRule(pricePerKm: 10_000m)
             };
             UnitOfWork = new UnitOfWorkFake();
@@ -137,7 +146,8 @@ public sealed class BookingTests
                 new DateTimeProviderFake(UtcNow),
                 new MapServiceFake(),
                 new FareEstimationService(),
-                MatchingService);
+                MatchingService,
+                new VehicleLicenseRequirementService());
         }
 
         public static readonly Guid CustomerId =
@@ -180,6 +190,14 @@ public sealed class BookingTests
             booking.BookingId = 42;
             AddedBooking = booking;
             return Task.CompletedTask;
+        }
+
+        public Task<Booking?> GetCustomerBookingAsync(
+            long bookingId,
+            Guid customerId,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult<Booking?>(AddedBooking);
         }
 
         public Task<Vehicle?> GetCustomerVehicleAsync(
@@ -226,6 +244,14 @@ public sealed class BookingTests
         {
             return Task.FromResult<IReadOnlyList<Booking>>([]);
         }
+
+        public Task CancelActiveDriverOffersAsync(
+            long bookingId,
+            DateTime cancelledAt,
+            CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class UnitOfWorkFake : IUnitOfWork
@@ -264,12 +290,12 @@ public sealed class BookingTests
     {
         public List<long> BookingIds { get; } = [];
 
-        public Task StartMatchingAsync(
+        public Task<Application.Features.Bookings.DTOs.BookingDriverOfferDto?> StartMatchingAsync(
             long bookingId,
             CancellationToken cancellationToken)
         {
             BookingIds.Add(bookingId);
-            return Task.CompletedTask;
+            return Task.FromResult<Application.Features.Bookings.DTOs.BookingDriverOfferDto?>(null);
         }
     }
 }
