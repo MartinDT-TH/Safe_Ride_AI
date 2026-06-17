@@ -3,6 +3,7 @@ using NetTopologySuite.Geometries;
 using SafeRide.Application.Common.Exceptions;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
+using SafeRide.Application.Common.Realtime;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
 
@@ -18,6 +19,7 @@ public sealed class CreateBookingCommandHandler
     private readonly IFareEstimationService _fareEstimationService;
     private readonly IBookingMatchingService _matchingService;
     private readonly IVehicleLicenseRequirementService _vehicleLicenseRequirementService;
+    private readonly IRealtimeNotificationService _realtimeNotificationService;
 
     public CreateBookingCommandHandler(
         IBookingRepository bookingRepository,
@@ -26,7 +28,8 @@ public sealed class CreateBookingCommandHandler
         IGoogleMapsService googleMapsService,
         IFareEstimationService fareEstimationService,
         IBookingMatchingService matchingService,
-        IVehicleLicenseRequirementService vehicleLicenseRequirementService)
+        IVehicleLicenseRequirementService vehicleLicenseRequirementService,
+        IRealtimeNotificationService realtimeNotificationService)
     {
         _bookingRepository = bookingRepository;
         _unitOfWork = unitOfWork;
@@ -35,6 +38,7 @@ public sealed class CreateBookingCommandHandler
         _fareEstimationService = fareEstimationService;
         _matchingService = matchingService;
         _vehicleLicenseRequirementService = vehicleLicenseRequirementService;
+        _realtimeNotificationService = realtimeNotificationService;
     }
 
     public async Task<CreateBookingResponse> Handle(
@@ -165,6 +169,13 @@ public sealed class CreateBookingCommandHandler
 
         await _bookingRepository.AddAsync(booking, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await _realtimeNotificationService.PublishBookingStatusChangedAsync(
+            new BookingStatusChangedEvent(
+                booking.BookingId,
+                booking.CustomerId,
+                booking.BookingStatus,
+                utcNow),
+            cancellationToken);
 
         var driverOffer = request.BookingType == BookingType.Now
             ? await _matchingService.StartMatchingAsync(
