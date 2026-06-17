@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Common.Realtime;
 using SafeRide.Application.Features.Bookings.DTOs;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
@@ -18,6 +19,7 @@ public sealed class BookingMatchingService : IBookingMatchingService
     private readonly IVehicleLicenseRequirementService _vehicleLicenseRequirementService;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IRedisService _redisService;
+    private readonly IRealtimeNotificationService _realtimeNotificationService;
 
     public BookingMatchingService(
         ILogger<BookingMatchingService> logger,
@@ -25,7 +27,8 @@ public sealed class BookingMatchingService : IBookingMatchingService
         ILicenseCompatibilityService licenseCompatibilityService,
         IVehicleLicenseRequirementService vehicleLicenseRequirementService,
         IDateTimeProvider dateTimeProvider,
-        IRedisService redisService)
+        IRedisService redisService,
+        IRealtimeNotificationService realtimeNotificationService)
     {
         _logger = logger;
         _dbContext = dbContext;
@@ -33,6 +36,7 @@ public sealed class BookingMatchingService : IBookingMatchingService
         _vehicleLicenseRequirementService = vehicleLicenseRequirementService;
         _dateTimeProvider = dateTimeProvider;
         _redisService = redisService;
+        _realtimeNotificationService = realtimeNotificationService;
     }
 
     public async Task<BookingDriverOfferDto?> StartMatchingAsync(
@@ -124,6 +128,16 @@ public sealed class BookingMatchingService : IBookingMatchingService
             .ToListAsync(cancellationToken);
 
         var blockedDriverIds = activeDriverIds.ToHashSet();
+        var previouslyOfferedDriverIds = await _dbContext.BookingDriverOffers
+            .AsNoTracking()
+            .Where(x => x.BookingId == bookingId)
+            .Select(x => x.DriverId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        foreach (var driverId in previouslyOfferedDriverIds)
+        {
+            blockedDriverIds.Add(driverId);
+        }
 
         var eligibleDriverIds = approvedDriverLicenses
             .GroupBy(x => x.DriverId)
@@ -171,7 +185,25 @@ public sealed class BookingMatchingService : IBookingMatchingService
         await _dbContext.SaveChangesAsync(cancellationToken);
         await CacheMatchingOfferAsync(offer);
 
-        return await GetActiveOfferDtoAsync(bookingId, utcNow, cancellationToken);
+        var offerDto = await GetActiveOfferDtoAsync(bookingId, utcNow, cancellationToken);
+        if (offerDto is not null)
+        {
+            await _realtimeNotificationService.PublishDriverOfferCreatedAsync(
+                new DriverOfferCreatedEvent(
+                    bookingId,
+                    booking.CustomerId,
+                    offerDto),
+                cancellationToken);
+            await _realtimeNotificationService.PublishDriverMatchedAsync(
+                new DriverMatchedEvent(
+                    bookingId,
+                    eligibleDriverId,
+                    offer.OfferedAt,
+                    offer.ExpiresAt),
+                cancellationToken);
+        }
+
+        return offerDto;
     }
 
     private async Task CacheMatchingBookingAsync(
