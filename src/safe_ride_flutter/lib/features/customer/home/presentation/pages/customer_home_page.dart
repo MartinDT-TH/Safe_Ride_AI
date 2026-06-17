@@ -13,6 +13,7 @@ import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../customer/booking/data/models/create_booking_request.dart';
 import '../../../../customer/booking/data/models/booking_catalog.dart';
 import '../../../../customer/booking/presentation/pages/booking_options_page.dart';
+import '../../../../customer/booking/presentation/pages/promotion_page.dart';
 import '../../../../shared/history/presentation/pages/history_page.dart';
 
 class CustomerHomePage extends StatefulWidget {
@@ -332,7 +333,14 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                     title: HomeStrings.history,
                     backgroundColor: const Color(0xFFF2F2F2),
                     iconColor: Colors.black,
-                    onTap: () {},
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const HistoryPage(),
+                        ),
+                      );
+                    },
                   ),
                   QuickActionItem(
                     icon: Icons.directions_car_filled_rounded,
@@ -353,7 +361,14 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                     title: HomeStrings.promotions,
                     backgroundColor: const Color(0xFFF2F2F2),
                     iconColor: Colors.black,
-                    onTap: () {},
+                    onTap: () {
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: Colors.transparent,
+                        builder: (context) => const PromotionPage(),
+                      );
+                    },
                   ),
                   QuickActionItem(
                     icon: Icons.star_rounded,
@@ -382,9 +397,19 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                 time: HomeStrings.recentTime,
               ),
               const SizedBox(height: 24),
-              const PromoBanner(
-                title: HomeStrings.promotionTitle,
-                code: HomeStrings.promotionCode,
+              GestureDetector(
+                onTap: () {
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (context) => const PromotionPage(),
+                  );
+                },
+                child: const PromoBanner(
+                  title: HomeStrings.promotionTitle,
+                  code: HomeStrings.promotionCode,
+                ),
               ),
             ],
           ),

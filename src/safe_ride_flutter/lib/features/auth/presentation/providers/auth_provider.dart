@@ -469,6 +469,7 @@ class AuthProvider extends ChangeNotifier {
 
       _token = accessToken;
       final response = await repository.getCurrentUser(accessToken);
+      _token = await _storage.readAccessToken() ?? accessToken;
       _readAuthState(response);
     } catch (e) {
       debugPrint('Restore session error: $e');
@@ -525,4 +526,3 @@ class AuthProvider extends ChangeNotifier {
     return null;
   }
 }
-
