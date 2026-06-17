@@ -24,6 +24,8 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
 
     public virtual DbSet<Booking> Bookings { get; set; }
 
+    public virtual DbSet<BookingDriverOffer> BookingDriverOffers { get; set; }
+
     public virtual DbSet<BookingPromotion> BookingPromotions { get; set; }
 
     public virtual DbSet<DriverKyc> DriverKycs { get; set; }
@@ -114,6 +116,40 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
         });
 
         modelBuilder.ApplyConfiguration(new BookingConfiguration());
+
+        modelBuilder.Entity<BookingDriverOffer>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_BookingDriverOffers");
+
+            entity.ToTable(tb =>
+            {
+                tb.HasCheckConstraint("CK_BookingDriverOffers_OfferStatus", "[OfferStatus] IN ('Offered', 'Confirmed', 'Expired', 'Cancelled')");
+                tb.HasCheckConstraint("CK_BookingDriverOffers_ExpiresAt", "[ExpiresAt] > [OfferedAt]");
+            });
+
+            entity.Property(e => e.OfferStatus)
+                .HasConversion<string>()
+                .HasMaxLength(20)
+                .HasDefaultValue(DriverOfferStatus.Offered);
+            entity.Property(e => e.OfferedAt).HasDefaultValueSql("(getutcdate())");
+
+            entity.HasIndex(e => e.BookingId);
+            entity.HasIndex(e => e.DriverId);
+            entity.HasIndex(e => new { e.BookingId, e.OfferStatus });
+            entity.HasIndex(e => new { e.DriverId, e.OfferStatus });
+
+            entity.HasOne(e => e.Booking)
+                .WithMany(e => e.DriverOffers)
+                .HasForeignKey(e => e.BookingId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_BookingDriverOffers_Bookings");
+
+            entity.HasOne(e => e.Driver)
+                .WithMany(e => e.BookingDriverOffers)
+                .HasForeignKey(e => e.DriverId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_BookingDriverOffers_DriverProfiles");
+        });
 
         modelBuilder.Entity<BookingPromotion>(entity =>
         {

@@ -45,6 +45,8 @@ public partial class Booking
 
     public virtual ICollection<BookingPromotion> BookingPromotions { get; set; } = new List<BookingPromotion>();
 
+    public virtual ICollection<BookingDriverOffer> DriverOffers { get; set; } = new List<BookingDriverOffer>();
+
     public virtual AspNetUser? CancelledByNavigation { get; set; }
 
     public virtual AspNetUser Customer { get; set; } = null!;
