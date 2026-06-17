@@ -1,24 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
-
-class Promotion {
-  final String code;
-  final String description;
-  final int daysLeft;
-
-  Promotion({
-    required this.code,
-    required this.description,
-    required this.daysLeft,
-  });
-
-  bool get isExpiringToday => daysLeft == 0;
-  
-  String get expiryText => isExpiringToday 
-    ? PromotionStrings.expiresToday 
-    : '${PromotionStrings.expiresAfter} $daysLeft ${PromotionStrings.days}';
-}
+import '../../data/models/promo_model.dart';
 
 class PromotionPage extends StatefulWidget {
   const PromotionPage({super.key});
@@ -30,21 +13,22 @@ class PromotionPage extends StatefulWidget {
 class _PromotionPageState extends State<PromotionPage> {
   final TextEditingController _promoController = TextEditingController();
 
-  final List<Promotion> _promotions = [
-    Promotion(
+  final List<PromoModel> _promotions = const [
+    PromoModel(
       code: 'SAFE10',
       description: 'Giảm 15.000đ - Cho mọi chuyến đi',
-      daysLeft: 2,
+      expiry: 'Hết hạn sau 2 ngày',
     ),
-    Promotion(
+    PromoModel(
       code: 'NEWUSER',
       description: 'Giảm 20% - Tối đa 30.000đ',
-      daysLeft: 5,
+      expiry: 'Hết hạn sau 5 ngày',
     ),
-    Promotion(
+    PromoModel(
       code: 'FREESHIP',
       description: 'Miễn phí phụ phí đêm',
-      daysLeft: 0,
+      expiry: 'Hết hạn hôm nay',
+      isExpiringSoon: true,
     ),
   ];
 
@@ -176,7 +160,7 @@ class _PromotionPageState extends State<PromotionPage> {
     );
   }
 
-  Widget _buildPromotionCard(Promotion promo) {
+  Widget _buildPromotionCard(PromoModel promo) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -238,17 +222,17 @@ class _PromotionPageState extends State<PromotionPage> {
                 Row(
                   children: [
                     Icon(
-                      promo.isExpiringToday ? Icons.error_outline : Icons.schedule,
+                      promo.isExpiringSoon ? Icons.error_outline : Icons.schedule,
                       size: 16,
-                      color: promo.isExpiringToday ? const Color(0xFFC61E27) : const Color(0xFF757575),
+                      color: promo.isExpiringSoon ? const Color(0xFFC61E27) : const Color(0xFF757575),
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      promo.isExpiringToday ? '! ${promo.expiryText}' : promo.expiryText,
+                      promo.isExpiringSoon ? '! ${promo.expiry}' : promo.expiry,
                       style: TextStyle(
                         fontSize: 14,
-                        color: promo.isExpiringToday ? const Color(0xFFC61E27) : const Color(0xFF757575),
-                        fontWeight: promo.isExpiringToday ? FontWeight.w700 : FontWeight.w500,
+                        color: promo.isExpiringSoon ? const Color(0xFFC61E27) : const Color(0xFF757575),
+                        fontWeight: promo.isExpiringSoon ? FontWeight.w700 : FontWeight.w500,
                       ),
                     ),
                   ],
