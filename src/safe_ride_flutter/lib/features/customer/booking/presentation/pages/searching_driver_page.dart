@@ -1,22 +1,30 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
-import '../../data/models/booking_location.dart';
+import '../../data/models/booking_catalog.dart';
 import '../../data/models/booking_fare_estimate.dart';
-import '../widgets/cancel_booking_sheet.dart';
+import '../../data/models/booking_location.dart';
+import '../../data/models/booking_response.dart';
+import '../widgets/booking_cancel_flow.dart';
+import 'driver_profile_page.dart';
 
 class SearchingDriverPage extends StatefulWidget {
   const SearchingDriverPage({
     super.key,
     required this.pickup,
+    this.booking,
     this.destination,
     this.fareEstimate,
+    this.vehicle,
   });
 
+  final BookingResponse? booking;
   final BookingLocation pickup;
   final BookingLocation? destination;
   final BookingFareEstimate? fareEstimate;
+  final BookingVehicleOption? vehicle;
 
   @override
   State<SearchingDriverPage> createState() => _SearchingDriverPageState();
@@ -25,6 +33,7 @@ class SearchingDriverPage extends StatefulWidget {
 class _SearchingDriverPageState extends State<SearchingDriverPage> {
   GoogleMapController? _controller;
   static const _tealColor = Color(0xFF006B70);
+  Offset? _markerScreenOffset;
 
   List<LatLng> get _routePoints {
     final encoded = widget.fareEstimate?.encodedPolyline;
@@ -45,6 +54,26 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
   void _onMapCreated(GoogleMapController controller) {
     _controller = controller;
     _fitRoute();
+    // Delay slightly to ensure map is fully rendered before getting coordinates
+    Future.delayed(const Duration(milliseconds: 300), _updateMarkerOffset);
+  }
+
+  Future<void> _updateMarkerOffset() async {
+    if (_controller == null) return;
+    try {
+      final pos = LatLng(widget.pickup.latitude, widget.pickup.longitude);
+      final screenPos = await _controller!.getScreenCoordinate(pos);
+      if (mounted) {
+        setState(() {
+          _markerScreenOffset = Offset(
+            screenPos.x.toDouble(),
+            screenPos.y.toDouble(),
+          );
+        });
+      }
+    } catch (e) {
+      debugPrint('Error updating marker offset: $e');
+    }
   }
 
   Future<void> _fitRoute() async {
@@ -75,10 +104,10 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
     var maxLng = points.first.longitude;
 
     for (final p in points) {
-      if (p.latitude < minLat) minLat = p.latitude;
-      if (p.latitude > maxLat) maxLat = p.latitude;
-      if (p.longitude < minLng) minLng = p.longitude;
-      if (p.longitude > maxLng) maxLng = p.longitude;
+      minLat = math.min(minLat, p.latitude);
+      maxLat = math.max(maxLat, p.latitude);
+      minLng = math.min(minLng, p.longitude);
+      maxLng = math.max(maxLng, p.longitude);
     }
 
     await controller.animateCamera(
@@ -99,78 +128,135 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
         ? LatLng(widget.destination!.latitude, widget.destination!.longitude)
         : null;
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          // Background Map
-          GoogleMap(
-            initialCameraPosition: CameraPosition(target: pickupPos, zoom: 15),
-            onMapCreated: _onMapCreated,
-            markers: {
-              Marker(
-                markerId: const MarkerId('pickup'),
-                position: pickupPos,
-                icon: BitmapDescriptor.defaultMarkerWithHue(
-                  BitmapDescriptor.hueAzure,
-                ),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        await handleBookingBack(context, booking: widget.booking);
+      },
+      child: Scaffold(
+        body: Stack(
+          children: [
+            GoogleMap(
+              initialCameraPosition: CameraPosition(
+                target: pickupPos,
+                zoom: 15,
               ),
-              if (destPos != null)
+              onMapCreated: _onMapCreated,
+              // Update on every camera move to keep radar attached
+              onCameraMove: (_) => _updateMarkerOffset(),
+              onCameraIdle: _updateMarkerOffset,
+              markers: {
                 Marker(
-                  markerId: const MarkerId('destination'),
-                  position: destPos,
+                  markerId: const MarkerId('pickup'),
+                  position: pickupPos,
+                  // Using a more visible anchor for the center of the radar
+                  anchor: const Offset(0.5, 0.5),
                   icon: BitmapDescriptor.defaultMarkerWithHue(
-                    BitmapDescriptor.hueRed,
+                    BitmapDescriptor.hueAzure,
                   ),
                 ),
-            },
-            polylines: _routePoints.isEmpty
-                ? {}
-                : {
-                    Polyline(
-                      polylineId: const PolylineId('route'),
-                      points: _routePoints,
-                      color: _tealColor,
-                      width: 5,
+                if (destPos != null)
+                  Marker(
+                    markerId: const MarkerId('destination'),
+                    position: destPos,
+                    icon: BitmapDescriptor.defaultMarkerWithHue(
+                      BitmapDescriptor.hueRed,
                     ),
-                  },
-            zoomControlsEnabled: false,
-            myLocationButtonEnabled: false,
-            compassEnabled: false,
-          ),
-
-          // Overlay Content
-          SafeArea(
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        backgroundColor: Colors.white,
-                        child: IconButton(
-                          icon: const Icon(
-                            Icons.arrow_back,
-                            color: Colors.black,
-                          ),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ),
-                    ],
                   ),
-                ),
-                const Spacer(),
-                _SearchingPanel(
-                  pickupAddress: widget.pickup.address,
-                  destinationAddress:
-                      widget.destination?.address ?? 'Thuê theo giờ',
-                ),
-              ],
+              },
+              polylines: _routePoints.isEmpty
+                  ? {}
+                  : {
+                      Polyline(
+                        polylineId: const PolylineId('route'),
+                        points: _routePoints,
+                        color: _tealColor,
+                        width: 5,
+                      ),
+                    },
+              zoomControlsEnabled: false,
+              myLocationButtonEnabled: false,
+              compassEnabled: false,
             ),
-          ),
-        ],
+
+            // Radar Scanner Overlay positioned over the pickup marker center
+            if (_markerScreenOffset != null)
+              Positioned(
+                // Offset calculation: screen coordinate - (radar size / 2)
+                left: _markerScreenOffset!.dx - 100,
+                top: _markerScreenOffset!.dy - 100,
+                child: const IgnorePointer(child: _RadarScanner(size: 200)),
+              ),
+
+            // Navigation and Info Panel
+            // Note: Keep the panel at the top level of the stack to ensure clicks work
+            SafeArea(
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundColor: Colors.white,
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.arrow_back,
+                              color: Colors.black,
+                            ),
+                            onPressed: () => handleBookingBack(
+                              context,
+                              booking: widget.booking,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Spacer(),
+                  _SearchingPanel(
+                    booking: widget.booking,
+                    vehicle: widget.vehicle,
+                    fareEstimate: widget.fareEstimate,
+                    pickupAddress: widget.pickup.address,
+                    onDriverPreviewTap: _shouldShowDriverCard(widget.booking)
+                        ? () {
+                            final offer = widget.booking!.driverOffer!;
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => DriverProfilePage(
+                                  name: offer.driverName,
+                                  avatarUrl: offer.driverAvatarUrl,
+                                  rating: offer.rating,
+                                  tripCount: offer.tripCount,
+                                  experienceYears: offer.experienceYears,
+                                  booking: widget.booking,
+                                  pickup: widget.pickup,
+                                  destination: widget.destination,
+                                  fareEstimate: widget.fareEstimate,
+                                  vehicle: widget.vehicle,
+                                ),
+                              ),
+                            );
+                          }
+                        : null,
+                    onCancelTap: () =>
+                        handleBookingBack(context, booking: widget.booking),
+                    destinationAddress:
+                        widget.destination?.address ?? 'Thuê theo giờ',
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  bool _shouldShowDriverCard(BookingResponse? booking) {
+    return booking?.driverOffer != null;
   }
 }
 
@@ -178,10 +264,20 @@ class _SearchingPanel extends StatelessWidget {
   const _SearchingPanel({
     required this.pickupAddress,
     required this.destinationAddress,
+    this.booking,
+    this.vehicle,
+    this.fareEstimate,
+    this.onDriverPreviewTap,
+    this.onCancelTap,
   });
 
+  final BookingResponse? booking;
+  final BookingVehicleOption? vehicle;
+  final BookingFareEstimate? fareEstimate;
   final String pickupAddress;
   final String destinationAddress;
+  final VoidCallback? onDriverPreviewTap;
+  final VoidCallback? onCancelTap;
 
   @override
   Widget build(BuildContext context) {
@@ -193,7 +289,7 @@ class _SearchingPanel extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 20,
             offset: const Offset(0, 4),
           ),
@@ -203,7 +299,6 @@ class _SearchingPanel extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           const SizedBox(height: 12),
-          // Drag handle
           Container(
             width: 40,
             height: 4,
@@ -212,12 +307,7 @@ class _SearchingPanel extends StatelessWidget {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          const SizedBox(height: 24),
-
-          // Animated Loading Circle with Car
-          const _AnimatedLoadingVehicle(),
-
-          const SizedBox(height: 16),
+          const SizedBox(height: 22),
           const Text(
             BookingStrings.searchingDriver,
             style: TextStyle(
@@ -227,13 +317,21 @@ class _SearchingPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
-            BookingStrings.estimatedWaitTime,
-            style: TextStyle(fontSize: 14, color: Color(0xFF666666)),
+          Text(
+            _statusText,
+            style: const TextStyle(fontSize: 14, color: Color(0xFF666666)),
           ),
 
-          const SizedBox(height: 24),
-          // Route info
+          const SizedBox(height: 18),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: _BookingSummary(
+              booking: booking,
+              vehicle: vehicle,
+              fareEstimate: fareEstimate,
+            ),
+          ),
+          const SizedBox(height: 14),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: _CompactRouteInfo(
@@ -241,22 +339,24 @@ class _SearchingPanel extends StatelessWidget {
               destination: destinationAddress,
             ),
           ),
-
+          if (onDriverPreviewTap != null) ...[
+            const SizedBox(height: 14),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: _DriverFoundCard(
+                booking: booking,
+                onTap: onDriverPreviewTap!,
+              ),
+            ),
+          ],
           const SizedBox(height: 24),
-          // Cancel Button
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: SizedBox(
               width: double.infinity,
               height: 52,
               child: ElevatedButton.icon(
-                onPressed: () async {
-                  final reason = await CancelBookingSheet.show(context);
-                  if (reason != null && context.mounted) {
-                    // TODO: Call API to cancel booking with reason
-                    Navigator.pop(context);
-                  }
-                },
+                onPressed: onCancelTap,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFF2F2F2),
                   foregroundColor: const Color(0xFFC62828),
@@ -278,64 +378,260 @@ class _SearchingPanel extends StatelessWidget {
       ),
     );
   }
+
+  String get _statusText {
+    final bookingId = booking?.bookingId;
+    if (bookingId == null) return BookingStrings.estimatedWaitTime;
+    return 'Mã chuyến #$bookingId • ${booking?.bookingStatus ?? 'Searching'}';
+  }
 }
 
-class _AnimatedLoadingVehicle extends StatefulWidget {
-  const _AnimatedLoadingVehicle();
+class _DriverFoundCard extends StatelessWidget {
+  const _DriverFoundCard({required this.booking, required this.onTap});
+
+  final BookingResponse? booking;
+  final VoidCallback onTap;
 
   @override
-  State<_AnimatedLoadingVehicle> createState() =>
-      _AnimatedLoadingVehicleState();
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF8E1),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFFFECB3)),
+        ),
+        child: Row(
+          children: [
+            const CircleAvatar(
+              backgroundColor: Color(0xFFFFB300),
+              child: Icon(Icons.person_search_rounded, color: Colors.white),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Tài xế phù hợp đã sẵn sàng',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Xem hồ sơ trước khi xác nhận thuê.',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF666666)),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Color(0xFF006B70)),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-class _AnimatedLoadingVehicleState extends State<_AnimatedLoadingVehicle>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
+class _RadarScanner extends StatefulWidget {
+  final double size;
+  const _RadarScanner({this.size = 120});
+
+  @override
+  State<_RadarScanner> createState() => _RadarScannerState();
+}
+
+class _RadarScannerState extends State<_RadarScanner>
+    with TickerProviderStateMixin {
+  late AnimationController _pulseController;
+  late AnimationController _driverController;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
+    _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
+    )..repeat();
+
+    _driverController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 4),
     )..repeat();
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _pulseController.dispose();
+    _driverController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        SizedBox(
-          width: 70,
-          height: 70,
-          child: CircularProgressIndicator(
-            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF006B70)),
-            backgroundColor: const Color(0xFF006B70).withOpacity(0.1),
-            strokeWidth: 6,
+    const primaryColor = Color(0xFF006B70);
+
+    return SizedBox(
+      width: widget.size,
+      height: widget.size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Concentric pulsing circles
+          for (int i = 0; i < 3; i++)
+            AnimatedBuilder(
+              animation: _pulseController,
+              builder: (context, child) {
+                double progress = (_pulseController.value + (i / 3)) % 1.0;
+                return Container(
+                  width: widget.size * progress,
+                  height: widget.size * progress,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: primaryColor.withValues(
+                        alpha: 0.6 * (1.0 - progress),
+                      ),
+                      width: 2,
+                    ),
+                  ),
+                );
+              },
+            ),
+
+          // Scanning Overlay (Faded circle)
+          Container(
+            width: widget.size * 0.8,
+            height: widget.size * 0.8,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: primaryColor.withValues(alpha: 0.08),
+            ),
           ),
-        ),
-        Container(
-          width: 50,
-          height: 50,
-          decoration: BoxDecoration(
-            color: const Color(0xFFE0F2F1),
-            shape: BoxShape.circle,
+
+          // Simulated Drivers (Dots appearing randomly)
+          _buildSimulatedDriver(
+            top: widget.size * 0.2,
+            left: widget.size * 0.25,
+            delay: 0.0,
           ),
-          child: const Icon(
-            Icons.directions_car_rounded,
-            color: Color(0xFF006B70),
-            size: 30,
+          _buildSimulatedDriver(
+            top: widget.size * 0.35,
+            right: widget.size * 0.15,
+            delay: 0.4,
           ),
-        ),
-      ],
+          _buildSimulatedDriver(
+            bottom: widget.size * 0.2,
+            left: widget.size * 0.4,
+            delay: 0.8,
+          ),
+        ],
+      ),
     );
+  }
+
+  Widget _buildSimulatedDriver({
+    double? top,
+    double? left,
+    double? right,
+    double? bottom,
+    required double delay,
+  }) {
+    return AnimatedBuilder(
+      animation: _driverController,
+      builder: (context, child) {
+        double val = (_driverController.value + delay) % 1.0;
+        double opacity = val < 0.2
+            ? val * 5
+            : (val < 0.8 ? 1.0 : (1.0 - val) * 5);
+
+        return Positioned(
+          top: top,
+          left: left,
+          right: right,
+          bottom: bottom,
+          child: Opacity(
+            opacity: opacity.clamp(0.0, 1.0),
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
+              ),
+              child: const Icon(
+                Icons.directions_car_rounded,
+                size: 14,
+                color: Color(0xFF006B70),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _BookingSummary extends StatelessWidget {
+  const _BookingSummary({
+    required this.booking,
+    required this.vehicle,
+    required this.fareEstimate,
+  });
+
+  final BookingResponse? booking;
+  final BookingVehicleOption? vehicle;
+  final BookingFareEstimate? fareEstimate;
+
+  @override
+  Widget build(BuildContext context) {
+    final fare = booking?.estimatedFare ?? fareEstimate?.estimatedFare;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF4F4),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            vehicle?.isMotorbike == true
+                ? Icons.directions_bike_rounded
+                : Icons.directions_car_rounded,
+            color: const Color(0xFF006B70),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              vehicle == null
+                  ? 'Đang chờ tài xế nhận chuyến'
+                  : '${vehicle!.name} • ${vehicle!.plateNumber}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+          if (fare != null)
+            Text(
+              _formatCurrency(fare),
+              style: const TextStyle(
+                color: Color(0xFF006B70),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _formatCurrency(double value) {
+    final formatter = value.round().toString().replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (Match m) => '${m[1]}.',
+    );
+    return '$formatterđ';
   }
 }
 

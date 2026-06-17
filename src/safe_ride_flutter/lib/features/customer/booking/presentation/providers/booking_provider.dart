@@ -109,6 +109,29 @@ class BookingProvider extends ChangeNotifier {
     return _run(() => _repository.createBooking(accessToken, request));
   }
 
+  Future<BookingResponse?> confirmDriver(
+    String accessToken, {
+    required int bookingId,
+  }) {
+    return _run(
+      () => _repository.confirmDriver(accessToken, bookingId: bookingId),
+    );
+  }
+
+  Future<BookingResponse?> cancelBooking(
+    String accessToken, {
+    required int bookingId,
+    required String reason,
+  }) {
+    return _run(
+      () => _repository.cancelBooking(
+        accessToken,
+        bookingId: bookingId,
+        reason: reason,
+      ),
+    );
+  }
+
   Future<T?> _run<T>(Future<T> Function() action) async {
     _isLoading = true;
     _errorMessage = null;
@@ -131,4 +154,3 @@ class BookingProvider extends ChangeNotifier {
     }
   }
 }
-

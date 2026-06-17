@@ -6,6 +6,11 @@ public interface IBookingRepository
 {
     Task AddAsync(Booking booking, CancellationToken cancellationToken);
 
+    Task<Booking?> GetCustomerBookingAsync(
+        long bookingId,
+        Guid customerId,
+        CancellationToken cancellationToken);
+        
     Task<Vehicle?> GetCustomerVehicleAsync(
         long vehicleId,
         Guid customerId,
@@ -26,5 +31,10 @@ public interface IBookingRepository
 
     Task<IReadOnlyList<Booking>> GetScheduledBookingsReadyForMatchingAsync(
         DateTime matchingCutoffUtc,
+        CancellationToken cancellationToken);
+
+    Task CancelActiveDriverOffersAsync(
+        long bookingId,
+        DateTime cancelledAt,
         CancellationToken cancellationToken);
 }
