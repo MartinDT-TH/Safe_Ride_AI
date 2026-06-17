@@ -1,9 +1,9 @@
 using SafeRide.Domain.Enums;
 using SafeRide.Application.Features.Bookings.DTOs;
 
-namespace SafeRide.Application.Features.Bookings.Commands.CreateBooking;
+namespace SafeRide.Application.Features.Bookings.Commands.CancelBooking;
 
-public sealed record CreateBookingResponse(
+public sealed record CancelBookingResponse(
     long BookingId,
     BookingType BookingType,
     BookingStatus BookingStatus,
