@@ -2,7 +2,6 @@ using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using SafeRide.Application.Features.Bookings.Commands.CancelBooking;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
 using SafeRide.Application.Features.Bookings.Queries.EstimateBookingFare;
 using SafeRide.Application.Features.Bookings.Queries.GetBookingCatalog;
@@ -132,41 +131,6 @@ public sealed class BookingsController : ControllerBase
             result.Message);
 
         return StatusCode(StatusCodes.Status201Created, response);
-    }
-
-    [HttpPost("{bookingId:long}/cancel")]
-    [ProducesResponseType<BookingResponse>(StatusCodes.Status200OK)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<BookingResponse>> CancelBooking(
-        long bookingId,
-        [FromBody] CancelBookingRequest? request,
-        CancellationToken cancellationToken)
-    {
-        if (!TryGetCustomerId(out var customerId))
-        {
-            return Unauthorized(CreateUnauthorizedProblem());
-        }
-
-        var result = await _sender.Send(
-            new CancelBookingCommand(
-                customerId,
-                bookingId,
-                request?.Reason),
-            cancellationToken);
-
-        return Ok(new BookingResponse(
-            result.BookingId,
-            result.BookingType,
-            result.BookingStatus,
-            result.ScheduledAt,
-            result.EstimatedDistanceKm,
-            result.EstimatedDurationMinutes,
-            result.EstimatedFare,
-            result.EncodedPolyline,
-            result.Message));
     }
 
     private bool TryGetCustomerId(out Guid customerId)

@@ -2,6 +2,7 @@ using MediatR;
 using SafeRide.Application.Common.Exceptions;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
+using SafeRide.Domain.Entities;
 
 namespace SafeRide.Application.Features.Bookings.Queries.EstimateBookingFare;
 
@@ -11,15 +12,18 @@ public sealed class EstimateBookingFareQueryHandler
     private readonly IBookingRepository _bookingRepository;
     private readonly IGoogleMapsService _googleMapsService;
     private readonly IFareEstimationService _fareEstimationService;
+    private readonly IVehicleLicenseRequirementService _vehicleLicenseRequirementService;
 
     public EstimateBookingFareQueryHandler(
         IBookingRepository bookingRepository,
         IGoogleMapsService googleMapsService,
-        IFareEstimationService fareEstimationService)
+        IFareEstimationService fareEstimationService,
+        IVehicleLicenseRequirementService vehicleLicenseRequirementService)
     {
         _bookingRepository = bookingRepository;
         _googleMapsService = googleMapsService;
         _fareEstimationService = fareEstimationService;
+        _vehicleLicenseRequirementService = vehicleLicenseRequirementService;
     }
 
     public async Task<EstimateBookingFareResult> Handle(
@@ -39,6 +43,8 @@ public sealed class EstimateBookingFareQueryHandler
                 "Không tìm thấy xe hợp lệ của bạn.",
                 404);
         }
+
+        ValidateVehicleLicenseRequirement(vehicle);
 
         var pricingRule = await _bookingRepository.GetPricingRuleAsync(
             request.ServiceTypeId,
@@ -141,6 +147,19 @@ public sealed class EstimateBookingFareQueryHandler
                 "Điểm đón và điểm đến phải khác nhau.",
                 400);
         }
+    }
+
+    private void ValidateVehicleLicenseRequirement(Vehicle vehicle)
+    {
+        if (_vehicleLicenseRequirementService.HasValidRequirement(vehicle))
+        {
+            return;
+        }
+
+        throw new BookingException(
+            "booking.invalid_vehicle_license_requirement",
+            "Không xác định được hạng bằng lái cần thiết cho xe đã chọn.",
+            400);
     }
 
     private static void ValidateCoordinate(double latitude, double longitude)

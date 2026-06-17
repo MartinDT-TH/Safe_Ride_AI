@@ -11,4 +11,7 @@ public sealed class VehicleResponse
     public string? Color { get; set; }
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public VehicleType VehicleType { get; set; }
+    public int? EngineCapacityCc { get; set; }
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public RequiredLicenseClass RequiredLicenseClass { get; set; }
 }

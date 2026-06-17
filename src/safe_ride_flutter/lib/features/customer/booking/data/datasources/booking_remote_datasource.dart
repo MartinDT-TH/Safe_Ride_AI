@@ -81,36 +81,6 @@ class BookingRemoteDatasource {
       throw const BookingApiException(BookingStrings.bookingFailed);
     }
   }
-
-  Future<BookingResponse> cancelBooking(
-    String accessToken, {
-    required int bookingId,
-    required String reason,
-  }) async {
-    try {
-      final response = await _dio.post(
-        '${ApiEndpoints.bookings}/$bookingId/cancel',
-        data: {'reason': reason},
-        options: Options(
-          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
-        ),
-      );
-
-      return BookingResponse.fromJson(
-        Map<String, dynamic>.from(response.data as Map),
-      );
-    } on FormatException {
-      throw const BookingApiException(BookingStrings.sessionExpired);
-    } on DioException catch (exception) {
-      final data = exception.response?.data;
-      if (data is Map && data[ApiKeys.detail] != null) {
-        throw BookingApiException(data[ApiKeys.detail].toString());
-      }
-      throw const BookingApiException(
-        'Không thể hủy chuyến. Vui lòng thử lại.',
-      );
-    }
-  }
 }
 
 class BookingApiException implements Exception {
@@ -121,3 +91,4 @@ class BookingApiException implements Exception {
   @override
   String toString() => message;
 }
+

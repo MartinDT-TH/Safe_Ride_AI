@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../../data/models/vehicle_model.dart';
 
 class VehicleCard extends StatelessWidget {
@@ -67,7 +66,7 @@ class VehicleCard extends StatelessWidget {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              _summaryText(vehicle),
+                              '${vehicle.plateNumber} • ${vehicle.color}',
                               style: const TextStyle(
                                 fontSize: 14,
                                 color: Color(0xFF6B7280),
@@ -117,18 +116,5 @@ class VehicleCard extends StatelessWidget {
       ),
     );
   }
-
-  static String _summaryText(VehicleModel vehicle) {
-    final details = <String>[
-      vehicle.plateNumber,
-      if (vehicle.color.trim().isNotEmpty) vehicle.color,
-      if (vehicle.type == VehicleType.motorbike &&
-          vehicle.engineCapacityCc != null)
-        '${vehicle.engineCapacityCc}cc',
-      if (vehicle.requiredLicenseClass.trim().isNotEmpty)
-        'Bằng ${vehicle.requiredLicenseClass}',
-    ];
-
-    return details.join(' • ');
-  }
 }
+

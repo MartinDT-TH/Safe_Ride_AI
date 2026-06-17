@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-
 import '../../data/models/vehicle_model.dart';
 
 class VehicleFormSheet extends StatefulWidget {
@@ -34,12 +32,11 @@ class VehicleFormSheet extends StatefulWidget {
 class _VehicleFormSheetState extends State<VehicleFormSheet> {
   late VehicleType _selectedType;
   late TextEditingController _nameController;
-  late TextEditingController _engineCapacityController;
+  late TextEditingController _licenseController;
   late TextEditingController _plateController;
   late TextEditingController _colorController;
   bool _isSaving = false;
   String? _nameError;
-  String? _engineCapacityError;
   String? _plateError;
   String? _colorError;
 
@@ -48,8 +45,8 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
     super.initState();
     _selectedType = widget.vehicle?.type ?? VehicleType.motorbike;
     _nameController = TextEditingController(text: widget.vehicle?.name ?? '');
-    _engineCapacityController = TextEditingController(
-      text: widget.vehicle?.engineCapacityCc?.toString() ?? '',
+    _licenseController = TextEditingController(
+      text: widget.vehicle?.licenseType ?? '',
     );
     _plateController = TextEditingController(
       text: widget.vehicle?.plateNumber ?? '',
@@ -60,7 +57,7 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
   @override
   void dispose() {
     _nameController.dispose();
-    _engineCapacityController.dispose();
+    _licenseController.dispose();
     _plateController.dispose();
     _colorController.dispose();
     super.dispose();
@@ -78,162 +75,150 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  isEdit ? 'Chỉnh sửa phương tiện' : 'Thêm phương tiện mới',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: textColor,
-                  ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                isEdit ? 'Chỉnh sửa phương tiện' : 'Thêm phương tiện mới',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
                 ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close, color: textColor, size: 24),
-                  splashRadius: 20,
+              ),
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close, color: textColor, size: 24),
+                splashRadius: 20,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Divider(height: 1, color: Color(0xFFF3F4F6)),
+          const SizedBox(height: 24),
+
+          const Text(
+            'Loại phương tiện',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: textColor,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF3F4F6),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                _buildTypeButton(
+                  'Xe máy',
+                  Icons.directions_bike_rounded,
+                  VehicleType.motorbike,
+                ),
+                _buildTypeButton(
+                  'Ô tô',
+                  Icons.directions_car_rounded,
+                  VehicleType.car,
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            const Divider(height: 1, color: Color(0xFFF3F4F6)),
-            const SizedBox(height: 24),
+          ),
+          const SizedBox(height: 24),
 
-            const Text(
-              'Loại phương tiện',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: textColor,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF3F4F6),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  _buildTypeButton(
-                    'Xe máy',
-                    Icons.directions_bike_rounded,
-                    VehicleType.motorbike,
-                  ),
-                  _buildTypeButton(
-                    'Ô tô',
-                    Icons.directions_car_rounded,
-                    VehicleType.car,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
+          _buildInputField(
+            label: 'Tên phương tiện',
+            controller: _nameController,
+            hint: 'Ví dụ: Honda Vision',
+            errorText: _nameError,
+          ),
+          const SizedBox(height: 20),
+          _buildInputField(
+            label: 'Loại bằng lái',
+            controller: _licenseController,
+            hint: 'Ví dụ: A1, B2...',
+          ),
+          const SizedBox(height: 20),
+          _buildInputField(
+            label: 'Biển số xe',
+            controller: _plateController,
+            hint: 'Ví dụ: 29A1 - 123.45',
+            errorText: _plateError,
+          ),
+          const SizedBox(height: 20),
+          _buildInputField(
+            label: 'Màu sắc',
+            controller: _colorController,
+            hint: 'Ví dụ: Xanh dương',
+            errorText: _colorError,
+          ),
+          const SizedBox(height: 32),
 
-            _buildInputField(
-              label: 'Tên phương tiện',
-              controller: _nameController,
-              hint: 'Ví dụ: Honda Vision',
-              errorText: _nameError,
-            ),
-            const SizedBox(height: 20),
-            if (_selectedType == VehicleType.motorbike) ...[
-              _buildInputField(
-                label: 'Dung tích xi-lanh (cc)',
-                controller: _engineCapacityController,
-                hint: 'Ví dụ: 110, 125, 150',
-                errorText: _engineCapacityError,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              ),
-              const SizedBox(height: 20),
-            ],
-            _buildInputField(
-              label: 'Biển số xe',
-              controller: _plateController,
-              hint: 'Ví dụ: 29A1 - 123.45',
-              errorText: _plateError,
-            ),
-            const SizedBox(height: 20),
-            _buildInputField(
-              label: 'Màu sắc',
-              controller: _colorController,
-              hint: 'Ví dụ: Xanh dương',
-              errorText: _colorError,
-            ),
-            const SizedBox(height: 32),
-
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton(
-                onPressed: _isSaving ? null : _saveVehicle,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: tealColor,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 0,
+          SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: ElevatedButton(
+              onPressed: _isSaving ? null : _saveVehicle,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: tealColor,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                child: _isSaving
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Text(
-                        isEdit ? 'Lưu thay đổi' : 'Lưu phương tiện',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
+                elevation: 0,
+              ),
+              child: _isSaving
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
                       ),
-              ),
+                    )
+                  : Text(
+                      isEdit ? 'Lưu thay đổi' : 'Lưu phương tiện',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
             ),
-            const SizedBox(height: 8),
-            Center(
-              child: TextButton(
-                onPressed: _isSaving ? null : () => Navigator.pop(context),
-                child: const Text(
-                  'Hủy',
-                  style: TextStyle(
-                    color: tealColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: TextButton(
+              onPressed: _isSaving ? null : () => Navigator.pop(context),
+              child: const Text(
+                'Hủy',
+                style: TextStyle(
+                  color: tealColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-          ],
-        ),
+          ),
+          const SizedBox(height: 12),
+        ],
       ),
     );
   }
 
   Future<void> _saveVehicle() async {
     final name = _nameController.text.trim();
-    final engineCapacityText = _engineCapacityController.text.trim();
+    final license = _licenseController.text.trim();
     final plateNumber = _plateController.text.trim();
     final color = _colorController.text.trim();
 
-    if (!_validateForm(
-      name: name,
-      engineCapacityText: engineCapacityText,
-      plateNumber: plateNumber,
-      color: color,
-    )) {
+    if (!_validateForm(name: name, plateNumber: plateNumber, color: color)) {
       return;
     }
 
@@ -241,13 +226,10 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
     final vehicle = VehicleModel(
       id: widget.vehicle?.id ?? 0,
       name: name,
+      licenseType: license,
       plateNumber: plateNumber,
       color: color,
       type: _selectedType,
-      engineCapacityCc: _selectedType == VehicleType.motorbike
-          ? int.parse(engineCapacityText)
-          : null,
-      requiredLicenseClass: widget.vehicle?.requiredLicenseClass ?? '',
     );
     final saved = await widget.onSave(vehicle);
     if (!mounted) return;
@@ -264,10 +246,7 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
 
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() {
-          _selectedType = type;
-          _engineCapacityError = null;
-        }),
+        onTap: () => setState(() => _selectedType = type),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
@@ -303,8 +282,6 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
     required TextEditingController controller,
     required String hint,
     String? errorText,
-    TextInputType? keyboardType,
-    List<TextInputFormatter>? inputFormatters,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -320,8 +297,6 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
         const SizedBox(height: 8),
         TextField(
           controller: controller,
-          keyboardType: keyboardType,
-          inputFormatters: inputFormatters,
           onChanged: (_) => _clearErrorFor(controller),
           style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
           decoration: InputDecoration(
@@ -357,18 +332,12 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
   }
 
   void _clearErrorFor(TextEditingController controller) {
-    if (_nameError == null &&
-        _engineCapacityError == null &&
-        _plateError == null &&
-        _colorError == null) {
+    if (_nameError == null && _plateError == null && _colorError == null) {
       return;
     }
 
     setState(() {
       if (controller == _nameController) _nameError = null;
-      if (controller == _engineCapacityController) {
-        _engineCapacityError = null;
-      }
       if (controller == _plateController) _plateError = null;
       if (controller == _colorController) _colorError = null;
     });
@@ -376,25 +345,15 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
 
   bool _validateForm({
     required String name,
-    required String engineCapacityText,
     required String plateNumber,
     required String color,
   }) {
     String? nameError;
-    String? engineCapacityError;
     String? plateError;
     String? colorError;
 
     if (name.length < 2 || name.length > 100) {
       nameError = 'Tên phương tiện phải từ 2 đến 100 ký tự.';
-    }
-
-    if (_selectedType == VehicleType.motorbike) {
-      final engineCapacity = int.tryParse(engineCapacityText);
-      if (engineCapacity == null || engineCapacity <= 0) {
-        engineCapacityError =
-            'Xe máy cần dung tích xi-lanh hợp lệ để xác định bằng A1 hoặc A.';
-      }
     }
 
     if (plateNumber.length < 4 || plateNumber.length > 20) {
@@ -410,14 +369,11 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
 
     setState(() {
       _nameError = nameError;
-      _engineCapacityError = engineCapacityError;
       _plateError = plateError;
       _colorError = colorError;
     });
 
-    return nameError == null &&
-        engineCapacityError == null &&
-        plateError == null &&
-        colorError == null;
+    return nameError == null && plateError == null && colorError == null;
   }
 }
+

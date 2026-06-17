@@ -39,8 +39,7 @@ public sealed class VehicleApiTests
                 BrandModel = "Toyota Vios 2024",
                 PlateNumber = second.PlateNumber,
                 Color = "Trắng",
-                VehicleType = VehicleType.Car,
-                EngineCapacityCc = null
+                VehicleType = VehicleType.Car
             });
         Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
 
@@ -77,10 +76,7 @@ public sealed class VehicleApiTests
                 BrandModel = brandModel,
                 PlateNumber = plateNumber,
                 Color = "Đen",
-                VehicleType = vehicleType,
-                EngineCapacityCc = vehicleType == VehicleType.Motorbike
-                    ? 110
-                    : null
+                VehicleType = vehicleType
             });
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         return (await response.Content.ReadFromJsonAsync<VehicleResponse>())!;

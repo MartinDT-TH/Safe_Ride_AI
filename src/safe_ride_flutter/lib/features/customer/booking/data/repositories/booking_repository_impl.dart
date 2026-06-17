@@ -44,5 +44,17 @@ class BookingRepositoryImpl implements BookingRepository {
   ) {
     return _remoteDatasource.createBooking(accessToken, request);
   }
-}
 
+  @override
+  Future<BookingResponse> cancelBooking(
+    String accessToken, {
+    required int bookingId,
+    required String reason,
+  }) {
+    return _remoteDatasource.cancelBooking(
+      accessToken,
+      bookingId: bookingId,
+      reason: reason,
+    );
+  }
+}

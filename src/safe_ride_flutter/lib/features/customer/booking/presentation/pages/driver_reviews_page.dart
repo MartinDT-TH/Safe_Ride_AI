@@ -2,16 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../../core/constants/app_colors.dart';
 
 class DriverReviewsPage extends StatelessWidget {
-  const DriverReviewsPage({
-    super.key,
-    this.driverName = 'Tài xế',
-    this.rating = 4.9,
-    this.reviewCount = 1248,
-  });
-
-  final String driverName;
-  final double rating;
-  final int reviewCount;
+  const DriverReviewsPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -50,11 +41,7 @@ class DriverReviewsPage extends StatelessWidget {
         children: [
           const SizedBox(height: 24),
           // Rating Summary Card
-          _RatingSummaryCard(
-            driverName: driverName,
-            rating: rating,
-            reviewCount: reviewCount,
-          ),
+          const _RatingSummaryCard(),
           const SizedBox(height: 24),
           // Filters
           const _ReviewFilters(),
@@ -69,15 +56,7 @@ class DriverReviewsPage extends StatelessWidget {
 }
 
 class _RatingSummaryCard extends StatelessWidget {
-  const _RatingSummaryCard({
-    required this.driverName,
-    required this.rating,
-    required this.reviewCount,
-  });
-
-  final String driverName;
-  final double rating;
-  final int reviewCount;
+  const _RatingSummaryCard();
 
   @override
   Widget build(BuildContext context) {
@@ -103,9 +82,9 @@ class _RatingSummaryCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  rating.toStringAsFixed(1),
-                  style: const TextStyle(
+                const Text(
+                  '4.9',
+                  style: TextStyle(
                     fontSize: 48,
                     fontWeight: FontWeight.w800,
                     color: Color(0xFF1F1F1F),
@@ -173,9 +152,7 @@ class _RatingSummaryCard extends StatelessWidget {
                 value: percent,
                 minHeight: 6,
                 backgroundColor: const Color(0xFFF0F0F0),
-                valueColor: const AlwaysStoppedAnimation<Color>(
-                  AppColors.primary,
-                ),
+                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
               ),
             ),
           ),
@@ -210,19 +187,12 @@ class _ReviewFiltersState extends State<_ReviewFilters> {
               onTap: () => setState(() => _selectedIndex = index),
               borderRadius: BorderRadius.circular(100),
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 22,
-                  vertical: 10,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
                 decoration: BoxDecoration(
-                  color: isSelected
-                      ? AppColors.primary
-                      : const Color(0xFFF5F5F5),
+                  color: isSelected ? AppColors.primary : const Color(0xFFF5F5F5),
                   borderRadius: BorderRadius.circular(100),
                   border: Border.all(
-                    color: isSelected
-                        ? AppColors.primary
-                        : const Color(0xFFE2E2E2),
+                    color: isSelected ? AppColors.primary : const Color(0xFFE2E2E2),
                     width: 1,
                   ),
                 ),
@@ -253,15 +223,13 @@ class _ReviewList extends StatelessWidget {
         initial: 'L',
         name: 'Lê T***',
         date: '20/10/2023',
-        comment:
-            'Tài xế lái xe rất cẩn thận và lịch sự. Tôi cảm thấy rất an tâm trong suốt chuyến đi.',
+        comment: 'Tài xế lái xe rất cẩn thận và lịch sự. Tôi cảm thấy rất an tâm trong suốt chuyến đi.',
       ),
       const _ReviewItem(
         initial: 'N',
         name: 'Nguyễn V***',
         date: '18/10/2023',
-        comment:
-            'Xe sạch sẽ, thơm. Tài xế nói chuyện rất nhã nhặn. Sẽ tiếp tục đặt xe!',
+        comment: 'Xe sạch sẽ, thơm. Tài xế nói chuyện rất nhã nhặn. Sẽ tiếp tục đặt xe!',
       ),
       const _ReviewItem(
         initial: 'H',
@@ -318,9 +286,7 @@ class _ReviewCard extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 22,
-                backgroundColor: const Color(
-                  0xFFE0EAEB,
-                ), // Light teal background for avatar
+                backgroundColor: const Color(0xFFE0EAEB), // Light teal background for avatar
                 child: Text(
                   review.initial,
                   style: const TextStyle(

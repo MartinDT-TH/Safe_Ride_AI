@@ -17,7 +17,6 @@ public sealed class CreateBookingCommandHandler
     private readonly IGoogleMapsService _googleMapsService;
     private readonly IFareEstimationService _fareEstimationService;
     private readonly IBookingMatchingService _matchingService;
-    private readonly IVehicleLicenseRequirementService _vehicleLicenseRequirementService;
 
     public CreateBookingCommandHandler(
         IBookingRepository bookingRepository,
@@ -25,8 +24,7 @@ public sealed class CreateBookingCommandHandler
         IDateTimeProvider dateTimeProvider,
         IGoogleMapsService googleMapsService,
         IFareEstimationService fareEstimationService,
-        IBookingMatchingService matchingService,
-        IVehicleLicenseRequirementService vehicleLicenseRequirementService)
+        IBookingMatchingService matchingService)
     {
         _bookingRepository = bookingRepository;
         _unitOfWork = unitOfWork;
@@ -34,7 +32,6 @@ public sealed class CreateBookingCommandHandler
         _googleMapsService = googleMapsService;
         _fareEstimationService = fareEstimationService;
         _matchingService = matchingService;
-        _vehicleLicenseRequirementService = vehicleLicenseRequirementService;
     }
 
     public async Task<CreateBookingResponse> Handle(
@@ -56,8 +53,6 @@ public sealed class CreateBookingCommandHandler
                 "Không tìm thấy xe hợp lệ của bạn.",
                 404);
         }
-
-        ValidateVehicleLicenseRequirement(vehicle);
 
         var pricingRule = await _bookingRepository.GetPricingRuleAsync(
             request.ServiceTypeId,
@@ -244,19 +239,6 @@ public sealed class CreateBookingCommandHandler
                 "Địa chỉ điểm đón là bắt buộc.",
                 400);
         }
-    }
-
-    private void ValidateVehicleLicenseRequirement(Vehicle vehicle)
-    {
-        if (_vehicleLicenseRequirementService.HasValidRequirement(vehicle))
-        {
-            return;
-        }
-
-        throw new BookingException(
-            "booking.invalid_vehicle_license_requirement",
-            "Không xác định được hạng bằng lái cần thiết cho xe đã chọn.",
-            400);
     }
 
     private static void ValidateDestination(CreateBookingCommand request)

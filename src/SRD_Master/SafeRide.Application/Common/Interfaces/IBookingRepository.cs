@@ -6,11 +6,6 @@ public interface IBookingRepository
 {
     Task AddAsync(Booking booking, CancellationToken cancellationToken);
 
-    Task<Booking?> GetCustomerBookingAsync(
-        long bookingId,
-        Guid customerId,
-        CancellationToken cancellationToken);
-
     Task<Vehicle?> GetCustomerVehicleAsync(
         long vehicleId,
         Guid customerId,

@@ -4,7 +4,6 @@ using SafeRide.Application.Features.Bookings;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
 using SafeRide.Application.Features.Bookings.Queries.EstimateBookingFare;
 using SafeRide.Application.Features.Bookings.Services;
-using SafeRide.Application.Features.Vehicles.Services;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
 
@@ -59,8 +58,7 @@ public sealed class BookingTests
         var handler = new EstimateBookingFareQueryHandler(
             fixture.Repository,
             new MapServiceFake(),
-            new FareEstimationService(),
-            new VehicleLicenseRequirementService());
+            new FareEstimationService());
 
         var result = await handler.Handle(
             new EstimateBookingFareQuery(
@@ -128,14 +126,7 @@ public sealed class BookingTests
         {
             Repository = new BookingRepositoryFake
             {
-                Vehicle = new Vehicle
-                {
-                    Id = 1,
-                    OwnerUserId = CustomerId,
-                    VehicleType = VehicleType.Motorbike,
-                    EngineCapacityCc = 110,
-                    RequiredLicenseClass = RequiredLicenseClass.A1
-                },
+                Vehicle = new Vehicle { Id = 1, OwnerUserId = CustomerId },
                 PricingRule = CreatePricingRule(pricePerKm: 10_000m)
             };
             UnitOfWork = new UnitOfWorkFake();
@@ -146,8 +137,7 @@ public sealed class BookingTests
                 new DateTimeProviderFake(UtcNow),
                 new MapServiceFake(),
                 new FareEstimationService(),
-                MatchingService,
-                new VehicleLicenseRequirementService());
+                MatchingService);
         }
 
         public static readonly Guid CustomerId =

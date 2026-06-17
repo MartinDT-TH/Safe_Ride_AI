@@ -2,7 +2,6 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Features.Vehicles.DTOs;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
@@ -16,14 +15,10 @@ namespace SafeRide.API.Controllers;
 public sealed class VehiclesController : ControllerBase
 {
     private readonly ApplicationDbContext _dbContext;
-    private readonly IVehicleLicenseRequirementService _licenseRequirementService;
 
-    public VehiclesController(
-        ApplicationDbContext dbContext,
-        IVehicleLicenseRequirementService licenseRequirementService)
+    public VehiclesController(ApplicationDbContext dbContext)
     {
         _dbContext = dbContext;
-        _licenseRequirementService = licenseRequirementService;
     }
 
     [HttpGet]
@@ -65,14 +60,6 @@ public sealed class VehiclesController : ControllerBase
             });
         }
 
-        if (!TryResolveRequiredLicenseClass(
-            request,
-            out var requiredLicenseClass,
-            out var validationError))
-        {
-            return validationError;
-        }
-
         var vehicle = new Vehicle
         {
             OwnerUserId = userId,
@@ -80,8 +67,9 @@ public sealed class VehiclesController : ControllerBase
             PlateNumber = plateNumber,
             Color = NormalizeOptional(request.Color),
             VehicleType = request.VehicleType,
-            RequiredLicenseClass = requiredLicenseClass,
-            EngineCapacityCc = NormalizeEngineCapacity(request),
+            RequiredLicenseClass = request.VehicleType == VehicleType.Motorbike
+                ? RequiredLicenseClass.A1
+                : RequiredLicenseClass.B,
             EngineType = EngineType.ICE,
             TransmissionType = TransmissionType.Automatic,
             CreatedAt = DateTime.UtcNow
@@ -120,20 +108,13 @@ public sealed class VehiclesController : ControllerBase
             });
         }
 
-        if (!TryResolveRequiredLicenseClass(
-            request,
-            out var requiredLicenseClass,
-            out var validationError))
-        {
-            return validationError;
-        }
-
         vehicle.BrandModel = request.BrandModel.Trim();
         vehicle.PlateNumber = plateNumber;
         vehicle.Color = NormalizeOptional(request.Color);
         vehicle.VehicleType = request.VehicleType;
-        vehicle.RequiredLicenseClass = requiredLicenseClass;
-        vehicle.EngineCapacityCc = NormalizeEngineCapacity(request);
+        vehicle.RequiredLicenseClass = request.VehicleType == VehicleType.Motorbike
+            ? RequiredLicenseClass.A1
+            : RequiredLicenseClass.B;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(ToResponse(vehicle));
@@ -205,37 +186,6 @@ public sealed class VehiclesController : ControllerBase
         return string.IsNullOrEmpty(normalized) ? null : normalized;
     }
 
-    private bool TryResolveRequiredLicenseClass(
-        SaveVehicleRequest request,
-        out RequiredLicenseClass requiredLicenseClass,
-        out ActionResult<VehicleResponse> errorResult)
-    {
-        if (_licenseRequirementService.TryResolveRequiredLicenseClass(
-            request.VehicleType,
-            request.EngineCapacityCc,
-            out requiredLicenseClass))
-        {
-            errorResult = default!;
-            return true;
-        }
-
-        errorResult = BadRequest(new
-        {
-            code = "vehicle.license_requirement_missing",
-            message = request.VehicleType == VehicleType.Motorbike
-                ? "Xe máy cần dung tích xi-lanh hợp lệ để xác định hạng bằng A1 hoặc A."
-                : "Không xác định được hạng bằng lái cần thiết cho xe."
-        });
-        return false;
-    }
-
-    private static int? NormalizeEngineCapacity(SaveVehicleRequest request)
-    {
-        return request.VehicleType == VehicleType.Motorbike
-            ? request.EngineCapacityCc
-            : null;
-    }
-
     private static VehicleResponse ToResponse(Vehicle vehicle)
     {
         return new VehicleResponse
@@ -244,9 +194,7 @@ public sealed class VehiclesController : ControllerBase
             BrandModel = vehicle.BrandModel,
             PlateNumber = vehicle.PlateNumber,
             Color = vehicle.Color,
-            VehicleType = vehicle.VehicleType,
-            EngineCapacityCc = vehicle.EngineCapacityCc,
-            RequiredLicenseClass = vehicle.RequiredLicenseClass
+            VehicleType = vehicle.VehicleType
         };
     }
 }

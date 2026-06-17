@@ -20,7 +20,6 @@ public partial class Vehicle
     public VehicleType VehicleType { get; set; }
     public EngineType EngineType { get; set; }
     public TransmissionType TransmissionType { get; set; }
-    public int? EngineCapacityCc { get; set; }
 
     public string? Color { get; set; }
 
