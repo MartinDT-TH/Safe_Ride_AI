@@ -1,0 +1,150 @@
+﻿{
+   "CodeGenerationMode": 4,
+   "ContextClassName": "ApplicationDBContext",
+   "ContextNamespace": "",
+   "FilterSchemas": false,
+   "IncludeConnectionString": false,
+   "IrregularWords": null,
+   "MinimumProductVersion": "2.6.1382",
+   "ModelNamespace": null,
+   "OutputContextPath": null,
+   "OutputPath": "Entities",
+   "PluralRules": null,
+   "PreserveCasingWithRegex": true,
+   "ProjectRootNamespace": "SafeRide.Domain",
+   "Schemas": null,
+   "SelectedHandlebarsLanguage": 2,
+   "SelectedToBeGenerated": 0,
+   "SingularRules": null,
+   "T4TemplatePath": "",
+   "Tables": [
+      {
+         "Name": "[dbo].[AspNetRoles]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[AspNetUserRoles]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[AspNetUsers]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[BookingPromotions]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[Bookings]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[DriverKyc]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[DriverProfiles]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[DriverWallets]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[Notifications]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[Payments]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[PricingRules]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[Promotions]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[Ratings]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[RefreshTokens]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[Reports]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[RouteDeviations]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[ServiceTypes]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[SOSAlerts]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[SurgePricingRules]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[SystemSettings]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[Trips]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[TripShares]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[Vehicles]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[WalletTransactions]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[WithdrawalRequests]",
+         "ObjectType": 0
+      }
+   ],
+   "UiHint": null,
+   "UncountableWords": null,
+   "UseAsyncStoredProcedureCalls": true,
+   "UseBoolPropertiesWithoutDefaultSql": false,
+   "UseDatabaseNames": false,
+   "UseDatabaseNamesForRoutines": true,
+   "UseDateOnlyTimeOnly": true,
+   "UseDbContextSplitting": false,
+   "UseDecimalDataAnnotationForSprocResult": true,
+   "UseFluentApiOnly": true,
+   "UseHandleBars": false,
+   "UseHierarchyId": false,
+   "UseInflector": true,
+   "UseInternalAccessModifiersForSprocsAndFunctions": false,
+   "UseLegacyPluralizer": false,
+   "UseManyToManyEntity": false,
+   "UseNoDefaultConstructor": false,
+   "UseNoNavigations": false,
+   "UseNoObjectFilter": false,
+   "UseNodaTime": false,
+   "UseNullableReferences": true,
+   "UsePrefixNavigationNaming": false,
+   "UseSchemaFolders": false,
+   "UseSchemaNamespaces": false,
+   "UseSpatial": true,
+   "UseT4": false,
+   "UseT4Split": false,
+   "UseTypedTvpParameters": true
+}
