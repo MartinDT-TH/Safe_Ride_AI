@@ -90,7 +90,19 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
     final List<Widget> pages = [
       _buildHomeContent(auth, bookingProvider),
-      const HistoryPage(),
+      bookingProvider.activeBooking != null
+          ? TripTrackingPage(
+              state: _trackingState(bookingProvider.activeBooking!),
+              booking: bookingProvider.activeBooking!,
+              pickup: (bookingProvider.activePickup ??
+                  bookingProvider.activeBooking!.pickup)!,
+              destination: bookingProvider.activeDestination ??
+                  bookingProvider.activeBooking!.destination,
+              vehicle: bookingProvider.activeVehicle ??
+                  bookingProvider.activeBooking!.vehicle,
+              onSwitchTab: (index) => setState(() => _selectedIndex = index),
+            )
+          : const HistoryPage(),
       const ProfilePage(),
     ];
 
@@ -159,21 +171,25 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                 const SizedBox(width: 8),
               ],
             )
-          : null,
+          : (_selectedIndex == 1 && bookingProvider.activeBooking == null
+              ? AppBar(
+                  backgroundColor: Colors.white,
+                  elevation: 0,
+                  title: const Text(
+                    'Hoạt động',
+                    style: TextStyle(
+                      color: Color(0xFF1A1A1A),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  centerTitle: true,
+                )
+              : null),
       body: IndexedStack(index: _selectedIndex, children: pages),
       bottomNavigationBar: CustomerBottomNavBar(
         currentIndex: _selectedIndex,
-        onTap: (index) async {
-          if (index == 1 && bookingProvider.activeBooking != null) {
-            setState(() => _selectedIndex = index);
-            // _showMessage('Đang mở chuyến đang hoạt động.');
-            final result = await _openActiveBooking(context, bookingProvider);
-            if (result == 'go_to_profile') {
-              setState(() => _selectedIndex = 2);
-            }
-          } else {
-            setState(() => _selectedIndex = index);
-          }
+        onTap: (index) {
+          setState(() => _selectedIndex = index);
         },
       ),
     );
@@ -431,54 +447,6 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
         ),
       ),
     );
-  }
-
-  Future<dynamic> _openActiveBooking(
-    BuildContext context,
-    BookingProvider bookingProvider,
-  ) async {
-    final booking = bookingProvider.activeBooking;
-    final pickup = bookingProvider.activePickup ?? booking?.pickup;
-    if (booking == null || pickup == null) {
-      _showMessage('Không thể mở chuyến đang hoạt động. Vui lòng thử lại.');
-      return null;
-    }
-
-    final destination =
-        bookingProvider.activeDestination ?? booking.destination;
-    final vehicle = bookingProvider.activeVehicle ?? booking.vehicle;
-
-    if (booking.bookingStatus == 'Searching' ||
-        !_canTrackAssignedBooking(booking)) {
-      return await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => SearchingDriverPage(
-            booking: booking,
-            pickup: pickup,
-            destination: destination,
-            vehicle: vehicle,
-          ),
-        ),
-      );
-    }
-
-    return await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => TripTrackingPage(
-          state: _trackingState(booking),
-          booking: booking,
-          pickup: pickup,
-          destination: destination,
-          vehicle: vehicle,
-        ),
-      ),
-    );
-  }
-
-  bool _canTrackAssignedBooking(BookingResponse booking) {
-    return booking.bookingStatus == 'DriverAssigned' &&
-        booking.tripStatus != null &&
-        booking.driverOffer != null;
   }
 
   TripTrackingState _trackingState(BookingResponse booking) {

@@ -7,8 +7,8 @@ using SafeRide.Application.Features.Auth.Services;
 using SafeRide.Application.Features.Auth;
 using SafeRide.Domain.Entities;
 using SafeRide.Infrastructure.Authentication;
-using SafeRide.Infrastructure.ExternalServices;
 using System.Security.Claims;
+using SafeRide.Infrastructure.ExternalServices.Cloudinary;
 
 namespace SafeRide.API.Controllers;
 

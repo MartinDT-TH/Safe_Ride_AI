@@ -21,7 +21,9 @@ using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
 using SafeRide.Infrastructure.Repositories;
 using SafeRide.Infrastructure.Services;
+using SafeRide.Infrastructure.Simulator;
 using System.Text;
+using SafeRide.Infrastructure.ExternalServices.Cloudinary;
 
 namespace SafeRide.Infrastructure;
 
@@ -125,6 +127,14 @@ public static class DependencyInjection
                 client.Timeout = TimeSpan.FromSeconds(15);
             });
         }
+
+        if (environment.IsDevelopment())
+        {
+            services.AddSingleton<DriverLocationSimulator>();
+            // Register V3 simulator with logger support
+            services.AddSingleton<DriverLocationSimulatorV3>();
+        }
+
         if (!environment.IsEnvironment("Testing"))
         {
             services.AddHostedService<ScheduledBookingMatchingJob>();
