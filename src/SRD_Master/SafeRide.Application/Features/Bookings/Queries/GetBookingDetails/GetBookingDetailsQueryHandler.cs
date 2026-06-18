@@ -9,13 +9,16 @@ public sealed class GetBookingDetailsQueryHandler
 {
     private readonly IBookingRepository _bookingRepository;
     private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly IGoogleMapsService _googleMapsService;
 
     public GetBookingDetailsQueryHandler(
         IBookingRepository bookingRepository,
-        IDateTimeProvider dateTimeProvider)
+        IDateTimeProvider dateTimeProvider,
+        IGoogleMapsService googleMapsService)
     {
         _bookingRepository = bookingRepository;
         _dateTimeProvider = dateTimeProvider;
+        _googleMapsService = googleMapsService;
     }
 
     public async Task<BookingDetailsDto> Handle(
@@ -42,6 +45,7 @@ public sealed class GetBookingDetailsQueryHandler
         return await BookingDetailsMapper.ToDtoAsync(
             booking,
             _bookingRepository,
+            _googleMapsService,
             cancellationToken);
     }
 }
