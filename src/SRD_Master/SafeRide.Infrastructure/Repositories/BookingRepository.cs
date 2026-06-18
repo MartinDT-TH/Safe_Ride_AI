@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Common.Models;
 using SafeRide.Application.Features.Bookings.DTOs;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
@@ -136,6 +137,32 @@ public sealed class BookingRepository : IBookingRepository
             latestOffer.ExperienceYears ?? 0,
             licenseClass ?? LicenseClass.A1,
             latestOffer.ExpiresAt);
+    }
+
+    public async Task<LocationPoint?> GetDriverLocationAsync(
+        Guid driverId,
+        CancellationToken cancellationToken)
+    {
+        var locationJson = await _redisService.GetAsync(RedisKeys.DriverLocation(driverId));
+        if (string.IsNullOrWhiteSpace(locationJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            var cache = JsonSerializer.Deserialize<DriverLocationCache>(
+                locationJson,
+                JsonOptions);
+            return cache is null
+                ? null
+                : new LocationPoint(cache.Latitude, cache.Longitude);
+        }
+        catch (JsonException)
+        {
+            await _redisService.RemoveAsync(RedisKeys.DriverLocation(driverId));
+            return null;
+        }
     }
 
     public async Task ExpireStaleNowBookingsAsync(

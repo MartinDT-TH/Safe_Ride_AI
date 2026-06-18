@@ -3,7 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Logging;
 
-namespace SafeRide.Realtime.Simulator;
+namespace SafeRide.Infrastructure.Simulator;
 
 public sealed class DriverLocationSimulatorV3
 {
@@ -37,7 +37,7 @@ public sealed class DriverLocationSimulatorV3
             var connection = new HubConnectionBuilder()
                 .WithUrl(HubUrl, options =>
                 {
-                    options.AccessTokenProvider = () => Task.FromResult((string?)(token ?? string.Empty));
+                    options.AccessTokenProvider = () => Task.FromResult((string?)token);
                 })
                 .WithAutomaticReconnect()
                 .Build();
