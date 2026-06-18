@@ -24,15 +24,9 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => getIt<AuthProvider>()),
-        ChangeNotifierProvider(create: (_) => getIt<AuthProvider>()),
-
         ChangeNotifierProvider(create: (_) => getIt<RoleProvider>()),
-        ChangeNotifierProvider(create: (_) => getIt<RoleProvider>()),
-
         ChangeNotifierProvider(create: (_) => getIt<HomeProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<BookingProvider>()),
-        ChangeNotifierProvider(create: (_) => getIt<HomeProvider>()),
-
         ChangeNotifierProvider(create: (_) => getIt<VehicleProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<HistoryProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<DriverDashboardProvider>()),
