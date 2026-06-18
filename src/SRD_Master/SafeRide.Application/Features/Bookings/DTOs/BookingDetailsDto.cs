@@ -23,9 +23,11 @@ public sealed record BookingDetailsDto(
     int EstimatedDurationMinutes,
     decimal EstimatedFare,
     string? EncodedPolyline,
+    string? ArrivalPolyline,
     string Message,
     BookingDriverOfferDto? DriverOffer,
     BookingLocationDto Pickup,
     BookingLocationDto? Destination,
     BookingVehicleSummaryDto Vehicle,
+    long? TripId,
     TripStatus? TripStatus);

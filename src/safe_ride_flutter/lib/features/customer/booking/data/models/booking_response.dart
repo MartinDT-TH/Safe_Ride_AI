@@ -12,11 +12,13 @@ class BookingResponse {
     required this.estimatedFare,
     required this.encodedPolyline,
     required this.message,
+    this.arrivalPolyline,
     this.scheduledAt,
     this.driverOffer,
     this.pickup,
     this.destination,
     this.vehicle,
+    this.tripId,
     this.tripStatus,
   });
 
@@ -28,11 +30,13 @@ class BookingResponse {
   final int estimatedDurationMinutes;
   final double estimatedFare;
   final String encodedPolyline;
+  final String? arrivalPolyline;
   final String message;
   final BookingDriverOffer? driverOffer;
   final BookingLocation? pickup;
   final BookingLocation? destination;
   final BookingVehicleOption? vehicle;
+  final int? tripId;
   final String? tripStatus;
 
   factory BookingResponse.fromJson(Map<String, dynamic> json) {
@@ -49,6 +53,7 @@ class BookingResponse {
           (json[ApiKeys.estimatedDurationMinutes] as num?)?.toInt() ?? 0,
       estimatedFare: (json[ApiKeys.estimatedFare] as num?)?.toDouble() ?? 0,
       encodedPolyline: json[ApiKeys.encodedPolyline]?.toString() ?? '',
+      arrivalPolyline: json[ApiKeys.arrivalPolyline]?.toString(),
       message:
           json[ApiKeys.message]?.toString() ?? BookingStrings.bookingSuccess,
       driverOffer: json[ApiKeys.driverOffer] is Map
@@ -71,6 +76,7 @@ class BookingResponse {
               Map<String, dynamic>.from(json[ApiKeys.vehicle] as Map),
             )
           : null,
+      tripId: (json[ApiKeys.tripId] as num?)?.toInt(),
       tripStatus: json[ApiKeys.tripStatus]?.toString(),
     );
   }
