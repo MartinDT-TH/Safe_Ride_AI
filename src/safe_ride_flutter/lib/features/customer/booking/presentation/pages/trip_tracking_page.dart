@@ -1,10 +1,17 @@
+import 'dart:async';
+import 'dart:math' as Math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:provider/provider.dart';
+import '../../../../../core/maps/polyline_decoder.dart';
+import '../../../../../core/services/socket_service.dart';
+import '../../../../../dependency_injection/injection.dart';
+import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/models/booking_catalog.dart';
 import '../../data/models/booking_location.dart';
 import '../../data/models/booking_response.dart';
-import '../../../home/presentation/widgets/customer_bottom_nav_bar.dart';
 import '../widgets/booking_cancel_flow.dart';
 
 enum TripTrackingState { arriving, inProgress }
@@ -35,6 +42,12 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     with TickerProviderStateMixin {
   GoogleMapController? _mapController;
   late AnimationController _pulseController;
+  final SocketService _socketService = getIt<SocketService>();
+  final List<LatLng> _arrivalRoutePoints = [];
+  final List<LatLng> _tripRoutePoints = [];
+  LatLng? _driverPosition;
+  double _driverHeading = 0;
+  int? _joinedTripId;
   static const _tealColor = Color(0xFF006B70);
 
   @override
@@ -44,12 +57,94 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
+    _initializeRoutes();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_connectTripSocket());
+    });
   }
 
   @override
   void dispose() {
+    final joinedTripId = _joinedTripId;
+    if (joinedTripId != null) {
+      unawaited(_socketService.leaveTrip(joinedTripId));
+    }
     _pulseController.dispose();
     super.dispose();
+  }
+
+  void _initializeRoutes() {
+    final arrivalPolyline = widget.booking.arrivalPolyline;
+    if (arrivalPolyline != null && arrivalPolyline.isNotEmpty) {
+      try {
+        _arrivalRoutePoints.addAll(decodePolyline(arrivalPolyline));
+      } on FormatException {
+        _arrivalRoutePoints.clear();
+      }
+    }
+
+    if (widget.booking.encodedPolyline.isNotEmpty) {
+      try {
+        _tripRoutePoints.addAll(decodePolyline(widget.booking.encodedPolyline));
+      } on FormatException {
+        _tripRoutePoints.clear();
+      }
+    }
+
+    if (_arrivalRoutePoints.isNotEmpty) {
+      _driverPosition = _arrivalRoutePoints.first;
+    }
+  }
+
+  Future<void> _connectTripSocket() async {
+    final tripId = widget.booking.tripId;
+    final accessToken = context.read<AuthProvider>().token;
+    if (tripId == null || accessToken == null || accessToken.isEmpty) {
+      return;
+    }
+
+    try {
+      await _socketService.connect(accessToken);
+      debugPrint('Tracking: Connected to Socket for Trip $tripId');
+      
+      _socketService.onDriverLocationUpdated((update) {
+        debugPrint('Tracking: Received Driver Update for Trip ${update.tripId} (Current: $tripId)');
+        if (!mounted || update.tripId != tripId) {
+          return;
+        }
+
+        setState(() {
+          if (_driverPosition != null) {
+            _driverHeading = _calculateHeading(_driverPosition!, LatLng(update.latitude, update.longitude));
+          }
+          _driverPosition = LatLng(update.latitude, update.longitude);
+          debugPrint('Tracking: Updated Driver Position to ${_driverPosition!.latitude}, ${_driverPosition!.longitude}');
+        });
+      });
+      await _socketService.joinTrip(tripId);
+      debugPrint('Tracking: Joined Trip Group $tripId');
+      _joinedTripId = tripId;
+    } catch (e) {
+      debugPrint('Tracking Error: $e');
+      if (mounted) {
+        _showMessage('Khong the ket noi theo doi vi tri tai xe.');
+      }
+    }
+  }
+
+  double _calculateHeading(LatLng start, LatLng end) {
+    final lat1 = start.latitude * (3.1415926535897932 / 180);
+    final lon1 = start.longitude * (3.1415926535897932 / 180);
+    final lat2 = end.latitude * (3.1415926535897932 / 180);
+    final lon2 = end.longitude * (3.1415926535897932 / 180);
+
+    final dLon = lon2 - lon1;
+    final y = Math.sin(dLon) * Math.cos(lat2);
+    final x = Math.cos(lat1) * Math.sin(lat2) -
+        Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+
+    final radians = Math.atan2(y, x);
+    return (radians * 180 / 3.1415926535897932 + 360) % 360;
   }
 
   void _showMessage(String message) {
@@ -60,7 +155,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         SnackBar(
           content: Text(message),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
           margin: const EdgeInsets.all(16),
         ),
       );
@@ -94,33 +191,177 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         target: LatLng(widget.pickup.latitude, widget.pickup.longitude),
         zoom: 15,
       ),
-      onMapCreated: (controller) => _mapController = controller,
+      onMapCreated: (controller) {
+        _mapController = controller;
+        _fitMapToVisibleRoute();
+      },
       zoomControlsEnabled: false,
       myLocationButtonEnabled: false,
       mapToolbarEnabled: false,
       myLocationEnabled: true,
-      markers: {
+      markers: _buildMarkers(),
+      polylines: _buildPolylines(),
+    );
+  }
+
+  Set<Marker> _buildMarkers() {
+    final markers = <Marker>{
+      Marker(
+        markerId: const MarkerId('pickup'),
+        position: LatLng(widget.pickup.latitude, widget.pickup.longitude),
+        anchor: const Offset(0.5, 0.5),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        infoWindow: const InfoWindow(title: 'Pickup'),
+      ),
+    };
+
+    final driverPosition = _driverPosition;
+    if (driverPosition != null) {
+      markers.add(
         Marker(
-          markerId: const MarkerId('pickup'),
-          position: LatLng(widget.pickup.latitude, widget.pickup.longitude),
+          markerId: const MarkerId('driver'),
+          position: driverPosition,
+          rotation: _driverHeading,
           anchor: const Offset(0.5, 0.5),
           icon: BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueAzure,
+            BitmapDescriptor.hueOrange,
           ),
-          infoWindow: const InfoWindow(title: 'Pickup'),
+          infoWindow: const InfoWindow(title: 'Driver'),
         ),
-        if (widget.state == TripTrackingState.arriving)
-          Marker(
-            markerId: const MarkerId('driver'),
-            position: LatLng(
-              widget.pickup.latitude + 0.001,
-              widget.pickup.longitude + 0.001,
-            ),
-            icon: BitmapDescriptor.defaultMarkerWithHue(
-              BitmapDescriptor.hueOrange,
-            ),
+      );
+    }
+
+    final destination = widget.destination;
+    if (destination != null) {
+      markers.add(
+        Marker(
+          markerId: const MarkerId('destination'),
+          position: LatLng(destination.latitude, destination.longitude),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+          infoWindow: const InfoWindow(title: 'Destination'),
+        ),
+      );
+    }
+
+    return markers;
+  }
+
+  Set<Polyline> _buildPolylines() {
+    final polylines = <Polyline>{};
+    final showArrival = widget.state == TripTrackingState.arriving;
+
+    if (_tripRoutePoints.length >= 2) {
+      polylines.add(
+        Polyline(
+          polylineId: const PolylineId('trip-route'),
+          points: _tripRoutePoints,
+          color: showArrival ? const Color(0x88006B70) : _tealColor,
+          width: showArrival ? 4 : 6,
+          zIndex: showArrival ? 1 : 3,
+        ),
+      );
+    }
+
+    if (showArrival) {
+      final arrivalPoints = _getDynamicArrivalPoints();
+      if (arrivalPoints.length >= 2) {
+        polylines.add(
+          Polyline(
+            polylineId: const PolylineId('arrival-route'),
+            points: arrivalPoints,
+            color: const Color(0xFF2F80ED),
+            width: 5,
+            patterns: [PatternItem.dash(12), PatternItem.gap(8)],
+            zIndex: 4,
           ),
-      },
+        );
+      }
+    }
+
+    return polylines;
+  }
+
+  List<LatLng> _getDynamicArrivalPoints() {
+    final driverPos = _driverPosition;
+    if (driverPos == null) return const [];
+
+    if (_arrivalRoutePoints.isEmpty) {
+      return [driverPos, LatLng(widget.pickup.latitude, widget.pickup.longitude)];
+    }
+
+    // Find the closest point index in the static route to the current driver position
+    int closestIdx = 0;
+    double minDistSq = double.maxFinite;
+    for (int i = 0; i < _arrivalRoutePoints.length; i++) {
+      final dx = driverPos.latitude - _arrivalRoutePoints[i].latitude;
+      final dy = driverPos.longitude - _arrivalRoutePoints[i].longitude;
+      final distSq = dx * dx + dy * dy;
+      if (distSq < minDistSq) {
+        minDistSq = distSq;
+        closestIdx = i;
+      }
+    }
+
+    // Return the route starting from the car's real position,
+    // followed by all remaining points in the static route.
+    return [driverPos, ..._arrivalRoutePoints.skip(closestIdx + 1)];
+  }
+
+  List<LatLng> _fallbackArrivalPoints() {
+    final driverPosition = _driverPosition;
+    if (driverPosition == null) {
+      return const [];
+    }
+
+    return [
+      driverPosition,
+      LatLng(widget.pickup.latitude, widget.pickup.longitude),
+    ];
+  }
+
+  void _fitMapToVisibleRoute() {
+    final driverPosition = _driverPosition;
+    final points = <LatLng>[
+      LatLng(widget.pickup.latitude, widget.pickup.longitude),
+    ];
+    final destination = widget.destination;
+    if (destination != null) {
+      points.add(LatLng(destination.latitude, destination.longitude));
+    }
+    if (driverPosition != null) {
+      points.add(driverPosition);
+    }
+    if (widget.state == TripTrackingState.arriving) {
+      points.addAll(_arrivalRoutePoints);
+    }
+    points.addAll(_tripRoutePoints);
+
+    if (points.length < 2) {
+      return;
+    }
+
+    final bounds = _boundsFor(points);
+    unawaited(
+      _mapController?.animateCamera(CameraUpdate.newLatLngBounds(bounds, 80)),
+    );
+  }
+
+  LatLngBounds _boundsFor(List<LatLng> points) {
+    var minLat = points.first.latitude;
+    var maxLat = points.first.latitude;
+    var minLng = points.first.longitude;
+    var maxLng = points.first.longitude;
+
+    for (final point in points.skip(1)) {
+      minLat = point.latitude < minLat ? point.latitude : minLat;
+      maxLat = point.latitude > maxLat ? point.latitude : maxLat;
+      minLng = point.longitude < minLng ? point.longitude : minLng;
+      maxLng = point.longitude > maxLng ? point.longitude : maxLng;
+    }
+
+    return LatLngBounds(
+      southwest: LatLng(minLat, minLng),
+      northeast: LatLng(maxLat, maxLng),
     );
   }
 
@@ -138,9 +379,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                   icon: Icons.home_rounded,
                   onPressed: () {
                     if (Navigator.of(context).canPop()) {
-                       Navigator.of(context).popUntil((route) => route.isFirst);
+                      Navigator.of(context).popUntil((route) => route.isFirst);
                     } else {
-                       widget.onSwitchTab?.call(0);
+                      widget.onSwitchTab?.call(0);
                     }
                   },
                 ),
@@ -264,11 +505,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
           color: Colors.red,
           shape: BoxShape.circle,
           boxShadow: [
-            BoxShadow(
-              color: Colors.redAccent,
-              blurRadius: 4,
-              spreadRadius: 2,
-            ),
+            BoxShadow(color: Colors.redAccent, blurRadius: 4, spreadRadius: 2),
           ],
         ),
       ),
@@ -474,7 +711,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                     child: _ActionButton(
                       icon: Icons.chat_bubble_rounded,
                       label: 'Nhắn tin',
-                      onPressed: () => _showMessage('Chức năng nhắn tin đang phát triển'),
+                      onPressed: () =>
+                          _showMessage('Chức năng nhắn tin đang phát triển'),
                     ),
                   ),
                   const SizedBox(width: 12),

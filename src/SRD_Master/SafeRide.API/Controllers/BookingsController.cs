@@ -356,7 +356,9 @@ public sealed class BookingsController : ControllerBase
                 result.Vehicle.PlateNumber,
                 result.Vehicle.Color,
                 result.Vehicle.IsMotorbike),
-            result.TripStatus);
+            result.TripStatus,
+            TripId: result.TripId,
+            ArrivalPolyline: result.ArrivalPolyline);
     }
 
     private bool TryGetCustomerId(out Guid customerId)

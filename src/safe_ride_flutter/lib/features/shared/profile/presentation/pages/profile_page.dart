@@ -189,15 +189,17 @@ class _ProfilePageState extends State<ProfilePage> {
                       onChanged: (val) async {
                         setState(() => _isDriverMode = val);
                         final role = val ? AppValues.roleDriver : AppValues.roleCustomer;
-                        await context.read<RoleProvider>().selectRole(role);
-                        
+                        final roleProvider = context.read<RoleProvider>();
+                        final navigator = Navigator.of(context);
+                        await roleProvider.selectRole(role);
+
                         if (!mounted) return;
-                        
-                        final Widget destination = val 
-                            ? const DriverDashboardPage() 
+
+                        final Widget destination = val
+                            ? const DriverDashboardPage()
                             : const CustomerHomePage();
-                            
-                        Navigator.of(context).pushAndRemoveUntil(
+
+                        navigator.pushAndRemoveUntil(
                           MaterialPageRoute(builder: (_) => destination),
                           (route) => false,
                         );

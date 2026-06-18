@@ -273,9 +273,11 @@ abstract final class ApiKeys {
   static const estimatedDistanceKm = 'estimatedDistanceKm';
   static const estimatedDurationMinutes = 'estimatedDurationMinutes';
   static const encodedPolyline = 'encodedPolyline';
+  static const arrivalPolyline = 'arrivalPolyline';
   static const driverOffer = 'driverOffer';
   static const vehicle = 'vehicle';
   static const tripStatus = 'tripStatus';
+  static const tripId = 'tripId';
   static const address = 'address';
   static const latitude = 'latitude';
   static const longitude = 'longitude';

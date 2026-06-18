@@ -39,4 +39,6 @@ public sealed record BookingResponse(
     BookingLocationResponse? Pickup = null,
     BookingLocationResponse? Destination = null,
     BookingVehicleSummaryResponse? Vehicle = null,
-    TripStatus? TripStatus = null);
+    TripStatus? TripStatus = null,
+    long? TripId = null,
+    string? ArrivalPolyline = null);

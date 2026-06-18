@@ -1,5 +1,6 @@
 using SafeRide.Domain.Entities;
 using SafeRide.Application.Features.Bookings.DTOs;
+using SafeRide.Application.Common.Models;
 
 namespace SafeRide.Application.Common.Interfaces;
 
@@ -23,6 +24,10 @@ public interface IBookingRepository
 
     Task<BookingDriverOfferDto?> GetLatestBookingDriverOfferAsync(
         long bookingId,
+        CancellationToken cancellationToken);
+
+    Task<LocationPoint?> GetDriverLocationAsync(
+        Guid driverId,
         CancellationToken cancellationToken);
 
     Task ExpireStaleNowBookingsAsync(
