@@ -43,11 +43,21 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
   StreamSubscription? _bookingStatusSubscription;
   bool _didLeaveSearch = false;
 
+  List<LatLng> _cachedPoints = const [];
+  String? _lastEncodedPolyline;
+
   List<LatLng> get _routePoints {
     final encoded = widget.fareEstimate?.encodedPolyline;
     if (encoded == null || encoded.isEmpty) return const [];
+
+    if (encoded == _lastEncodedPolyline) {
+      return _cachedPoints;
+    }
+
     try {
-      return decodePolyline(encoded);
+      _lastEncodedPolyline = encoded;
+      _cachedPoints = decodePolyline(encoded);
+      return _cachedPoints;
     } on FormatException {
       return const [];
     }
@@ -296,16 +306,27 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
                   ),
                 ),
               },
-              polylines: _routePoints.isEmpty
-                  ? {}
-                  : {
-                      Polyline(
-                        polylineId: const PolylineId('route'),
-                        points: _routePoints,
-                        color: _tealColor,
-                        width: 5,
-                      ),
-                    },
+              polylines: {
+                if (_routePoints.isNotEmpty)
+                  Polyline(
+                    polylineId: const PolylineId('route'),
+                    points: _routePoints,
+                    color: _tealColor,
+                    width: 5,
+                    jointType: JointType.round,
+                    startCap: Cap.roundCap,
+                    endCap: Cap.roundCap,
+                    zIndex: 1,
+                  ),
+                if (destPos != null && _routePoints.isEmpty)
+                  Polyline(
+                    polylineId: const PolylineId('direct_route'),
+                    points: [pickupPos, destPos],
+                    color: _tealColor.withOpacity(0.5),
+                    width: 4,
+                    patterns: [PatternItem.dash(20), PatternItem.gap(10)],
+                  ),
+              },
               zoomControlsEnabled: false,
               myLocationButtonEnabled: false,
               compassEnabled: false,
