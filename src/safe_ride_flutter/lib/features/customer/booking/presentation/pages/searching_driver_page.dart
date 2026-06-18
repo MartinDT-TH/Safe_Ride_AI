@@ -1,14 +1,19 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:provider/provider.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
+import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/models/booking_catalog.dart';
 import '../../data/models/booking_fare_estimate.dart';
 import '../../data/models/booking_location.dart';
 import '../../data/models/booking_response.dart';
+import '../providers/booking_provider.dart';
 import '../widgets/booking_cancel_flow.dart';
 import 'driver_profile_page.dart';
+import 'trip_tracking_page.dart';
 
 class SearchingDriverPage extends StatefulWidget {
   const SearchingDriverPage({
@@ -34,6 +39,9 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
   GoogleMapController? _controller;
   static const _tealColor = Color(0xFF006B70);
   Offset? _markerScreenOffset;
+  StreamSubscription? _nearbyDriversSubscription;
+  StreamSubscription? _bookingStatusSubscription;
+  bool _didLeaveSearch = false;
 
   List<LatLng> get _routePoints {
     final encoded = widget.fareEstimate?.encodedPolyline;
@@ -46,7 +54,18 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<BookingProvider>().setSearchingBooking(widget.booking);
+    });
+    _startPolling();
+  }
+
+  @override
   void dispose() {
+    _nearbyDriversSubscription?.cancel();
+    _bookingStatusSubscription?.cancel();
     _controller?.dispose();
     super.dispose();
   }
@@ -56,6 +75,104 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
     _fitRoute();
     // Delay slightly to ensure map is fully rendered before getting coordinates
     Future.delayed(const Duration(milliseconds: 300), _updateMarkerOffset);
+    _fetchNearbyDrivers();
+  }
+
+  void _startPolling() {
+    // Refresh nearby drivers every 5 seconds while on this page for better real-time feel
+    _nearbyDriversSubscription = Stream.periodic(const Duration(seconds: 5))
+        .listen((_) {
+          if (mounted) _fetchNearbyDrivers();
+        });
+
+    // Refresh booking status every 3 seconds to check for driver offers
+    _bookingStatusSubscription = Stream.periodic(const Duration(seconds: 3))
+        .listen((_) {
+          if (mounted) _refreshBookingStatus();
+        });
+  }
+
+  Future<void> _refreshBookingStatus() async {
+    final auth = context.read<AuthProvider>();
+    final bookingProvider = context.read<BookingProvider>();
+    final token = auth.token;
+    final bookingId =
+        bookingProvider.searchingBooking?.bookingId ??
+        widget.booking?.bookingId;
+
+    if (token != null && bookingId != null) {
+      final booking = await bookingProvider.refreshSearchingBooking(
+        token,
+        bookingId: bookingId,
+      );
+      if (!mounted || booking == null || _didLeaveSearch) {
+        return;
+      }
+
+      if (booking.bookingStatus == 'DriverAssigned' &&
+          booking.tripStatus != null &&
+          booking.driverOffer != null) {
+        _didLeaveSearch = true;
+        _nearbyDriversSubscription?.cancel();
+        _bookingStatusSubscription?.cancel();
+        bookingProvider.setActiveBooking(
+          booking: booking,
+          pickup: booking.pickup ?? widget.pickup,
+          destination: booking.destination ?? widget.destination,
+          vehicle: booking.vehicle ?? widget.vehicle,
+        );
+        await Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => TripTrackingPage(
+              state: booking.tripStatus == 'IN_PROGRESS'
+                  ? TripTrackingState.inProgress
+                  : TripTrackingState.arriving,
+              booking: booking,
+              pickup: booking.pickup ?? widget.pickup,
+              destination: booking.destination ?? widget.destination,
+              vehicle: booking.vehicle ?? widget.vehicle,
+            ),
+          ),
+        );
+        return;
+      }
+
+      if (booking.bookingStatus == 'Cancelled' ||
+          booking.bookingStatus == 'Expired' ||
+          booking.bookingStatus == 'Completed') {
+        _didLeaveSearch = true;
+        _nearbyDriversSubscription?.cancel();
+        _bookingStatusSubscription?.cancel();
+        bookingProvider.setSearchingBooking(null);
+        bookingProvider.clearActiveBooking();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Chuyến #${booking.bookingId} đã kết thúc.'),
+            ),
+          );
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
+      }
+    }
+  }
+
+  void _fetchNearbyDrivers() {
+    final auth = context.read<AuthProvider>();
+    final booking = context.read<BookingProvider>();
+    final token = auth.token;
+    if (token != null) {
+      debugPrint(
+        'Fetching nearby drivers for: ${widget.pickup.latitude}, ${widget.pickup.longitude}',
+      );
+      booking.fetchNearbyDrivers(
+        token,
+        latitude: widget.pickup.latitude,
+        longitude: widget.pickup.longitude,
+      );
+    } else {
+      debugPrint('Nearby drivers fetch skipped: Token is null');
+    }
   }
 
   Future<void> _updateMarkerOffset() async {
@@ -128,11 +245,15 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
         ? LatLng(widget.destination!.latitude, widget.destination!.longitude)
         : null;
 
+    final bookingProvider = context.watch<BookingProvider>();
+    final nearbyDrivers = bookingProvider.nearbyDrivers;
+    final currentBooking = bookingProvider.searchingBooking ?? widget.booking;
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        await handleBookingBack(context, booking: widget.booking);
+        await handleBookingBack(context, booking: currentBooking);
       },
       child: Scaffold(
         body: Stack(
@@ -164,6 +285,16 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
                       BitmapDescriptor.hueRed,
                     ),
                   ),
+                ...nearbyDrivers.map(
+                  (driver) => Marker(
+                    markerId: MarkerId('driver_${driver.driverId}'),
+                    position: LatLng(driver.latitude, driver.longitude),
+                    icon: BitmapDescriptor.defaultMarkerWithHue(
+                      BitmapDescriptor.hueOrange,
+                    ),
+                    anchor: const Offset(0.5, 0.5),
+                  ),
+                ),
               },
               polylines: _routePoints.isEmpty
                   ? {}
@@ -207,7 +338,7 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
                             ),
                             onPressed: () => handleBookingBack(
                               context,
-                              booking: widget.booking,
+                              booking: currentBooking,
                             ),
                           ),
                         ),
@@ -216,13 +347,15 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
                   ),
                   const Spacer(),
                   _SearchingPanel(
-                    booking: widget.booking,
-                    vehicle: widget.vehicle,
+                    booking: currentBooking,
+                    vehicle: widget.vehicle ?? currentBooking?.vehicle,
                     fareEstimate: widget.fareEstimate,
-                    pickupAddress: widget.pickup.address,
-                    onDriverPreviewTap: _shouldShowDriverCard(widget.booking)
+                    pickupAddress:
+                        currentBooking?.pickup?.address ??
+                        widget.pickup.address,
+                    onDriverPreviewTap: _shouldShowDriverCard(currentBooking)
                         ? () {
-                            final offer = widget.booking!.driverOffer!;
+                            final offer = currentBooking!.driverOffer!;
                             Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (_) => DriverProfilePage(
@@ -231,18 +364,22 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
                                   rating: offer.rating,
                                   tripCount: offer.tripCount,
                                   experienceYears: offer.experienceYears,
-                                  booking: widget.booking,
-                                  pickup: widget.pickup,
-                                  destination: widget.destination,
+                                  booking: currentBooking,
+                                  pickup:
+                                      currentBooking.pickup ?? widget.pickup,
+                                  destination:
+                                      currentBooking.destination ??
+                                      widget.destination,
                                   fareEstimate: widget.fareEstimate,
-                                  vehicle: widget.vehicle,
+                                  vehicle:
+                                      currentBooking.vehicle ?? widget.vehicle,
                                 ),
                               ),
                             );
                           }
                         : null,
                     onCancelTap: () =>
-                        handleBookingBack(context, booking: widget.booking),
+                        handleBookingBack(context, booking: currentBooking),
                     destinationAddress:
                         widget.destination?.address ?? 'Thuê theo giờ',
                   ),

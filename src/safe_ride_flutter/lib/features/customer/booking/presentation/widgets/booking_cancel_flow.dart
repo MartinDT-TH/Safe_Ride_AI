@@ -8,7 +8,15 @@ import 'cancel_booking_sheet.dart';
 
 bool isBookingCancellable(BookingResponse? booking) {
   final status = booking?.bookingStatus;
-  return status == null || status == 'Searching' || status == 'PendingSchedule';
+  final tripStatus = booking?.tripStatus;
+  if (status == null || status == 'Searching' || status == 'PendingSchedule') {
+    return true;
+  }
+
+  return status == 'DriverAssigned' &&
+      tripStatus != 'IN_PROGRESS' &&
+      tripStatus != 'COMPLETED' &&
+      tripStatus != 'CANCELLED';
 }
 
 Future<void> handleBookingBack(
@@ -57,6 +65,14 @@ Future<void> handleBookingBack(
     return;
   }
 
+  context.read<BookingProvider>().setSearchingBooking(null);
+  context.read<BookingProvider>().clearActiveBooking();
+  _showMessage(
+    context,
+    result.bookingStatus == 'Expired'
+        ? 'Chuyến đã hết thời gian chờ và được kết thúc.'
+        : 'Đã hủy chuyến thành công.',
+  );
   Navigator.of(context).popUntil((route) => route.isFirst);
 }
 

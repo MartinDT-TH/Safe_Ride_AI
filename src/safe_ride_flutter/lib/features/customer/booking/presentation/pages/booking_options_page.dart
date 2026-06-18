@@ -11,7 +11,6 @@ import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/models/booking_catalog.dart';
 import '../../data/models/booking_fare_estimate.dart';
 import '../../data/models/booking_location.dart';
-import '../../data/models/booking_response.dart';
 import '../../data/models/create_booking_request.dart';
 import '../providers/booking_provider.dart';
 import 'location_picker_page.dart';
@@ -355,7 +354,7 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
               onBack: () => Navigator.pop(context),
             ),
           ),
-          
+
           // Lớp trên: Panel trắng bo tròn
           Positioned(
             top:
@@ -393,8 +392,7 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                     ),
                   ),
                   const SizedBox(height: 18),
-                  if (catalog.services.isEmpty ||
-                      catalog.vehicles.isEmpty)
+                  if (catalog.services.isEmpty || catalog.vehicles.isEmpty)
                     const _EmptyCatalogMessage()
                   else ...[
                     _ServiceSelector(
@@ -484,7 +482,9 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                     BookingStrings.fareCalculationNote,
                     style: TextStyle(color: Color(0xFF667174), fontSize: 13),
                   ),
-                  const SizedBox(height: 100), // Khoảng trống cho nút bấm phía dưới
+                  const SizedBox(
+                    height: 100,
+                  ), // Khoảng trống cho nút bấm phía dưới
                 ],
               ),
             ),
@@ -1192,4 +1192,3 @@ class _MapConfigurationError extends StatelessWidget {
     );
   }
 }
-

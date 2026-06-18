@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import '../providers/driver_dashboard_provider.dart';
+import '../widgets/driver_bottom_nav_bar.dart';
 import '../../../../shared/history/presentation/pages/history_page.dart';
 import '../../../../shared/profile/presentation/pages/profile_page.dart';
 
@@ -32,7 +33,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
         index: _selectedIndex,
         children: pages,
       ),
-      bottomNavigationBar: _BottomNavBar(
+      bottomNavigationBar: DriverBottomNavBar(
         currentIndex: _selectedIndex,
         onTap: (index) => setState(() => _selectedIndex = index),
       ),
@@ -499,28 +500,4 @@ class _AddressItem extends StatelessWidget {
   }
 }
 
-class _BottomNavBar extends StatelessWidget {
-  final int currentIndex;
-  final ValueChanged<int> onTap;
-
-  const _BottomNavBar({required this.currentIndex, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return BottomNavigationBar(
-      currentIndex: currentIndex,
-      onTap: onTap,
-      type: BottomNavigationBarType.fixed,
-      selectedItemColor: const Color(0xFF006B70),
-      unselectedItemColor: Colors.grey,
-      selectedLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-      unselectedLabelStyle: const TextStyle(fontSize: 12),
-      items: const [
-        BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'Trang chủ'),
-        BottomNavigationBarItem(icon: Icon(Icons.history), label: 'Hoạt động'),
-        BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet), label: 'Ví'),
-        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Tài khoản'),
-      ],
-    );
-  }
-}
+// _BottomNavBar logic removed, now using DriverBottomNavBar widget
