@@ -17,6 +17,7 @@ class TripTrackingPage extends StatefulWidget {
     required this.pickup,
     this.destination,
     this.vehicle,
+    this.onSwitchTab,
   });
 
   final TripTrackingState state;
@@ -24,6 +25,7 @@ class TripTrackingPage extends StatefulWidget {
   final BookingLocation pickup;
   final BookingLocation? destination;
   final BookingVehicleOption? vehicle;
+  final ValueChanged<int>? onSwitchTab;
 
   @override
   State<TripTrackingPage> createState() => _TripTrackingPageState();
@@ -79,23 +81,10 @@ class _TripTrackingPageState extends State<TripTrackingPage>
           _buildBottomPanel(),
         ],
       ),
-      bottomNavigationBar: _buildBottomNavigationBar(),
     );
   }
 
-  Widget _buildBottomNavigationBar() {
-    return CustomerBottomNavBar(
-      currentIndex: 1, // Hoạt động is active
-      onTap: (index) {
-        if (index == 0) {
-          Navigator.of(context).popUntil((route) => route.isFirst);
-        } else if (index == 2) {
-          // Signal to go to Profile and pop
-          Navigator.of(context).pop('go_to_profile');
-        }
-      },
-    );
-  }
+  // _buildBottomNavigationBar removed to avoid duplicate navbar when hosted in CustomerHomePage IndexedStack
 
   // BottomNavigationBarItem _buildNavItem helper logic removed, now using CustomerBottomNavBar
 
@@ -147,7 +136,13 @@ class _TripTrackingPageState extends State<TripTrackingPage>
               children: [
                 _CircleIconButton(
                   icon: Icons.home_rounded,
-                  onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
+                  onPressed: () {
+                    if (Navigator.of(context).canPop()) {
+                       Navigator.of(context).popUntil((route) => route.isFirst);
+                    } else {
+                       widget.onSwitchTab?.call(0);
+                    }
+                  },
                 ),
                 const SizedBox(width: 12),
                 Expanded(

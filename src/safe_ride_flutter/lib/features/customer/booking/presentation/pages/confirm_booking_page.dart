@@ -199,18 +199,8 @@ class ConfirmBookingPage extends StatelessWidget {
           FilledButton(
             onPressed: () {
               Navigator.pop(dialogContext);
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(
-                  builder: (_) => TripTrackingPage(
-                    state: TripTrackingState.arriving,
-                    booking: result,
-                    pickup: pickup,
-                    destination: destination,
-                    vehicle: vehicle,
-                  ),
-                ),
-                (route) => route.isFirst,
-              );
+              // Directly go back to home, it will automatically show the tracking tab
+              Navigator.of(context).popUntil((route) => route.isFirst);
             },
             child: const Text('Theo dõi chuyến đi'),
           ),
