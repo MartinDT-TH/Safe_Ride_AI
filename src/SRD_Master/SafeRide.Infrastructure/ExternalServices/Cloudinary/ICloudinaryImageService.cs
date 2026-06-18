@@ -1,4 +1,4 @@
-namespace SafeRide.Infrastructure.ExternalServices;
+namespace SafeRide.Infrastructure.ExternalServices.Cloudinary;
 
 public interface ICloudinaryImageService
 {
