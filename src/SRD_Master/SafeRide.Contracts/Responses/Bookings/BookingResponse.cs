@@ -13,6 +13,18 @@ public sealed record BookingDriverOfferResponse(
     LicenseClass LicenseClass,
     DateTime ExpiresAt);
 
+public sealed record BookingLocationResponse(
+    string Address,
+    double Latitude,
+    double Longitude);
+
+public sealed record BookingVehicleSummaryResponse(
+    long Id,
+    string Name,
+    string PlateNumber,
+    string Color,
+    bool IsMotorbike);
+
 public sealed record BookingResponse(
     long BookingId,
     BookingType BookingType,
@@ -23,4 +35,8 @@ public sealed record BookingResponse(
     decimal EstimatedFare,
     string? EncodedPolyline,
     string Message,
-    BookingDriverOfferResponse? DriverOffer = null);
+    BookingDriverOfferResponse? DriverOffer = null,
+    BookingLocationResponse? Pickup = null,
+    BookingLocationResponse? Destination = null,
+    BookingVehicleSummaryResponse? Vehicle = null,
+    TripStatus? TripStatus = null);

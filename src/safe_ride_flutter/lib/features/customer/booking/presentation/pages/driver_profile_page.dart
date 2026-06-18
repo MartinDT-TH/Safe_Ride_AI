@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../../../core/constants/app_colors.dart';
+import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/models/booking_catalog.dart';
 import '../../data/models/booking_fare_estimate.dart';
 import '../../data/models/booking_location.dart';
 import '../../data/models/booking_response.dart';
+import '../providers/booking_provider.dart';
 import '../widgets/booking_cancel_flow.dart';
 import 'confirm_booking_page.dart';
 import 'driver_reviews_page.dart';
@@ -160,93 +163,166 @@ class DriverProfilePage extends StatelessWidget {
             ],
           ),
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => DriverReviewsPage(
-                          driverName: name,
-                          rating: rating,
-                          reviewCount: tripCount,
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => DriverReviewsPage(
+                              driverName: name,
+                              rating: rating,
+                              reviewCount: tripCount,
+                            ),
+                          ),
+                        );
+                      },
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        side: const BorderSide(
+                          color: AppColors.primary,
+                          width: 1.5,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                    );
-                  },
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    side: const BorderSide(
-                      color: AppColors.primary,
-                      width: 1.5,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                 child: const Text(
-                    'Xem đánh giá',
-                    style: TextStyle(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-              ),
-             const SizedBox(width: 16),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: booking == null || pickup == null
-                      ? null
-                      : () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => ConfirmBookingPage(
-                                booking: booking!,
-                                pickup: pickup!,
-                                destination: destination,
-                                fareEstimate: fareEstimate,
-                                vehicle: vehicle,
-                                driverName: name,
-                                driverRating: rating,
-                                driverTripCount: tripCount,
-                                driverExperienceYears: experienceYears,
-                              ),
-                            ),
-                          );
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                 child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.check_circle_outline, size: 20),
-                      SizedBox(width: 8),
-                      Text(
-                        'Xác nhận thuê',
+                      child: const Text(
+                        'Xem đánh giá',
                         style: TextStyle(
+                          color: AppColors.primary,
                           fontWeight: FontWeight.w700,
                           fontSize: 16,
                         ),
                       ),
-                   ],
-                 ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: booking == null || pickup == null
+                          ? null
+                          : () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => ConfirmBookingPage(
+                                    booking: booking!,
+                                    pickup: pickup!,
+                                    destination: destination,
+                                    fareEstimate: fareEstimate,
+                                    vehicle: vehicle,
+                                    driverName: name,
+                                    driverRating: rating,
+                                    driverTripCount: tripCount,
+                                    driverExperienceYears: experienceYears,
+                                  ),
+                                ),
+                              );
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.check_circle_outline, size: 20),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Xác nhận thuê',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: booking == null ? null : () => _rejectDriver(context),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    foregroundColor: const Color(0xFFC62828),
+                  ),
+                  child: const Text(
+                    'Từ chối tài xế này và tìm người khác',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
                 ),
               ),
-           ],
-         ),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  Future<void> _rejectDriver(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Từ chối tài xế?'),
+        content: const Text(
+          'Hệ thống sẽ bỏ qua tài xế này và tiếp tục tìm kiếm người khác cho bạn.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Quay lại'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Xác nhận từ chối'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    final token = context.read<AuthProvider>().token;
+    if (token == null) return;
+
+    final result = await context.read<BookingProvider>().rejectDriver(
+          token,
+          bookingId: booking!.bookingId,
+        );
+
+    if (!context.mounted) return;
+
+    if (result != null) {
+      Navigator.pop(context); // Go back to searching screen
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đang tìm tài xế khác cho bạn...')),
+      );
+    } else {
+      final error = context.read<BookingProvider>().errorMessage;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error ?? 'Không thể từ chối tài xế.')),
+      );
+    }
   }
 }
 

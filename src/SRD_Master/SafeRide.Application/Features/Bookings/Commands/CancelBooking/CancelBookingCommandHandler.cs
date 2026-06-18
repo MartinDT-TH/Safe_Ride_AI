@@ -29,6 +29,12 @@ public sealed class CancelBookingCommandHandler
         CancelBookingCommand request,
         CancellationToken cancellationToken)
     {
+        var utcNow = _dateTimeProvider.UtcNow;
+        await _bookingRepository.ExpireStaleNowBookingsAsync(
+            request.CustomerId,
+            utcNow,
+            cancellationToken);
+
         var booking = await _bookingRepository.GetCustomerBookingAsync(
             request.BookingId,
             request.CustomerId,
@@ -46,6 +52,11 @@ public sealed class CancelBookingCommandHandler
             return ToResponse(booking, "Chuyến đã được hủy trước đó.");
         }
 
+        if (booking.BookingStatus == BookingStatus.Expired)
+        {
+            return ToResponse(booking, "Chuyến đã hết thời gian chờ và được tự động kết thúc.");
+        }
+
         if (!CanCancel(booking.BookingStatus))
         {
             throw new BookingException(
@@ -54,10 +65,28 @@ public sealed class CancelBookingCommandHandler
                 409);
         }
 
-        var utcNow = _dateTimeProvider.UtcNow;
+        var previousStatus = booking.BookingStatus;
+        var reason = NormalizeReason(request.Reason);
+        if (previousStatus == BookingStatus.DriverAssigned)
+        {
+            var cancelledTrip = await _bookingRepository.CancelAssignedTripAsync(
+                booking.BookingId,
+                request.CustomerId,
+                reason,
+                utcNow,
+                cancellationToken);
+            if (!cancelledTrip)
+            {
+                throw new BookingException(
+                    "booking.cannot_cancel_started_trip",
+                    "Chuyến này đã bắt đầu hoặc đã kết thúc, không thể hủy.",
+                    409);
+            }
+        }
+
         booking.BookingStatus = BookingStatus.Cancelled;
         booking.CancelledBy = request.CustomerId;
-        booking.CancellationReason = NormalizeReason(request.Reason);
+        booking.CancellationReason = reason;
         booking.UpdatedAt = utcNow;
 
         await _bookingRepository.CancelActiveDriverOffersAsync(
@@ -79,7 +108,9 @@ public sealed class CancelBookingCommandHandler
 
     private static bool CanCancel(BookingStatus status)
     {
-        return status is BookingStatus.Searching or BookingStatus.PendingSchedule;
+        return status is BookingStatus.Searching
+            or BookingStatus.PendingSchedule
+            or BookingStatus.DriverAssigned;
     }
 
     private static string? NormalizeReason(string? reason)
