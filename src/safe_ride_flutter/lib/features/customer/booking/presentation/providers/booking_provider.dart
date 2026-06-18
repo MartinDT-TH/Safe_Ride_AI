@@ -25,12 +25,105 @@ class BookingProvider extends ChangeNotifier {
   List<NearbyDriver> _nearbyDrivers = [];
   int _estimateRequestId = 0;
 
+  BookingResponse? _activeBooking;
+  BookingLocation? _activePickup;
+  BookingLocation? _activeDestination;
+  BookingVehicleOption? _activeVehicle;
+
+  BookingResponse? _searchingBooking;
+
   bool get isLoading => _isLoading;
   bool get isEstimating => _isEstimating;
   String? get errorMessage => _errorMessage;
   BookingCatalog? get catalog => _catalog;
   BookingFareEstimate? get fareEstimate => _fareEstimate;
   List<NearbyDriver> get nearbyDrivers => _nearbyDrivers;
+
+  BookingResponse? get activeBooking => _activeBooking;
+  BookingLocation? get activePickup => _activePickup;
+  BookingLocation? get activeDestination => _activeDestination;
+  BookingVehicleOption? get activeVehicle => _activeVehicle;
+
+  BookingResponse? get searchingBooking => _searchingBooking;
+
+  bool get hasActiveNowBooking => _activeBooking != null;
+
+  void setSearchingBooking(BookingResponse? booking) {
+    _searchingBooking = booking;
+    notifyListeners();
+  }
+
+  Future<BookingResponse?> refreshSearchingBooking(
+    String accessToken, {
+    required int bookingId,
+  }) async {
+    final booking = await _repository.getBookingDetails(
+      accessToken,
+      bookingId: bookingId,
+    );
+    _searchingBooking = booking;
+    if (_isActiveNowBooking(booking)) {
+      _setActiveBookingFromResponse(booking);
+    } else if (booking.bookingStatus == 'Cancelled' ||
+        booking.bookingStatus == 'Expired' ||
+        booking.bookingStatus == 'Completed') {
+      _activeBooking = null;
+      _activePickup = null;
+      _activeDestination = null;
+      _activeVehicle = null;
+    }
+    notifyListeners();
+    return booking;
+  }
+
+  Future<BookingResponse?> loadActiveBooking(String accessToken) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final booking = await _repository.getActiveBooking(accessToken);
+      if (_isActiveNowBooking(booking)) {
+        _setActiveBookingFromResponse(booking!);
+      } else {
+        _activeBooking = null;
+        _activePickup = null;
+        _activeDestination = null;
+        _activeVehicle = null;
+      }
+      return booking;
+    } on BookingApiException catch (exception) {
+      _errorMessage = exception.message;
+      return null;
+    } catch (_) {
+      _errorMessage = AppStrings.genericError;
+      return null;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  void setActiveBooking({
+    BookingResponse? booking,
+    BookingLocation? pickup,
+    BookingLocation? destination,
+    BookingVehicleOption? vehicle,
+  }) {
+    _activeBooking = booking;
+    _activePickup = pickup ?? booking?.pickup;
+    _activeDestination = destination ?? booking?.destination;
+    _activeVehicle = vehicle ?? booking?.vehicle;
+    notifyListeners();
+  }
+
+  void clearActiveBooking() {
+    _activeBooking = null;
+    _activePickup = null;
+    _activeDestination = null;
+    _activeVehicle = null;
+    notifyListeners();
+  }
 
   Future<void> loadCatalog(String accessToken) async {
     if (_catalog != null) return;
@@ -121,18 +214,35 @@ class BookingProvider extends ChangeNotifier {
     );
   }
 
+  Future<BookingResponse?> rejectDriver(
+    String accessToken, {
+    required int bookingId,
+  }) {
+    return _run(
+      () => _repository.rejectDriver(accessToken, bookingId: bookingId),
+    );
+  }
+
   Future<BookingResponse?> cancelBooking(
     String accessToken, {
     required int bookingId,
     required String reason,
   }) {
-    return _run(
-      () => _repository.cancelBooking(
+    return _run(() async {
+      final booking = await _repository.cancelBooking(
         accessToken,
         bookingId: bookingId,
         reason: reason,
-      ),
-    );
+      );
+      if (_isTerminalBooking(booking)) {
+        _searchingBooking = null;
+        _activeBooking = null;
+        _activePickup = null;
+        _activeDestination = null;
+        _activeVehicle = null;
+      }
+      return booking;
+    });
   }
 
   Future<void> fetchNearbyDrivers(
@@ -173,5 +283,25 @@ class BookingProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  void _setActiveBookingFromResponse(BookingResponse booking) {
+    _activeBooking = booking;
+    _activePickup = booking.pickup;
+    _activeDestination = booking.destination;
+    _activeVehicle = booking.vehicle;
+  }
+
+  bool _isActiveNowBooking(BookingResponse? booking) {
+    return booking != null &&
+        booking.bookingType == AppValues.bookingNow &&
+        (booking.bookingStatus == 'Searching' ||
+            booking.bookingStatus == 'DriverAssigned');
+  }
+
+  bool _isTerminalBooking(BookingResponse booking) {
+    return booking.bookingStatus == 'Cancelled' ||
+        booking.bookingStatus == 'Expired' ||
+        booking.bookingStatus == 'Completed';
   }
 }

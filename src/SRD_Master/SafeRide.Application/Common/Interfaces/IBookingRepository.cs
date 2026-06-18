@@ -1,4 +1,5 @@
 using SafeRide.Domain.Entities;
+using SafeRide.Application.Features.Bookings.DTOs;
 
 namespace SafeRide.Application.Common.Interfaces;
 
@@ -9,6 +10,24 @@ public interface IBookingRepository
     Task<Booking?> GetCustomerBookingAsync(
         long bookingId,
         Guid customerId,
+        CancellationToken cancellationToken);
+
+    Task<Booking?> GetCustomerBookingWithDetailsAsync(
+        long bookingId,
+        Guid customerId,
+        CancellationToken cancellationToken);
+
+    Task<Booking?> GetActiveNowBookingAsync(
+        Guid customerId,
+        CancellationToken cancellationToken);
+
+    Task<BookingDriverOfferDto?> GetLatestBookingDriverOfferAsync(
+        long bookingId,
+        CancellationToken cancellationToken);
+
+    Task ExpireStaleNowBookingsAsync(
+        Guid customerId,
+        DateTime utcNow,
         CancellationToken cancellationToken);
         
     Task<Vehicle?> GetCustomerVehicleAsync(
@@ -35,6 +54,13 @@ public interface IBookingRepository
 
     Task CancelActiveDriverOffersAsync(
         long bookingId,
+        DateTime cancelledAt,
+        CancellationToken cancellationToken);
+
+    Task<bool> CancelAssignedTripAsync(
+        long bookingId,
+        Guid cancelledByUserId,
+        string? reason,
         DateTime cancelledAt,
         CancellationToken cancellationToken);
 }

@@ -96,6 +96,46 @@ public sealed class BookingTests
     }
 
     [Fact]
+    public async Task Handle_NowBookingWithActiveNowBooking_Throws()
+    {
+        var fixture = new HandlerFixture();
+        fixture.Repository.ActiveNowBooking = new Booking
+        {
+            BookingId = 10,
+            CustomerId = HandlerFixture.CustomerId,
+            BookingType = BookingType.Now,
+            BookingStatus = BookingStatus.Searching
+        };
+        var command = fixture.CreateCommand(BookingType.Now, null);
+
+        var exception = await Assert.ThrowsAsync<BookingException>(
+            () => fixture.Handler.Handle(command, CancellationToken.None));
+
+        Assert.Equal("booking.active_now_exists", exception.Code);
+        Assert.Null(fixture.Repository.AddedBooking);
+        Assert.Empty(fixture.MatchingService.BookingIds);
+    }
+
+    [Fact]
+    public async Task Handle_ScheduledBookingWithActiveNowBooking_IsAllowed()
+    {
+        var fixture = new HandlerFixture();
+        fixture.Repository.ActiveNowBooking = new Booking
+        {
+            BookingId = 10,
+            CustomerId = HandlerFixture.CustomerId,
+            BookingType = BookingType.Now,
+            BookingStatus = BookingStatus.DriverAssigned
+        };
+        var command = fixture.CreateCommand(BookingType.Scheduled, UtcNow.AddMinutes(30));
+
+        var result = await fixture.Handler.Handle(command, CancellationToken.None);
+
+        Assert.Equal(BookingStatus.PendingSchedule, result.BookingStatus);
+        Assert.NotNull(fixture.Repository.AddedBooking);
+    }
+
+    [Fact]
     public async Task Handle_ScheduledBookingLessThanThirtyMinutes_Throws()
     {
         var fixture = new HandlerFixture();
@@ -185,6 +225,7 @@ public sealed class BookingTests
     {
         public Vehicle? Vehicle { get; init; }
         public PricingRule? PricingRule { get; init; }
+        public Booking? ActiveNowBooking { get; set; }
         public Booking? AddedBooking { get; private set; }
 
         public Task AddAsync(Booking booking, CancellationToken cancellationToken)
@@ -200,6 +241,36 @@ public sealed class BookingTests
             CancellationToken cancellationToken)
         {
             return Task.FromResult<Booking?>(AddedBooking);
+        }
+
+        public Task<Booking?> GetCustomerBookingWithDetailsAsync(
+            long bookingId,
+            Guid customerId,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult<Booking?>(AddedBooking);
+        }
+
+        public Task<Booking?> GetActiveNowBookingAsync(
+            Guid customerId,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(ActiveNowBooking);
+        }
+
+        public Task<Application.Features.Bookings.DTOs.BookingDriverOfferDto?> GetLatestBookingDriverOfferAsync(
+            long bookingId,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult<Application.Features.Bookings.DTOs.BookingDriverOfferDto?>(null);
+        }
+
+        public Task ExpireStaleNowBookingsAsync(
+            Guid customerId,
+            DateTime utcNow,
+            CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
         }
 
         public Task<Vehicle?> GetCustomerVehicleAsync(
@@ -253,6 +324,16 @@ public sealed class BookingTests
             CancellationToken cancellationToken)
         {
             return Task.CompletedTask;
+        }
+
+        public Task<bool> CancelAssignedTripAsync(
+            long bookingId,
+            Guid cancelledByUserId,
+            string? reason,
+            DateTime cancelledAt,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(true);
         }
     }
 

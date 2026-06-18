@@ -47,6 +47,22 @@ class BookingRepositoryImpl implements BookingRepository {
   }
 
   @override
+  Future<BookingResponse> getBookingDetails(
+    String accessToken, {
+    required int bookingId,
+  }) {
+    return _remoteDatasource.getBookingDetails(
+      accessToken,
+      bookingId: bookingId,
+    );
+  }
+
+  @override
+  Future<BookingResponse?> getActiveBooking(String accessToken) {
+    return _remoteDatasource.getActiveBooking(accessToken);
+  }
+
+  @override
   Future<BookingResponse> cancelBooking(
     String accessToken, {
     required int bookingId,
@@ -65,6 +81,14 @@ class BookingRepositoryImpl implements BookingRepository {
     required int bookingId,
   }) {
     return _remoteDatasource.confirmDriver(accessToken, bookingId: bookingId);
+  }
+
+  @override
+  Future<BookingResponse> rejectDriver(
+    String accessToken, {
+    required int bookingId,
+  }) {
+    return _remoteDatasource.rejectDriver(accessToken, bookingId: bookingId);
   }
 
   @override

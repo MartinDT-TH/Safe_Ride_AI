@@ -22,6 +22,13 @@ abstract class BookingRepository {
     CreateBookingRequest request,
   );
 
+  Future<BookingResponse> getBookingDetails(
+    String accessToken, {
+    required int bookingId,
+  });
+
+  Future<BookingResponse?> getActiveBooking(String accessToken);
+
   Future<BookingResponse> cancelBooking(
     String accessToken, {
     required int bookingId,
@@ -29,6 +36,11 @@ abstract class BookingRepository {
   });
 
   Future<BookingResponse> confirmDriver(
+    String accessToken, {
+    required int bookingId,
+  });
+
+  Future<BookingResponse> rejectDriver(
     String accessToken, {
     required int bookingId,
   });
