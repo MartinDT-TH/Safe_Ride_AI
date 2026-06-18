@@ -18,7 +18,7 @@ class HistoryProvider extends ChangeNotifier {
       case HistoryFilter.cancelled:
         return _allTrips.where((t) => t.status == HistoryTripStatus.cancelled).toList();
       case HistoryFilter.all:
-      default:
+      
         return _allTrips;
     }
   }

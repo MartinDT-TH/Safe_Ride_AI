@@ -265,6 +265,13 @@ public sealed class BookingTests
             return Task.FromResult<Application.Features.Bookings.DTOs.BookingDriverOfferDto?>(null);
         }
 
+        public Task<LocationPoint?> GetDriverLocationAsync(
+            Guid driverId,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult<LocationPoint?>(null);
+        }
+
         public Task ExpireStaleNowBookingsAsync(
             Guid customerId,
             DateTime utcNow,
