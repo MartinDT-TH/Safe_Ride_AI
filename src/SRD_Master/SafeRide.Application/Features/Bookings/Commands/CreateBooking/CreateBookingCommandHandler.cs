@@ -48,6 +48,7 @@ public sealed class CreateBookingCommandHandler
         var utcNow = _dateTimeProvider.UtcNow;
         ValidateSchedule(request.BookingType, request.ScheduledAt, utcNow);
         ValidatePickup(request);
+        await EnsureNoActiveNowBookingAsync(request, cancellationToken);
 
         var vehicle = await _bookingRepository.GetCustomerVehicleAsync(
             request.VehicleId,
@@ -239,6 +240,29 @@ public sealed class CreateBookingCommandHandler
                 "Thời gian đặt trước phải được gửi theo múi giờ UTC.",
                 400);
         }
+    }
+
+    private async Task EnsureNoActiveNowBookingAsync(
+        CreateBookingCommand request,
+        CancellationToken cancellationToken)
+    {
+        if (request.BookingType != BookingType.Now)
+        {
+            return;
+        }
+
+        var activeBooking = await _bookingRepository.GetActiveNowBookingAsync(
+            request.CustomerId,
+            cancellationToken);
+        if (activeBooking is null)
+        {
+            return;
+        }
+
+        throw new BookingException(
+            "booking.active_now_exists",
+            "Bạn đang có chuyến đang hoạt động. Vui lòng theo dõi chuyến ở mục Hoạt động.",
+            409);
     }
 
     private static void ValidatePickup(CreateBookingCommand request)
