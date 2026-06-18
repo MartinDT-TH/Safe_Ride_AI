@@ -63,20 +63,34 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
 
     final provider = context.read<BookingProvider>();
     provider.clearFareEstimate();
-    final currentLocation = await provider.getCurrentLocation();
-    await provider.loadCatalog(token);
+
+    final currentLocationFuture = provider.getCurrentLocation().timeout(
+      const Duration(seconds: 15),
+      onTimeout: () => null,
+    );
+    await provider.loadCatalog(token, forceRefresh: true);
+
     if (!mounted) return;
 
     final catalog = provider.catalog;
-    setState(() {
-      _pickup = currentLocation;
-      _service = _selectInitialService(catalog?.services ?? const []);
-      _vehicle = catalog?.vehicles.firstOrNull;
-      if (widget.showSchedule) {
-        _scheduledAt = DateTime.now().add(const Duration(minutes: 31));
-      }
-    });
-    await _refreshEstimate();
+    if (catalog != null) {
+      setState(() {
+        _service = _selectInitialService(catalog.services);
+        _vehicle = catalog.vehicles.firstOrNull;
+        if (widget.showSchedule) {
+          _scheduledAt = DateTime.now().add(const Duration(minutes: 31));
+        }
+      });
+    } else if (provider.errorMessage != null) {
+      _showMessage(provider.errorMessage!);
+      return;
+    }
+
+    final currentLocation = await currentLocationFuture.catchError((_) => null);
+    if (mounted && currentLocation != null) {
+      setState(() => _pickup = currentLocation);
+      await _refreshEstimate();
+    }
   }
 
   BookingServiceOption? _selectInitialService(
@@ -333,8 +347,10 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
   Widget build(BuildContext context) {
     final provider = context.watch<BookingProvider>();
     final catalog = provider.catalog;
+    final hasError = provider.errorMessage != null;
 
-    if (catalog == null || _service == null || _vehicle == null) {
+    // Show loading only if catalog is null AND there is no error message
+    if (catalog == null && !hasError) {
       return const AppLoadingScreen(message: 'Đang tải thông tin dịch vụ...');
     }
 
@@ -392,9 +408,18 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                     ),
                   ),
                   const SizedBox(height: 18),
-                  if (catalog.services.isEmpty || catalog.vehicles.isEmpty)
-                    const _EmptyCatalogMessage()
-                  else ...[
+                  if (catalog == null ||
+                      catalog.services.isEmpty ||
+                      catalog.vehicles.isEmpty) ...[
+                    const _EmptyCatalogMessage(),
+                    if (hasError) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        provider.errorMessage!,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    ],
+                  ] else ...[
                     _ServiceSelector(
                       services: catalog.services,
                       selected: _selectedServiceOrFirst(catalog.services),
@@ -423,7 +448,7 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                           : () => _pickLocation(LocationPickerType.destination),
                       estimatedHours: _isHourly ? _estimatedHours : null,
                     ),
-                    if (provider.errorMessage != null) ...[
+                    if (hasError) ...[
                       const SizedBox(height: 10),
                       Text(
                         provider.errorMessage!,
@@ -539,9 +564,10 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
     return '$bufferđ';
   }
 
-  BookingServiceOption _selectedServiceOrFirst(
+  BookingServiceOption? _selectedServiceOrFirst(
     List<BookingServiceOption> services,
   ) {
+    if (services.isEmpty) return null;
     return services.firstWhere(
       (service) => service.id == _service?.id,
       orElse: () => services.first,
@@ -570,11 +596,21 @@ class _MapPreviewState extends State<_MapPreview> {
   static const _fallback = LatLng(10.7769, 106.7009);
   GoogleMapController? _controller;
 
+  List<LatLng> _cachedPoints = const [];
+  String? _lastEncodedPolyline;
+
   List<LatLng> get _routePoints {
     final encoded = widget.estimate?.encodedPolyline;
     if (encoded == null || encoded.isEmpty) return const [];
+
+    if (encoded == _lastEncodedPolyline) {
+      return _cachedPoints;
+    }
+
     try {
-      return decodePolyline(encoded);
+      _lastEncodedPolyline = encoded;
+      _cachedPoints = decodePolyline(encoded);
+      return _cachedPoints;
     } on FormatException {
       return const [];
     }
@@ -643,7 +679,7 @@ class _MapPreviewState extends State<_MapPreview> {
           southwest: LatLng(minLatitude, minLongitude),
           northeast: LatLng(maxLatitude, maxLongitude),
         ),
-        54,
+        80, // Increased padding for better visibility
       ),
     );
   }
@@ -684,16 +720,28 @@ class _MapPreviewState extends State<_MapPreview> {
                 ),
               ),
           },
-          polylines: routePoints.isEmpty
-              ? {}
-              : {
-                  Polyline(
-                    polylineId: const PolylineId('route'),
-                    points: routePoints,
-                    color: AppColors.primary,
-                    width: 5,
-                  ),
-                },
+          polylines: {
+            if (routePoints.isNotEmpty)
+              Polyline(
+                polylineId: const PolylineId('route'),
+                points: routePoints,
+                color: AppColors.primary,
+                width: 5,
+                jointType: JointType.round,
+                startCap: Cap.roundCap,
+                endCap: Cap.roundCap,
+                zIndex: 1,
+              )
+            else if (widget.pickup != null && destination != null)
+              Polyline(
+                polylineId: const PolylineId('direct_route'),
+                points: [_pickup, destination],
+                color: AppColors.primary.withOpacity(0.5),
+                width: 4,
+                patterns: [PatternItem.dash(20), PatternItem.gap(10)],
+                zIndex: 0,
+              ),
+          },
           zoomControlsEnabled: false,
           mapToolbarEnabled: false,
           myLocationButtonEnabled: false,

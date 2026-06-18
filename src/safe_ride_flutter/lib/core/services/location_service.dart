@@ -20,9 +20,31 @@ class LocationService {
       throw const LocationServiceException(LocationStrings.permissionRequired);
     }
 
-    final position = await Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
-    );
+    final lastKnown = await Geolocator.getLastKnownPosition();
+    if (lastKnown != null) {
+      final age = DateTime.now().difference(lastKnown.timestamp);
+      if (age.inMinutes <= 5) {
+        return await _toBookingLocation(lastKnown);
+      }
+    }
+
+    final position =
+        await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 12),
+          ),
+        ).catchError((_) async {
+          final lastKnown = await Geolocator.getLastKnownPosition();
+          if (lastKnown != null) return lastKnown;
+          throw const LocationServiceException(
+            LocationStrings.locationNotFound,
+          );
+        });
+    return await _toBookingLocation(position);
+  }
+
+  Future<BookingLocation> _toBookingLocation(Position position) async {
     final address = await _reverseGeocode(
       position.latitude,
       position.longitude,
@@ -71,7 +93,10 @@ class LocationService {
 
   Future<String> _reverseGeocode(double latitude, double longitude) async {
     try {
-      final placemarks = await placemarkFromCoordinates(latitude, longitude);
+      final placemarks = await placemarkFromCoordinates(
+        latitude,
+        longitude,
+      ).timeout(const Duration(seconds: 4));
       if (placemarks.isEmpty) return LocationStrings.currentLocation;
 
       final place = placemarks.first;
@@ -94,4 +119,3 @@ class LocationServiceException implements Exception {
   @override
   String toString() => message;
 }
-
