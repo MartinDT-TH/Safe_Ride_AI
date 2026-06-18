@@ -13,24 +13,24 @@ using StackExchange.Redis;
  * 3. Update the 'DriverId' to match a driver in your database.
  */
 
-namespace SafeRide.Simulator;
+namespace SafeRide.Infrastructure.Simulator;
 
 public class DriverLocationSimulator
 {
-    public static async Task Main(string[] args)
-    {
-        await RunAsync();
-    }
+    // public static async Task Main(string[] args)
+    // {
+    //     await RunAsync();
+    // }
 
     // Configuration
     private const string RedisConnectionString = "localhost:6379";
-    private static readonly Guid DriverId = Guid.Parse("10000000-0000-0000-0000-000000000003"); // Replace with actual Driver ID
+    private static readonly Guid DriverId = Guid.Parse("10000000-0000-0000-0000-000000000001"); // Replace with actual Driver ID
     private const string GeoKey = "sr:geo:drivers:online";
     private static string LocationKey(Guid id) => $"sr:driver:location:{id}";
     private static string OnlineKey(Guid id) => $"sr:driver:online:{id}";
     private static string StatusKey(Guid id) => $"sr:driver:status:{id}";
 
-    public static async Task RunAsync()
+    public async Task RunAsync()
     {
         Console.WriteLine("--- SafeRide Driver Location Simulator ---");
         Console.WriteLine($"Simulating Driver: {DriverId}");
@@ -50,7 +50,8 @@ public class DriverLocationSimulator
             (16.0520, 108.2020),
             (16.0505, 108.1980),
             (16.0490, 108.1940),
-            (16.0475, 108.1900)  // Near Airport
+            (16.0475, 108.1900),  // Near Airport
+            (16.05702162564365, 108.20252646698634) // Da Nang Airport
         };
 
         // Set Driver Online Status
