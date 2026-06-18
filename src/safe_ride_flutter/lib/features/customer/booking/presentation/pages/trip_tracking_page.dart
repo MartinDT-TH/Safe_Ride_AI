@@ -258,6 +258,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
           color: showArrival ? const Color(0x88006B70) : _tealColor,
           width: showArrival ? 4 : 6,
           zIndex: showArrival ? 1 : 3,
+          jointType: JointType.round,
+          startCap: Cap.roundCap,
+          endCap: Cap.roundCap,
         ),
       );
     }
@@ -273,6 +276,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
             width: 5,
             patterns: [PatternItem.dash(12), PatternItem.gap(8)],
             zIndex: 4,
+            jointType: JointType.round,
+            startCap: Cap.roundCap,
+            endCap: Cap.roundCap,
           ),
         );
       }
