@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Features.Bookings.DTOs;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
 using SafeRide.Infrastructure.Persistence;
@@ -13,6 +14,7 @@ public sealed class BookingRepository : IBookingRepository
     private readonly ApplicationDbContext _dbContext;
     private readonly IRedisService _redisService;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly TimeSpan NowBookingSearchTimeout = TimeSpan.FromMinutes(10);
 
     public BookingRepository(
         ApplicationDbContext dbContext,
@@ -39,6 +41,167 @@ public sealed class BookingRepository : IBookingRepository
                 booking => booking.BookingId == bookingId
                     && booking.CustomerId == customerId,
                 cancellationToken);
+    }
+
+    public Task<Booking?> GetCustomerBookingWithDetailsAsync(
+        long bookingId,
+        Guid customerId,
+        CancellationToken cancellationToken)
+    {
+        return _dbContext.Bookings
+            .AsNoTracking()
+            .Include(booking => booking.Vehicle)
+            .Include(booking => booking.Trip)
+            .FirstOrDefaultAsync(
+                booking => booking.BookingId == bookingId
+                    && booking.CustomerId == customerId,
+                cancellationToken);
+    }
+
+    public Task<Booking?> GetActiveNowBookingAsync(
+        Guid customerId,
+        CancellationToken cancellationToken)
+    {
+        return _dbContext.Bookings
+            .AsNoTracking()
+            .Include(booking => booking.Vehicle)
+            .Include(booking => booking.Trip)
+            .Where(booking => booking.CustomerId == customerId
+                && booking.BookingType == BookingType.Now
+                && (booking.BookingStatus == BookingStatus.Searching
+                    || booking.BookingStatus == BookingStatus.DriverAssigned))
+            .OrderByDescending(booking => booking.UpdatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<BookingDriverOfferDto?> GetLatestBookingDriverOfferAsync(
+        long bookingId,
+        CancellationToken cancellationToken)
+    {
+        var latestOffer = await (
+            from driverOffer in _dbContext.BookingDriverOffers.AsNoTracking()
+            join profile in _dbContext.DriverProfiles.AsNoTracking()
+                on driverOffer.DriverId equals profile.DriverId
+            join user in _dbContext.AspNetUsers.AsNoTracking()
+                on driverOffer.DriverId equals user.Id
+            where driverOffer.BookingId == bookingId
+                && (driverOffer.OfferStatus == DriverOfferStatus.Offered
+                    || driverOffer.OfferStatus == DriverOfferStatus.Confirmed)
+            orderby driverOffer.ConfirmedAt ?? driverOffer.OfferedAt descending
+            select new
+            {
+                driverOffer.Id,
+                driverOffer.DriverId,
+                user.FullName,
+                user.UserName,
+                user.AvatarUrl,
+                profile.ExperienceYears,
+                driverOffer.ExpiresAt
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (latestOffer is null)
+        {
+            return null;
+        }
+
+        var licenseClass = await _dbContext.DriverKycs
+            .AsNoTracking()
+            .Where(kyc => kyc.DriverId == latestOffer.DriverId
+                && kyc.DocumentType == KycDocumentType.DRIVING_LICENSE
+                && kyc.KycStatus == KycStatus.Approved
+                && kyc.LicenseClass.HasValue)
+            .OrderByDescending(kyc => kyc.VerifiedAt ?? kyc.CreatedAt)
+            .Select(kyc => kyc.LicenseClass)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var ratingStats = await _dbContext.Ratings
+            .AsNoTracking()
+            .Where(rating => rating.DriverId == latestOffer.DriverId)
+            .GroupBy(rating => rating.DriverId)
+            .Select(group => new
+            {
+                Rating = Math.Round(group.Average(rating => (double)rating.RatingScore), 1),
+                TripCount = group.Count()
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return new BookingDriverOfferDto(
+            latestOffer.Id,
+            latestOffer.DriverId,
+            latestOffer.FullName ?? latestOffer.UserName ?? "Tài xế SafeRide",
+            latestOffer.AvatarUrl,
+            ratingStats?.Rating ?? 0,
+            ratingStats?.TripCount ?? 0,
+            latestOffer.ExperienceYears ?? 0,
+            licenseClass ?? LicenseClass.A1,
+            latestOffer.ExpiresAt);
+    }
+
+    public async Task ExpireStaleNowBookingsAsync(
+        Guid customerId,
+        DateTime utcNow,
+        CancellationToken cancellationToken)
+    {
+        var bookings = await _dbContext.Bookings
+            .Include(booking => booking.Trip)
+            .Include(booking => booking.DriverOffers)
+            .Where(booking => booking.CustomerId == customerId
+                && booking.BookingType == BookingType.Now
+                && (booking.BookingStatus == BookingStatus.Searching
+                    || booking.BookingStatus == BookingStatus.DriverAssigned))
+            .ToListAsync(cancellationToken);
+
+        var changed = false;
+        foreach (var booking in bookings)
+        {
+            if (!ShouldExpireNowBooking(booking, utcNow))
+            {
+                continue;
+            }
+
+            booking.BookingStatus = BookingStatus.Expired;
+            booking.UpdatedAt = utcNow;
+            changed = true;
+
+            foreach (var offer in booking.DriverOffers
+                .Where(offer => offer.OfferStatus == DriverOfferStatus.Offered))
+            {
+                offer.OfferStatus = DriverOfferStatus.Expired;
+                offer.ExpiredAt ??= utcNow;
+                await _redisService.RemoveAsync(
+                    RedisKeys.MatchingOffer(offer.BookingId, offer.DriverId));
+                await _redisService.RemoveAsync(
+                    RedisKeys.MatchingDriverLock(offer.DriverId));
+            }
+
+            await _redisService.RemoveAsync(RedisKeys.MatchingBooking(booking.BookingId));
+        }
+
+        if (changed)
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private static bool ShouldExpireNowBooking(Booking booking, DateTime utcNow)
+    {
+        if (booking.BookingStatus == BookingStatus.DriverAssigned)
+        {
+            return booking.Trip is null
+                || booking.Trip.TripStatus == TripStatus.CANCELLED;
+        }
+
+        var latestOffer = booking.DriverOffers
+            .Where(offer => offer.OfferStatus == DriverOfferStatus.Offered)
+            .OrderByDescending(offer => offer.OfferedAt)
+            .FirstOrDefault();
+        if (latestOffer is not null)
+        {
+            return latestOffer.ExpiresAt <= utcNow;
+        }
+
+        return booking.UpdatedAt <= utcNow.Subtract(NowBookingSearchTimeout);
     }
     
     public Task<Vehicle?> GetCustomerVehicleAsync(
@@ -174,7 +337,8 @@ public sealed class BookingRepository : IBookingRepository
     {
         var offers = await _dbContext.BookingDriverOffers
             .Where(offer => offer.BookingId == bookingId
-                && offer.OfferStatus == DriverOfferStatus.Offered)
+                && (offer.OfferStatus == DriverOfferStatus.Offered
+                    || offer.OfferStatus == DriverOfferStatus.Confirmed))
             .ToListAsync(cancellationToken);
 
         foreach (var offer in offers)
@@ -188,5 +352,78 @@ public sealed class BookingRepository : IBookingRepository
         }
 
         await _redisService.RemoveAsync(RedisKeys.MatchingBooking(bookingId));
+    }
+
+    public async Task<bool> CancelAssignedTripAsync(
+        long bookingId,
+        Guid cancelledByUserId,
+        string? reason,
+        DateTime cancelledAt,
+        CancellationToken cancellationToken)
+    {
+        var trip = await _dbContext.Trips
+            .FirstOrDefaultAsync(
+                trip => trip.BookingId == bookingId,
+                cancellationToken);
+        if (trip is null)
+        {
+            var confirmedOffer = await _dbContext.BookingDriverOffers
+                .AsNoTracking()
+                .Where(offer => offer.BookingId == bookingId
+                    && offer.OfferStatus == DriverOfferStatus.Confirmed)
+                .OrderByDescending(offer => offer.ConfirmedAt ?? offer.OfferedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (confirmedOffer is not null)
+            {
+                await ReleaseDriverAsync(
+                    confirmedOffer.DriverId,
+                    cancelledAt,
+                    cancellationToken);
+            }
+
+            return true;
+        }
+
+        if (trip.TripStatus is TripStatus.IN_PROGRESS
+            or TripStatus.COMPLETED
+            or TripStatus.CANCELLED)
+        {
+            return false;
+        }
+
+        trip.TripStatus = TripStatus.CANCELLED;
+        trip.CancelledByUserId = cancelledByUserId;
+        trip.CancellationReason = reason;
+
+        await ReleaseDriverAsync(trip.DriverId, cancelledAt, cancellationToken);
+        await _redisService.RemoveAsync(RedisKeys.TripLive(trip.Id));
+
+        return true;
+    }
+
+    private async Task ReleaseDriverAsync(
+        Guid driverId,
+        DateTime releasedAt,
+        CancellationToken cancellationToken)
+    {
+        var driverProfile = await _dbContext.DriverProfiles
+            .FirstOrDefaultAsync(
+                profile => profile.DriverId == driverId,
+                cancellationToken);
+        if (driverProfile is not null)
+        {
+            driverProfile.WorkStatus = DriverWorkStatus.Online;
+            driverProfile.LastActiveAt = releasedAt;
+            driverProfile.UpdatedAt = releasedAt;
+        }
+
+        await _redisService.SetAsync(
+            RedisKeys.DriverOnline(driverId),
+            "1",
+            TimeSpan.FromMinutes(5));
+        await _redisService.SetAsync(
+            RedisKeys.DriverStatus(driverId),
+            DriverWorkStatus.Online.ToString(),
+            TimeSpan.FromMinutes(5));
     }
 }
