@@ -9,6 +9,7 @@ import '../../data/models/booking_location.dart';
 import '../../data/models/booking_response.dart';
 import '../../data/models/create_booking_request.dart';
 import '../providers/booking_provider.dart';
+import 'trip_tracking_page.dart';
 
 class ConfirmBookingPage extends StatelessWidget {
   const ConfirmBookingPage({
@@ -170,6 +171,14 @@ class ConfirmBookingPage extends StatelessWidget {
       return;
     }
 
+    // Set active booking in provider
+    context.read<BookingProvider>().setActiveBooking(
+          booking: result,
+          pickup: pickup,
+          destination: destination,
+          vehicle: vehicle,
+        );
+
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -190,9 +199,20 @@ class ConfirmBookingPage extends StatelessWidget {
           FilledButton(
             onPressed: () {
               Navigator.pop(dialogContext);
-              Navigator.of(context).popUntil((route) => route.isFirst);
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(
+                  builder: (_) => TripTrackingPage(
+                    state: TripTrackingState.arriving,
+                    booking: result,
+                    pickup: pickup,
+                    destination: destination,
+                    vehicle: vehicle,
+                  ),
+                ),
+                (route) => route.isFirst,
+              );
             },
-            child: const Text('Về trang chủ'),
+            child: const Text('Theo dõi chuyến đi'),
           ),
         ],
       ),

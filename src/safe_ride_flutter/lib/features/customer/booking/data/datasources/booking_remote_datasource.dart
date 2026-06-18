@@ -7,6 +7,7 @@ import '../models/booking_response.dart';
 import '../models/booking_fare_estimate.dart';
 import '../models/booking_location.dart';
 import '../models/create_booking_request.dart';
+import '../models/nearby_driver.dart';
 
 class BookingRemoteDatasource {
   BookingRemoteDatasource({Dio? dio}) : _dio = dio ?? DioClient().dio;
@@ -82,6 +83,63 @@ class BookingRemoteDatasource {
     }
   }
 
+  Future<BookingResponse> getBookingDetails(
+    String accessToken, {
+    required int bookingId,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '${ApiEndpoints.bookings}/$bookingId',
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+        ),
+      );
+
+      return BookingResponse.fromJson(
+        Map<String, dynamic>.from(response.data as Map),
+      );
+    } on FormatException {
+      throw const BookingApiException(BookingStrings.sessionExpired);
+    } on DioException catch (exception) {
+      final data = exception.response?.data;
+      if (data is Map && data[ApiKeys.detail] != null) {
+        throw BookingApiException(data[ApiKeys.detail].toString());
+      }
+      throw const BookingApiException(
+        'Không thể lấy thông tin chuyến đi. Vui lòng thử lại.',
+      );
+    }
+  }
+
+  Future<BookingResponse?> getActiveBooking(String accessToken) async {
+    try {
+      final response = await _dio.get(
+        ApiEndpoints.activeBooking,
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+        ),
+      );
+
+      if (response.statusCode == 204 || response.data == null) {
+        return null;
+      }
+
+      return BookingResponse.fromJson(
+        Map<String, dynamic>.from(response.data as Map),
+      );
+    } on FormatException {
+      throw const BookingApiException(BookingStrings.sessionExpired);
+    } on DioException catch (exception) {
+      final data = exception.response?.data;
+      if (data is Map && data[ApiKeys.detail] != null) {
+        throw BookingApiException(data[ApiKeys.detail].toString());
+      }
+      throw const BookingApiException(
+        'KhÃ´ng thá»ƒ láº¥y chuyáº¿n Ä‘ang hoáº¡t Ä‘á»™ng. Vui lÃ²ng thá»­ láº¡i.',
+      );
+    }
+  }
+
   Future<BookingResponse> cancelBooking(
     String accessToken, {
     required int bookingId,
@@ -137,6 +195,62 @@ class BookingRemoteDatasource {
       throw const BookingApiException(
         'Không thể xác nhận tài xế. Vui lòng thử lại.',
       );
+    }
+  }
+
+  Future<BookingResponse> rejectDriver(
+    String accessToken, {
+    required int bookingId,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '${ApiEndpoints.bookings}/$bookingId/reject-driver',
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+        ),
+      );
+
+      return BookingResponse.fromJson(
+        Map<String, dynamic>.from(response.data as Map),
+      );
+    } on FormatException {
+      throw const BookingApiException(BookingStrings.sessionExpired);
+    } on DioException catch (exception) {
+      final data = exception.response?.data;
+      if (data is Map && data[ApiKeys.detail] != null) {
+        throw BookingApiException(data[ApiKeys.detail].toString());
+      }
+      throw const BookingApiException(
+        'Không thể từ chối tài xế. Vui lòng thử lại.',
+      );
+    }
+  }
+
+  Future<List<NearbyDriver>> getNearbyDrivers(
+    String accessToken, {
+    required double latitude,
+    required double longitude,
+  }) async {
+    try {
+      final response = await _dio.get(
+        ApiEndpoints.nearbyDrivers,
+        queryParameters: {
+          'latitude': latitude,
+          'longitude': longitude,
+          'radiusKm':
+              5, // Tăng lên 1000km để chắc chắn thấy dữ liệu test ở Đà Nẵng
+        },
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+        ),
+      );
+
+      final List data = response.data as List;
+      return data
+          .map((item) => NearbyDriver.fromJson(Map<String, dynamic>.from(item)))
+          .toList();
+    } on DioException {
+      return const [];
     }
   }
 }

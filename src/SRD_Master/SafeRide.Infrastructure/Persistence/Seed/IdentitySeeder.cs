@@ -12,72 +12,72 @@ namespace SafeRide.Infrastructure.Persistence;
 public static class IdentitySeeder
 {
     private static readonly TestDriverSeed[] TestDrivers =
-[
-    // ~0.8 km from center
-    new(
-        Guid.Parse("10000000-0000-0000-0000-000000000001"),
-        "driver.b.safe@srd.test",
-        "0901000001",
-        "SafeRide Test Driver B1",
-        "SRD-ID-000001",
-        "SRD-B-000001",
-        LicenseClass.B,
-        16.075691660288026,
-        108.21881746818354,
-        5),
+    [
+        // ~0.8 km from center
+        new(
+            Guid.Parse("10000000-0000-0000-0000-000000000001"),
+            "driver.b.safe@srd.test",
+            "0901000001",
+            "SafeRide Test Driver B1",
+            "SRD-ID-000001",
+            "SRD-B-000001",
+            LicenseClass.B,
+            16.075691660288026,
+            108.21881746818354,
+            5),
 
-    // ~2.5 km from center
-    new(
-        Guid.Parse("10000000-0000-0000-0000-000000000002"),
-        "driver.b2.safe@srd.test",
-        "0901000002",
-        "SafeRide Test Driver B2",
-        "SRD-ID-000002",
-        "SRD-B-000002",
-        LicenseClass.B,
-        16.05470584882748,
-        108.23006623372896,
-        3),
+        // ~2.5 km from center
+        new(
+            Guid.Parse("10000000-0000-0000-0000-000000000002"),
+            "driver.b2.safe@srd.test",
+            "0901000002",
+            "SafeRide Test Driver B2",
+            "SRD-ID-000002",
+            "SRD-B-000002",
+            LicenseClass.B,
+            16.05470584882748,
+            108.23006623372896,
+            3),
 
-    // ~5.0 km from center
-    new(
-        Guid.Parse("10000000-0000-0000-0000-000000000003"),
-        "driver.a.safe@srd.test",
-        "0901000003",
-        "SafeRide Test Driver A",
-        "SRD-ID-000003",
-        "SRD-A-000003",
-        LicenseClass.A,
-        16.048117543791392,
-        108.17300223966612,
-        4),
+        // ~5.0 km from center
+        new(
+            Guid.Parse("10000000-0000-0000-0000-000000000003"),
+            "driver.a.safe@srd.test",
+            "0901000003",
+            "SafeRide Test Driver A",
+            "SRD-ID-000003",
+            "SRD-A-000003",
+            LicenseClass.A,
+            16.048117543791392,
+            108.17300223966612,
+            4),
 
-    // ~9.0 km from center
-    new(
-        Guid.Parse("10000000-0000-0000-0000-000000000004"),
-        "driver.a1.safe@srd.test",
-        "0901000004",
-        "SafeRide Test Driver A1",
-        "SRD-ID-000004",
-        "SRD-A1-000004",
-        LicenseClass.A1,
-        16.111061501803842,
-        108.14056244597721,
-        2),
+        // ~9.0 km from center
+        new(
+            Guid.Parse("10000000-0000-0000-0000-000000000004"),
+            "driver.a1.safe@srd.test",
+            "0901000004",
+            "SafeRide Test Driver A1",
+            "SRD-ID-000004",
+            "SRD-A1-000004",
+            LicenseClass.A1,
+            16.111061501803842,
+            108.14056244597721,
+            2),
 
-    // ~14.5 km from center
-    new(
-        Guid.Parse("10000000-0000-0000-0000-000000000005"),
-        "driver.oldb2.safe@srd.test",
-        "0901000005",
-        "SafeRide Test Driver Old B2",
-        "SRD-ID-000005",
-        "SRD-OLDB2-000005",
-        LicenseClass.Old_B2,
-        16.19313683009435,
-        108.25996556885026,
-        7)
-];
+        // ~14.5 km from center
+        new(
+            Guid.Parse("10000000-0000-0000-0000-000000000005"),
+            "driver.oldb2.safe@srd.test",
+            "0901000005",
+            "SafeRide Test Driver Old B2",
+            "SRD-ID-000005",
+            "SRD-OLDB2-000005",
+            LicenseClass.Old_B2,
+            16.19313683009435,
+            108.25996556885026,
+            7)
+    ];
 
     public static async Task SeedIdentityAsync(this IServiceProvider services)
     {
