@@ -6,7 +6,7 @@ import '../../data/models/driver_review_model.dart';
 class DriverReviewsPage extends StatelessWidget {
   const DriverReviewsPage({
     super.key,
-    this.driverName = 'Tài xế',
+    this.driverName = 'Nguyễn Văn An',
     this.rating = 4.9,
     this.reviewCount = 1248,
   });
@@ -17,10 +17,10 @@ class DriverReviewsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const summary = DriverRatingSummaryModel(
-      averageRating: 4.9,
-      totalReviews: 1248,
-      ratingPercentages: {5: 0.85, 4: 0.10, 3: 0.03, 2: 0.01, 1: 0.01},
+    final summary = DriverRatingSummaryModel(
+      averageRating: rating,
+      totalReviews: reviewCount,
+      ratingPercentages: const {5: 0.85, 4: 0.10, 3: 0.03, 2: 0.01, 1: 0.01},
     );
 
     return Scaffold(
@@ -57,12 +57,7 @@ class DriverReviewsPage extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 20),
         children: [
           const SizedBox(height: 24),
-          // Rating Summary Card
-          _RatingSummaryCard(
-            driverName: driverName,
-            rating: rating,
-            reviewCount: reviewCount,
-          ),
+          _RatingSummaryCard(summary: summary),
           const SizedBox(height: 24),
           const _ReviewFilters(),
           const SizedBox(height: 16),
@@ -75,15 +70,9 @@ class DriverReviewsPage extends StatelessWidget {
 }
 
 class _RatingSummaryCard extends StatelessWidget {
-  const _RatingSummaryCard({
-    required this.driverName,
-    required this.rating,
-    required this.reviewCount,
-  });
+  const _RatingSummaryCard({required this.summary});
 
-  final String driverName;
-  final double rating;
-  final int reviewCount;
+  final DriverRatingSummaryModel summary;
 
   @override
   Widget build(BuildContext context) {
@@ -110,7 +99,7 @@ class _RatingSummaryCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  rating.toStringAsFixed(1),
+                  summary.averageRating.toStringAsFixed(1),
                   style: const TextStyle(
                     fontSize: 48,
                     fontWeight: FontWeight.w800,
@@ -122,7 +111,9 @@ class _RatingSummaryCard extends StatelessWidget {
                 Row(
                   children: List.generate(5, (index) {
                     return Icon(
-                      index < summary.averageRating.floor() ? Icons.star : Icons.star_half,
+                      index < summary.averageRating.floor()
+                          ? Icons.star
+                          : Icons.star_half,
                       color: const Color(0xFF9E5425),
                       size: 20,
                     );
@@ -130,7 +121,7 @@ class _RatingSummaryCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '${summary.totalReviews.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')} đánh giá',
+                  '${summary.totalReviews.toString().replaceAllMapped(RegExp(r"(\d{1,3})(?=(\d{3})+(?!\d))"), (Match m) => "${m[1]},")} đánh giá',
                   style: const TextStyle(
                     fontSize: 13,
                     color: Color(0xFF6B6B6B),
@@ -145,7 +136,10 @@ class _RatingSummaryCard extends StatelessWidget {
             flex: 6,
             child: Column(
               children: [5, 4, 3, 2, 1].map((star) {
-                return _buildStarLine(star, summary.ratingPercentages[star] ?? 0);
+                return _buildStarLine(
+                  star,
+                  summary.ratingPercentages[star] ?? 0,
+                );
               }).toList(),
             ),
           ),
@@ -175,9 +169,8 @@ class _RatingSummaryCard extends StatelessWidget {
                 value: percent,
                 minHeight: 6,
                 backgroundColor: const Color(0xFFF0F0F0),
-                 valueColor: const AlwaysStoppedAnimation<Color>(
-                  AppColors.primary,
-                ),
+                valueColor:
+                    const AlwaysStoppedAnimation<Color>(AppColors.primary),
               ),
             ),
           ),
@@ -212,12 +205,18 @@ class _ReviewFiltersState extends State<_ReviewFilters> {
               onTap: () => setState(() => _selectedIndex = index),
               borderRadius: BorderRadius.circular(100),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 22,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
-                  color: isSelected ? AppColors.primary : const Color(0xFFF5F5F5),
+                  color:
+                      isSelected ? AppColors.primary : const Color(0xFFF5F5F5),
                   borderRadius: BorderRadius.circular(100),
                   border: Border.all(
-                    color: isSelected ? AppColors.primary : const Color(0xFFE2E2E2),
+                    color: isSelected
+                        ? AppColors.primary
+                        : const Color(0xFFE2E2E2),
                     width: 1,
                   ),
                 ),
@@ -249,14 +248,16 @@ class _ReviewList extends StatelessWidget {
         name: 'Lê T***',
         date: '20/10/2023',
         rating: 5,
-        comment: 'Tài xế lái xe rất cẩn thận và lịch sự. Tôi cảm thấy rất an tâm trong suốt chuyến đi.',
+        comment:
+            'Tài xế lái xe rất cẩn thận và lịch sự. Tôi cảm thấy rất an tâm trong suốt chuyến đi.',
       ),
       DriverReviewModel(
         initial: 'N',
         name: 'Nguyễn V***',
         date: '18/10/2023',
         rating: 5,
-        comment: 'Xe sạch sẽ, thơm. Tài xế nói chuyện rất nhã nhặn. Sẽ tiếp tục đặt xe!',
+        comment:
+            'Xe sạch sẽ, thơm. Tài xế nói chuyện rất nhã nhặn. Sẽ tiếp tục đặt xe!',
       ),
       DriverReviewModel(
         initial: 'H',

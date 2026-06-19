@@ -215,7 +215,7 @@ abstract final class LocationStrings {
 }
 
 abstract final class AppConfig {
-  static const apiBaseUrl = 'http://10.0.2.2:5026/api/';
+  static const apiBaseUrl = 'http://192.168.1.36:5026/api/';
   static const fontFamily = 'SFProDisplay';
   static const logoUrl =
       'https://res.cloudinary.com/dj7y3ikck/image/upload/v1781487774/logo_poxclo.png';
@@ -239,6 +239,8 @@ abstract final class ApiEndpoints {
   static const bookings = '/bookings';
   static const bookingCatalog = '/bookings/catalog';
   static const bookingEstimate = '/bookings/estimate';
+  static const identityVerificationDocuments =
+      '/identity-verification/documents';
 }
 
 abstract final class ApiKeys {
@@ -252,6 +254,11 @@ abstract final class ApiKeys {
   static const fullName = 'fullName';
   static const email = 'email';
   static const file = 'file';
+  static const frontImage = 'frontImage';
+  static const backImage = 'backImage';
+  static const documentNumber = 'documentNumber';
+  static const issueDate = 'issueDate';
+  static const expiryDate = 'expiryDate';
   static const avatarUrl = 'avatarUrl';
   static const refreshToken = 'refreshToken';
   static const accessToken = 'accessToken';
