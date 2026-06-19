@@ -4,7 +4,7 @@ using Microsoft.Extensions.Options;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Features.IdentityVerification.DTOs;
 using SafeRide.Domain.Enums;
-using SafeRide.Infrastructure.ExternalServices;
+using SafeRide.Infrastructure.ExternalServices.Cloudinary;
 
 namespace SafeRide.Infrastructure.Services;
 
