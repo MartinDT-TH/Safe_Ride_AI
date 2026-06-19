@@ -1,5 +1,6 @@
 import 'package:get_it/get_it.dart';
 
+import '../core/services/connectivity_service.dart';
 import '../core/services/device_identity_service.dart';
 import '../core/services/location_service.dart';
 import '../core/services/socket_service.dart';
@@ -43,6 +44,7 @@ Future<void> setupDependencies() async {
   );
   getIt.registerLazySingleton<LocationService>(() => LocationService());
   getIt.registerLazySingleton<SocketService>(() => SocketService());
+  getIt.registerLazySingleton<ConnectivityService>(() => ConnectivityService());
 
   getIt.registerLazySingleton<AuthRemoteDatasource>(
     () => AuthRemoteDatasource(),

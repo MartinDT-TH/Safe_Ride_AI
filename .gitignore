@@ -402,3 +402,4 @@ FodyWeavers.xsd
 
 # Local application secrets
 **/appsettings.Development.json
+*.sql
