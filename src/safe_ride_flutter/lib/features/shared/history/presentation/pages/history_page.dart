@@ -47,28 +47,40 @@ class _HistoryPageState extends State<HistoryPage> {
           Expanded(
             child: Consumer<HistoryProvider>(
               builder: (context, provider, child) {
-                if (provider.isLoading) {
+                if (provider.isLoading && provider.trips.isEmpty) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                if (provider.trips.isEmpty) {
-                  return const Center(
-                    child: Text('Không có dữ liệu chuyến đi.'),
-                  );
-                }
-
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                  itemCount: provider.trips.length,
-                  itemBuilder: (context, index) {
-                    final trip = provider.trips[index];
-                    return TripHistoryCard(
-                      trip: trip,
-                      onRebook: () {
-                        // Handle rebook logic
-                      },
-                    );
+                return RefreshIndicator(
+                  onRefresh: () async {
+                    final auth = context.read<AuthProvider>();
+                    await provider.loadHistory(auth.token);
                   },
+                  color: AppColors.primary,
+                  child: provider.trips.isEmpty
+                      ? ListView(
+                          children: const [
+                            SizedBox(height: 100),
+                            Center(child: Text('Không có dữ liệu chuyến đi.')),
+                          ],
+                        )
+                      : ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 16,
+                          ),
+                          itemCount: provider.trips.length,
+                          itemBuilder: (context, index) {
+                            final trip = provider.trips[index];
+                            return TripHistoryCard(
+                              trip: trip,
+                              onRebook: () {
+                                // Handle rebook logic
+                              },
+                            );
+                          },
+                        ),
                 );
               },
             ),
