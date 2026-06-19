@@ -5,6 +5,7 @@ using SafeRide.Application;
 using SafeRide.API.Middlewares;
 using SafeRide.Infrastructure;
 using SafeRide.Infrastructure.Persistence;
+using Microsoft.Extensions.FileProviders;
 using SafeRide.Infrastructure.Simulator;
 using SafeRide.Realtime;
 using System.Text.Json.Serialization;
@@ -112,6 +113,13 @@ if (app.Environment.IsDevelopment())
 
 app.UseMiddleware<ApiExceptionMiddleware>();
 app.UseHttpsRedirection();
+var uploadsPath = Path.Combine(app.Environment.ContentRootPath, "uploads");
+Directory.CreateDirectory(uploadsPath);
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(uploadsPath),
+    RequestPath = "/uploads"
+});
 app.UseMiddleware<AuthRateLimitMiddleware>();
 app.UseAuthentication();
 app.UseMiddleware<ProfileCompletionMiddleware>();
