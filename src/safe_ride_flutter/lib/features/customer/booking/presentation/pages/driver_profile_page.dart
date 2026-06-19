@@ -16,7 +16,8 @@ class DriverProfilePage extends StatelessWidget {
     super.key,
     this.name = 'Nguyễn Văn An',
     this.avatarUrl =
-        'https://img.freepik.com/free-photo/handsome-young-man-with-new-haircut_176420-19636.jpg',    this.rating = 4.9,
+        'https://img.freepik.com/free-photo/handsome-young-man-with-new-haircut_176420-19636.jpg',
+    this.rating = 4.9,
     this.tripCount = 1200,
     this.experienceYears = 5,
     this.isVerified = true,
@@ -60,7 +61,7 @@ class DriverProfilePage extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
-        centerTitle: true,
+          centerTitle: true,
           actions: [
             IconButton(
               icon: const Icon(Icons.more_vert, color: Color(0xFF6B6B6B)),
@@ -74,7 +75,6 @@ class DriverProfilePage extends StatelessWidget {
           child: Column(
             children: [
               const SizedBox(height: 24),
-              // Avatar Section
               _DriverAvatar(avatarUrl: avatarUrl, isVerified: isVerified),
               const SizedBox(height: 20),
               Text(
@@ -102,13 +102,13 @@ class DriverProfilePage extends StatelessWidget {
                   ),
                   const SizedBox(width: 10),
                   Container(
-                    width: 1,
+                    width: 1.5,
                     height: 14,
                     color: const Color(0xFFE2E2E2),
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    '${tripCount.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}+ chuyến đi',
+                    '${tripCount.toString().replaceAllMapped(RegExp(r"(\d{1,3})(?=(\d{3})+(?!\d))"), (Match m) => "${m[1]},")}+ chuyến đi',
                     style: const TextStyle(
                       color: Color(0xFF6B6B6B),
                       fontSize: 15,
@@ -118,8 +118,6 @@ class DriverProfilePage extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 32),
-
-             // Highlight Cards Row
               Row(
                 children: [
                   Expanded(child: _ExperienceCard(years: experienceYears)),
@@ -128,18 +126,15 @@ class DriverProfilePage extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 20),
-
-              // KYC Status Card
               _StatusCard(
                 icon: Icons.assignment_turned_in_outlined,
                 title: 'Trạng thái KYC',
                 subtitle: 'Hồ sơ đã được duyệt bởi hệ thống',
-                trailing: _VerifiedBadge(),
+                trailing: const _VerifiedBadge(),
                 iconBgColor: const Color(0xFFE8F5E9),
                 iconColor: const Color(0xFF4CAF50),
               ),
               const SizedBox(height: 12),
-              // Legal History Card
               const _StatusCard(
                 icon: Icons.gavel_outlined,
                 title: 'Lý lịch tư pháp',
@@ -453,7 +448,11 @@ class _AttributesCard extends StatelessWidget {
           SizedBox(height: 12),
           Row(
             children: [
-              Icon(Icons.sentiment_satisfied_alt, size: 20, color: AppColors.primary),
+              Icon(
+                Icons.sentiment_satisfied_alt,
+                size: 20,
+                color: AppColors.primary,
+              ),
               SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -549,6 +548,7 @@ class _StatusCard extends StatelessWidget {
 }
 
 class _VerifiedBadge extends StatelessWidget {
+  const _VerifiedBadge();
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -560,11 +560,7 @@ class _VerifiedBadge extends StatelessWidget {
       child: const Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-                Icons.sentiment_satisfied_alt,
-                size: 20,
-                color: AppColors.primary,
-              ),
+          Icon(Icons.check_circle, size: 14, color: Color(0xFF4CAF50)),
           SizedBox(width: 6),
           Text(
             'Đã xác minh',

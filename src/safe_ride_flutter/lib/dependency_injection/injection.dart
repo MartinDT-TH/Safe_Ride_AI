@@ -29,6 +29,7 @@ import '../features/shared/profile/domain/repositories/vehicle_repository.dart';
 import '../features/shared/profile/presentation/providers/vehicle_provider.dart';
 import '../features/shared/history/presentation/providers/history_provider.dart';
 import '../features/driver/dashboard/presentation/providers/driver_dashboard_provider.dart';
+import '../features/driver/registration/data/datasources/identity_verification_remote_datasource.dart';
 
 final getIt = GetIt.instance;
 
@@ -118,5 +119,9 @@ Future<void> setupDependencies() async {
 
   getIt.registerFactory<DriverDashboardProvider>(
     () => DriverDashboardProvider(),
+  );
+
+  getIt.registerLazySingleton<IdentityVerificationRemoteDatasource>(
+    () => IdentityVerificationRemoteDatasource(),
   );
 }
