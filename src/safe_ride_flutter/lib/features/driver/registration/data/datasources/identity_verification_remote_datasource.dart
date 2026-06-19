@@ -63,6 +63,25 @@ class IdentityVerificationRemoteDatasource {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getDocuments(String accessToken) async {
+    final response = await _dio.get(
+      ApiEndpoints.identityVerificationDocuments,
+      options: Options(
+        headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+      ),
+    );
+
+    final data = response.data;
+    if (data is! List) {
+      return const [];
+    }
+
+    return data
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
   Future<void> _uploadDocument(
     String accessToken,
     String documentType,
