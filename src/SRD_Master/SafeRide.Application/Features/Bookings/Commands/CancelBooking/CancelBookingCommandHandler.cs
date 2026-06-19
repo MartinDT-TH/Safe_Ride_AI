@@ -1,5 +1,6 @@
 using MediatR;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Common.Realtime;
 using SafeRide.Domain.Enums;
 
 namespace SafeRide.Application.Features.Bookings.Commands.CancelBooking;
@@ -10,21 +11,30 @@ public sealed class CancelBookingCommandHandler
     private readonly IBookingRepository _bookingRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly IRealtimeNotificationService _realtimeNotificationService;
 
     public CancelBookingCommandHandler(
         IBookingRepository bookingRepository,
         IUnitOfWork unitOfWork,
-        IDateTimeProvider dateTimeProvider)
+        IDateTimeProvider dateTimeProvider,
+        IRealtimeNotificationService realtimeNotificationService)
     {
         _bookingRepository = bookingRepository;
         _unitOfWork = unitOfWork;
         _dateTimeProvider = dateTimeProvider;
+        _realtimeNotificationService = realtimeNotificationService;
     }
 
     public async Task<CancelBookingResponse> Handle(
         CancelBookingCommand request,
         CancellationToken cancellationToken)
     {
+        var utcNow = _dateTimeProvider.UtcNow;
+        await _bookingRepository.ExpireStaleNowBookingsAsync(
+            request.CustomerId,
+            utcNow,
+            cancellationToken);
+
         var booking = await _bookingRepository.GetCustomerBookingAsync(
             request.BookingId,
             request.CustomerId,
@@ -42,6 +52,11 @@ public sealed class CancelBookingCommandHandler
             return ToResponse(booking, "Chuyến đã được hủy trước đó.");
         }
 
+        if (booking.BookingStatus == BookingStatus.Expired)
+        {
+            return ToResponse(booking, "Chuyến đã hết thời gian chờ và được tự động kết thúc.");
+        }
+
         if (!CanCancel(booking.BookingStatus))
         {
             throw new BookingException(
@@ -50,10 +65,28 @@ public sealed class CancelBookingCommandHandler
                 409);
         }
 
-        var utcNow = _dateTimeProvider.UtcNow;
+        var previousStatus = booking.BookingStatus;
+        var reason = NormalizeReason(request.Reason);
+        if (previousStatus == BookingStatus.DriverAssigned)
+        {
+            var cancelledTrip = await _bookingRepository.CancelAssignedTripAsync(
+                booking.BookingId,
+                request.CustomerId,
+                reason,
+                utcNow,
+                cancellationToken);
+            if (!cancelledTrip)
+            {
+                throw new BookingException(
+                    "booking.cannot_cancel_started_trip",
+                    "Chuyến này đã bắt đầu hoặc đã kết thúc, không thể hủy.",
+                    409);
+            }
+        }
+
         booking.BookingStatus = BookingStatus.Cancelled;
         booking.CancelledBy = request.CustomerId;
-        booking.CancellationReason = NormalizeReason(request.Reason);
+        booking.CancellationReason = reason;
         booking.UpdatedAt = utcNow;
 
         await _bookingRepository.CancelActiveDriverOffersAsync(
@@ -62,13 +95,22 @@ public sealed class CancelBookingCommandHandler
             cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await _realtimeNotificationService.PublishBookingStatusChangedAsync(
+            new BookingStatusChangedEvent(
+                booking.BookingId,
+                booking.CustomerId,
+                booking.BookingStatus,
+                utcNow),
+            cancellationToken);
 
         return ToResponse(booking, "Đã hủy chuyến thành công.");
     }
 
     private static bool CanCancel(BookingStatus status)
     {
-        return status is BookingStatus.Searching or BookingStatus.PendingSchedule;
+        return status is BookingStatus.Searching
+            or BookingStatus.PendingSchedule
+            or BookingStatus.DriverAssigned;
     }
 
     private static string? NormalizeReason(string? reason)

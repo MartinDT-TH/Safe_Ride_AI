@@ -9,7 +9,7 @@ namespace SafeRide.Domain.Entities;
 
 public partial class Booking
 {
-    public long BookingId { get; set; }
+    public long BookingId { get; set; } // nên đổi lại là Id cho thống nhất với các entity khác, nhưng để vậy cũng được
 
     public Guid CustomerId { get; set; }
     public long VehicleId { get; set; }

@@ -21,7 +21,9 @@ using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
 using SafeRide.Infrastructure.Repositories;
 using SafeRide.Infrastructure.Services;
+using SafeRide.Infrastructure.Simulator;
 using System.Text;
+using SafeRide.Infrastructure.ExternalServices.Cloudinary;
 
 namespace SafeRide.Infrastructure;
 
@@ -104,6 +106,8 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IBookingMatchingService, BookingMatchingService>();
         services.AddScoped<IBookingAssignmentService, BookingAssignmentService>();
+        services.AddScoped<IDriverRealtimeService, DriverRealtimeService>();
+        services.AddScoped<ITripStatusService, TripStatusService>();
         services.AddHttpClient<ISpeedSmsService, InfobipSmsService>();
         var mapRoutingProvider = configuration["MapRouting:Provider"];
         if (string.Equals(
@@ -124,6 +128,14 @@ public static class DependencyInjection
                 client.Timeout = TimeSpan.FromSeconds(15);
             });
         }
+
+        if (environment.IsDevelopment())
+        {
+            services.AddSingleton<DriverLocationSimulator>();
+            // Register V3 simulator with logger support
+            services.AddSingleton<DriverLocationSimulatorV3>();
+        }
+
         if (!environment.IsEnvironment("Testing"))
         {
             services.AddHostedService<ScheduledBookingMatchingJob>();
@@ -149,6 +161,18 @@ public static class DependencyInjection
                             context.Exception,
                             "JWT authentication failed for {Path}.",
                             context.Request.Path);
+                        return Task.CompletedTask;
+                    },
+                    OnMessageReceived = context =>
+                    {
+                        var accessToken = context.Request.Query["access_token"];
+                        var path = context.HttpContext.Request.Path;
+                        if (!string.IsNullOrWhiteSpace(accessToken)
+                            && path.StartsWithSegments("/hubs"))
+                        {
+                            context.Token = accessToken;
+                        }
+
                         return Task.CompletedTask;
                     },
                     OnChallenge = async context =>

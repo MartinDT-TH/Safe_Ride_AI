@@ -84,7 +84,10 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
   }
 
   Future<void> _useCurrentLocation() async {
-    final location = await context.read<BookingProvider>().getCurrentLocation();
+    final location = await context.read<BookingProvider>().getCurrentLocation().timeout(
+          const Duration(seconds: 12),
+          onTimeout: () => null,
+        );
     if (!mounted || location == null) return;
 
     setState(() {
@@ -275,10 +278,10 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                       ),
                     ],
                   ),
-                  if (provider.errorMessage != null) ...[
+                  if (provider.locationErrorMessage != null) ...[
                     const SizedBox(height: 8),
                     Text(
-                      provider.errorMessage!,
+                      provider.locationErrorMessage!,
                       style: const TextStyle(color: Colors.red),
                     ),
                   ],
@@ -315,4 +318,3 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
     );
   }
 }
-

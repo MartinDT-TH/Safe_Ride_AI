@@ -3,6 +3,7 @@ import '../../data/models/booking_fare_estimate.dart';
 import '../../data/models/booking_location.dart';
 import '../../data/models/booking_response.dart';
 import '../../data/models/create_booking_request.dart';
+import '../../data/models/nearby_driver.dart';
 
 abstract class BookingRepository {
   Future<BookingCatalog> getCatalog(String accessToken);
@@ -21,6 +22,13 @@ abstract class BookingRepository {
     CreateBookingRequest request,
   );
 
+  Future<BookingResponse> getBookingDetails(
+    String accessToken, {
+    required int bookingId,
+  });
+
+  Future<BookingResponse?> getActiveBooking(String accessToken);
+
   Future<BookingResponse> cancelBooking(
     String accessToken, {
     required int bookingId,
@@ -30,5 +38,16 @@ abstract class BookingRepository {
   Future<BookingResponse> confirmDriver(
     String accessToken, {
     required int bookingId,
+  });
+
+  Future<BookingResponse> rejectDriver(
+    String accessToken, {
+    required int bookingId,
+  });
+
+  Future<List<NearbyDriver>> getNearbyDrivers(
+    String accessToken, {
+    required double latitude,
+    required double longitude,
   });
 }

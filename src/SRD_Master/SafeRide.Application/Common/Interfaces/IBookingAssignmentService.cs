@@ -8,4 +8,9 @@ public interface IBookingAssignmentService
         Guid customerId,
         long bookingId,
         CancellationToken cancellationToken);
+
+    Task<CreateBookingResponse> RejectDriverAsync(
+        Guid customerId,
+        long bookingId,
+        CancellationToken cancellationToken);
 }

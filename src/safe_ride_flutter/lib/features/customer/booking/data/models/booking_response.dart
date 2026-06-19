@@ -1,4 +1,6 @@
 import '../../../../../core/constants/app_strings.dart';
+import 'booking_catalog.dart';
+import 'booking_location.dart';
 
 class BookingResponse {
   const BookingResponse({
@@ -10,8 +12,14 @@ class BookingResponse {
     required this.estimatedFare,
     required this.encodedPolyline,
     required this.message,
+    this.arrivalPolyline,
     this.scheduledAt,
     this.driverOffer,
+    this.pickup,
+    this.destination,
+    this.vehicle,
+    this.tripId,
+    this.tripStatus,
   });
 
   final int bookingId;
@@ -22,8 +30,14 @@ class BookingResponse {
   final int estimatedDurationMinutes;
   final double estimatedFare;
   final String encodedPolyline;
+  final String? arrivalPolyline;
   final String message;
   final BookingDriverOffer? driverOffer;
+  final BookingLocation? pickup;
+  final BookingLocation? destination;
+  final BookingVehicleOption? vehicle;
+  final int? tripId;
+  final String? tripStatus;
 
   factory BookingResponse.fromJson(Map<String, dynamic> json) {
     return BookingResponse(
@@ -39,6 +53,7 @@ class BookingResponse {
           (json[ApiKeys.estimatedDurationMinutes] as num?)?.toInt() ?? 0,
       estimatedFare: (json[ApiKeys.estimatedFare] as num?)?.toDouble() ?? 0,
       encodedPolyline: json[ApiKeys.encodedPolyline]?.toString() ?? '',
+      arrivalPolyline: json[ApiKeys.arrivalPolyline]?.toString(),
       message:
           json[ApiKeys.message]?.toString() ?? BookingStrings.bookingSuccess,
       driverOffer: json[ApiKeys.driverOffer] is Map
@@ -46,6 +61,31 @@ class BookingResponse {
               Map<String, dynamic>.from(json[ApiKeys.driverOffer] as Map),
             )
           : null,
+      pickup: json[ApiKeys.pickup] is Map
+          ? _locationFromJson(
+              Map<String, dynamic>.from(json[ApiKeys.pickup] as Map),
+            )
+          : null,
+      destination: json[ApiKeys.destination] is Map
+          ? _locationFromJson(
+              Map<String, dynamic>.from(json[ApiKeys.destination] as Map),
+            )
+          : null,
+      vehicle: json[ApiKeys.vehicle] is Map
+          ? BookingVehicleOption.fromJson(
+              Map<String, dynamic>.from(json[ApiKeys.vehicle] as Map),
+            )
+          : null,
+      tripId: (json[ApiKeys.tripId] as num?)?.toInt(),
+      tripStatus: json[ApiKeys.tripStatus]?.toString(),
+    );
+  }
+
+  static BookingLocation _locationFromJson(Map<String, dynamic> json) {
+    return BookingLocation(
+      address: json[ApiKeys.address]?.toString() ?? '',
+      latitude: (json[ApiKeys.latitude] as num?)?.toDouble() ?? 0,
+      longitude: (json[ApiKeys.longitude] as num?)?.toDouble() ?? 0,
     );
   }
 }

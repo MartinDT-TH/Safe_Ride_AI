@@ -3,6 +3,7 @@ using NetTopologySuite.Geometries;
 using SafeRide.Application.Common.Exceptions;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
+using SafeRide.Application.Common.Realtime;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
 
@@ -18,6 +19,7 @@ public sealed class CreateBookingCommandHandler
     private readonly IFareEstimationService _fareEstimationService;
     private readonly IBookingMatchingService _matchingService;
     private readonly IVehicleLicenseRequirementService _vehicleLicenseRequirementService;
+    private readonly IRealtimeNotificationService _realtimeNotificationService;
 
     public CreateBookingCommandHandler(
         IBookingRepository bookingRepository,
@@ -26,7 +28,8 @@ public sealed class CreateBookingCommandHandler
         IGoogleMapsService googleMapsService,
         IFareEstimationService fareEstimationService,
         IBookingMatchingService matchingService,
-        IVehicleLicenseRequirementService vehicleLicenseRequirementService)
+        IVehicleLicenseRequirementService vehicleLicenseRequirementService,
+        IRealtimeNotificationService realtimeNotificationService)
     {
         _bookingRepository = bookingRepository;
         _unitOfWork = unitOfWork;
@@ -35,6 +38,7 @@ public sealed class CreateBookingCommandHandler
         _fareEstimationService = fareEstimationService;
         _matchingService = matchingService;
         _vehicleLicenseRequirementService = vehicleLicenseRequirementService;
+        _realtimeNotificationService = realtimeNotificationService;
     }
 
     public async Task<CreateBookingResponse> Handle(
@@ -44,6 +48,7 @@ public sealed class CreateBookingCommandHandler
         var utcNow = _dateTimeProvider.UtcNow;
         ValidateSchedule(request.BookingType, request.ScheduledAt, utcNow);
         ValidatePickup(request);
+        await EnsureNoActiveNowBookingAsync(request, cancellationToken);
 
         var vehicle = await _bookingRepository.GetCustomerVehicleAsync(
             request.VehicleId,
@@ -165,6 +170,13 @@ public sealed class CreateBookingCommandHandler
 
         await _bookingRepository.AddAsync(booking, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await _realtimeNotificationService.PublishBookingStatusChangedAsync(
+            new BookingStatusChangedEvent(
+                booking.BookingId,
+                booking.CustomerId,
+                booking.BookingStatus,
+                utcNow),
+            cancellationToken);
 
         var driverOffer = request.BookingType == BookingType.Now
             ? await _matchingService.StartMatchingAsync(
@@ -228,6 +240,29 @@ public sealed class CreateBookingCommandHandler
                 "Thời gian đặt trước phải được gửi theo múi giờ UTC.",
                 400);
         }
+    }
+
+    private async Task EnsureNoActiveNowBookingAsync(
+        CreateBookingCommand request,
+        CancellationToken cancellationToken)
+    {
+        if (request.BookingType != BookingType.Now)
+        {
+            return;
+        }
+
+        var activeBooking = await _bookingRepository.GetActiveNowBookingAsync(
+            request.CustomerId,
+            cancellationToken);
+        if (activeBooking is null)
+        {
+            return;
+        }
+
+        throw new BookingException(
+            "booking.active_now_exists",
+            "Bạn đang có chuyến đang hoạt động. Vui lòng theo dõi chuyến ở mục Hoạt động.",
+            409);
     }
 
     private static void ValidatePickup(CreateBookingCommand request)
