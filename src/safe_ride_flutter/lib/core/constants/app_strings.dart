@@ -215,7 +215,10 @@ abstract final class LocationStrings {
 }
 
 abstract final class AppConfig {
-  static const apiBaseUrl = 'http://192.168.1.36:5026/api/';
+  static const apiBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://192.168.1.36:5026/api/',
+  );
   static const fontFamily = 'SFProDisplay';
   static const logoUrl =
       'https://res.cloudinary.com/dj7y3ikck/image/upload/v1781487774/logo_poxclo.png';
@@ -258,7 +261,13 @@ abstract final class ApiKeys {
   static const file = 'file';
   static const frontImage = 'frontImage';
   static const backImage = 'backImage';
+  static const documentType = 'documentType';
   static const documentNumber = 'documentNumber';
+  static const frontImageUrl = 'frontImageUrl';
+  static const backImageUrl = 'backImageUrl';
+  static const fileUrl = 'fileUrl';
+  static const kycStatus = 'kycStatus';
+  static const rejectionReason = 'rejectionReason';
   static const issueDate = 'issueDate';
   static const expiryDate = 'expiryDate';
   static const avatarUrl = 'avatarUrl';

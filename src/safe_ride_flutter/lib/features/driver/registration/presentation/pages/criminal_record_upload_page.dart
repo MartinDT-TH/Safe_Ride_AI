@@ -10,6 +10,7 @@ import '../../../../../core/storage/secure_storage_service.dart';
 import '../../../../../core/widgets/custom_button.dart';
 import '../../../../../dependency_injection/injection.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
+import '../../../../customer/home/presentation/pages/customer_home_page.dart';
 import '../../data/datasources/identity_verification_remote_datasource.dart';
 import '../../data/models/identity_verification_submission.dart';
 
@@ -443,7 +444,7 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -466,7 +467,12 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
             CustomButton(
               text: 'Về trang chủ',
               onPressed: () {
-                Navigator.of(context).popUntil((route) => route.isFirst);
+                Navigator.of(dialogContext).pop();
+                if (!mounted) return;
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const CustomerHomePage()),
+                  (route) => false,
+                );
               },
             ),
           ],

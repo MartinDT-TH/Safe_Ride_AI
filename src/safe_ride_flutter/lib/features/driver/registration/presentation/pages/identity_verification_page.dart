@@ -1,41 +1,83 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../../../core/constants/app_colors.dart';
+import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/storage/secure_storage_service.dart';
 import '../../../../../core/widgets/custom_button.dart';
+import '../../../../../dependency_injection/injection.dart';
+import '../../../../auth/presentation/providers/auth_provider.dart';
+import '../../data/datasources/identity_verification_remote_datasource.dart';
 import '../../data/models/identity_document_model.dart';
 import '../../data/models/identity_verification_submission.dart';
+import 'identity_document_detail_page.dart';
 import 'upload_cccd_page.dart';
 import 'license_upload_page.dart';
 import 'criminal_record_upload_page.dart';
 
-class IdentityVerificationPage extends StatelessWidget {
+class IdentityVerificationPage extends StatefulWidget {
   const IdentityVerificationPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    // TODO: Replace with API data from /api/identity-verification/documents.
-    final documents = [
-      const IdentityDocumentModel(
-        title: 'CCCD / Hộ chiếu',
-        description: 'Mặt trước và mặt sau',
-        icon: Icons.badge_outlined,
-        status: DocumentStatus.notSubmitted,
-      ),
-      const IdentityDocumentModel(
-        title: 'Bằng lái xe (GPLX)',
-        description: 'Ảnh bằng lái và thông tin GPLX',
-        icon: Icons.directions_car_outlined,
-        status: DocumentStatus.notSubmitted,
-      ),
-      const IdentityDocumentModel(
-        title: 'Lý lịch tư pháp',
-        description: 'Bản gốc, cấp trong 6 tháng',
-        icon: Icons.security_outlined,
-        status: DocumentStatus.notSubmitted,
-      ),
-    ];
+  State<IdentityVerificationPage> createState() =>
+      _IdentityVerificationPageState();
+}
 
+class _IdentityVerificationPageState extends State<IdentityVerificationPage> {
+  late List<IdentityDocumentModel> _documents;
+  bool _isLoading = true;
+  String? _loadError;
+
+  @override
+  void initState() {
+    super.initState();
+    _documents = _defaultDocuments();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadDocuments();
+    });
+  }
+
+  Future<void> _loadDocuments() async {
+    final providerToken = context.read<AuthProvider>().token;
+    final token =
+        providerToken ?? await getIt<SecureStorageService>().readAccessToken();
+    if (!mounted) return;
+
+    if (token == null || token.isEmpty) {
+      setState(() {
+        _isLoading = false;
+        _loadError = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
+
+    try {
+      final remoteDocuments =
+          await getIt<IdentityVerificationRemoteDatasource>().getDocuments(
+        token,
+      );
+      if (!mounted) return;
+      setState(() {
+        _documents = _mergeDocuments(remoteDocuments);
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _loadError = 'Không thể tải trạng thái hồ sơ. Vui lòng thử lại.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     // Check if there is any rejected document
-    final rejectedDoc = documents.cast<IdentityDocumentModel?>().firstWhere(
+    final rejectedDoc = _documents.cast<IdentityDocumentModel?>().firstWhere(
           (doc) => doc?.status == DocumentStatus.rejected,
           orElse: () => null,
         );
@@ -114,6 +156,17 @@ class IdentityVerificationPage extends StatelessWidget {
             ],
 
             const SizedBox(height: 32),
+            if (_isLoading) ...[
+              const LinearProgressIndicator(
+                color: AppColors.primary,
+                minHeight: 3,
+              ),
+              const SizedBox(height: 16),
+            ],
+            if (_loadError != null) ...[
+              _buildLoadError(_loadError!),
+              const SizedBox(height: 16),
+            ],
             const Align(
               alignment: Alignment.centerLeft,
               child: Text(
@@ -128,11 +181,24 @@ class IdentityVerificationPage extends StatelessWidget {
             const SizedBox(height: 16),
 
             // Document List
-            ...documents.map((doc) => Padding(
+            ..._documents.map((doc) => Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: _DocumentItem(
                     document: doc,
                     onTap: () {
+                      if (doc.status == DocumentStatus.pending ||
+                          doc.status == DocumentStatus.verified) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => IdentityDocumentDetailPage(
+                              document: doc,
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+
                       if (doc.title.contains('CCCD')) {
                         Navigator.push(
                           context,
@@ -255,6 +321,107 @@ class IdentityVerificationPage extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildLoadError(String message) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8E1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFFE082)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline, color: Color(0xFFFFA000)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: Color(0xFF795548),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: _loadDocuments,
+            child: const Text('Thử lại'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<IdentityDocumentModel> _defaultDocuments() {
+    return const [
+      IdentityDocumentModel(
+        documentType: 'ID_CARD',
+        title: 'CCCD / Hộ chiếu',
+        description: 'Mặt trước và mặt sau',
+        icon: Icons.badge_outlined,
+      ),
+      IdentityDocumentModel(
+        documentType: 'DRIVING_LICENSE',
+        title: 'Bằng lái xe (GPLX)',
+        description: 'Ảnh bằng lái và thông tin GPLX',
+        icon: Icons.directions_car_outlined,
+      ),
+      IdentityDocumentModel(
+        documentType: 'CRIMINAL_RECORD',
+        title: 'Lý lịch tư pháp',
+        description: 'Bản gốc, cấp trong 6 tháng',
+        icon: Icons.security_outlined,
+      ),
+    ];
+  }
+
+  List<IdentityDocumentModel> _mergeDocuments(
+    List<Map<String, dynamic>> remoteDocuments,
+  ) {
+    final byType = <String, Map<String, dynamic>>{};
+    for (final document in remoteDocuments) {
+      final type = document[ApiKeys.documentType]?.toString();
+      if (type != null && type.isNotEmpty) {
+        byType[type] = document;
+      }
+    }
+
+    return _defaultDocuments().map((document) {
+      final remote = byType[document.documentType];
+      if (remote == null) {
+        return document;
+      }
+
+      final status = IdentityDocumentModel.statusFromBackend(
+        remote[ApiKeys.kycStatus]?.toString(),
+      );
+      return document.copyWith(
+        status: status,
+        description: _descriptionForStatus(document, status),
+        rejectionReason: remote[ApiKeys.rejectionReason]?.toString(),
+        documentNumber: remote[ApiKeys.documentNumber]?.toString(),
+        licenseClass: remote[ApiKeys.licenseClass]?.toString(),
+        frontImageUrl: remote[ApiKeys.frontImageUrl]?.toString(),
+        backImageUrl: remote[ApiKeys.backImageUrl]?.toString(),
+        fileUrl: remote[ApiKeys.fileUrl]?.toString(),
+        issueDate: remote[ApiKeys.issueDate]?.toString(),
+        expiryDate: remote[ApiKeys.expiryDate]?.toString(),
+      );
+    }).toList();
+  }
+
+  String _descriptionForStatus(
+    IdentityDocumentModel document,
+    DocumentStatus status,
+  ) {
+    return switch (status) {
+      DocumentStatus.pending => 'Đã nộp, đang chờ duyệt',
+      DocumentStatus.verified => 'Đã duyệt',
+      DocumentStatus.rejected => 'Cần nộp lại',
+      DocumentStatus.notSubmitted => document.description,
+    };
+  }
 }
 
 class _DocumentItem extends StatelessWidget {
@@ -333,8 +500,9 @@ class _DocumentItem extends StatelessWidget {
       case DocumentStatus.notSubmitted:
         return const Color(0xFF757575);
       case DocumentStatus.pending:
-      case DocumentStatus.verified:
         return const Color(0xFFFFA000);
+      case DocumentStatus.verified:
+        return const Color(0xFF2E7D32);
       case DocumentStatus.rejected:
         return const Color(0xFFD32F2F);
     }
@@ -345,8 +513,9 @@ class _DocumentItem extends StatelessWidget {
       case DocumentStatus.notSubmitted:
         return const Color(0xFFFAFAFA);
       case DocumentStatus.pending:
-      case DocumentStatus.verified:
         return const Color(0xFFFFFDF5);
+      case DocumentStatus.verified:
+        return const Color(0xFFF1F8E9);
       case DocumentStatus.rejected:
         return const Color(0xFFFFFBFA);
     }
@@ -357,8 +526,9 @@ class _DocumentItem extends StatelessWidget {
       case DocumentStatus.notSubmitted:
         return const Color(0xFFE0E0E0);
       case DocumentStatus.pending:
-      case DocumentStatus.verified:
         return const Color(0xFFFFE082);
+      case DocumentStatus.verified:
+        return const Color(0xFFC8E6C9);
       case DocumentStatus.rejected:
         return const Color(0xFFFFCDD2);
     }
@@ -418,15 +588,15 @@ class _DocumentItem extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: const Color(0xFFFFF8E1),
+            color: const Color(0xFFE8F5E9),
             borderRadius: BorderRadius.circular(100),
           ),
           child: const Text(
-            'ĐÃ NỘP',
+            'ĐÃ DUYỆT',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w800,
-              color: Color(0xFFFFA000),
+              color: Color(0xFF2E7D32),
             ),
           ),
         );
