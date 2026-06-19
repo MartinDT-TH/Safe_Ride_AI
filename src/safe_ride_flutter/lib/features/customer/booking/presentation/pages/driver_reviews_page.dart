@@ -76,12 +76,6 @@ class _RatingSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final summary = DriverRatingSummaryModel(
-      averageRating: rating,
-      totalReviews: reviewCount,
-      ratingPercentages: const {5: 0.85, 4: 0.10, 3: 0.03, 2: 0.01, 1: 0.01},
-    );
-
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
