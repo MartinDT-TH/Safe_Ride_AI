@@ -157,18 +157,8 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      if (!ApiKeysConfig.hasGoogleServerClientId) {
-        debugPrint(
-          'GOOGLE_SERVER_CLIENT_ID is missing. Start Flutter with '
-          '--dart-define-from-file=env/api_keys.local.json.',
-        );
-        return false;
-      }
-
-      final configuredClientId = ApiKeysConfig.googleServerClientId.trim();
-      final googleSignIn = GoogleSignIn(
-        serverClientId: configuredClientId.isEmpty ? null : configuredClientId,
-      );
+      final googleSignIn = _getGoogleSignIn();
+      if (googleSignIn == null) return false;
 
       final account = await googleSignIn.signIn();
 
@@ -240,14 +230,9 @@ class AuthProvider extends ChangeNotifier {
       _lastErrorCode = null;
       notifyListeners();
 
-      if (!ApiKeysConfig.hasGoogleServerClientId) {
-        return false;
-      }
+      final googleSignIn = _getGoogleSignIn();
+      if (googleSignIn == null) return false;
 
-      final configuredClientId = ApiKeysConfig.googleServerClientId.trim();
-      final googleSignIn = GoogleSignIn(
-        serverClientId: configuredClientId.isEmpty ? null : configuredClientId,
-      );
       await googleSignIn.signOut();
       final account = await googleSignIn.signIn();
       if (account == null) {
@@ -419,6 +404,13 @@ class AuthProvider extends ChangeNotifier {
 
       await repository.logout(refreshToken);
       await _storage.clearTokens();
+
+      // Sign out from Google to clear the cached account
+      final googleSignIn = _getGoogleSignIn();
+      if (googleSignIn != null) {
+        await googleSignIn.signOut();
+      }
+
       _token = null;
       _clearAuthState();
       return true;
@@ -524,5 +516,20 @@ class AuthProvider extends ChangeNotifier {
       return data[ApiKeys.code].toString();
     }
     return null;
+  }
+
+  GoogleSignIn? _getGoogleSignIn() {
+    if (!ApiKeysConfig.hasGoogleServerClientId) {
+      debugPrint(
+        'GOOGLE_SERVER_CLIENT_ID is missing. Start Flutter with '
+        '--dart-define-from-file=env/api_keys.local.json.',
+      );
+      return null;
+    }
+
+    final configuredClientId = ApiKeysConfig.googleServerClientId.trim();
+    return GoogleSignIn(
+      serverClientId: configuredClientId.isEmpty ? null : configuredClientId,
+    );
   }
 }

@@ -2,7 +2,7 @@ using CloudinaryDotNet;
 using CloudinaryDotNet.Actions;
 using Microsoft.Extensions.Options;
 
-namespace SafeRide.Infrastructure.ExternalServices;
+namespace SafeRide.Infrastructure.ExternalServices.Cloudinary;
 
 public sealed class CloudinaryImageService : ICloudinaryImageService
 {
@@ -28,7 +28,7 @@ public sealed class CloudinaryImageService : ICloudinaryImageService
                 "Cloudinary configuration is incomplete.");
         }
 
-        var cloudinary = new Cloudinary(new Account(
+        var cloudinary = new global::CloudinaryDotNet.Cloudinary(new Account(
             _options.CloudName,
             _options.ApiKey,
             _options.ApiSecret));

@@ -1,9 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.OpenApi.Models;
 using SafeRide.Application;
 using SafeRide.API.Middlewares;
 using SafeRide.Infrastructure;
 using SafeRide.Infrastructure.Persistence;
+using SafeRide.Infrastructure.Simulator;
+using SafeRide.Realtime;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,7 +19,7 @@ if (builder.Environment.IsDevelopment())
         reloadOnChange: true);
 }
 
-const string mapRoutingProvider = "OpenRouteService"; // Use "OpenRouteService" to switch provider. Google
+const string mapRoutingProvider = "OpenRouteService"; // Use "OpenRouteService" or "Google" to switch provider
 builder.Configuration["MapRouting:Provider"] = mapRoutingProvider;
 
 builder.Services
@@ -44,6 +47,7 @@ builder.Services
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
+builder.Services.AddSafeRideRealtime();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -77,6 +81,33 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+
+
+    // var runDriverSimulator = builder.Configuration.GetValue<bool>("Simulator:RunDriverLocationSimulator");
+    // if (runDriverSimulator)
+    // {
+    //     // V1: Redis Direct Simulator
+    //     Console.WriteLine("\n=== Running V1: Redis Direct Simulator ===");
+    //     Console.WriteLine("Starting Driver Location Simulator...");
+    //     // await app.Services.GetRequiredService<DriverLocationSimulator>().RunAsync();
+    //     _ = Task.Run(async () =>
+    //     {
+    //         using var scope = app.Services.CreateScope();
+    //         await scope.ServiceProvider
+    //             .GetRequiredService<DriverLocationSimulator>()
+    //             .RunAsync();
+    //     });
+    // }
+
+
+    // V2: SignalR Real-time Simulator (if needed, uncomment and configure)
+    // Console.WriteLine("\n=== Running V2: SignalR Real-time Simulator ===");
+    // await DriverLocationSimulatorV2.Main(Array.Empty<string>());
+
+    // V3: DI-based SignalR Simulator (if needed, uncomment and configure)
+    // Console.WriteLine("\n=== Running V3: DI-based SignalR Simulator ===");
+    // var v3Simulator = app.Services.GetRequiredService<SafeRide.Realtime.Simulator.DriverLocationSimulatorV3>();
+    // await v3Simulator.StartAsync("0987654321", 1);
 }
 
 app.UseMiddleware<ApiExceptionMiddleware>();
@@ -88,6 +119,7 @@ app.UseAuthorization();
 
 await app.Services.SeedIdentityAsync();
 app.MapControllers();
+app.MapHub<SafeRideHub>("/hubs/saferide");
 app.Run();
 
 public partial class Program;

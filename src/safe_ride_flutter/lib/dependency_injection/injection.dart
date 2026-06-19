@@ -2,6 +2,7 @@ import 'package:get_it/get_it.dart';
 
 import '../core/services/device_identity_service.dart';
 import '../core/services/location_service.dart';
+import '../core/services/socket_service.dart';
 import '../core/storage/secure_storage_service.dart';
 import '../features/auth/data/datasources/auth_remote_datasource.dart';
 import '../features/auth/data/repositories/auth_repository_impl.dart';
@@ -41,6 +42,7 @@ Future<void> setupDependencies() async {
     () => DeviceIdentityService(getIt<SecureStorageService>()),
   );
   getIt.registerLazySingleton<LocationService>(() => LocationService());
+  getIt.registerLazySingleton<SocketService>(() => SocketService());
 
   getIt.registerLazySingleton<AuthRemoteDatasource>(
     () => AuthRemoteDatasource(),
