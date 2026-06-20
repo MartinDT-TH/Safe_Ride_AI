@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../../core/constants/app_strings.dart';
 import '../../domain/repositories/onboarding_repository.dart';
 
 class RoleProvider extends ChangeNotifier {
@@ -10,6 +11,14 @@ class RoleProvider extends ChangeNotifier {
   String? _selectedRole;
 
   String? get selectedRole => _selectedRole;
+
+  bool get isDriver => _selectedRole == AppValues.roleDriver;
+
+  void setRole(String? role) {
+    if (_selectedRole == role) return;
+    _selectedRole = role;
+    notifyListeners();
+  }
 
   bool _rememberRole = true;
 

@@ -87,6 +87,14 @@ class AuthProvider extends ChangeNotifier {
   String? _googleEmail;
   String? get googleEmail => _googleEmail;
 
+  List<String> _roles = [];
+  List<String> get roles => _roles;
+
+  bool get isDriverEligible => _roles.contains(AppValues.roleDriver);
+
+  String? _lastSelectedRole;
+  String? get lastSelectedRole => _lastSelectedRole;
+
   String? _lastErrorCode;
   String? get lastErrorCode => _lastErrorCode;
 
@@ -475,16 +483,49 @@ class AuthProvider extends ChangeNotifier {
   }
 
   void _readAuthState(Map<String, dynamic> response) {
-    _fullName = response[ApiKeys.fullName]?.toString();
-    _phoneNumber = response[ApiKeys.phoneNumber]?.toString();
-    _phoneNumberConfirmed = response[ApiKeys.phoneNumberConfirmed] == true;
-    _email = response[ApiKeys.email]?.toString();
-    _avatarUrl = response[ApiKeys.avatarUrl]?.toString();
-    _nextStep = switch (response[ApiKeys.nextStep]?.toString()) {
+    _fullName = _readResponseValue(response, ApiKeys.fullName)?.toString();
+    _phoneNumber = _readResponseValue(
+      response,
+      ApiKeys.phoneNumber,
+    )?.toString();
+    _phoneNumberConfirmed =
+        _readResponseValue(response, ApiKeys.phoneNumberConfirmed) == true;
+    _email = _readResponseValue(response, ApiKeys.email)?.toString();
+    _avatarUrl = _readResponseValue(response, ApiKeys.avatarUrl)?.toString();
+
+    final rolesData = _readResponseValue(response, ApiKeys.roles);
+    if (rolesData is List) {
+      _roles = rolesData.map(_normalizeRole).whereType<String>().toList();
+    } else {
+      _roles = [];
+    }
+
+    _lastSelectedRole = _normalizeRole(
+      _readResponseValue(response, ApiKeys.lastSelectedRole),
+    );
+
+    _nextStep = switch (_readResponseValue(
+      response,
+      ApiKeys.nextStep,
+    )?.toString()) {
       AppValues.completeProfile => AuthNextStep.completeProfile,
       AppValues.selectRole => AuthNextStep.selectRole,
       _ => AuthNextStep.customerHome,
     };
+  }
+
+  Object? _readResponseValue(Map<String, dynamic> response, String key) {
+    if (response.containsKey(key)) {
+      return response[key];
+    }
+
+    final pascalKey = key[0].toUpperCase() + key.substring(1);
+    return response[pascalKey];
+  }
+
+  String? _normalizeRole(Object? role) {
+    final normalized = role?.toString().trim().toLowerCase();
+    return normalized == null || normalized.isEmpty ? null : normalized;
   }
 
   void _readLinkedAccounts(Map<String, dynamic> response) {
@@ -504,6 +545,8 @@ class AuthProvider extends ChangeNotifier {
     _phoneLinked = false;
     _googleLinked = false;
     _googleEmail = null;
+    _roles = [];
+    _lastSelectedRole = null;
     _lastErrorCode = null;
   }
 
