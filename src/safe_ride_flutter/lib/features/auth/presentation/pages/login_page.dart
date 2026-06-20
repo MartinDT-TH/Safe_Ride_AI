@@ -11,6 +11,8 @@ import '../../../../../core/utils/validators.dart';
 import '../../../../../core/widgets/custom_button.dart';
 import '../../../../../core/widgets/custom_textfield.dart';
 import '../providers/auth_provider.dart';
+import '../../../shared/onboarding/presentation/providers/role_provider.dart';
+import '../../../driver/dashboard/presentation/pages/driver_dashboard_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -27,6 +29,13 @@ class _LoginPageState extends State<LoginPage> {
   void dispose() {
     phoneController.dispose();
     super.dispose();
+  }
+
+  Widget _getHomeByRole(RoleProvider roleProvider) {
+    if (roleProvider.isDriver) {
+      return const DriverDashboardPage();
+    }
+    return const CustomerHomePage();
   }
 
   @override
@@ -202,21 +211,32 @@ class _LoginPageState extends State<LoginPage> {
                         if (!context.mounted) return;
 
                         if (ok) {
-                          final Widget destination =
-                              switch (provider.nextStep) {
-                                AuthNextStep.completeProfile => EditProfilePage(
-                                  requiredCompletion: true,
-                                  phoneNumber: provider.phoneNumber,
-                                ),
-                                AuthNextStep.selectRole =>
-                                  const RoleSelectionPage(),
-                                AuthNextStep.customerHome =>
-                                  const CustomerHomePage(),
-                              };
-                          Navigator.of(context).pushAndRemoveUntil(
-                            MaterialPageRoute(builder: (_) => destination),
-                            (_) => false,
-                          );
+                          if (context.mounted) {
+                            final roleProvider = context.read<RoleProvider>();
+                            if (provider.lastSelectedRole != null) {
+                              roleProvider.setRole(provider.lastSelectedRole!);
+                            } else if (provider.roles.isNotEmpty &&
+                                provider.roles.length == 1) {
+                              roleProvider.setRole(provider.roles.first);
+                            }
+
+                            final Widget destination =
+                                switch (provider.nextStep) {
+                                  AuthNextStep.completeProfile => EditProfilePage(
+                                    requiredCompletion: true,
+                                    phoneNumber: provider.phoneNumber,
+                                  ),
+                                  AuthNextStep.selectRole =>
+                                    const RoleSelectionPage(),
+                                  AuthNextStep.customerHome =>
+                                    _getHomeByRole(roleProvider),
+                                };
+
+                            Navigator.of(context).pushAndRemoveUntil(
+                              MaterialPageRoute(builder: (_) => destination),
+                              (_) => false,
+                            );
+                          }
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
@@ -320,4 +340,3 @@ class _CountryCodePicker extends StatelessWidget {
     );
   }
 }
-
