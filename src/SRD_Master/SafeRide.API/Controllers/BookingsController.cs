@@ -413,7 +413,11 @@ public sealed class BookingsController : ControllerBase
                 result.Vehicle.IsMotorbike),
             result.TripStatus,
             TripId: result.TripId,
-            ArrivalPolyline: result.ArrivalPolyline);
+            ArrivalPolyline: result.ArrivalPolyline,
+            OriginalFare: result.OriginalFare,
+            PromotionCode: result.PromotionCode,
+            DiscountAmount: result.DiscountAmount,
+            FinalFare: result.FinalFare);
     }
 
     private bool TryGetCustomerId(out Guid customerId)

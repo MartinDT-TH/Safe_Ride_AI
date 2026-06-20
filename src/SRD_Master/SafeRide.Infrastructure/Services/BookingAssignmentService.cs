@@ -50,6 +50,8 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
 
         var booking = await _dbContext.Bookings
             .Include(x => x.Vehicle)
+            .Include(x => x.BookingPromotions)
+                .ThenInclude(x => x.Promotion)
             .FirstOrDefaultAsync(
                 x => x.BookingId == bookingId && x.CustomerId == customerId,
                 cancellationToken);
@@ -199,6 +201,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             cancellationToken);
 
         var driverOffer = await GetOfferDtoAsync(offer.Id, cancellationToken);
+        var price = BookingPriceMapper.FromBooking(booking);
 
         return new CreateBookingResponse(
             booking.BookingId,
@@ -208,10 +211,10 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             (double)(booking.EstimatedDistanceKm ?? 0m),
             booking.EstimatedDurationMinutes ?? 0,
             booking.EstimatedFare,
-            booking.EstimatedFare,
-            null,
-            0m,
-            booking.EstimatedFare,
+            price.OriginalFare,
+            price.PromotionCode,
+            price.DiscountAmount,
+            price.FinalFare,
             booking.RoutePolyline,
             "Đã xác nhận tài xế cho chuyến đi.",
             driverOffer);
@@ -226,6 +229,8 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         var booking = await _dbContext.Bookings
+            .Include(x => x.BookingPromotions)
+                .ThenInclude(x => x.Promotion)
             .FirstOrDefaultAsync(
                 x => x.BookingId == bookingId && x.CustomerId == customerId,
                 cancellationToken);
@@ -282,6 +287,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         var nextOffer = await _bookingMatchingService.StartMatchingAsync(
             booking.BookingId,
             cancellationToken);
+        var price = BookingPriceMapper.FromBooking(booking);
 
         return new CreateBookingResponse(
             booking.BookingId,
@@ -291,10 +297,10 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             (double)(booking.EstimatedDistanceKm ?? 0m),
             booking.EstimatedDurationMinutes ?? 0,
             booking.EstimatedFare,
-            booking.EstimatedFare,
-            null,
-            0m,
-            booking.EstimatedFare,
+            price.OriginalFare,
+            price.PromotionCode,
+            price.DiscountAmount,
+            price.FinalFare,
             booking.RoutePolyline,
             nextOffer is null
                 ? "Da tu choi tai xe. Hien chua tim thay tai xe tiep theo."
