@@ -473,9 +473,28 @@ class AuthProvider extends ChangeNotifier {
       _readAuthState(response);
     } catch (e) {
       debugPrint('Restore session error: $e');
-      await _storage.clearTokens();
-      _token = null;
-      _clearAuthState();
+
+      // Only clear session if it's an Authentication Error (401)
+      bool shouldLogout = false;
+      if (e is DioException) {
+        if (e.response?.statusCode == 401) {
+          shouldLogout = true;
+        }
+      } else {
+        // For non-Dio errors, we might want to keep the session and try again later
+        // or if it's a critical parsing error, logout.
+        // For now, let's only logout on 401.
+      }
+
+      if (shouldLogout) {
+        debugPrint('Authentication failed during session restore. Logging out.');
+        await _storage.clearTokens();
+        _token = null;
+        _clearAuthState();
+      } else {
+        debugPrint('Session restore failed due to network or other error. Keeping token for retry.');
+        // We keep the token in memory, the next API call will try again or trigger refresh.
+      }
     } finally {
       _isRestoringSession = false;
       notifyListeners();

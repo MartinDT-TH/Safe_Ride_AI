@@ -54,7 +54,7 @@ Future<void> setupDependencies() async {
     () => AuthRepositoryImpl(getIt<AuthRemoteDatasource>()),
   );
 
-  getIt.registerFactory<AuthProvider>(
+  getIt.registerLazySingleton<AuthProvider>(
     () => AuthProvider(
       getIt<AuthRepository>(),
       getIt<SecureStorageService>(),

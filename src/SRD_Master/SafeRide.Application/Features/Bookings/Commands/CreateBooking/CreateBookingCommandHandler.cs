@@ -4,6 +4,7 @@ using SafeRide.Application.Common.Exceptions;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
 using SafeRide.Application.Common.Realtime;
+using SafeRide.Application.Features.Promotions;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
 
@@ -20,6 +21,7 @@ public sealed class CreateBookingCommandHandler
     private readonly IBookingMatchingService _matchingService;
     private readonly IVehicleLicenseRequirementService _vehicleLicenseRequirementService;
     private readonly IRealtimeNotificationService _realtimeNotificationService;
+    private readonly IPromotionRepository _promotionRepository;
 
     public CreateBookingCommandHandler(
         IBookingRepository bookingRepository,
@@ -29,7 +31,8 @@ public sealed class CreateBookingCommandHandler
         IFareEstimationService fareEstimationService,
         IBookingMatchingService matchingService,
         IVehicleLicenseRequirementService vehicleLicenseRequirementService,
-        IRealtimeNotificationService realtimeNotificationService)
+        IRealtimeNotificationService realtimeNotificationService,
+        IPromotionRepository promotionRepository)
     {
         _bookingRepository = bookingRepository;
         _unitOfWork = unitOfWork;
@@ -39,6 +42,7 @@ public sealed class CreateBookingCommandHandler
         _matchingService = matchingService;
         _vehicleLicenseRequirementService = vehicleLicenseRequirementService;
         _realtimeNotificationService = realtimeNotificationService;
+        _promotionRepository = promotionRepository;
     }
 
     public async Task<CreateBookingResponse> Handle(
@@ -168,6 +172,13 @@ public sealed class CreateBookingCommandHandler
             UpdatedAt = utcNow
         };
 
+        var promotionResult = await ApplyPromotionIfRequestedAsync(
+            booking,
+            request.PromotionCode,
+            estimatedFare,
+            utcNow,
+            cancellationToken);
+
         await _bookingRepository.AddAsync(booking, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         await _realtimeNotificationService.PublishBookingStatusChangedAsync(
@@ -198,6 +209,10 @@ public sealed class CreateBookingCommandHandler
             (double)estimatedDistanceKm,
             estimatedDurationMinutes,
             booking.EstimatedFare,
+            estimatedFare,
+            promotionResult.PromotionCode,
+            promotionResult.DiscountAmount,
+            Math.Max(0m, estimatedFare - promotionResult.DiscountAmount),
             routePolyline,
             message,
             driverOffer);
@@ -345,4 +360,74 @@ public sealed class CreateBookingCommandHandler
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
+
+    private async Task<CreateBookingPromotionResult> ApplyPromotionIfRequestedAsync(
+        Booking booking,
+        string? promotionCode,
+        decimal originalFare,
+        DateTime utcNow,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(promotionCode))
+        {
+            return new CreateBookingPromotionResult(null, 0m);
+        }
+
+        var normalizedCode = PromotionApplicationRules.NormalizePromotionCode(
+            promotionCode);
+        var promotion = await _promotionRepository.GetPromotionByCodeAsync(
+            normalizedCode,
+            cancellationToken);
+        if (promotion is null)
+        {
+            throw new PromotionException(
+                "promotion.not_found",
+                "Mã khuyến mãi không tồn tại.",
+                404);
+        }
+
+        PromotionApplicationRules.ValidateAvailability(promotion, utcNow);
+        PromotionApplicationRules.ValidateMinimumOrderValue(
+            originalFare,
+            promotion.MinimumOrderValue);
+        await ValidateCustomerUsageAsync(
+            booking.CustomerId,
+            promotion.Id,
+            promotion.UsageLimitPerUser,
+            cancellationToken);
+
+        var discountAmount = PromotionApplicationRules.CalculateDiscountAmount(
+            promotion,
+            originalFare);
+        booking.BookingPromotions.Add(new BookingPromotion
+        {
+            Promotion = promotion,
+            PromotionId = promotion.Id,
+            DiscountAmount = discountAmount,
+            CreatedAt = utcNow
+        });
+
+        return new CreateBookingPromotionResult(
+            promotion.PromotionCode,
+            discountAmount);
+    }
+
+    private async Task ValidateCustomerUsageAsync(
+        Guid customerId,
+        long promotionId,
+        int usageLimitPerUser,
+        CancellationToken cancellationToken)
+    {
+        var usageCount = await _promotionRepository.CountCustomerPromotionUsageAsync(
+            customerId,
+            promotionId,
+            cancellationToken);
+        PromotionApplicationRules.ValidateCustomerUsageLimit(
+            usageCount,
+            usageLimitPerUser);
+    }
+
+    private sealed record CreateBookingPromotionResult(
+        string? PromotionCode,
+        decimal DiscountAmount);
 }

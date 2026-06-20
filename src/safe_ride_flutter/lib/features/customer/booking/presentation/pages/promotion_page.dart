@@ -13,22 +13,31 @@ class PromotionPage extends StatefulWidget {
 class _PromotionPageState extends State<PromotionPage> {
   final TextEditingController _promoController = TextEditingController();
 
-  final List<PromoModel> _promotions = const [
+  final List<PromoModel> _promotions = [
     PromoModel(
-      code: 'SAFE10',
-      description: 'Giảm 15.000đ - Cho mọi chuyến đi',
-      expiry: 'Hết hạn sau 2 ngày',
+      promotionId: 1,
+      promotionCode: 'SAFE10',
+      shortDescription: 'Giảm 15.000đ - Cho mọi chuyến đi',
+      discountType: 'Fixed',
+      discountValue: 15000,
+      remainingUsageCount: 10,
     ),
     PromoModel(
-      code: 'NEWUSER',
-      description: 'Giảm 20% - Tối đa 30.000đ',
-      expiry: 'Hết hạn sau 5 ngày',
+      promotionId: 2,
+      promotionCode: 'NEWUSER',
+      shortDescription: 'Giảm 20% - Tối đa 30.000đ',
+      discountType: 'Percentage',
+      discountValue: 20,
+      maximumDiscountValue: 30000,
+      remainingUsageCount: 1,
     ),
     PromoModel(
-      code: 'FREESHIP',
-      description: 'Miễn phí phụ phí đêm',
-      expiry: 'Hết hạn hôm nay',
-      isExpiringSoon: true,
+      promotionId: 3,
+      promotionCode: 'FREESHIP',
+      shortDescription: 'Miễn phí phụ phí đêm',
+      discountType: 'Fixed',
+      discountValue: 0,
+      remainingUsageCount: 5,
     ),
   ];
 
@@ -200,7 +209,7 @@ class _PromotionPageState extends State<PromotionPage> {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    promo.code,
+                    promo.promotionCode,
                     style: const TextStyle(
                       color: AppColors.primary,
                       fontSize: 13,
@@ -210,7 +219,7 @@ class _PromotionPageState extends State<PromotionPage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  promo.description,
+                  promo.shortDescription,
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -221,18 +230,18 @@ class _PromotionPageState extends State<PromotionPage> {
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    Icon(
-                      promo.isExpiringSoon ? Icons.error_outline : Icons.schedule,
+                    const Icon(
+                      Icons.schedule,
                       size: 16,
-                      color: promo.isExpiringSoon ? const Color(0xFFC61E27) : const Color(0xFF757575),
+                      color: Color(0xFF757575),
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      promo.isExpiringSoon ? '! ${promo.expiry}' : promo.expiry,
-                      style: TextStyle(
+                      'Lượt còn lại: ${promo.remainingUsageCount}',
+                      style: const TextStyle(
                         fontSize: 14,
-                        color: promo.isExpiringSoon ? const Color(0xFFC61E27) : const Color(0xFF757575),
-                        fontWeight: promo.isExpiringSoon ? FontWeight.w700 : FontWeight.w500,
+                        color: Color(0xFF757575),
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
@@ -244,7 +253,7 @@ class _PromotionPageState extends State<PromotionPage> {
           // Action
           const SizedBox(width: 8),
           TextButton(
-            onPressed: () => Navigator.pop(context, promo.code),
+            onPressed: () => Navigator.pop(context, promo.promotionCode),
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 0),
               minimumSize: Size.zero,

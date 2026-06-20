@@ -1,8 +1,10 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/network/auth_header.dart';
 import '../../../../../core/network/dio_client.dart';
+import '../models/promo_model.dart';
 import '../models/booking_response.dart';
 import '../models/booking_fare_estimate.dart';
 import '../models/booking_location.dart';
@@ -13,6 +15,37 @@ class BookingRemoteDatasource {
   BookingRemoteDatasource({Dio? dio}) : _dio = dio ?? DioClient().dio;
 
   final Dio _dio;
+
+  Future<List<PromoModel>> getAvailablePromotions(String accessToken) async {
+    try {
+      final response = await _dio.get(
+        ApiEndpoints.availablePromotions,
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+        ),
+      );
+
+      final List data = (response.data is List)
+          ? response.data
+          : (response.data is Map && response.data['data'] is List)
+              ? response.data['data']
+              : [];
+
+      return data
+          .map((item) => PromoModel.fromJson(Map<String, dynamic>.from(item)))
+          .toList();
+    } on FormatException {
+      throw const BookingApiException(BookingStrings.sessionExpired);
+    } on DioException catch (exception) {
+      final data = exception.response?.data;
+      if (data is Map && data[ApiKeys.detail] != null) {
+        throw BookingApiException(data[ApiKeys.detail].toString());
+      }
+      throw const BookingApiException(
+        'Không thể lấy danh sách khuyến mãi. Vui lòng thử lại.',
+      );
+    }
+  }
 
   Future<BookingFareEstimate> estimateFare(
     String accessToken, {
@@ -145,28 +178,51 @@ class BookingRemoteDatasource {
     required int bookingId,
     required String reason,
   }) async {
+    final url = '${ApiEndpoints.bookings}/$bookingId/cancel';
+    debugPrint('CANCEL_BOOKING: Requesting $url');
+    debugPrint('CANCEL_BOOKING: BookingID: $bookingId, Reason: $reason');
+    debugPrint('CANCEL_BOOKING: Token exists: ${accessToken.isNotEmpty}, Length: ${accessToken.length}');
+
     try {
       final response = await _dio.post(
-        '${ApiEndpoints.bookings}/$bookingId/cancel',
+        url,
         data: {'reason': reason},
         options: Options(
           headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
         ),
       );
 
+      debugPrint('CANCEL_BOOKING: Response Status: ${response.statusCode}');
+      debugPrint('CANCEL_BOOKING: Response Data: ${response.data}');
+
       return BookingResponse.fromJson(
         Map<String, dynamic>.from(response.data as Map),
       );
-    } on FormatException {
+    } on FormatException catch (e) {
+      debugPrint('CANCEL_BOOKING: FormatException: $e');
       throw const BookingApiException(BookingStrings.sessionExpired);
     } on DioException catch (exception) {
+      final status = exception.response?.statusCode;
       final data = exception.response?.data;
+      debugPrint('CANCEL_BOOKING: DioException Status: $status');
+      debugPrint('CANCEL_BOOKING: DioException Data: $data');
+
       if (data is Map && data[ApiKeys.detail] != null) {
         throw BookingApiException(data[ApiKeys.detail].toString());
       }
+
+      if (status == 401) {
+        throw const BookingApiException('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      } else if (status == 403) {
+        throw const BookingApiException('Bạn không có quyền hủy chuyến đi này.');
+      }
+
       throw const BookingApiException(
         'Không thể hủy chuyến. Vui lòng thử lại.',
       );
+    } catch (e) {
+      debugPrint('CANCEL_BOOKING: Unknown Error: $e');
+      throw const BookingApiException('Đã xảy ra lỗi không xác định khi hủy chuyến.');
     }
   }
 
