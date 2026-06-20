@@ -208,6 +208,10 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             (double)(booking.EstimatedDistanceKm ?? 0m),
             booking.EstimatedDurationMinutes ?? 0,
             booking.EstimatedFare,
+            booking.EstimatedFare,
+            null,
+            0m,
+            booking.EstimatedFare,
             booking.RoutePolyline,
             "Đã xác nhận tài xế cho chuyến đi.",
             driverOffer);
@@ -286,6 +290,10 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             booking.ScheduledAt,
             (double)(booking.EstimatedDistanceKm ?? 0m),
             booking.EstimatedDurationMinutes ?? 0,
+            booking.EstimatedFare,
+            booking.EstimatedFare,
+            null,
+            0m,
             booking.EstimatedFare,
             booking.RoutePolyline,
             nextOffer is null

@@ -123,7 +123,8 @@ public sealed class BookingsController : ControllerBase
                 request.DestinationLatitude,
                 request.DestinationLongitude,
                 request.SpecialRequest,
-                request.EstimatedHours),
+                request.EstimatedHours,
+                request.PromotionCode),
             cancellationToken);
 
         var response = ToResponse(
@@ -134,6 +135,10 @@ public sealed class BookingsController : ControllerBase
             result.EstimatedDistanceKm,
             result.EstimatedDurationMinutes,
             result.EstimatedFare,
+            result.OriginalFare,
+            result.PromotionCode,
+            result.DiscountAmount,
+            result.FinalFare,
             result.EncodedPolyline,
             result.Message,
             result.DriverOffer);
@@ -209,6 +214,10 @@ public sealed class BookingsController : ControllerBase
             result.EstimatedDistanceKm,
             result.EstimatedDurationMinutes,
             result.EstimatedFare,
+            result.EstimatedFare,
+            null,
+            0m,
+            result.EstimatedFare,
             result.EncodedPolyline,
             result.Message,
             result.DriverOffer));
@@ -240,6 +249,10 @@ public sealed class BookingsController : ControllerBase
             result.ScheduledAt,
             result.EstimatedDistanceKm,
             result.EstimatedDurationMinutes,
+            result.EstimatedFare,
+            result.EstimatedFare,
+            null,
+            0m,
             result.EstimatedFare,
             result.EncodedPolyline,
             result.Message,
@@ -276,6 +289,10 @@ public sealed class BookingsController : ControllerBase
             result.ScheduledAt,
             result.EstimatedDistanceKm,
             result.EstimatedDurationMinutes,
+            result.EstimatedFare,
+            result.EstimatedFare,
+            null,
+            0m,
             result.EstimatedFare,
             result.EncodedPolyline,
             result.Message,
@@ -318,6 +335,10 @@ public sealed class BookingsController : ControllerBase
         double estimatedDistanceKm,
         int estimatedDurationMinutes,
         decimal estimatedFare,
+        decimal originalFare,
+        string? promotionCode,
+        decimal discountAmount,
+        decimal finalFare,
         string? encodedPolyline,
         string message,
         BookingDriverOfferDto? driverOffer)
@@ -343,7 +364,11 @@ public sealed class BookingsController : ControllerBase
                     driverOffer.TripCount,
                     driverOffer.ExperienceYears,
                     driverOffer.LicenseClass,
-                    driverOffer.ExpiresAt));
+                    driverOffer.ExpiresAt),
+            OriginalFare: originalFare,
+            PromotionCode: promotionCode,
+            DiscountAmount: discountAmount,
+            FinalFare: finalFare);
     }
 
     private static BookingResponse ToResponse(BookingDetailsDto result)
