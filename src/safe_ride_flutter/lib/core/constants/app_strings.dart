@@ -217,7 +217,7 @@ abstract final class LocationStrings {
 abstract final class AppConfig {
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://192.168.1.36:5026/api/',
+    defaultValue: 'http://10.0.2.2:5026/api/',
   );
   static const fontFamily = 'SFProDisplay';
   static const logoUrl =
@@ -273,6 +273,8 @@ abstract final class ApiKeys {
   static const avatarUrl = 'avatarUrl';
   static const refreshToken = 'refreshToken';
   static const accessToken = 'accessToken';
+  static const roles = 'roles';
+  static const lastSelectedRole = 'lastSelectedRole';
   static const message = 'message';
   static const nextStep = 'nextStep';
   static const detail = 'detail';
