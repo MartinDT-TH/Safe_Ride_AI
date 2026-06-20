@@ -23,6 +23,7 @@ internal static class BookingDetailsMapper
             repository,
             googleMapsService,
             cancellationToken);
+        var price = BookingPriceMapper.FromBooking(booking);
 
         return new BookingDetailsDto(
             booking.BookingId,
@@ -32,6 +33,10 @@ internal static class BookingDetailsMapper
             (double)(booking.EstimatedDistanceKm ?? 0m),
             booking.EstimatedDurationMinutes ?? 0,
             booking.EstimatedFare,
+            price.OriginalFare,
+            price.PromotionCode,
+            price.DiscountAmount,
+            price.FinalFare,
             booking.RoutePolyline,
             arrivalPolyline,
             "Loaded booking details successfully.",

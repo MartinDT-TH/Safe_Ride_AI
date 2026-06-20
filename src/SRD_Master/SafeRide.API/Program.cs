@@ -5,6 +5,7 @@ using SafeRide.Application;
 using SafeRide.API.Middlewares;
 using SafeRide.Infrastructure;
 using SafeRide.Infrastructure.Persistence;
+using Microsoft.Extensions.FileProviders;
 using SafeRide.Infrastructure.Simulator;
 using SafeRide.Realtime;
 using System.Text.Json.Serialization;
@@ -19,7 +20,7 @@ if (builder.Environment.IsDevelopment())
         reloadOnChange: true);
 }
 
-const string mapRoutingProvider = "OpenRouteService"; // Use "OpenRouteService" to switch provider. Google
+const string mapRoutingProvider = "OpenRouteService"; // Use "OpenRouteService" or "Google" to switch provider
 builder.Configuration["MapRouting:Provider"] = mapRoutingProvider;
 
 builder.Services
@@ -82,21 +83,22 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 
-    var runDriverSimulator = builder.Configuration.GetValue<bool>("Simulator:RunDriverLocationSimulator");
-    if (runDriverSimulator)
-    {
-        // V1: Redis Direct Simulator
-        Console.WriteLine("\n=== Running V1: Redis Direct Simulator ===");
-        Console.WriteLine("Starting Driver Location Simulator...");
-        // await app.Services.GetRequiredService<DriverLocationSimulator>().RunAsync();
-        _ = Task.Run(async () =>
-        {
-            using var scope = app.Services.CreateScope();
-            await scope.ServiceProvider
-                .GetRequiredService<DriverLocationSimulator>()
-                .RunAsync();
-        });
-    }
+
+    // var runDriverSimulator = builder.Configuration.GetValue<bool>("Simulator:RunDriverLocationSimulator");
+    // if (runDriverSimulator)
+    // {
+    //     // V1: Redis Direct Simulator
+    //     Console.WriteLine("\n=== Running V1: Redis Direct Simulator ===");
+    //     Console.WriteLine("Starting Driver Location Simulator...");
+    //     // await app.Services.GetRequiredService<DriverLocationSimulator>().RunAsync();
+    //     _ = Task.Run(async () =>
+    //     {
+    //         using var scope = app.Services.CreateScope();
+    //         await scope.ServiceProvider
+    //             .GetRequiredService<DriverLocationSimulator>()
+    //             .RunAsync();
+    //     });
+    // }
 
 
     // V2: SignalR Real-time Simulator (if needed, uncomment and configure)
@@ -111,6 +113,13 @@ if (app.Environment.IsDevelopment())
 
 app.UseMiddleware<ApiExceptionMiddleware>();
 app.UseHttpsRedirection();
+var uploadsPath = Path.Combine(app.Environment.ContentRootPath, "uploads");
+Directory.CreateDirectory(uploadsPath);
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(uploadsPath),
+    RequestPath = "/uploads"
+});
 app.UseMiddleware<AuthRateLimitMiddleware>();
 app.UseAuthentication();
 app.UseMiddleware<ProfileCompletionMiddleware>();

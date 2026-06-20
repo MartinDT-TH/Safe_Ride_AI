@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SafeRide.Application.Common.Exceptions;
@@ -55,11 +56,16 @@ public sealed class GoogleMapsService : IGoogleMapsService
             units = "METRIC"
         };
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, _options.RoutesApiUrl)
+        var requestUrl = QueryHelpers.AddQueryString(
+            _options.RoutesApiUrl,
+            "key",
+            _options.ApiKey);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, requestUrl)
         {
             Content = JsonContent.Create(requestBody)
         };
-        request.Headers.Add("X-Goog-Api-Key", _options.ApiKey);
+        // request.Headers.Add("X-Goog-Api-Key", _options.ApiKey);
         request.Headers.Add("X-Goog-FieldMask", FieldMask);
 
         try

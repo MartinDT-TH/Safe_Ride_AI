@@ -87,6 +87,14 @@ class AuthProvider extends ChangeNotifier {
   String? _googleEmail;
   String? get googleEmail => _googleEmail;
 
+  List<String> _roles = [];
+  List<String> get roles => _roles;
+
+  bool get isDriverEligible => _roles.contains(AppValues.roleDriver);
+
+  String? _lastSelectedRole;
+  String? get lastSelectedRole => _lastSelectedRole;
+
   String? _lastErrorCode;
   String? get lastErrorCode => _lastErrorCode;
 
@@ -157,18 +165,8 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      if (!ApiKeysConfig.hasGoogleServerClientId) {
-        debugPrint(
-          'GOOGLE_SERVER_CLIENT_ID is missing. Start Flutter with '
-          '--dart-define-from-file=env/api_keys.local.json.',
-        );
-        return false;
-      }
-
-      final configuredClientId = ApiKeysConfig.googleServerClientId.trim();
-      final googleSignIn = GoogleSignIn(
-        serverClientId: configuredClientId.isEmpty ? null : configuredClientId,
-      );
+      final googleSignIn = _getGoogleSignIn();
+      if (googleSignIn == null) return false;
 
       final account = await googleSignIn.signIn();
 
@@ -240,14 +238,9 @@ class AuthProvider extends ChangeNotifier {
       _lastErrorCode = null;
       notifyListeners();
 
-      if (!ApiKeysConfig.hasGoogleServerClientId) {
-        return false;
-      }
+      final googleSignIn = _getGoogleSignIn();
+      if (googleSignIn == null) return false;
 
-      final configuredClientId = ApiKeysConfig.googleServerClientId.trim();
-      final googleSignIn = GoogleSignIn(
-        serverClientId: configuredClientId.isEmpty ? null : configuredClientId,
-      );
       await googleSignIn.signOut();
       final account = await googleSignIn.signIn();
       if (account == null) {
@@ -419,6 +412,13 @@ class AuthProvider extends ChangeNotifier {
 
       await repository.logout(refreshToken);
       await _storage.clearTokens();
+
+      // Sign out from Google to clear the cached account
+      final googleSignIn = _getGoogleSignIn();
+      if (googleSignIn != null) {
+        await googleSignIn.signOut();
+      }
+
       _token = null;
       _clearAuthState();
       return true;
@@ -473,9 +473,28 @@ class AuthProvider extends ChangeNotifier {
       _readAuthState(response);
     } catch (e) {
       debugPrint('Restore session error: $e');
-      await _storage.clearTokens();
-      _token = null;
-      _clearAuthState();
+
+      // Only clear session if it's an Authentication Error (401)
+      bool shouldLogout = false;
+      if (e is DioException) {
+        if (e.response?.statusCode == 401) {
+          shouldLogout = true;
+        }
+      } else {
+        // For non-Dio errors, we might want to keep the session and try again later
+        // or if it's a critical parsing error, logout.
+        // For now, let's only logout on 401.
+      }
+
+      if (shouldLogout) {
+        debugPrint('Authentication failed during session restore. Logging out.');
+        await _storage.clearTokens();
+        _token = null;
+        _clearAuthState();
+      } else {
+        debugPrint('Session restore failed due to network or other error. Keeping token for retry.');
+        // We keep the token in memory, the next API call will try again or trigger refresh.
+      }
     } finally {
       _isRestoringSession = false;
       notifyListeners();
@@ -483,16 +502,49 @@ class AuthProvider extends ChangeNotifier {
   }
 
   void _readAuthState(Map<String, dynamic> response) {
-    _fullName = response[ApiKeys.fullName]?.toString();
-    _phoneNumber = response[ApiKeys.phoneNumber]?.toString();
-    _phoneNumberConfirmed = response[ApiKeys.phoneNumberConfirmed] == true;
-    _email = response[ApiKeys.email]?.toString();
-    _avatarUrl = response[ApiKeys.avatarUrl]?.toString();
-    _nextStep = switch (response[ApiKeys.nextStep]?.toString()) {
+    _fullName = _readResponseValue(response, ApiKeys.fullName)?.toString();
+    _phoneNumber = _readResponseValue(
+      response,
+      ApiKeys.phoneNumber,
+    )?.toString();
+    _phoneNumberConfirmed =
+        _readResponseValue(response, ApiKeys.phoneNumberConfirmed) == true;
+    _email = _readResponseValue(response, ApiKeys.email)?.toString();
+    _avatarUrl = _readResponseValue(response, ApiKeys.avatarUrl)?.toString();
+
+    final rolesData = _readResponseValue(response, ApiKeys.roles);
+    if (rolesData is List) {
+      _roles = rolesData.map(_normalizeRole).whereType<String>().toList();
+    } else {
+      _roles = [];
+    }
+
+    _lastSelectedRole = _normalizeRole(
+      _readResponseValue(response, ApiKeys.lastSelectedRole),
+    );
+
+    _nextStep = switch (_readResponseValue(
+      response,
+      ApiKeys.nextStep,
+    )?.toString()) {
       AppValues.completeProfile => AuthNextStep.completeProfile,
       AppValues.selectRole => AuthNextStep.selectRole,
       _ => AuthNextStep.customerHome,
     };
+  }
+
+  Object? _readResponseValue(Map<String, dynamic> response, String key) {
+    if (response.containsKey(key)) {
+      return response[key];
+    }
+
+    final pascalKey = key[0].toUpperCase() + key.substring(1);
+    return response[pascalKey];
+  }
+
+  String? _normalizeRole(Object? role) {
+    final normalized = role?.toString().trim().toLowerCase();
+    return normalized == null || normalized.isEmpty ? null : normalized;
   }
 
   void _readLinkedAccounts(Map<String, dynamic> response) {
@@ -512,6 +564,8 @@ class AuthProvider extends ChangeNotifier {
     _phoneLinked = false;
     _googleLinked = false;
     _googleEmail = null;
+    _roles = [];
+    _lastSelectedRole = null;
     _lastErrorCode = null;
   }
 
@@ -524,5 +578,20 @@ class AuthProvider extends ChangeNotifier {
       return data[ApiKeys.code].toString();
     }
     return null;
+  }
+
+  GoogleSignIn? _getGoogleSignIn() {
+    if (!ApiKeysConfig.hasGoogleServerClientId) {
+      debugPrint(
+        'GOOGLE_SERVER_CLIENT_ID is missing. Start Flutter with '
+        '--dart-define-from-file=env/api_keys.local.json.',
+      );
+      return null;
+    }
+
+    final configuredClientId = ApiKeysConfig.googleServerClientId.trim();
+    return GoogleSignIn(
+      serverClientId: configuredClientId.isEmpty ? null : configuredClientId,
+    );
   }
 }

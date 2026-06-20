@@ -1,5 +1,6 @@
 import 'package:get_it/get_it.dart';
 
+import '../core/services/connectivity_service.dart';
 import '../core/services/device_identity_service.dart';
 import '../core/services/location_service.dart';
 import '../core/services/socket_service.dart';
@@ -29,6 +30,7 @@ import '../features/shared/profile/domain/repositories/vehicle_repository.dart';
 import '../features/shared/profile/presentation/providers/vehicle_provider.dart';
 import '../features/shared/history/presentation/providers/history_provider.dart';
 import '../features/driver/dashboard/presentation/providers/driver_dashboard_provider.dart';
+import '../features/driver/registration/data/datasources/identity_verification_remote_datasource.dart';
 
 final getIt = GetIt.instance;
 
@@ -42,6 +44,7 @@ Future<void> setupDependencies() async {
   );
   getIt.registerLazySingleton<LocationService>(() => LocationService());
   getIt.registerLazySingleton<SocketService>(() => SocketService());
+  getIt.registerLazySingleton<ConnectivityService>(() => ConnectivityService());
 
   getIt.registerLazySingleton<AuthRemoteDatasource>(
     () => AuthRemoteDatasource(),
@@ -51,7 +54,7 @@ Future<void> setupDependencies() async {
     () => AuthRepositoryImpl(getIt<AuthRemoteDatasource>()),
   );
 
-  getIt.registerFactory<AuthProvider>(
+  getIt.registerLazySingleton<AuthProvider>(
     () => AuthProvider(
       getIt<AuthRepository>(),
       getIt<SecureStorageService>(),
@@ -118,5 +121,9 @@ Future<void> setupDependencies() async {
 
   getIt.registerFactory<DriverDashboardProvider>(
     () => DriverDashboardProvider(),
+  );
+
+  getIt.registerLazySingleton<IdentityVerificationRemoteDatasource>(
+    () => IdentityVerificationRemoteDatasource(),
   );
 }

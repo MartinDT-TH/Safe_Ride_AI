@@ -5,6 +5,7 @@ using SafeRide.Application.Features.Bookings;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
 using SafeRide.Application.Features.Bookings.Queries.EstimateBookingFare;
 using SafeRide.Application.Features.Bookings.Services;
+using SafeRide.Application.Features.Promotions;
 using SafeRide.Application.Features.Vehicles.Services;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
@@ -189,7 +190,8 @@ public sealed class BookingTests
                 new FareEstimationService(),
                 MatchingService,
                 new VehicleLicenseRequirementService(),
-                new RealtimeNotificationServiceFake());
+                new RealtimeNotificationServiceFake(),
+                Repository);
         }
 
         public static readonly Guid CustomerId =
@@ -217,14 +219,16 @@ public sealed class BookingTests
                 10.818797,
                 106.651856,
                 null,
+                null,
                 null);
         }
     }
 
-    private sealed class BookingRepositoryFake : IBookingRepository
+    private sealed class BookingRepositoryFake : IBookingRepository, IPromotionRepository
     {
         public Vehicle? Vehicle { get; init; }
         public PricingRule? PricingRule { get; init; }
+        public Promotion? Promotion { get; init; }
         public Booking? ActiveNowBooking { get; set; }
         public Booking? AddedBooking { get; private set; }
 
@@ -341,6 +345,55 @@ public sealed class BookingTests
             CancellationToken cancellationToken)
         {
             return Task.FromResult(true);
+        }
+
+        public Task<IReadOnlyList<Promotion>> GetAvailablePromotionsAsync(
+            DateTime utcNow,
+            CancellationToken cancellationToken)
+        {
+            IReadOnlyList<Promotion> promotions = Promotion is null
+                ? []
+                : [Promotion];
+
+            return Task.FromResult(promotions);
+        }
+
+        public Task<Promotion?> GetPromotionByCodeAsync(
+            string promotionCode,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(Promotion);
+        }
+
+        public Task<Booking?> GetBookingForPromotionAsync(
+            long bookingId,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult<Booking?>(AddedBooking);
+        }
+
+        public Task<int> CountCustomerPromotionUsageAsync(
+            Guid customerId,
+            long promotionId,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(0);
+        }
+
+        public Task AddBookingPromotionAsync(
+            BookingPromotion bookingPromotion,
+            CancellationToken cancellationToken)
+        {
+            AddedBooking?.BookingPromotions.Add(bookingPromotion);
+            return Task.CompletedTask;
+        }
+
+        public Task RemoveBookingPromotionsForBookingAsync(
+            long bookingId,
+            CancellationToken cancellationToken)
+        {
+            AddedBooking?.BookingPromotions.Clear();
+            return Task.CompletedTask;
         }
     }
 

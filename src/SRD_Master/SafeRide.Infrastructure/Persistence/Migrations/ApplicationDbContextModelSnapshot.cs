@@ -448,6 +448,11 @@ namespace SafeRide.Infrastructure.Migrations
                     b.Property<long>("PromotionId")
                         .HasColumnType("bigint");
 
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("(getutcdate())");
+
                     b.Property<decimal>("DiscountAmount")
                         .HasColumnType("decimal(18,2)");
 

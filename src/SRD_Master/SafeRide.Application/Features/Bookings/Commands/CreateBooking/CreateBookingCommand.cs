@@ -16,4 +16,5 @@ public sealed record CreateBookingCommand(
     double DestinationLatitude,
     double DestinationLongitude,
     string? SpecialRequest,
-    int? EstimatedHours) : IRequest<CreateBookingResponse>;
+    int? EstimatedHours,
+    string? PromotionCode) : IRequest<CreateBookingResponse>;

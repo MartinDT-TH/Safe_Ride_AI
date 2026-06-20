@@ -97,11 +97,13 @@ public static class DependencyInjection
                 provider.GetRequiredService<InMemoryRedisService>(),
                 provider.GetRequiredService<ILogger<ResilientRedisService>>()));
         services.AddSingleton<ICloudinaryImageService, CloudinaryImageService>();
+        services.AddSingleton<IIdentityDocumentStorage, CloudinaryIdentityDocumentStorage>();
         services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IGoogleTokenVerifier, GoogleTokenVerifier>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IBookingRepository, BookingRepository>();
+        services.AddScoped<IPromotionRepository, PromotionRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IBookingMatchingService, BookingMatchingService>();
         services.AddScoped<IBookingAssignmentService, BookingAssignmentService>();

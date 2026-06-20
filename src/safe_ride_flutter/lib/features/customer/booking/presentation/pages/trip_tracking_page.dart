@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:math' as Math;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -139,11 +139,11 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     final lon2 = end.longitude * (3.1415926535897932 / 180);
 
     final dLon = lon2 - lon1;
-    final y = Math.sin(dLon) * Math.cos(lat2);
-    final x = Math.cos(lat1) * Math.sin(lat2) -
-        Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+    final y = math.sin(dLon) * math.cos(lat2);
+    final x = math.cos(lat1) * math.sin(lat2) -
+        math.sin(lat1) * math.cos(lat2) * math.cos(dLon);
 
-    final radians = Math.atan2(y, x);
+    final radians = math.atan2(y, x);
     return (radians * 180 / 3.1415926535897932 + 360) % 360;
   }
 
@@ -258,6 +258,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
           color: showArrival ? const Color(0x88006B70) : _tealColor,
           width: showArrival ? 4 : 6,
           zIndex: showArrival ? 1 : 3,
+          jointType: JointType.round,
+          startCap: Cap.roundCap,
+          endCap: Cap.roundCap,
         ),
       );
     }
@@ -273,6 +276,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
             width: 5,
             patterns: [PatternItem.dash(12), PatternItem.gap(8)],
             zIndex: 4,
+            jointType: JointType.round,
+            startCap: Cap.roundCap,
+            endCap: Cap.roundCap,
           ),
         );
       }

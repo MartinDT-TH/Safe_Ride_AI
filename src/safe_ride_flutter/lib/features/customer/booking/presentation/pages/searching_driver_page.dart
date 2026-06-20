@@ -43,11 +43,21 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
   StreamSubscription? _bookingStatusSubscription;
   bool _didLeaveSearch = false;
 
+  List<LatLng> _cachedPoints = const [];
+  String? _lastEncodedPolyline;
+
   List<LatLng> get _routePoints {
     final encoded = widget.fareEstimate?.encodedPolyline;
     if (encoded == null || encoded.isEmpty) return const [];
+
+    if (encoded == _lastEncodedPolyline) {
+      return _cachedPoints;
+    }
+
     try {
-      return decodePolyline(encoded);
+      _lastEncodedPolyline = encoded;
+      _cachedPoints = decodePolyline(encoded);
+      return _cachedPoints;
     } on FormatException {
       return const [];
     }
@@ -101,58 +111,65 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
         widget.booking?.bookingId;
 
     if (token != null && bookingId != null) {
-      final booking = await bookingProvider.refreshSearchingBooking(
-        token,
-        bookingId: bookingId,
-      );
-      if (!mounted || booking == null || _didLeaveSearch) {
-        return;
-      }
-
-      if (booking.bookingStatus == 'DriverAssigned' &&
-          booking.tripStatus != null &&
-          booking.driverOffer != null) {
-        _didLeaveSearch = true;
-        _nearbyDriversSubscription?.cancel();
-        _bookingStatusSubscription?.cancel();
-        bookingProvider.setActiveBooking(
-          booking: booking,
-          pickup: booking.pickup ?? widget.pickup,
-          destination: booking.destination ?? widget.destination,
-          vehicle: booking.vehicle ?? widget.vehicle,
+      try {
+        final booking = await bookingProvider.refreshSearchingBooking(
+          token,
+          bookingId: bookingId,
         );
-        await Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => TripTrackingPage(
-              state: booking.tripStatus == 'IN_PROGRESS'
-                  ? TripTrackingState.inProgress
-                  : TripTrackingState.arriving,
-              booking: booking,
-              pickup: booking.pickup ?? widget.pickup,
-              destination: booking.destination ?? widget.destination,
-              vehicle: booking.vehicle ?? widget.vehicle,
-            ),
-          ),
-        );
-        return;
-      }
 
-      if (booking.bookingStatus == 'Cancelled' ||
-          booking.bookingStatus == 'Expired' ||
-          booking.bookingStatus == 'Completed') {
-        _didLeaveSearch = true;
-        _nearbyDriversSubscription?.cancel();
-        _bookingStatusSubscription?.cancel();
-        bookingProvider.setSearchingBooking(null);
-        bookingProvider.clearActiveBooking();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Chuyến #${booking.bookingId} đã kết thúc.'),
+        if (!mounted || booking == null || _didLeaveSearch) {
+          return;
+        }
+
+        if (booking.bookingStatus == 'DriverAssigned' &&
+            booking.tripStatus != null &&
+            booking.driverOffer != null) {
+          _didLeaveSearch = true;
+          _nearbyDriversSubscription?.cancel();
+          _bookingStatusSubscription?.cancel();
+          bookingProvider.setActiveBooking(
+            booking: booking,
+            pickup: booking.pickup ?? widget.pickup,
+            destination: booking.destination ?? widget.destination,
+            vehicle: booking.vehicle ?? widget.vehicle,
+          );
+          await Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => TripTrackingPage(
+                state: booking.tripStatus == 'IN_PROGRESS'
+                    ? TripTrackingState.inProgress
+                    : TripTrackingState.arriving,
+                booking: booking,
+                pickup: booking.pickup ?? widget.pickup,
+                destination: booking.destination ?? widget.destination,
+                vehicle: booking.vehicle ?? widget.vehicle,
+              ),
             ),
           );
-          Navigator.of(context).popUntil((route) => route.isFirst);
+          return;
         }
+
+        if (booking.bookingStatus == 'Cancelled' ||
+            booking.bookingStatus == 'Expired' ||
+            booking.bookingStatus == 'Completed') {
+          _didLeaveSearch = true;
+          _nearbyDriversSubscription?.cancel();
+          _bookingStatusSubscription?.cancel();
+          bookingProvider.setSearchingBooking(null);
+          bookingProvider.clearActiveBooking();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Chuyến #${booking.bookingId} đã kết thúc.'),
+              ),
+            );
+            // Safety check: ensure we land on Home, not Login
+            Navigator.of(context).popUntil((route) => route.isFirst);
+          }
+        }
+      } catch (e) {
+        debugPrint('ERROR in _refreshBookingStatus: $e');
+        // Don't pop to login on polling error
       }
     }
   }
@@ -296,16 +313,27 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
                   ),
                 ),
               },
-              polylines: _routePoints.isEmpty
-                  ? {}
-                  : {
-                      Polyline(
-                        polylineId: const PolylineId('route'),
-                        points: _routePoints,
-                        color: _tealColor,
-                        width: 5,
-                      ),
-                    },
+              polylines: {
+                if (_routePoints.isNotEmpty)
+                  Polyline(
+                    polylineId: const PolylineId('route'),
+                    points: _routePoints,
+                    color: _tealColor,
+                    width: 5,
+                    jointType: JointType.round,
+                    startCap: Cap.roundCap,
+                    endCap: Cap.roundCap,
+                    zIndex: 1,
+                  ),
+                if (destPos != null && _routePoints.isEmpty)
+                  Polyline(
+                    polylineId: const PolylineId('direct_route'),
+                    points: [pickupPos, destPos],
+                    color: _tealColor.withOpacity(0.5),
+                    width: 4,
+                    patterns: [PatternItem.dash(20), PatternItem.gap(10)],
+                  ),
+              },
               zoomControlsEnabled: false,
               myLocationButtonEnabled: false,
               compassEnabled: false,
@@ -322,68 +350,70 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
 
             // Navigation and Info Panel
             // Note: Keep the panel at the top level of the stack to ensure clicks work
-            SafeArea(
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          backgroundColor: Colors.white,
-                          child: IconButton(
-                            icon: const Icon(
-                              Icons.arrow_back,
-                              color: Colors.black,
-                            ),
-                            onPressed: () => handleBookingBack(
-                              context,
-                              booking: currentBooking,
+            Positioned.fill(
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            backgroundColor: Colors.white,
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.arrow_back,
+                                color: Colors.black,
+                              ),
+                              onPressed: () => handleBookingBack(
+                                context,
+                                booking: currentBooking,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  const Spacer(),
-                  _SearchingPanel(
-                    booking: currentBooking,
-                    vehicle: widget.vehicle ?? currentBooking?.vehicle,
-                    fareEstimate: widget.fareEstimate,
-                    pickupAddress:
-                        currentBooking?.pickup?.address ??
-                        widget.pickup.address,
-                    onDriverPreviewTap: _shouldShowDriverCard(currentBooking)
-                        ? () {
-                            final offer = currentBooking!.driverOffer!;
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => DriverProfilePage(
-                                  name: offer.driverName,
-                                  avatarUrl: offer.driverAvatarUrl,
-                                  rating: offer.rating,
-                                  tripCount: offer.tripCount,
-                                  experienceYears: offer.experienceYears,
-                                  booking: currentBooking,
-                                  pickup:
-                                      currentBooking.pickup ?? widget.pickup,
-                                  destination:
-                                      currentBooking.destination ??
-                                      widget.destination,
-                                  fareEstimate: widget.fareEstimate,
-                                  vehicle:
-                                      currentBooking.vehicle ?? widget.vehicle,
+                    const Spacer(),
+                    _SearchingPanel(
+                      booking: currentBooking,
+                      vehicle: widget.vehicle ?? currentBooking?.vehicle,
+                      fareEstimate: widget.fareEstimate,
+                      pickupAddress:
+                          currentBooking?.pickup?.address ??
+                          widget.pickup.address,
+                      onDriverPreviewTap: _shouldShowDriverCard(currentBooking)
+                          ? () {
+                              final offer = currentBooking!.driverOffer!;
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => DriverProfilePage(
+                                    name: offer.driverName,
+                                    avatarUrl: offer.driverAvatarUrl,
+                                    rating: offer.rating,
+                                    tripCount: offer.tripCount,
+                                    experienceYears: offer.experienceYears,
+                                    booking: currentBooking,
+                                    pickup:
+                                        currentBooking.pickup ?? widget.pickup,
+                                    destination:
+                                        currentBooking.destination ??
+                                        widget.destination,
+                                    fareEstimate: widget.fareEstimate,
+                                    vehicle:
+                                        currentBooking.vehicle ?? widget.vehicle,
+                                  ),
                                 ),
-                              ),
-                            );
-                          }
-                        : null,
-                    onCancelTap: () =>
-                        handleBookingBack(context, booking: currentBooking),
-                    destinationAddress:
-                        widget.destination?.address ?? 'Thuê theo giờ',
-                  ),
-                ],
+                              );
+                            }
+                          : null,
+                      onCancelTap: () =>
+                          handleBookingBack(context, booking: currentBooking),
+                      destinationAddress:
+                          widget.destination?.address ?? 'Thuê theo giờ',
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -493,7 +523,9 @@ class _SearchingPanel extends StatelessWidget {
               width: double.infinity,
               height: 52,
               child: ElevatedButton.icon(
-                onPressed: onCancelTap,
+                onPressed: (booking == null ||
+                          context.watch<BookingProvider>().isLoading)
+                          ? null : onCancelTap,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFF2F2F2),
                   foregroundColor: const Color(0xFFC62828),
@@ -502,10 +534,21 @@ class _SearchingPanel extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                icon: const Icon(Icons.close, size: 20),
-                label: const Text(
-                  BookingStrings.cancelBooking,
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                icon: context.watch<BookingProvider>().isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Color(0xFFC62828),
+                        ),
+                      )
+                    : const Icon(Icons.close, size: 20),
+                label: Text(
+                  context.watch<BookingProvider>().isLoading
+                      ? 'Đang hủy...'
+                      : BookingStrings.cancelBooking,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
               ),
             ),
@@ -724,40 +767,92 @@ class _BookingSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fare = booking?.estimatedFare ?? fareEstimate?.estimatedFare;
+    final originalFare = booking?.originalFare ??
+        booking?.estimatedFare ??
+        fareEstimate?.estimatedFare;
+
+    // Fallback logic: prefer finalFare from booking, then estimatedFare, then fareEstimate
+    final finalFare = booking?.finalFare ??
+                     booking?.estimatedFare ??
+                     fareEstimate?.estimatedFare;
+
+    final discount = booking?.discountAmount ?? 0;
+    final promoCode = booking?.promotionCode;
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFFEAF4F4),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Icon(
-            vehicle?.isMotorbike == true
-                ? Icons.directions_bike_rounded
-                : Icons.directions_car_rounded,
-            color: const Color(0xFF006B70),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              vehicle == null
-                  ? 'Đang chờ tài xế nhận chuyến'
-                  : '${vehicle!.name} • ${vehicle!.plateNumber}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ),
-          if (fare != null)
-            Text(
-              _formatCurrency(fare),
-              style: const TextStyle(
-                color: Color(0xFF006B70),
-                fontWeight: FontWeight.w800,
+          Row(
+            children: [
+              Icon(
+                vehicle?.isMotorbike == true
+                    ? Icons.directions_bike_rounded
+                    : Icons.directions_car_rounded,
+                color: const Color(0xFF006B70),
               ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  vehicle == null
+                      ? 'Đang chờ tài xế nhận chuyến'
+                      : '${vehicle!.name} • ${vehicle!.plateNumber}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              if (finalFare != null)
+                Text(
+                  _formatCurrency(finalFare),
+                  style: const TextStyle(
+                    color: Color(0xFF006B70),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+            ],
+          ),
+          if (discount > 0 || promoCode != null) ...[
+            const Divider(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Giá gốc:',
+                  style: TextStyle(fontSize: 13, color: Color(0xFF666666)),
+                ),
+                if (originalFare != null)
+                  Text(
+                    _formatCurrency(originalFare),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      decoration: TextDecoration.lineThrough,
+                    ),
+                  ),
+              ],
             ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Khuyến mãi (${promoCode ?? 'Mã đã áp dụng'}):',
+                  style: const TextStyle(fontSize: 13, color: Color(0xFF666666)),
+                ),
+                Text(
+                  '-${_formatCurrency(discount)}',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFFC62828),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

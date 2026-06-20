@@ -1,5 +1,6 @@
 import '../../domain/repositories/booking_repository.dart';
 import '../models/nearby_driver.dart';
+import '../models/promo_model.dart';
 import '../datasources/booking_catalog_datasource.dart';
 import '../datasources/booking_remote_datasource.dart';
 import '../models/booking_catalog.dart';
@@ -13,6 +14,11 @@ class BookingRepositoryImpl implements BookingRepository {
 
   final BookingRemoteDatasource _remoteDatasource;
   final BookingCatalogDatasource _catalogDatasource;
+
+  @override
+  Future<List<PromoModel>> getAvailablePromotions(String accessToken) {
+    return _remoteDatasource.getAvailablePromotions(accessToken);
+  }
 
   @override
   Future<BookingCatalog> getCatalog(String accessToken) {

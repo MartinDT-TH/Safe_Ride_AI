@@ -12,17 +12,20 @@ public sealed class CancelBookingCommandHandler
     private readonly IUnitOfWork _unitOfWork;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IRealtimeNotificationService _realtimeNotificationService;
+    private readonly IPromotionRepository _promotionRepository;
 
     public CancelBookingCommandHandler(
         IBookingRepository bookingRepository,
         IUnitOfWork unitOfWork,
         IDateTimeProvider dateTimeProvider,
-        IRealtimeNotificationService realtimeNotificationService)
+        IRealtimeNotificationService realtimeNotificationService,
+        IPromotionRepository promotionRepository)
     {
         _bookingRepository = bookingRepository;
         _unitOfWork = unitOfWork;
         _dateTimeProvider = dateTimeProvider;
         _realtimeNotificationService = realtimeNotificationService;
+        _promotionRepository = promotionRepository;
     }
 
     public async Task<CancelBookingResponse> Handle(
@@ -88,6 +91,10 @@ public sealed class CancelBookingCommandHandler
         booking.CancelledBy = request.CustomerId;
         booking.CancellationReason = reason;
         booking.UpdatedAt = utcNow;
+
+        await _promotionRepository.RemoveBookingPromotionsForBookingAsync(
+            booking.BookingId,
+            cancellationToken);
 
         await _bookingRepository.CancelActiveDriverOffersAsync(
             booking.BookingId,

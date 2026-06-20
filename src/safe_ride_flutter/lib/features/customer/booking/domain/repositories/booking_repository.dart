@@ -1,4 +1,5 @@
 import '../../data/models/booking_catalog.dart';
+import '../../data/models/promo_model.dart';
 import '../../data/models/booking_fare_estimate.dart';
 import '../../data/models/booking_location.dart';
 import '../../data/models/booking_response.dart';
@@ -6,6 +7,8 @@ import '../../data/models/create_booking_request.dart';
 import '../../data/models/nearby_driver.dart';
 
 abstract class BookingRepository {
+  Future<List<PromoModel>> getAvailablePromotions(String accessToken);
+
   Future<BookingCatalog> getCatalog(String accessToken);
 
   Future<BookingFareEstimate> estimateFare(

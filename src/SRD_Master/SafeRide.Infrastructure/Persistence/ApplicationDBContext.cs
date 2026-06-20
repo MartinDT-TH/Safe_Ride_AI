@@ -160,6 +160,9 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
                 tb.HasCheckConstraint("CK_BookingPromotions_DiscountAmount", "[DiscountAmount] >= 0");
             });
 
+            entity.Property(e => e.CreatedAt)
+                .IsRequired()
+                .HasDefaultValueSql("(getutcdate())");
 
             entity.HasOne(d => d.Booking).WithMany(p => p.BookingPromotions)
                 .HasForeignKey(d => d.BookingId)
