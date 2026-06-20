@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:math' as math;
+import 'package:provider/provider.dart';
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../auth/presentation/pages/login_page.dart';
+import '../../../../auth/presentation/providers/auth_provider.dart';
+import '../../../../customer/home/presentation/pages/customer_home_page.dart';
+import '../../../../shared/profile/presentation/pages/edit_profile_page.dart';
+import '../../presentation/pages/role_selection_page.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -65,17 +70,41 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
 
     Timer(const Duration(seconds: 4), () {
       if (mounted) {
-        Navigator.of(context).pushReplacement(
-          PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) => const LoginPage(),
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-            transitionDuration: const Duration(milliseconds: 800),
-          ),
-        );
+        _navigateToNext(context);
       }
     });
+  }
+
+  void _navigateToNext(BuildContext context) {
+    final auth = context.read<AuthProvider>();
+
+    Widget destination;
+    if (auth.token != null && auth.token!.isNotEmpty) {
+      if (auth.isProfileComplete) {
+        destination = const CustomerHomePage();
+      } else if (auth.nextStep == AuthNextStep.completeProfile) {
+        destination = EditProfilePage(
+          requiredCompletion: true,
+          phoneNumber: auth.phoneNumber,
+        );
+      } else if (auth.nextStep == AuthNextStep.selectRole) {
+        destination = const RoleSelectionPage();
+      } else {
+        destination = const CustomerHomePage();
+      }
+    } else {
+      destination = const LoginPage();
+    }
+
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => destination,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 800),
+      ),
+    );
   }
 
   @override
