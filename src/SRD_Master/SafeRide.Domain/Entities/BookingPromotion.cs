@@ -13,6 +13,8 @@ public partial class BookingPromotion
 
     public decimal DiscountAmount { get; set; }
 
+    public DateTime CreatedAt { get; set; }
+
     public virtual Booking Booking { get; set; } = null!;
     public virtual Promotion Promotion { get; set; } = null!;
 }
