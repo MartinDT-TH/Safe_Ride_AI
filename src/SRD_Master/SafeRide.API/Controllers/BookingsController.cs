@@ -10,8 +10,10 @@ using SafeRide.Application.Features.Bookings.DTOs;
 using SafeRide.Application.Features.Bookings.Queries.EstimateBookingFare;
 using SafeRide.Application.Features.Bookings.Queries.GetBookingDetails;
 using SafeRide.Application.Features.Bookings.Queries.GetBookingCatalog;
+using SafeRide.Application.Features.Promotions.Commands.ApplyPromotionToBooking;
 using SafeRide.Contracts.Requests.Bookings;
 using SafeRide.Contracts.Responses.Bookings;
+using SafeRide.Contracts.Responses.Promotions;
 
 namespace SafeRide.API.Controllers;
 
@@ -278,6 +280,34 @@ public sealed class BookingsController : ControllerBase
             result.EncodedPolyline,
             result.Message,
             result.DriverOffer));
+    }
+
+    [Authorize(Roles = "Customer")]
+    [HttpPost("{bookingId:long}/promotions")]
+    [ProducesResponseType<ApplyPromotionToBookingResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<ApplyPromotionToBookingResponse>> ApplyPromotion(
+        long bookingId,
+        [FromBody] ApplyPromotionToBookingRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCustomerId(out var customerId))
+        {
+            return Unauthorized(CreateUnauthorizedProblem());
+        }
+
+        var result = await _sender.Send(
+            new ApplyPromotionToBookingCommand(
+                customerId,
+                bookingId,
+                request.PromotionCode),
+            cancellationToken);
+
+        return Ok(result);
     }
 
     private static BookingResponse ToResponse(
