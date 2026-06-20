@@ -177,6 +177,7 @@ public sealed class BookingRepository : IBookingRepository
         var bookings = await _dbContext.Bookings
             .Include(booking => booking.Trip)
             .Include(booking => booking.DriverOffers)
+            .Include(booking => booking.BookingPromotions)
             .Where(booking => booking.CustomerId == customerId
                 && booking.BookingType == BookingType.Now
                 && (booking.BookingStatus == BookingStatus.Searching
@@ -194,6 +195,8 @@ public sealed class BookingRepository : IBookingRepository
             booking.BookingStatus = BookingStatus.Expired;
             booking.UpdatedAt = utcNow;
             changed = true;
+
+            _dbContext.BookingPromotions.RemoveRange(booking.BookingPromotions);
 
             foreach (var offer in booking.DriverOffers
                 .Where(offer => offer.OfferStatus == DriverOfferStatus.Offered))
