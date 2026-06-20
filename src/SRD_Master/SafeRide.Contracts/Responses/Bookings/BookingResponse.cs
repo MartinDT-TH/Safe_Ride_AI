@@ -41,4 +41,8 @@ public sealed record BookingResponse(
     BookingVehicleSummaryResponse? Vehicle = null,
     TripStatus? TripStatus = null,
     long? TripId = null,
-    string? ArrivalPolyline = null);
+    string? ArrivalPolyline = null,
+    decimal OriginalFare = 0m,
+    string? PromotionCode = null,
+    decimal DiscountAmount = 0m,
+    decimal FinalFare = 0m);
