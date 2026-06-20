@@ -43,50 +43,68 @@ public sealed class BookingMatchingService : IBookingMatchingService
         long bookingId,
         CancellationToken cancellationToken)
     {
-        var utcNow = _dateTimeProvider.UtcNow;
-        var booking = await _dbContext.Bookings
-            .Include(x => x.Vehicle)
-            .FirstOrDefaultAsync(
-                x => x.BookingId == bookingId,
-                cancellationToken);
-        if (booking is null)
+        try
         {
-            _logger.LogWarning(
-                "Matching skipped because booking {BookingId} was not found.",
-                bookingId);
-            return null;
-        }
+            var utcNow = _dateTimeProvider.UtcNow;
+            var booking = await _dbContext.Bookings
+                .Include(x => x.Vehicle)
+                .FirstOrDefaultAsync(
+                    x => x.BookingId == bookingId,
+                    cancellationToken);
+            if (booking is null)
+            {
+                _logger.LogWarning(
+                    "Matching skipped because booking {BookingId} was not found.",
+                    bookingId);
+                return null;
+            }
 
-        if (booking.BookingStatus != BookingStatus.Searching)
-        {
-            _logger.LogInformation(
-                "Matching skipped for booking {BookingId} because status is {BookingStatus}.",
-                bookingId,
-                booking.BookingStatus);
-            return null;
-        }
+            if (booking.PickupLocation == null)
+            {
+                _logger.LogError(
+                    "Matching failed: PickupLocation is null for booking {BookingId}.",
+                    bookingId);
+                return null;
+            }
 
-        if (!_vehicleLicenseRequirementService.HasValidRequirement(booking.Vehicle))
-        {
-            _logger.LogWarning(
-                "Matching skipped for booking {BookingId} because vehicle {VehicleId} has invalid license requirement.",
-                bookingId,
-                booking.VehicleId);
-            return null;
-        }
+            if (booking.BookingStatus != BookingStatus.Searching)
+            {
+                _logger.LogInformation(
+                    "Matching skipped for booking {BookingId} because status is {BookingStatus}.",
+                    bookingId,
+                    booking.BookingStatus);
+                return null;
+            }
 
-        await CacheMatchingBookingAsync(booking, utcNow, cancellationToken);
-        await ExpireStaleOffersAsync(utcNow, cancellationToken);
+            if (booking.Vehicle == null)
+            {
+                _logger.LogError(
+                    "Matching failed: Vehicle is null for booking {BookingId}.",
+                    bookingId);
+                return null;
+            }
 
-        var existingOffer = await GetActiveOfferDtoAsync(bookingId, utcNow, cancellationToken);
-        if (existingOffer is not null)
-        {
-            return existingOffer;
-        }
+            if (!_vehicleLicenseRequirementService.HasValidRequirement(booking.Vehicle))
+            {
+                _logger.LogWarning(
+                    "Matching skipped for booking {BookingId} because vehicle {VehicleId} has invalid license requirement.",
+                    bookingId,
+                    booking.VehicleId);
+                return null;
+            }
 
-        var redisCandidateIds = await GetRedisCandidateDriverIdsAsync(
-            booking.PickupLocation.X,
-            booking.PickupLocation.Y);
+            await CacheMatchingBookingAsync(booking, utcNow, cancellationToken);
+            await ExpireStaleOffersAsync(utcNow, cancellationToken);
+
+            var existingOffer = await GetActiveOfferDtoAsync(bookingId, utcNow, cancellationToken);
+            if (existingOffer is not null)
+            {
+                return existingOffer;
+            }
+
+            var redisCandidateIds = await GetRedisCandidateDriverIdsAsync(
+                booking.PickupLocation.X,
+                booking.PickupLocation.Y);
 
         var approvedDriverLicensesQuery = _dbContext.DriverKycs
             .AsNoTracking()
@@ -167,43 +185,52 @@ public sealed class BookingMatchingService : IBookingMatchingService
             eligibleDriverId != Guid.Empty,
             booking.Vehicle.RequiredLicenseClass);
 
-        if (eligibleDriverId == Guid.Empty)
+            if (eligibleDriverId == Guid.Empty)
+            {
+                return null;
+            }
+
+            var offer = new BookingDriverOffer
+            {
+                BookingId = bookingId,
+                DriverId = eligibleDriverId,
+                OfferStatus = DriverOfferStatus.Offered,
+                OfferedAt = utcNow,
+                ExpiresAt = utcNow.AddMinutes(2)
+            };
+
+            await _dbContext.BookingDriverOffers.AddAsync(offer, cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await CacheMatchingOfferAsync(offer);
+
+            var offerDto = await GetActiveOfferDtoAsync(bookingId, utcNow, cancellationToken);
+            if (offerDto is not null)
+            {
+                await _realtimeNotificationService.PublishDriverOfferCreatedAsync(
+                    new DriverOfferCreatedEvent(
+                        bookingId,
+                        booking.CustomerId,
+                        offerDto),
+                    cancellationToken);
+                await _realtimeNotificationService.PublishDriverMatchedAsync(
+                    new DriverMatchedEvent(
+                        bookingId,
+                        eligibleDriverId,
+                        offer.OfferedAt,
+                        offer.ExpiresAt),
+                    cancellationToken);
+            }
+
+            return offerDto;
+        }
+        catch (Exception exception)
         {
+            _logger.LogError(
+                exception,
+                "Error during matching process for booking {BookingId}.",
+                bookingId);
             return null;
         }
-
-        var offer = new BookingDriverOffer
-        {
-            BookingId = bookingId,
-            DriverId = eligibleDriverId,
-            OfferStatus = DriverOfferStatus.Offered,
-            OfferedAt = utcNow,
-            ExpiresAt = utcNow.AddMinutes(2)
-        };
-
-        await _dbContext.BookingDriverOffers.AddAsync(offer, cancellationToken);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        await CacheMatchingOfferAsync(offer);
-
-        var offerDto = await GetActiveOfferDtoAsync(bookingId, utcNow, cancellationToken);
-        if (offerDto is not null)
-        {
-            await _realtimeNotificationService.PublishDriverOfferCreatedAsync(
-                new DriverOfferCreatedEvent(
-                    bookingId,
-                    booking.CustomerId,
-                    offerDto),
-                cancellationToken);
-            await _realtimeNotificationService.PublishDriverMatchedAsync(
-                new DriverMatchedEvent(
-                    bookingId,
-                    eligibleDriverId,
-                    offer.OfferedAt,
-                    offer.ExpiresAt),
-                cancellationToken);
-        }
-
-        return offerDto;
     }
 
     private async Task CacheMatchingBookingAsync(
@@ -345,7 +372,7 @@ public sealed class BookingMatchingService : IBookingMatchingService
                 user.UserName,
                 user.AvatarUrl,
                 profile.ExperienceYears,
-                LicenseClass = kyc.LicenseClass!.Value,
+                LicenseClass = kyc.LicenseClass ?? LicenseClass.A1,
                 driverOffer.ExpiresAt
             })
             .Take(1)
@@ -362,7 +389,7 @@ public sealed class BookingMatchingService : IBookingMatchingService
             .GroupBy(x => x.DriverId)
             .Select(group => new
             {
-                Rating = Math.Round(group.Average(x => (double)x.RatingScore), 1),
+                AverageRating = group.Average(x => (double)x.RatingScore),
                 TripCount = group.Count()
             })
             .FirstOrDefaultAsync(cancellationToken);
@@ -372,7 +399,7 @@ public sealed class BookingMatchingService : IBookingMatchingService
             activeOffer.DriverId,
             activeOffer.FullName ?? activeOffer.UserName ?? "Tài xế SafeRide",
             activeOffer.AvatarUrl,
-            ratingStats?.Rating ?? 0,
+            ratingStats is null ? 0 : Math.Round(ratingStats.AverageRating, 1),
             ratingStats?.TripCount ?? 0,
             activeOffer.ExperienceYears ?? 0,
             activeOffer.LicenseClass,

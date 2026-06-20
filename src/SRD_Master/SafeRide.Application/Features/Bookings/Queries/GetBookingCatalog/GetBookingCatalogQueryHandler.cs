@@ -28,6 +28,14 @@ public sealed class GetBookingCatalogQueryHandler
             request.CustomerId,
             cancellationToken);
 
+        if (pricingRules.Count == 0)
+        {
+            throw new BookingException(
+                "booking.no_available_services",
+                "Hiện chưa có dịch vụ nào khả dụng cho các loại xe của bạn.",
+                404);
+        }
+
         var services = pricingRules
             .GroupBy(rule => rule.ServiceTypeId)
             .Select(group =>
@@ -47,6 +55,14 @@ public sealed class GetBookingCatalogQueryHandler
             })
             .OrderBy(service => service.Id)
             .ToList();
+
+        if (vehicles.Count == 0)
+        {
+            throw new BookingException(
+                "booking.no_registered_vehicles",
+                "Bạn chưa đăng ký phương tiện nào. Vui lòng đăng ký xe để bắt đầu đặt chuyến.",
+                404);
+        }
 
         var vehicleOptions = vehicles
             .Select(vehicle => new BookingVehicleOptionResult(
