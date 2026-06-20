@@ -241,6 +241,7 @@ abstract final class ApiEndpoints {
   static const logout = '/auth/logout';
   static const bookings = '/bookings';
   static const activeBooking = '/bookings/active';
+  static const availablePromotions = '/promotions/available';
   static const bookingCatalog = '/bookings/catalog';
   static const bookingEstimate = '/bookings/estimate';
   static const nearbyDrivers = '/drivers/nearby';
@@ -318,6 +319,10 @@ abstract final class ApiKeys {
   static const destinationLatitude = 'destinationLatitude';
   static const destinationLongitude = 'destinationLongitude';
   static const specialRequest = 'specialRequest';
+  static const promotionCode = 'promotionCode';
+  static const originalFare = 'originalFare';
+  static const discountAmount = 'discountAmount';
+  static const finalFare = 'finalFare';
   static const userName = 'userName';
   static const recentTrips = 'recentTrips';
   static const pickup = 'pickup';

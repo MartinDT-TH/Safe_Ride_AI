@@ -491,6 +491,7 @@ class _StatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final trailingWidget = trailing;
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -540,7 +541,7 @@ class _StatusCard extends StatelessWidget {
               ],
             ),
           ),
-          ?trailing,
+          if (trailingWidget != null) trailingWidget,
         ],
       ),
     );
