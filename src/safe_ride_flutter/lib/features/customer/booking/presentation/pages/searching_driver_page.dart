@@ -767,40 +767,92 @@ class _BookingSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fare = booking?.estimatedFare ?? fareEstimate?.estimatedFare;
+    final originalFare = booking?.originalFare ??
+        booking?.estimatedFare ??
+        fareEstimate?.estimatedFare;
+
+    // Fallback logic: prefer finalFare from booking, then estimatedFare, then fareEstimate
+    final finalFare = booking?.finalFare ??
+                     booking?.estimatedFare ??
+                     fareEstimate?.estimatedFare;
+
+    final discount = booking?.discountAmount ?? 0;
+    final promoCode = booking?.promotionCode;
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFFEAF4F4),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Icon(
-            vehicle?.isMotorbike == true
-                ? Icons.directions_bike_rounded
-                : Icons.directions_car_rounded,
-            color: const Color(0xFF006B70),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              vehicle == null
-                  ? 'Đang chờ tài xế nhận chuyến'
-                  : '${vehicle!.name} • ${vehicle!.plateNumber}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ),
-          if (fare != null)
-            Text(
-              _formatCurrency(fare),
-              style: const TextStyle(
-                color: Color(0xFF006B70),
-                fontWeight: FontWeight.w800,
+          Row(
+            children: [
+              Icon(
+                vehicle?.isMotorbike == true
+                    ? Icons.directions_bike_rounded
+                    : Icons.directions_car_rounded,
+                color: const Color(0xFF006B70),
               ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  vehicle == null
+                      ? 'Đang chờ tài xế nhận chuyến'
+                      : '${vehicle!.name} • ${vehicle!.plateNumber}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              if (finalFare != null)
+                Text(
+                  _formatCurrency(finalFare),
+                  style: const TextStyle(
+                    color: Color(0xFF006B70),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+            ],
+          ),
+          if (discount > 0 || promoCode != null) ...[
+            const Divider(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Giá gốc:',
+                  style: TextStyle(fontSize: 13, color: Color(0xFF666666)),
+                ),
+                if (originalFare != null)
+                  Text(
+                    _formatCurrency(originalFare),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      decoration: TextDecoration.lineThrough,
+                    ),
+                  ),
+              ],
             ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Khuyến mãi (${promoCode ?? 'Mã đã áp dụng'}):',
+                  style: const TextStyle(fontSize: 13, color: Color(0xFF666666)),
+                ),
+                Text(
+                  '-${_formatCurrency(discount)}',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFFC62828),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
