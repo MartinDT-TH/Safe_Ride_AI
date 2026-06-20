@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../../../core/constants/app_colors.dart';
+import '../../../../../core/constants/app_strings.dart';
+import '../../../../auth/presentation/providers/auth_provider.dart';
+import '../providers/booking_provider.dart';
 import '../../data/models/promo_model.dart';
 
 class SelectPromoSheet extends StatefulWidget {
@@ -21,24 +25,16 @@ class SelectPromoSheet extends StatefulWidget {
 class _SelectPromoSheetState extends State<SelectPromoSheet> {
   final _promoController = TextEditingController();
 
-  final List<PromoModel> _promos = const [
-    PromoModel(
-      code: 'SAFE10',
-      description: 'Giảm 15.000đ - Cho mọi chuyến đi',
-      expiry: 'Hết hạn sau 2 ngày',
-    ),
-    PromoModel(
-      code: 'NEWUSER',
-      description: 'Giảm 20% - Tối đa 30.000đ',
-      expiry: 'Hết hạn sau 5 ngày',
-    ),
-    PromoModel(
-      code: 'FREESHIP',
-      description: 'Miễn phí phụ phí đêm',
-      expiry: 'Hết hạn hôm nay',
-      isExpiringSoon: true,
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final token = context.read<AuthProvider>().token;
+      if (token != null) {
+        context.read<BookingProvider>().loadAvailablePromotions(token);
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -48,6 +44,10 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<BookingProvider>();
+    final promos = provider.availablePromotions;
+    final isLoading = provider.isLoadingPromotions;
+
     return Container(
       height: MediaQuery.of(context).size.height * 0.85,
       decoration: const BoxDecoration(
@@ -74,7 +74,7 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'Chọn mã khuyến mãi',
+                  PromotionStrings.selectPromotion,
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
@@ -108,7 +108,7 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
                     child: TextField(
                       controller: _promoController,
                       decoration: InputDecoration(
-                        hintText: 'Nhập mã khuyến mãi',
+                        hintText: PromotionStrings.enterPromoCode,
                         hintStyle: const TextStyle(color: Color(0xFFAAAAAA), fontSize: 15),
                         filled: true,
                         fillColor: const Color(0xFFF7F7F7),
@@ -125,7 +125,12 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
                 SizedBox(
                   height: 54,
                   child: ElevatedButton(
-                    onPressed: () {},
+                    onPressed: () {
+                      if (_promoController.text.isNotEmpty) {
+                        // Manual entry could be handled by searching or direct apply
+                        // For now, let's just pop with a dummy promo or handle it if API supports
+                      }
+                    },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
@@ -136,7 +141,7 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
                       padding: const EdgeInsets.symmetric(horizontal: 24),
                     ),
                     child: const Text(
-                      'Áp dụng',
+                      PromotionStrings.apply,
                       style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
                     ),
                   ),
@@ -147,19 +152,49 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
           const SizedBox(height: 24),
           // List Section
           Expanded(
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              itemCount: _promos.length,
-              physics: const BouncingScrollPhysics(),
-              separatorBuilder: (context, index) => const SizedBox(height: 16),
-              itemBuilder: (context, index) {
-                return _PromoCard(
-                  promo: _promos[index],
-                  onUse: () => Navigator.pop(context, _promos[index]),
-                );
-              },
-            ),
+            child: isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : promos.isEmpty
+                    ? const Center(child: Text('Hiện chưa có mã khuyến mãi khả dụng.'))
+                    : ListView.separated(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                        itemCount: promos.length,
+                        physics: const BouncingScrollPhysics(),
+                        separatorBuilder: (context, index) => const SizedBox(height: 16),
+                        itemBuilder: (context, index) {
+                          return _PromoCard(
+                            promo: promos[index],
+                            isSelected: provider.selectedPromo?.promotionId == promos[index].promotionId,
+                            onUse: () {
+                              provider.selectPromo(promos[index]);
+                              Navigator.pop(context, promos[index]);
+                            },
+                          );
+                        },
+                      ),
           ),
+          if (provider.selectedPromo != null)
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: SizedBox(
+                width: double.infinity,
+                height: 54,
+                child: OutlinedButton(
+                  onPressed: () {
+                    provider.clearSelectedPromo();
+                    Navigator.pop(context);
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    side: const BorderSide(color: Colors.red),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text('Bỏ chọn mã khuyến mãi'),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -169,10 +204,12 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
 class _PromoCard extends StatelessWidget {
   final PromoModel promo;
   final VoidCallback onUse;
+  final bool isSelected;
 
   const _PromoCard({
     required this.promo,
     required this.onUse,
+    this.isSelected = false,
   });
 
   @override
@@ -181,7 +218,10 @@ class _PromoCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFEEEEEE), width: 1.5),
+        border: Border.all(
+          color: isSelected ? AppColors.primary : const Color(0xFFEEEEEE),
+          width: 1.5,
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -215,7 +255,7 @@ class _PromoCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      promo.code,
+                      promo.promotionCode,
                       style: const TextStyle(
                         color: AppColors.primary,
                         fontWeight: FontWeight.w800,
@@ -226,7 +266,7 @@ class _PromoCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    promo.description,
+                    promo.shortDescription,
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
@@ -234,21 +274,30 @@ class _PromoCard extends StatelessWidget {
                       height: 1.3,
                     ),
                   ),
+                  if (promo.minimumOrderValue > 0) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Đơn tối thiểu: ${_formatCurrency(promo.minimumOrderValue)}',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF888888)),
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      Icon(
-                        promo.isExpiringSoon ? Icons.priority_high : Icons.access_time,
+                      const Icon(
+                        Icons.access_time,
                         size: 14,
-                        color: promo.isExpiringSoon ? const Color(0xFFE53935) : const Color(0xFF888888),
+                        color: Color(0xFF888888),
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        promo.expiry,
-                        style: TextStyle(
+                        promo.remainingUsageCount > 0
+                          ? 'Còn lại: ${promo.remainingUsageCount} lượt'
+                          : 'Hết lượt sử dụng',
+                        style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: promo.isExpiringSoon ? const Color(0xFFE53935) : const Color(0xFF888888),
+                          color: Color(0xFF888888),
                         ),
                       ),
                     ],
@@ -265,10 +314,10 @@ class _PromoCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: const Text(
-                'Dùng\nngay',
+              child: Text(
+                isSelected ? 'Đang\ndùng' : PromotionStrings.useNow,
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 14,
                   height: 1.2,
@@ -279,5 +328,15 @@ class _PromoCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _formatCurrency(double value) {
+    final digits = value.round().toString();
+    final buffer = StringBuffer();
+    for (var index = 0; index < digits.length; index++) {
+      if (index > 0 && (digits.length - index) % 3 == 0) buffer.write('.');
+      buffer.write(digits[index]);
+    }
+    return '$bufferđ';
   }
 }

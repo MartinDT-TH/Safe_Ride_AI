@@ -12,9 +12,10 @@ import '../../data/models/booking_catalog.dart';
 import '../../data/models/booking_fare_estimate.dart';
 import '../../data/models/booking_location.dart';
 import '../../data/models/create_booking_request.dart';
+import '../../data/models/promo_model.dart';
 import '../providers/booking_provider.dart';
 import 'location_picker_page.dart';
-import 'promotion_page.dart';
+import '../widgets/select_promo_sheet.dart';
 import 'searching_driver_page.dart';
 
 class BookingOptionsPage extends StatefulWidget {
@@ -269,13 +270,8 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
     );
   }
 
-  void _showPromoStub() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => const PromotionPage(),
-    );
+  void _showPromoSheet() {
+    SelectPromoSheet.show(context);
   }
 
   void _showMessage(String message) {
@@ -490,7 +486,11 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                       ),
                   ],
                   const SizedBox(height: 12),
-                  _PromoTile(onTap: _showPromoStub),
+                  _PromoTile(
+                    selectedPromo: provider.selectedPromo,
+                    onTap: _showPromoSheet,
+                    onClear: provider.clearSelectedPromo,
+                  ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _specialRequestController,
@@ -552,16 +552,6 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
         ),
       ),
     );
-  }
-
-  String _formatCurrency(double value) {
-    final digits = value.round().toString();
-    final buffer = StringBuffer();
-    for (var index = 0; index < digits.length; index++) {
-      if (index > 0 && (digits.length - index) % 3 == 0) buffer.write('.');
-      buffer.write(digits[index]);
-    }
-    return '$bufferđ';
   }
 
   BookingServiceOption? _selectedServiceOrFirst(
@@ -964,9 +954,15 @@ class _HourInput extends StatelessWidget {
 }
 
 class _PromoTile extends StatelessWidget {
-  const _PromoTile({required this.onTap});
+  const _PromoTile({
+    required this.onTap,
+    this.selectedPromo,
+    required this.onClear,
+  });
 
   final VoidCallback onTap;
+  final PromoModel? selectedPromo;
+  final VoidCallback onClear;
 
   @override
   Widget build(BuildContext context) {
@@ -974,22 +970,54 @@ class _PromoTile extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: const Color(0xFFF8F6F6),
+          color: selectedPromo != null
+              ? const Color(0xFFEAF4F4)
+              : const Color(0xFFF8F6F6),
           borderRadius: BorderRadius.circular(12),
+          border: selectedPromo != null
+              ? Border.all(color: AppColors.primary)
+              : null,
         ),
-        child: const Row(
+        child: Row(
           children: [
-            Icon(Icons.local_offer, color: AppColors.primary),
-            SizedBox(width: 12),
+            const Icon(Icons.local_offer, color: AppColors.primary),
+            const SizedBox(width: 12),
             Expanded(
-              child: Text(
-                'Thêm mã khuyến mãi',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    selectedPromo?.promotionCode ?? 'Thêm mã khuyến mãi',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  if (selectedPromo != null)
+                    Text(
+                      selectedPromo!.shortDescription,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF626A6C),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
               ),
             ),
-            Icon(Icons.chevron_right),
+            if (selectedPromo != null)
+              IconButton(
+                onPressed: onClear,
+                icon: const Icon(Icons.cancel, color: Colors.grey, size: 20),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              )
+            else
+              const Icon(Icons.chevron_right),
           ],
         ),
       ),

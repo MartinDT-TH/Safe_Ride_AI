@@ -9,7 +9,7 @@ import '../../data/models/booking_location.dart';
 import '../../data/models/booking_response.dart';
 import '../../data/models/create_booking_request.dart';
 import '../providers/booking_provider.dart';
-import 'trip_tracking_page.dart';
+// import 'trip_tracking_page.dart';
 
 class ConfirmBookingPage extends StatelessWidget {
   const ConfirmBookingPage({
@@ -41,7 +41,11 @@ class ConfirmBookingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fare = booking?.estimatedFare ?? fareEstimate?.estimatedFare;
+    final fare = booking?.finalFare ?? booking?.estimatedFare ?? fareEstimate?.estimatedFare;
+    final originalFare = booking?.originalFare ?? booking?.estimatedFare ?? fareEstimate?.estimatedFare;
+    final discount = booking?.discountAmount ?? 0;
+    final promoCode = booking?.promotionCode;
+
     final distance =
         booking?.estimatedDistanceKm ?? fareEstimate?.estimatedDistanceKm;
     final duration =
@@ -116,8 +120,19 @@ class ConfirmBookingPage extends StatelessWidget {
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Divider(thickness: 1, color: Color(0xFFEEEEEE)),
               ),
+              if (discount > 0 || promoCode != null) ...[
+                _InfoRow(
+                  label: 'Giá gốc',
+                  value: originalFare == null ? 'Đang cập nhật' : _formatCurrency(originalFare),
+                ),
+                _InfoRow(
+                  label: 'Khuyến mãi ${promoCode != null ? '($promoCode)' : ''}',
+                  value: '-${_formatCurrency(discount)}',
+                  valueColor: Colors.red,
+                ),
+              ],
               _InfoRow(
-                label: 'Tổng dự kiến',
+                label: 'Tổng thanh toán dự kiến',
                 value: fare == null ? 'Đang cập nhật' : _formatCurrency(fare),
                 isTotal: true,
               ),
@@ -394,11 +409,13 @@ class _InfoRow extends StatelessWidget {
     required this.label,
     required this.value,
     this.isTotal = false,
+    this.valueColor,
   });
 
   final String label;
   final String value;
   final bool isTotal;
+  final Color? valueColor;
 
   @override
   Widget build(BuildContext context) {
@@ -411,7 +428,7 @@ class _InfoRow extends StatelessWidget {
           Text(
             value,
             style: TextStyle(
-              color: isTotal ? AppColors.primary : Colors.black,
+              color: valueColor ?? (isTotal ? AppColors.primary : Colors.black),
               fontSize: isTotal ? 18 : 15,
               fontWeight: isTotal ? FontWeight.w800 : FontWeight.w600,
             ),

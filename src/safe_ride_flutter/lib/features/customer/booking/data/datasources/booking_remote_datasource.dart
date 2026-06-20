@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/network/auth_header.dart';
 import '../../../../../core/network/dio_client.dart';
+import '../models/promo_model.dart';
 import '../models/booking_response.dart';
 import '../models/booking_fare_estimate.dart';
 import '../models/booking_location.dart';
@@ -13,6 +14,37 @@ class BookingRemoteDatasource {
   BookingRemoteDatasource({Dio? dio}) : _dio = dio ?? DioClient().dio;
 
   final Dio _dio;
+
+  Future<List<PromoModel>> getAvailablePromotions(String accessToken) async {
+    try {
+      final response = await _dio.get(
+        ApiEndpoints.availablePromotions,
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+        ),
+      );
+
+      final List data = (response.data is List)
+          ? response.data
+          : (response.data is Map && response.data['data'] is List)
+              ? response.data['data']
+              : [];
+
+      return data
+          .map((item) => PromoModel.fromJson(Map<String, dynamic>.from(item)))
+          .toList();
+    } on FormatException {
+      throw const BookingApiException(BookingStrings.sessionExpired);
+    } on DioException catch (exception) {
+      final data = exception.response?.data;
+      if (data is Map && data[ApiKeys.detail] != null) {
+        throw BookingApiException(data[ApiKeys.detail].toString());
+      }
+      throw const BookingApiException(
+        'Không thể lấy danh sách khuyến mãi. Vui lòng thử lại.',
+      );
+    }
+  }
 
   Future<BookingFareEstimate> estimateFare(
     String accessToken, {

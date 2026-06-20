@@ -20,6 +20,10 @@ class BookingResponse {
     this.vehicle,
     this.tripId,
     this.tripStatus,
+    this.originalFare,
+    this.promotionCode,
+    this.discountAmount,
+    this.finalFare,
   });
 
   final int bookingId;
@@ -38,10 +42,48 @@ class BookingResponse {
   final BookingVehicleOption? vehicle;
   final int? tripId;
   final String? tripStatus;
+  final double? originalFare;
+  final String? promotionCode;
+  final double? discountAmount;
+  final double? finalFare;
 
   factory BookingResponse.fromJson(Map<String, dynamic> json) {
+    final estimatedFareValue = (json[ApiKeys.estimatedFare] as num?)?.toDouble() ?? 0;
+    final originalFareFromApi = (json[ApiKeys.originalFare] as num?)?.toDouble();
+    final discountAmountValue = (json[ApiKeys.discountAmount] as num?)?.toDouble() ?? 0;
+    final finalFareFromApi = (json[ApiKeys.finalFare] as num?)?.toDouble();
+
+    // Fallback originalFare to estimatedFare if it's null or zero
+    final originalFareValue = (originalFareFromApi == null || originalFareFromApi == 0)
+        ? estimatedFareValue
+        : originalFareFromApi;
+
+    // Calculate final fare.
+    // If we have a discount (> 0), we prioritize calculating it (original - discount)
+    // especially if the backend returns the full price as finalFare or returns 0.
+    var calculatedFinalFare = finalFareFromApi;
+
+    if (discountAmountValue > 0) {
+      final expectedFare = originalFareValue - discountAmountValue;
+      // If finalFare is missing, zero, or matches the original price despite having a discount, recalculate it.
+      if (calculatedFinalFare == null ||
+          calculatedFinalFare == 0 ||
+          (calculatedFinalFare - originalFareValue).abs() < 1.0 ||
+          (calculatedFinalFare - estimatedFareValue).abs() < 1.0) {
+        calculatedFinalFare = expectedFare;
+      }
+    } else {
+      // No discount applied in this JSON
+      if (calculatedFinalFare == null || calculatedFinalFare == 0) {
+        calculatedFinalFare = estimatedFareValue;
+      }
+    }
+
+    // Ensure finalFare is never negative
+    if (calculatedFinalFare < 0) calculatedFinalFare = 0;
+
     return BookingResponse(
-      bookingId: (json[ApiKeys.bookingId] as num).toInt(),
+      bookingId: (json[ApiKeys.bookingId] as num?)?.toInt() ?? 0,
       bookingType: json[ApiKeys.bookingType]?.toString() ?? '',
       bookingStatus: json[ApiKeys.bookingStatus]?.toString() ?? '',
       scheduledAt: json[ApiKeys.scheduledAt] == null
@@ -51,7 +93,7 @@ class BookingResponse {
           (json[ApiKeys.estimatedDistanceKm] as num?)?.toDouble() ?? 0,
       estimatedDurationMinutes:
           (json[ApiKeys.estimatedDurationMinutes] as num?)?.toInt() ?? 0,
-      estimatedFare: (json[ApiKeys.estimatedFare] as num?)?.toDouble() ?? 0,
+      estimatedFare: estimatedFareValue,
       encodedPolyline: json[ApiKeys.encodedPolyline]?.toString() ?? '',
       arrivalPolyline: json[ApiKeys.arrivalPolyline]?.toString(),
       message:
@@ -78,7 +120,110 @@ class BookingResponse {
           : null,
       tripId: (json[ApiKeys.tripId] as num?)?.toInt(),
       tripStatus: json[ApiKeys.tripStatus]?.toString(),
+      originalFare: originalFareValue,
+      promotionCode: json[ApiKeys.promotionCode]?.toString(),
+      discountAmount: discountAmountValue,
+      finalFare: calculatedFinalFare,
     );
+  }
+
+  BookingResponse copyWith({
+    int? bookingId,
+    String? bookingType,
+    String? bookingStatus,
+    DateTime? scheduledAt,
+    double? estimatedDistanceKm,
+    int? estimatedDurationMinutes,
+    double? estimatedFare,
+    String? encodedPolyline,
+    String? arrivalPolyline,
+    String? message,
+    BookingDriverOffer? driverOffer,
+    BookingLocation? pickup,
+    BookingLocation? destination,
+    BookingVehicleOption? vehicle,
+    int? tripId,
+    String? tripStatus,
+    double? originalFare,
+    String? promotionCode,
+    double? discountAmount,
+    double? finalFare,
+  }) {
+    return BookingResponse(
+      bookingId: bookingId ?? this.bookingId,
+      bookingType: bookingType ?? this.bookingType,
+      bookingStatus: bookingStatus ?? this.bookingStatus,
+      scheduledAt: scheduledAt ?? this.scheduledAt,
+      estimatedDistanceKm: estimatedDistanceKm ?? this.estimatedDistanceKm,
+      estimatedDurationMinutes:
+          estimatedDurationMinutes ?? this.estimatedDurationMinutes,
+      estimatedFare: estimatedFare ?? this.estimatedFare,
+      encodedPolyline: encodedPolyline ?? this.encodedPolyline,
+      arrivalPolyline: arrivalPolyline ?? this.arrivalPolyline,
+      message: message ?? this.message,
+      driverOffer: driverOffer ?? this.driverOffer,
+      pickup: pickup ?? this.pickup,
+      destination: destination ?? this.destination,
+      vehicle: vehicle ?? this.vehicle,
+      tripId: tripId ?? this.tripId,
+      tripStatus: tripStatus ?? this.tripStatus,
+      originalFare: originalFare ?? this.originalFare,
+      promotionCode: promotionCode ?? this.promotionCode,
+      discountAmount: discountAmount ?? this.discountAmount,
+      finalFare: finalFare ?? this.finalFare,
+    );
+  }
+
+  BookingResponse mergeWithPreservedPromotion(BookingResponse newer) {
+    // Determine if either version has promotion information
+    final bool oldHasPromo = (promotionCode != null && promotionCode!.trim().isNotEmpty) ||
+                             (discountAmount != null && discountAmount! > 0);
+
+    final bool newHasPromo = (newer.promotionCode != null && newer.promotionCode!.trim().isNotEmpty) ||
+                             (newer.discountAmount != null && newer.discountAmount! > 0);
+
+    // Case 1: Newer response is completely missing promotion info (typical polling)
+    if (oldHasPromo && !newHasPromo) {
+      final double preservedOriginalFare = (newer.originalFare != null && newer.originalFare! > 0)
+          ? newer.originalFare!
+          : (originalFare ?? newer.estimatedFare);
+
+      final double preservedDiscount = discountAmount ?? 0;
+      final String? preservedCode = promotionCode;
+
+      var calculatedFinalFare = preservedOriginalFare - preservedDiscount;
+      if (calculatedFinalFare < 0) calculatedFinalFare = 0;
+
+      return newer.copyWith(
+        promotionCode: preservedCode,
+        discountAmount: preservedDiscount,
+        originalFare: preservedOriginalFare,
+        finalFare: calculatedFinalFare,
+      );
+    }
+
+    // Case 2: Newer response has promotion info (e.g. detailed get booking or fresh create)
+    // We still want to be careful about finalFare if it looks like the original price
+    if (newHasPromo) {
+      final double newerOriginal = newer.originalFare ?? newer.estimatedFare;
+      final double newerDiscount = newer.discountAmount ?? 0;
+      var newerFinal = newer.finalFare ?? 0;
+
+      // If newerFinal is suspiciously equal to original price despite having a discount
+      if (newerDiscount > 0 &&
+          (newerFinal == 0 ||
+           (newerFinal - newerOriginal).abs() < 1.0 ||
+           (newerFinal - newer.estimatedFare).abs() < 1.0)) {
+        newerFinal = newerOriginal - newerDiscount;
+      }
+
+      if (newerFinal < 0) newerFinal = 0;
+
+      return newer.copyWith(finalFare: newerFinal);
+    }
+
+    // Default fallback
+    return newer;
   }
 
   static BookingLocation _locationFromJson(Map<String, dynamic> json) {
