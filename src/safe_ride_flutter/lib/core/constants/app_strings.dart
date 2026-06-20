@@ -215,7 +215,10 @@ abstract final class LocationStrings {
 }
 
 abstract final class AppConfig {
-  static const apiBaseUrl = 'http://10.0.2.2:5026/api/';
+  static const apiBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://10.0.2.2:5026/api/',
+  );
   static const fontFamily = 'SFProDisplay';
   static const logoUrl =
       'https://res.cloudinary.com/dj7y3ikck/image/upload/v1781487774/logo_poxclo.png';
@@ -242,6 +245,8 @@ abstract final class ApiEndpoints {
   static const bookingCatalog = '/bookings/catalog';
   static const bookingEstimate = '/bookings/estimate';
   static const nearbyDrivers = '/drivers/nearby';
+  static const identityVerificationDocuments =
+      '/identity-verification/documents';
 }
 
 abstract final class ApiKeys {
@@ -255,9 +260,22 @@ abstract final class ApiKeys {
   static const fullName = 'fullName';
   static const email = 'email';
   static const file = 'file';
+  static const frontImage = 'frontImage';
+  static const backImage = 'backImage';
+  static const documentType = 'documentType';
+  static const documentNumber = 'documentNumber';
+  static const frontImageUrl = 'frontImageUrl';
+  static const backImageUrl = 'backImageUrl';
+  static const fileUrl = 'fileUrl';
+  static const kycStatus = 'kycStatus';
+  static const rejectionReason = 'rejectionReason';
+  static const issueDate = 'issueDate';
+  static const expiryDate = 'expiryDate';
   static const avatarUrl = 'avatarUrl';
   static const refreshToken = 'refreshToken';
   static const accessToken = 'accessToken';
+  static const roles = 'roles';
+  static const lastSelectedRole = 'lastSelectedRole';
   static const message = 'message';
   static const nextStep = 'nextStep';
   static const detail = 'detail';
