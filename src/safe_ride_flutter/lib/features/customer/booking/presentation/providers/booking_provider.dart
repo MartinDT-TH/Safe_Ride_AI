@@ -306,13 +306,18 @@ class BookingProvider extends ChangeNotifier {
     required int bookingId,
     required String reason,
   }) {
+    debugPrint('PROVIDER: cancelBooking for ID $bookingId');
     return _run(() async {
       final booking = await _repository.cancelBooking(
         accessToken,
         bookingId: bookingId,
         reason: reason,
       );
+
+      debugPrint('PROVIDER: cancelBooking success, new status: ${booking.bookingStatus}');
+
       if (_isTerminalBooking(booking)) {
+        debugPrint('PROVIDER: Booking is terminal, clearing state');
         _searchingBooking = null;
         _activeBooking = null;
         _activePickup = null;
