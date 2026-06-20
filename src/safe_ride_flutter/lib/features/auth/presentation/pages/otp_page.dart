@@ -188,9 +188,10 @@ class _OtpPageState extends State<OtpPage> {
                           AuthNextStep.selectRole => const RoleSelectionPage(),
                           AuthNextStep.customerHome => const CustomerHomePage(),
                         };
-                        Navigator.pushReplacement(
+                        Navigator.pushAndRemoveUntil(
                           context,
                           MaterialPageRoute(builder: (_) => destination),
+                          (route) => false,
                         );
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(

@@ -19,7 +19,7 @@ if (builder.Environment.IsDevelopment())
         reloadOnChange: true);
 }
 
-const string mapRoutingProvider = "OpenRouteService"; // Use "OpenRouteService" to switch provider. Google
+const string mapRoutingProvider = "OpenRouteService"; // Use "OpenRouteService" or "Google" to switch provider
 builder.Configuration["MapRouting:Provider"] = mapRoutingProvider;
 
 builder.Services
@@ -82,21 +82,22 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 
-    var runDriverSimulator = builder.Configuration.GetValue<bool>("Simulator:RunDriverLocationSimulator");
-    if (runDriverSimulator)
-    {
-        // V1: Redis Direct Simulator
-        Console.WriteLine("\n=== Running V1: Redis Direct Simulator ===");
-        Console.WriteLine("Starting Driver Location Simulator...");
-        // await app.Services.GetRequiredService<DriverLocationSimulator>().RunAsync();
-        _ = Task.Run(async () =>
-        {
-            using var scope = app.Services.CreateScope();
-            await scope.ServiceProvider
-                .GetRequiredService<DriverLocationSimulator>()
-                .RunAsync();
-        });
-    }
+
+    // var runDriverSimulator = builder.Configuration.GetValue<bool>("Simulator:RunDriverLocationSimulator");
+    // if (runDriverSimulator)
+    // {
+    //     // V1: Redis Direct Simulator
+    //     Console.WriteLine("\n=== Running V1: Redis Direct Simulator ===");
+    //     Console.WriteLine("Starting Driver Location Simulator...");
+    //     // await app.Services.GetRequiredService<DriverLocationSimulator>().RunAsync();
+    //     _ = Task.Run(async () =>
+    //     {
+    //         using var scope = app.Services.CreateScope();
+    //         await scope.ServiceProvider
+    //             .GetRequiredService<DriverLocationSimulator>()
+    //             .RunAsync();
+    //     });
+    // }
 
 
     // V2: SignalR Real-time Simulator (if needed, uncomment and configure)

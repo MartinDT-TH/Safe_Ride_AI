@@ -13,6 +13,7 @@ class CreateBookingRequest {
     this.scheduledAt,
     this.specialRequest,
     this.estimatedHours,
+    this.promotionCode,
   });
 
   final int vehicleId;
@@ -23,6 +24,31 @@ class CreateBookingRequest {
   final BookingLocation? destination;
   final String? specialRequest;
   final int? estimatedHours;
+  final String? promotionCode;
+
+  CreateBookingRequest copyWith({
+    int? vehicleId,
+    int? serviceTypeId,
+    BookingType? bookingType,
+    DateTime? scheduledAt,
+    BookingLocation? pickup,
+    BookingLocation? destination,
+    String? specialRequest,
+    int? estimatedHours,
+    String? promotionCode,
+  }) {
+    return CreateBookingRequest(
+      vehicleId: vehicleId ?? this.vehicleId,
+      serviceTypeId: serviceTypeId ?? this.serviceTypeId,
+      bookingType: bookingType ?? this.bookingType,
+      scheduledAt: scheduledAt ?? this.scheduledAt,
+      pickup: pickup ?? this.pickup,
+      destination: destination ?? this.destination,
+      specialRequest: specialRequest ?? this.specialRequest,
+      estimatedHours: estimatedHours ?? this.estimatedHours,
+      promotionCode: promotionCode ?? this.promotionCode,
+    );
+  }
 
   Map<String, dynamic> toJson() {
     return {
@@ -42,6 +68,8 @@ class CreateBookingRequest {
           ? null
           : specialRequest?.trim(),
       ApiKeys.estimatedHours: estimatedHours,
+      if (promotionCode != null && promotionCode!.trim().isNotEmpty)
+        ApiKeys.promotionCode: promotionCode!.trim(),
     };
   }
 }

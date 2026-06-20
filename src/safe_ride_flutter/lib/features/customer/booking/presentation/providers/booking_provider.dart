@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/services/location_service.dart';
+import '../../data/models/promo_model.dart';
 import '../../data/datasources/booking_remote_datasource.dart';
 import '../../data/models/booking_catalog.dart';
 import '../../data/models/booking_fare_estimate.dart';
@@ -19,11 +20,15 @@ class BookingProvider extends ChangeNotifier {
 
   bool _isLoading = false;
   bool _isEstimating = false;
+  bool _isLoadingPromotions = false;
   String? _errorMessage;
   BookingCatalog? _catalog;
   BookingFareEstimate? _fareEstimate;
   List<NearbyDriver> _nearbyDrivers = [];
+  List<PromoModel> _availablePromotions = [];
+  PromoModel? _selectedPromo;
   int _estimateRequestId = 0;
+  String? _locationErrorMessage;
 
   BookingResponse? _activeBooking;
   BookingLocation? _activePickup;
@@ -34,10 +39,14 @@ class BookingProvider extends ChangeNotifier {
 
   bool get isLoading => _isLoading;
   bool get isEstimating => _isEstimating;
+  bool get isLoadingPromotions => _isLoadingPromotions;
   String? get errorMessage => _errorMessage;
+  String? get locationErrorMessage => _locationErrorMessage;
   BookingCatalog? get catalog => _catalog;
   BookingFareEstimate? get fareEstimate => _fareEstimate;
   List<NearbyDriver> get nearbyDrivers => _nearbyDrivers;
+  List<PromoModel> get availablePromotions => _availablePromotions;
+  PromoModel? get selectedPromo => _selectedPromo;
 
   BookingResponse? get activeBooking => _activeBooking;
   BookingLocation? get activePickup => _activePickup;
@@ -57,10 +66,18 @@ class BookingProvider extends ChangeNotifier {
     String accessToken, {
     required int bookingId,
   }) async {
-    final booking = await _repository.getBookingDetails(
+    final newBooking = await _repository.getBookingDetails(
       accessToken,
       bookingId: bookingId,
     );
+
+    // Preserve promotion info if the polling response is missing it
+    final current = _searchingBooking ?? _activeBooking;
+
+    final booking = (current != null && current.bookingId == newBooking.bookingId)
+        ? current.mergeWithPreservedPromotion(newBooking)
+        : newBooking;
+
     _searchingBooking = booking;
     if (_isActiveNowBooking(booking)) {
       _setActiveBookingFromResponse(booking);
@@ -82,9 +99,22 @@ class BookingProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final booking = await _repository.getActiveBooking(accessToken);
+      final newBooking = await _repository.getActiveBooking(accessToken);
+      if (newBooking == null) {
+        _activeBooking = null;
+        _activePickup = null;
+        _activeDestination = null;
+        _activeVehicle = null;
+        return null;
+      }
+
+      // Preserve promotion info if we already have it
+      final booking = (_activeBooking != null && _activeBooking!.bookingId == newBooking.bookingId)
+          ? _activeBooking!.mergeWithPreservedPromotion(newBooking)
+          : newBooking;
+
       if (_isActiveNowBooking(booking)) {
-        _setActiveBookingFromResponse(booking!);
+        _setActiveBookingFromResponse(booking);
       } else {
         _activeBooking = null;
         _activePickup = null;
@@ -125,26 +155,71 @@ class BookingProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadCatalog(String accessToken) async {
-    if (_catalog != null) return;
+  Future<void> loadCatalog(
+    String accessToken, {
+    bool forceRefresh = false,
+  }) async {
+    if (_catalog != null && !forceRefresh) return;
     await _run(() async {
       _catalog = await _repository.getCatalog(accessToken);
     });
   }
 
+  Future<void> loadAvailablePromotions(String accessToken) async {
+    _isLoadingPromotions = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      _availablePromotions = await _repository.getAvailablePromotions(accessToken);
+    } on BookingApiException catch (exception) {
+      _errorMessage = exception.message;
+    } catch (_) {
+      _errorMessage = AppStrings.genericError;
+    } finally {
+      _isLoadingPromotions = false;
+      notifyListeners();
+    }
+  }
+
+  void selectPromo(PromoModel promo) {
+    _selectedPromo = promo;
+    notifyListeners();
+  }
+
+  void clearSelectedPromo() {
+    _selectedPromo = null;
+    notifyListeners();
+  }
+
   Future<BookingLocation?> getCurrentLocation() async {
-    return _run(() => _locationService.getCurrentLocation());
+    _locationErrorMessage = null;
+    notifyListeners();
+
+    try {
+      return await _locationService.getCurrentLocation();
+    } on LocationServiceException catch (exception) {
+      _locationErrorMessage = exception.message;
+      notifyListeners();
+      return null;
+    } catch (_) {
+      _locationErrorMessage = AppStrings.genericError;
+      notifyListeners();
+      return null;
+    }
   }
 
   Future<BookingLocation?> resolveAddress(String address) async {
-    return _run(() => _locationService.resolveAddress(address));
+    return _runLocation(() => _locationService.resolveAddress(address));
   }
 
   Future<BookingLocation?> resolveCoordinates(
     double latitude,
     double longitude,
   ) async {
-    return _run(() => _locationService.resolveCoordinates(latitude, longitude));
+    return _runLocation(
+      () => _locationService.resolveCoordinates(latitude, longitude),
+    );
   }
 
   Future<BookingFareEstimate?> estimateFare(
@@ -202,7 +277,10 @@ class BookingProvider extends ChangeNotifier {
     String accessToken,
     CreateBookingRequest request,
   ) {
-    return _run(() => _repository.createBooking(accessToken, request));
+    final finalRequest = request.promotionCode == null
+        ? request.copyWith(promotionCode: _selectedPromo?.promotionCode)
+        : request;
+    return _run(() => _repository.createBooking(accessToken, finalRequest));
   }
 
   Future<BookingResponse?> confirmDriver(
@@ -228,13 +306,18 @@ class BookingProvider extends ChangeNotifier {
     required int bookingId,
     required String reason,
   }) {
+    debugPrint('PROVIDER: cancelBooking for ID $bookingId');
     return _run(() async {
       final booking = await _repository.cancelBooking(
         accessToken,
         bookingId: bookingId,
         reason: reason,
       );
+
+      debugPrint('PROVIDER: cancelBooking success, new status: ${booking.bookingStatus}');
+
       if (_isTerminalBooking(booking)) {
+        debugPrint('PROVIDER: Booking is terminal, clearing state');
         _searchingBooking = null;
         _activeBooking = null;
         _activePickup = null;
@@ -282,6 +365,23 @@ class BookingProvider extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<T?> _runLocation<T>(Future<T> Function() action) async {
+    _locationErrorMessage = null;
+    notifyListeners();
+
+    try {
+      return await action();
+    } on LocationServiceException catch (exception) {
+      _locationErrorMessage = exception.message;
+      notifyListeners();
+      return null;
+    } catch (_) {
+      _locationErrorMessage = AppStrings.genericError;
+      notifyListeners();
+      return null;
     }
   }
 

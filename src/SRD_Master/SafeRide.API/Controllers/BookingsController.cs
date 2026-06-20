@@ -10,8 +10,10 @@ using SafeRide.Application.Features.Bookings.DTOs;
 using SafeRide.Application.Features.Bookings.Queries.EstimateBookingFare;
 using SafeRide.Application.Features.Bookings.Queries.GetBookingDetails;
 using SafeRide.Application.Features.Bookings.Queries.GetBookingCatalog;
+using SafeRide.Application.Features.Promotions.Commands.ApplyPromotionToBooking;
 using SafeRide.Contracts.Requests.Bookings;
 using SafeRide.Contracts.Responses.Bookings;
+using SafeRide.Contracts.Responses.Promotions;
 
 namespace SafeRide.API.Controllers;
 
@@ -121,7 +123,8 @@ public sealed class BookingsController : ControllerBase
                 request.DestinationLatitude,
                 request.DestinationLongitude,
                 request.SpecialRequest,
-                request.EstimatedHours),
+                request.EstimatedHours,
+                request.PromotionCode),
             cancellationToken);
 
         var response = ToResponse(
@@ -132,6 +135,10 @@ public sealed class BookingsController : ControllerBase
             result.EstimatedDistanceKm,
             result.EstimatedDurationMinutes,
             result.EstimatedFare,
+            result.OriginalFare,
+            result.PromotionCode,
+            result.DiscountAmount,
+            result.FinalFare,
             result.EncodedPolyline,
             result.Message,
             result.DriverOffer);
@@ -207,6 +214,10 @@ public sealed class BookingsController : ControllerBase
             result.EstimatedDistanceKm,
             result.EstimatedDurationMinutes,
             result.EstimatedFare,
+            result.EstimatedFare,
+            null,
+            0m,
+            result.EstimatedFare,
             result.EncodedPolyline,
             result.Message,
             result.DriverOffer));
@@ -238,6 +249,10 @@ public sealed class BookingsController : ControllerBase
             result.ScheduledAt,
             result.EstimatedDistanceKm,
             result.EstimatedDurationMinutes,
+            result.EstimatedFare,
+            result.EstimatedFare,
+            null,
+            0m,
             result.EstimatedFare,
             result.EncodedPolyline,
             result.Message,
@@ -275,9 +290,41 @@ public sealed class BookingsController : ControllerBase
             result.EstimatedDistanceKm,
             result.EstimatedDurationMinutes,
             result.EstimatedFare,
+            result.EstimatedFare,
+            null,
+            0m,
+            result.EstimatedFare,
             result.EncodedPolyline,
             result.Message,
             result.DriverOffer));
+    }
+
+    [Authorize(Roles = "Customer")]
+    [HttpPost("{bookingId:long}/promotions")]
+    [ProducesResponseType<ApplyPromotionToBookingResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<ApplyPromotionToBookingResponse>> ApplyPromotion(
+        long bookingId,
+        [FromBody] ApplyPromotionToBookingRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCustomerId(out var customerId))
+        {
+            return Unauthorized(CreateUnauthorizedProblem());
+        }
+
+        var result = await _sender.Send(
+            new ApplyPromotionToBookingCommand(
+                customerId,
+                bookingId,
+                request.PromotionCode),
+            cancellationToken);
+
+        return Ok(result);
     }
 
     private static BookingResponse ToResponse(
@@ -288,6 +335,10 @@ public sealed class BookingsController : ControllerBase
         double estimatedDistanceKm,
         int estimatedDurationMinutes,
         decimal estimatedFare,
+        decimal originalFare,
+        string? promotionCode,
+        decimal discountAmount,
+        decimal finalFare,
         string? encodedPolyline,
         string message,
         BookingDriverOfferDto? driverOffer)
@@ -313,7 +364,11 @@ public sealed class BookingsController : ControllerBase
                     driverOffer.TripCount,
                     driverOffer.ExperienceYears,
                     driverOffer.LicenseClass,
-                    driverOffer.ExpiresAt));
+                    driverOffer.ExpiresAt),
+            OriginalFare: originalFare,
+            PromotionCode: promotionCode,
+            DiscountAmount: discountAmount,
+            FinalFare: finalFare);
     }
 
     private static BookingResponse ToResponse(BookingDetailsDto result)
@@ -358,7 +413,11 @@ public sealed class BookingsController : ControllerBase
                 result.Vehicle.IsMotorbike),
             result.TripStatus,
             TripId: result.TripId,
-            ArrivalPolyline: result.ArrivalPolyline);
+            ArrivalPolyline: result.ArrivalPolyline,
+            OriginalFare: result.OriginalFare,
+            PromotionCode: result.PromotionCode,
+            DiscountAmount: result.DiscountAmount,
+            FinalFare: result.FinalFare);
     }
 
     private bool TryGetCustomerId(out Guid customerId)

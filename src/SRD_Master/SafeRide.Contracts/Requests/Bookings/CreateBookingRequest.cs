@@ -37,4 +37,7 @@ public sealed class CreateBookingRequest
 
     [Range(1, 24)]
     public int? EstimatedHours { get; init; }
+
+    [MaxLength(50)]
+    public string? PromotionCode { get; init; }
 }

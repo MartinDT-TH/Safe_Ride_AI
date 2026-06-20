@@ -11,6 +11,10 @@ public sealed record CreateBookingResponse(
     double EstimatedDistanceKm,
     int EstimatedDurationMinutes,
     decimal EstimatedFare,
+    decimal OriginalFare,
+    string? PromotionCode,
+    decimal DiscountAmount,
+    decimal FinalFare,
     string? EncodedPolyline,
     string Message,
     BookingDriverOfferDto? DriverOffer = null);

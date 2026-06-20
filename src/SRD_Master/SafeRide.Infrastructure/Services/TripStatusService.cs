@@ -36,6 +36,8 @@ public sealed class TripStatusService : ITripStatusService
     {
         var trip = await _dbContext.Trips
             .Include(x => x.Booking)
+                .ThenInclude(x => x.BookingPromotions)
+                    .ThenInclude(x => x.Promotion)
             .FirstOrDefaultAsync(
                 x => x.Id == tripId && x.DriverId == driverId,
                 cancellationToken);
@@ -56,6 +58,8 @@ public sealed class TripStatusService : ITripStatusService
         }
 
         var utcNow = _dateTimeProvider.UtcNow;
+        var previousTripStatus = trip.TripStatus;
+        var previousBookingStatus = trip.Booking.BookingStatus;
         trip.TripStatus = tripStatus;
         switch (tripStatus)
         {
@@ -69,12 +73,22 @@ public sealed class TripStatusService : ITripStatusService
                 trip.CompletedAt ??= utcNow;
                 trip.Booking.BookingStatus = BookingStatus.Completed;
                 trip.Booking.UpdatedAt = utcNow;
+                if (previousTripStatus != TripStatus.COMPLETED &&
+                    previousBookingStatus != BookingStatus.Completed)
+                {
+                    IncrementPromotionUsage(trip.Booking);
+                }
                 await ReleaseDriverAsync(driverId, utcNow, cancellationToken);
                 break;
             case TripStatus.CANCELLED:
                 trip.CancelledByUserId = driverId;
                 trip.Booking.BookingStatus = BookingStatus.Cancelled;
                 trip.Booking.UpdatedAt = utcNow;
+                if (previousTripStatus != TripStatus.COMPLETED &&
+                    previousBookingStatus != BookingStatus.Completed)
+                {
+                    RemoveBookingPromotions(trip.Booking);
+                }
                 await ReleaseDriverAsync(driverId, utcNow, cancellationToken);
                 break;
         }
@@ -144,6 +158,24 @@ public sealed class TripStatusService : ITripStatusService
             RedisKeys.DriverStatus(driverId),
             DriverWorkStatus.Online.ToString(),
             TimeSpan.FromMinutes(5));
+    }
+
+    private static void IncrementPromotionUsage(Domain.Entities.Booking booking)
+    {
+        foreach (var bookingPromotion in booking.BookingPromotions)
+        {
+            bookingPromotion.Promotion.CurrentUsageCount += 1;
+        }
+    }
+
+    private void RemoveBookingPromotions(Domain.Entities.Booking booking)
+    {
+        if (booking.BookingPromotions.Count == 0)
+        {
+            return;
+        }
+
+        _dbContext.BookingPromotions.RemoveRange(booking.BookingPromotions);
     }
 
     private static bool CanTransition(

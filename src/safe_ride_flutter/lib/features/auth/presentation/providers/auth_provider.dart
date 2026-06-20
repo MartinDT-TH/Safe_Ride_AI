@@ -157,18 +157,8 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      if (!ApiKeysConfig.hasGoogleServerClientId) {
-        debugPrint(
-          'GOOGLE_SERVER_CLIENT_ID is missing. Start Flutter with '
-          '--dart-define-from-file=env/api_keys.local.json.',
-        );
-        return false;
-      }
-
-      final configuredClientId = ApiKeysConfig.googleServerClientId.trim();
-      final googleSignIn = GoogleSignIn(
-        serverClientId: configuredClientId.isEmpty ? null : configuredClientId,
-      );
+      final googleSignIn = _getGoogleSignIn();
+      if (googleSignIn == null) return false;
 
       final account = await googleSignIn.signIn();
 
@@ -240,14 +230,9 @@ class AuthProvider extends ChangeNotifier {
       _lastErrorCode = null;
       notifyListeners();
 
-      if (!ApiKeysConfig.hasGoogleServerClientId) {
-        return false;
-      }
+      final googleSignIn = _getGoogleSignIn();
+      if (googleSignIn == null) return false;
 
-      final configuredClientId = ApiKeysConfig.googleServerClientId.trim();
-      final googleSignIn = GoogleSignIn(
-        serverClientId: configuredClientId.isEmpty ? null : configuredClientId,
-      );
       await googleSignIn.signOut();
       final account = await googleSignIn.signIn();
       if (account == null) {
@@ -419,6 +404,13 @@ class AuthProvider extends ChangeNotifier {
 
       await repository.logout(refreshToken);
       await _storage.clearTokens();
+
+      // Sign out from Google to clear the cached account
+      final googleSignIn = _getGoogleSignIn();
+      if (googleSignIn != null) {
+        await googleSignIn.signOut();
+      }
+
       _token = null;
       _clearAuthState();
       return true;
@@ -473,9 +465,28 @@ class AuthProvider extends ChangeNotifier {
       _readAuthState(response);
     } catch (e) {
       debugPrint('Restore session error: $e');
-      await _storage.clearTokens();
-      _token = null;
-      _clearAuthState();
+
+      // Only clear session if it's an Authentication Error (401)
+      bool shouldLogout = false;
+      if (e is DioException) {
+        if (e.response?.statusCode == 401) {
+          shouldLogout = true;
+        }
+      } else {
+        // For non-Dio errors, we might want to keep the session and try again later
+        // or if it's a critical parsing error, logout.
+        // For now, let's only logout on 401.
+      }
+
+      if (shouldLogout) {
+        debugPrint('Authentication failed during session restore. Logging out.');
+        await _storage.clearTokens();
+        _token = null;
+        _clearAuthState();
+      } else {
+        debugPrint('Session restore failed due to network or other error. Keeping token for retry.');
+        // We keep the token in memory, the next API call will try again or trigger refresh.
+      }
     } finally {
       _isRestoringSession = false;
       notifyListeners();
@@ -524,5 +535,20 @@ class AuthProvider extends ChangeNotifier {
       return data[ApiKeys.code].toString();
     }
     return null;
+  }
+
+  GoogleSignIn? _getGoogleSignIn() {
+    if (!ApiKeysConfig.hasGoogleServerClientId) {
+      debugPrint(
+        'GOOGLE_SERVER_CLIENT_ID is missing. Start Flutter with '
+        '--dart-define-from-file=env/api_keys.local.json.',
+      );
+      return null;
+    }
+
+    final configuredClientId = ApiKeysConfig.googleServerClientId.trim();
+    return GoogleSignIn(
+      serverClientId: configuredClientId.isEmpty ? null : configuredClientId,
+    );
   }
 }
