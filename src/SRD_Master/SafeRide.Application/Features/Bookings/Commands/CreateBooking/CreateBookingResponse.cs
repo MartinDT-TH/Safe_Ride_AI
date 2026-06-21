@@ -17,4 +17,10 @@ public sealed record CreateBookingResponse(
     decimal FinalFare,
     string? EncodedPolyline,
     string Message,
-    BookingDriverOfferDto? DriverOffer = null);
+    long? TripId = null,
+    BookingDriverOfferDto? DriverOffer = null,
+    TripStatus? TripStatus = null,
+    double? CurrentSearchRadiusKm = null,
+    DateTime? ExpiresAt = null,
+    int? EstimatedRemainingSeconds = null,
+    string? MatchingMessage = null);

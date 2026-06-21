@@ -22,6 +22,7 @@ public sealed class CreateBookingCommandHandler
     private readonly IVehicleLicenseRequirementService _vehicleLicenseRequirementService;
     private readonly IRealtimeNotificationService _realtimeNotificationService;
     private readonly IPromotionRepository _promotionRepository;
+    private readonly IMatchingPolicyProvider _matchingPolicyProvider;
 
     public CreateBookingCommandHandler(
         IBookingRepository bookingRepository,
@@ -32,7 +33,8 @@ public sealed class CreateBookingCommandHandler
         IBookingMatchingService matchingService,
         IVehicleLicenseRequirementService vehicleLicenseRequirementService,
         IRealtimeNotificationService realtimeNotificationService,
-        IPromotionRepository promotionRepository)
+        IPromotionRepository promotionRepository,
+        IMatchingPolicyProvider matchingPolicyProvider)
     {
         _bookingRepository = bookingRepository;
         _unitOfWork = unitOfWork;
@@ -43,6 +45,7 @@ public sealed class CreateBookingCommandHandler
         _vehicleLicenseRequirementService = vehicleLicenseRequirementService;
         _realtimeNotificationService = realtimeNotificationService;
         _promotionRepository = promotionRepository;
+        _matchingPolicyProvider = matchingPolicyProvider;
     }
 
     public async Task<CreateBookingResponse> Handle(
@@ -188,12 +191,28 @@ public sealed class CreateBookingCommandHandler
                 booking.BookingStatus,
                 utcNow),
             cancellationToken);
+        if (request.BookingType == BookingType.Now)
+        {
+            await _realtimeNotificationService.PublishBookingSearchingStartedAsync(
+                new BookingSearchingStartedEvent(
+                    booking.BookingId,
+                    booking.CustomerId,
+                    _matchingPolicyProvider.Current.InitialRadiusKm,
+                    utcNow,
+                    $"SafeRide đang tìm tài xế gần bạn trong bán kính {_matchingPolicyProvider.Current.InitialRadiusKm:0.#}km."),
+                cancellationToken);
+        }
 
-        var driverOffer = request.BookingType == BookingType.Now
-            ? await _matchingService.StartMatchingAsync(
+        if (request.BookingType == BookingType.Now)
+        {
+            await _matchingService.StartMatchingAsync(
                 booking.BookingId,
-                cancellationToken)
-            : null;
+                cancellationToken);
+        }
+
+        var matchingSnapshot = _matchingPolicyProvider.GetSnapshot(
+            booking,
+            utcNow);
 
         var message = request.BookingType == BookingType.Now
             ? "Đặt chuyến thành công. Hệ thống đang tìm tài xế."
@@ -215,7 +234,13 @@ public sealed class CreateBookingCommandHandler
             Math.Max(0m, estimatedFare - promotionResult.DiscountAmount),
             routePolyline,
             message,
-            driverOffer);
+            TripId: null,
+            DriverOffer: null,
+            TripStatus: null,
+            CurrentSearchRadiusKm: matchingSnapshot.CurrentSearchRadiusKm,
+            ExpiresAt: matchingSnapshot.ExpiresAt,
+            EstimatedRemainingSeconds: matchingSnapshot.EstimatedRemainingSeconds,
+            MatchingMessage: matchingSnapshot.MatchingMessage);
     }
 
     private static void ValidateSchedule(

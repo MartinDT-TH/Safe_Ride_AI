@@ -74,6 +74,11 @@ public sealed class SignalRRealtimeNotificationService
                 "TripStatusChanged",
                 notification,
                 cancellationToken),
+            SendToBookingAsync(
+                notification.BookingId,
+                "TripStatusChanged",
+                notification,
+                cancellationToken),
             SendToTripAsync(
                 notification.TripId,
                 "TripStatusChanged",
@@ -137,6 +142,61 @@ public sealed class SignalRRealtimeNotificationService
                 cancellationToken));
     }
 
+    public Task PublishBookingSearchingStartedAsync(
+        BookingSearchingStartedEvent notification,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.WhenAll(
+            SendToUserAsync(
+                notification.CustomerId,
+                "BookingSearchingStarted",
+                notification,
+                cancellationToken),
+            SendToBookingAsync(
+                notification.BookingId,
+                "BookingSearchingStarted",
+                notification,
+                cancellationToken));
+    }
+
+    public Task PublishBookingDriverAssignedAsync(
+        BookingDriverAssignedEvent notification,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.WhenAll(
+            SendToUserAsync(
+                notification.CustomerId,
+                "BookingDriverAssigned",
+                notification,
+                cancellationToken),
+            SendToDriverAsync(
+                notification.DriverId,
+                "BookingDriverAssigned",
+                notification,
+                cancellationToken),
+            SendToBookingAsync(
+                notification.BookingId,
+                "BookingDriverAssigned",
+                notification,
+                cancellationToken),
+            SendToTripAsync(
+                notification.TripId,
+                "BookingDriverAssigned",
+                notification,
+                cancellationToken));
+    }
+
+    public Task PublishDriverOfferReceivedAsync(
+        DriverOfferReceivedEvent notification,
+        CancellationToken cancellationToken = default)
+    {
+        return SendToDriverAsync(
+            notification.DriverId,
+            "ReceiveDriverOffer",
+            notification,
+            cancellationToken);
+    }
+
     public Task PublishDriverOfferRejectedAsync(
         DriverOfferRejectedEvent notification,
         CancellationToken cancellationToken = default)
@@ -159,6 +219,67 @@ public sealed class SignalRRealtimeNotificationService
                 cancellationToken));
     }
 
+    public Task PublishDriverOfferAcceptedAsync(
+        DriverOfferAcceptedEvent notification,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.WhenAll(
+            SendToUserAsync(
+                notification.CustomerId,
+                "DriverOfferAccepted",
+                notification,
+                cancellationToken),
+            SendToBookingAsync(
+                notification.BookingId,
+                "DriverOfferAccepted",
+                notification,
+                cancellationToken));
+    }
+
+    public Task PublishDriverOfferExpiredAsync(
+        DriverOfferExpiredEvent notification,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.WhenAll(
+            SendToUserAsync(
+                notification.CustomerId,
+                "DriverOfferExpired",
+                notification,
+                cancellationToken),
+            SendToDriverAsync(
+                notification.DriverId,
+                "DriverOfferExpired",
+                notification,
+                cancellationToken),
+            SendToBookingAsync(
+                notification.BookingId,
+                "DriverOfferExpired",
+                notification,
+                cancellationToken));
+    }
+
+    public Task PublishDriverOfferCancelledAsync(
+        DriverOfferCancelledEvent notification,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.WhenAll(
+            SendToUserAsync(
+                notification.CustomerId,
+                "DriverOfferCancelled",
+                notification,
+                cancellationToken),
+            SendToDriverAsync(
+                notification.DriverId,
+                "DriverOfferCancelled",
+                notification,
+                cancellationToken),
+            SendToBookingAsync(
+                notification.BookingId,
+                "DriverOfferCancelled",
+                notification,
+                cancellationToken));
+    }
+
     public Task PublishDriverMatchedAsync(
         DriverMatchedEvent notification,
         CancellationToken cancellationToken = default)
@@ -168,6 +289,62 @@ public sealed class SignalRRealtimeNotificationService
             "BookingMatched",
             notification,
             cancellationToken);
+    }
+
+    public Task PublishCustomerConfirmedDriverOfferAsync(
+        CustomerConfirmedDriverOfferEvent notification,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.WhenAll(
+            SendToUserAsync(
+                notification.CustomerId,
+                "CustomerConfirmedDriverOffer",
+                notification,
+                cancellationToken),
+            SendToDriverAsync(
+                notification.DriverId,
+                "CustomerConfirmedDriverOffer",
+                notification,
+                cancellationToken),
+            SendToBookingAsync(
+                notification.BookingId,
+                "CustomerConfirmedDriverOffer",
+                notification,
+                cancellationToken));
+    }
+
+    public Task PublishBookingSearchRadiusExpandedAsync(
+        BookingSearchRadiusExpandedEvent notification,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.WhenAll(
+            SendToUserAsync(
+                notification.CustomerId,
+                "BookingSearchRadiusExpanded",
+                notification,
+                cancellationToken),
+            SendToBookingAsync(
+                notification.BookingId,
+                "BookingSearchRadiusExpanded",
+                notification,
+                cancellationToken));
+    }
+
+    public Task PublishBookingExpiredAsync(
+        BookingExpiredEvent notification,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.WhenAll(
+            SendToUserAsync(
+                notification.CustomerId,
+                "BookingExpired",
+                notification,
+                cancellationToken),
+            SendToBookingAsync(
+                notification.BookingId,
+                "BookingExpired",
+                notification,
+                cancellationToken));
     }
 
     private Task SendToUserAsync<T>(
