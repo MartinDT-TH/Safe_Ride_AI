@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using SafeRide.Application.Features.Auth.Services;
+using SafeRide.Application.Common.Models;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Domain.Entities;
 using SafeRide.Infrastructure.Authentication;
@@ -89,6 +90,18 @@ public static class DependencyInjection
                     UriKind.Absolute),
                 "OpenRouteService:MatrixApiUrl must be an absolute URL.")
             .ValidateOnStart();
+        services
+            .AddOptions<MatchingOptions>()
+            .Bind(configuration.GetSection(MatchingOptions.SectionName))
+            .Validate(options => options.InitialRadiusKm > 0, "MatchingOptions:InitialRadiusKm must be greater than zero.")
+            .Validate(options => options.ExpandedRadiusKm >= options.InitialRadiusKm, "MatchingOptions:ExpandedRadiusKm must be greater than or equal to InitialRadiusKm.")
+            .Validate(options => options.ExpandAfterMinutes > 0, "MatchingOptions:ExpandAfterMinutes must be greater than zero.")
+            .Validate(options => options.BookingExpireAfterMinutes > options.ExpandAfterMinutes, "MatchingOptions:BookingExpireAfterMinutes must be greater than ExpandAfterMinutes.")
+            .Validate(options => options.OfferExpireSeconds > 0, "MatchingOptions:OfferExpireSeconds must be greater than zero.")
+            .Validate(options => options.CustomerConfirmExpireSeconds > 0, "MatchingOptions:CustomerConfirmExpireSeconds must be greater than zero.")
+            .Validate(options => options.MatchingTickSeconds > 0, "MatchingOptions:MatchingTickSeconds must be greater than zero.")
+            .Validate(options => options.MockDriverTtlRefreshSeconds > 0, "MatchingOptions:MockDriverTtlRefreshSeconds must be greater than zero.")
+            .ValidateOnStart();
         services.AddSingleton<RedisService>();
         services.AddSingleton<InMemoryRedisService>();
         services.AddSingleton<IRedisService>(provider =>
@@ -105,6 +118,7 @@ public static class DependencyInjection
         services.AddScoped<IBookingRepository, BookingRepository>();
         services.AddScoped<IPromotionRepository, PromotionRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddSingleton<IMatchingPolicyProvider, MatchingPolicyProvider>();
         services.AddScoped<IBookingMatchingService, BookingMatchingService>();
         services.AddScoped<IBookingAssignmentService, BookingAssignmentService>();
         services.AddScoped<IDriverRealtimeService, DriverRealtimeService>();
@@ -132,14 +146,17 @@ public static class DependencyInjection
 
         if (environment.IsDevelopment())
         {
-            services.AddSingleton<DriverLocationSimulator>();
+            // services.AddSingleton<DriverLocationSimulator>();
             // Register V3 simulator with logger support
-            services.AddSingleton<DriverLocationSimulatorV3>();
+            // services.AddSingleton<DriverLocationSimulatorV3>();
+            // Register mock driver offer acceptor service
+            services.AddHostedService<MockDriverOfferAcceptorService>();
         }
 
         if (!environment.IsEnvironment("Testing"))
         {
             services.AddHostedService<ScheduledBookingMatchingJob>();
+            services.AddHostedService<BookingMatchingBackgroundService>();
         }
 
         services

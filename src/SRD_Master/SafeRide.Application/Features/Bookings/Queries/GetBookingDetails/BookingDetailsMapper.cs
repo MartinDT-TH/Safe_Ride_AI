@@ -12,6 +12,8 @@ internal static class BookingDetailsMapper
         Booking booking,
         IBookingRepository repository,
         IGoogleMapsService googleMapsService,
+        IMatchingPolicyProvider matchingPolicyProvider,
+        DateTime utcNow,
         CancellationToken cancellationToken)
     {
         var driverOffer = await repository.GetLatestBookingDriverOfferAsync(
@@ -24,6 +26,10 @@ internal static class BookingDetailsMapper
             googleMapsService,
             cancellationToken);
         var price = BookingPriceMapper.FromBooking(booking);
+        var matchingSnapshot = matchingPolicyProvider.GetSnapshot(booking, utcNow);
+        var matchingMessage = driverOffer?.OfferStatus == DriverOfferStatus.DriverAccepted
+            ? "Tài xế phù hợp đã sẵn sàng."
+            : matchingSnapshot.MatchingMessage;
 
         return new BookingDetailsDto(
             booking.BookingId,
@@ -58,7 +64,11 @@ internal static class BookingDetailsMapper
                 booking.Vehicle.Color ?? string.Empty,
                 booking.Vehicle.VehicleType == VehicleType.Motorbike),
             booking.Trip?.Id,
-            booking.Trip?.TripStatus);
+            booking.Trip?.TripStatus,
+            matchingSnapshot.CurrentSearchRadiusKm,
+            matchingSnapshot.ExpiresAt,
+            matchingSnapshot.EstimatedRemainingSeconds,
+            matchingMessage);
     }
 
     private static async Task<string?> GetArrivalPolylineAsync(

@@ -12,7 +12,7 @@ public partial class BookingDriverOffer
 
     public Guid DriverId { get; set; }
 
-    public DriverOfferStatus OfferStatus { get; set; } = DriverOfferStatus.Offered;
+    public DriverOfferStatus OfferStatus { get; set; } = DriverOfferStatus.Sent;
 
     public DateTime OfferedAt { get; set; } = DateTime.UtcNow;
 

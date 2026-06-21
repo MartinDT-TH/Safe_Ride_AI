@@ -11,4 +11,6 @@ public sealed record BookingDriverOfferDto(
     int TripCount,
     int ExperienceYears,
     LicenseClass LicenseClass,
-    DateTime ExpiresAt);
+    DateTime ExpiresAt,
+    DriverOfferStatus OfferStatus,
+    int? CustomerConfirmRemainingSeconds = null);

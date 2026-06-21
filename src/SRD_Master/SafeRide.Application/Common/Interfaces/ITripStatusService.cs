@@ -9,4 +9,9 @@ public interface ITripStatusService
         long tripId,
         TripStatus tripStatus,
         CancellationToken cancellationToken);
+
+    Task CompleteTripAsync(
+        Guid userId,
+        long tripId,
+        CancellationToken cancellationToken);
 }
