@@ -26,6 +26,7 @@
 //   }
 // }
 
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -314,6 +315,7 @@ class AuthProvider extends ChangeNotifier {
       _phoneNumberConfirmed = response[ApiKeys.phoneNumberConfirmed] == true;
       _email = response[ApiKeys.email]?.toString();
       _nextStep = AuthNextStep.customerHome;
+      _storage.saveUserProfile(jsonEncode(response));
       return true;
     } catch (e) {
       _lastErrorCode = _extractErrorCode(e);
@@ -455,6 +457,17 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> _restoreSession() async {
     try {
+      // 1. Load cached profile immediately for fast UI response
+      final cachedProfile = await _storage.readUserProfile();
+      if (cachedProfile != null) {
+        try {
+          _readAuthState(jsonDecode(cachedProfile) as Map<String, dynamic>);
+          debugPrint('Session restored from cache.');
+        } catch (e) {
+          debugPrint('Error decoding cached profile: $e');
+        }
+      }
+
       final savedToken = await _storage.readAccessToken();
       if (savedToken == null || savedToken.trim().isEmpty) {
         return;
@@ -468,9 +481,14 @@ class AuthProvider extends ChangeNotifier {
       }
 
       _token = accessToken;
+      
+      // 2. Validate token and get latest state from server in background
       final response = await repository.getCurrentUser(accessToken);
       _token = await _storage.readAccessToken() ?? accessToken;
       _readAuthState(response);
+      
+      // 3. Cache the latest state
+      await _storage.saveUserProfile(jsonEncode(response));
     } catch (e) {
       debugPrint('Restore session error: $e');
 
@@ -480,10 +498,6 @@ class AuthProvider extends ChangeNotifier {
         if (e.response?.statusCode == 401) {
           shouldLogout = true;
         }
-      } else {
-        // For non-Dio errors, we might want to keep the session and try again later
-        // or if it's a critical parsing error, logout.
-        // For now, let's only logout on 401.
       }
 
       if (shouldLogout) {
@@ -491,9 +505,6 @@ class AuthProvider extends ChangeNotifier {
         await _storage.clearTokens();
         _token = null;
         _clearAuthState();
-      } else {
-        debugPrint('Session restore failed due to network or other error. Keeping token for retry.');
-        // We keep the token in memory, the next API call will try again or trigger refresh.
       }
     } finally {
       _isRestoringSession = false;
@@ -531,6 +542,11 @@ class AuthProvider extends ChangeNotifier {
       AppValues.selectRole => AuthNextStep.selectRole,
       _ => AuthNextStep.customerHome,
     };
+
+    // Cache state if we have a token (logged in)
+    if (_token != null) {
+      _storage.saveUserProfile(jsonEncode(response));
+    }
   }
 
   Object? _readResponseValue(Map<String, dynamic> response, String key) {

@@ -364,6 +364,7 @@ abstract final class AppValues {
 abstract final class StorageKeys {
   static const accessToken = 'auth.access_token';
   static const refreshToken = 'auth.refresh_token';
+  static const userProfile = 'auth.user_profile';
   static const deviceId = 'device.id';
 }
 

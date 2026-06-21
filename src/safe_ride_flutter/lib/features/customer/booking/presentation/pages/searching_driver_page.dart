@@ -5,11 +5,14 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
+import '../../../../../core/services/socket_service.dart';
+import '../../../../../dependency_injection/injection.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/models/booking_catalog.dart';
 import '../../data/models/booking_fare_estimate.dart';
 import '../../data/models/booking_location.dart';
 import '../../data/models/booking_response.dart';
+import '../../../home/presentation/providers/home_provider.dart';
 import '../providers/booking_provider.dart';
 import '../widgets/booking_cancel_flow.dart';
 import 'driver_profile_page.dart';
@@ -42,6 +45,8 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
   StreamSubscription? _nearbyDriversSubscription;
   StreamSubscription? _bookingStatusSubscription;
   bool _didLeaveSearch = false;
+  final SocketService _socketService = getIt<SocketService>();
+  int? _joinedBookingId;
 
   List<LatLng> _cachedPoints = const [];
   String? _lastEncodedPolyline;
@@ -67,13 +72,21 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<BookingProvider>().setSearchingBooking(widget.booking);
+      final bookingId = widget.booking?.bookingId;
+      if (bookingId != null) {
+        context.read<BookingProvider>().setSearchingBooking(widget.booking);
+        unawaited(_connectBookingSocket(bookingId));
+      }
     });
     _startPolling();
   }
 
   @override
   void dispose() {
+    final joinedBookingId = _joinedBookingId;
+    if (joinedBookingId != null) {
+      unawaited(_socketService.leaveBooking(joinedBookingId));
+    }
     _nearbyDriversSubscription?.cancel();
     _bookingStatusSubscription?.cancel();
     _controller?.dispose();
@@ -121,31 +134,8 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
           return;
         }
 
-        if (booking.bookingStatus == 'DriverAssigned' &&
-            booking.tripStatus != null &&
-            booking.driverOffer != null) {
-          _didLeaveSearch = true;
-          _nearbyDriversSubscription?.cancel();
-          _bookingStatusSubscription?.cancel();
-          bookingProvider.setActiveBooking(
-            booking: booking,
-            pickup: booking.pickup ?? widget.pickup,
-            destination: booking.destination ?? widget.destination,
-            vehicle: booking.vehicle ?? widget.vehicle,
-          );
-          await Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => TripTrackingPage(
-                state: booking.tripStatus == 'IN_PROGRESS'
-                    ? TripTrackingState.inProgress
-                    : TripTrackingState.arriving,
-                booking: booking,
-                pickup: booking.pickup ?? widget.pickup,
-                destination: booking.destination ?? widget.destination,
-                vehicle: booking.vehicle ?? widget.vehicle,
-              ),
-            ),
-          );
+        if (_canOpenTracking(booking)) {
+          await _openTracking(booking);
           return;
         }
 
@@ -171,6 +161,76 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
         debugPrint('ERROR in _refreshBookingStatus: $e');
         // Don't pop to login on polling error
       }
+    }
+  }
+
+  Future<void> _connectBookingSocket(int bookingId) async {
+    final token = context.read<AuthProvider>().token;
+    if (token == null || token.isEmpty) {
+      return;
+    }
+
+    try {
+      await _socketService.connect(token);
+      await _socketService.joinBooking(bookingId);
+      _joinedBookingId = bookingId;
+      debugPrint('Searching: joined booking group $bookingId');
+    } catch (error) {
+      debugPrint('Searching: failed to connect booking socket: $error');
+    }
+  }
+
+  bool _canOpenTracking(BookingResponse booking) {
+    return booking.bookingStatus == 'DriverAssigned' &&
+        booking.tripId != null &&
+        booking.tripStatus != null &&
+        booking.driverOffer != null;
+  }
+
+  Future<void> _openTracking(BookingResponse booking) async {
+    if (!mounted || _didLeaveSearch || !_canOpenTracking(booking)) {
+      return;
+    }
+
+    _didLeaveSearch = true;
+    _nearbyDriversSubscription?.cancel();
+    _bookingStatusSubscription?.cancel();
+    
+    final bookingProvider = context.read<BookingProvider>();
+    final homeProvider = context.read<HomeProvider>();
+
+    bookingProvider.setActiveBooking(
+      booking: booking,
+      pickup: booking.pickup ?? widget.pickup,
+      destination: booking.destination ?? widget.destination,
+      vehicle: booking.vehicle ?? widget.vehicle,
+    );
+    
+    // Switch to tracking tab and pop to main screen
+    homeProvider.setSelectedIndex(1);
+    Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
+  Future<void> _confirmCurrentDriver(BookingResponse booking) async {
+    final token = context.read<AuthProvider>().token;
+    final offerId = booking.driverOffer?.offerId;
+    if (token == null || token.isEmpty || offerId == null) {
+      return;
+    }
+
+    final result = await context.read<BookingProvider>().confirmDriverOffer(
+          token,
+          bookingId: booking.bookingId,
+          offerId: offerId,
+        );
+    if (!mounted || result == null) {
+      return;
+    }
+
+    if (_canOpenTracking(result)) {
+      await _openTracking(result);
+    } else {
+      await _refreshBookingStatus();
     }
   }
 
@@ -265,6 +325,11 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
     final bookingProvider = context.watch<BookingProvider>();
     final nearbyDrivers = bookingProvider.nearbyDrivers;
     final currentBooking = bookingProvider.searchingBooking ?? widget.booking;
+    if (currentBooking != null && _canOpenTracking(currentBooking)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _openTracking(currentBooking);
+      });
+    }
 
     return PopScope(
       canPop: false,
@@ -407,6 +472,9 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
                               );
                             }
                           : null,
+                      onConfirmDriverTap: _shouldShowDriverCard(currentBooking)
+                          ? () => _confirmCurrentDriver(currentBooking!)
+                          : null,
                       onCancelTap: () =>
                           handleBookingBack(context, booking: currentBooking),
                       destinationAddress:
@@ -423,7 +491,8 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
   }
 
   bool _shouldShowDriverCard(BookingResponse? booking) {
-    return booking?.driverOffer != null;
+    return booking?.driverOffer != null &&
+        booking?.driverOffer?.offerStatus == 'DriverAccepted';
   }
 }
 
@@ -435,6 +504,7 @@ class _SearchingPanel extends StatelessWidget {
     this.vehicle,
     this.fareEstimate,
     this.onDriverPreviewTap,
+    this.onConfirmDriverTap,
     this.onCancelTap,
   });
 
@@ -444,6 +514,7 @@ class _SearchingPanel extends StatelessWidget {
   final String pickupAddress;
   final String destinationAddress;
   final VoidCallback? onDriverPreviewTap;
+  final VoidCallback? onConfirmDriverTap;
   final VoidCallback? onCancelTap;
 
   @override
@@ -513,6 +584,7 @@ class _SearchingPanel extends StatelessWidget {
               child: _DriverFoundCard(
                 booking: booking,
                 onTap: onDriverPreviewTap!,
+                onConfirmTap: onConfirmDriverTap,
               ),
             ),
           ],
@@ -560,6 +632,22 @@ class _SearchingPanel extends StatelessWidget {
   }
 
   String get _statusText {
+    if (booking?.matchingMessage != null &&
+        booking!.matchingMessage!.trim().isNotEmpty) {
+      final radius = booking?.currentSearchRadiusKm;
+      final radiusInfo = radius != null ? 'trong bán kính ${radius.toStringAsFixed(1)}km' : '';
+      final remaining = booking!.estimatedRemainingSeconds;
+      if (remaining != null && remaining > 0) {
+        final minutes = remaining ~/ 60;
+        final seconds = remaining % 60;
+        final countdown =
+            '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+        return '${booking!.matchingMessage!} $radiusInfo • Còn $countdown';
+      }
+
+      return '${booking!.matchingMessage!} $radiusInfo';
+    }
+
     final bookingId = booking?.bookingId;
     if (bookingId == null) return BookingStrings.estimatedWaitTime;
     return 'Mã chuyến #$bookingId • ${booking?.bookingStatus ?? 'Searching'}';
@@ -567,24 +655,31 @@ class _SearchingPanel extends StatelessWidget {
 }
 
 class _DriverFoundCard extends StatelessWidget {
-  const _DriverFoundCard({required this.booking, required this.onTap});
+  const _DriverFoundCard({
+    required this.booking,
+    required this.onTap,
+    this.onConfirmTap,
+  });
 
   final BookingResponse? booking;
   final VoidCallback onTap;
+  final VoidCallback? onConfirmTap;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFFF8E1),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFFFECB3)),
-        ),
-        child: Row(
+    final remaining = booking?.driverOffer?.customerConfirmRemainingSeconds;
+    final countdownText = remaining != null && remaining > 0 ? ' • Còn $remaining giây' : '';
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8E1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFFFECB3)),
+      ),
+      child: Column(
+        children: [
+          Row(
           children: [
             const CircleAvatar(
               backgroundColor: Color(0xFFFFB300),
@@ -597,12 +692,12 @@ class _DriverFoundCard extends StatelessWidget {
                 children: [
                   Text(
                     'Tài xế phù hợp đã sẵn sàng',
-                    style: TextStyle(fontWeight: FontWeight.w800),
+                    style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
-                  SizedBox(height: 2),
+                  const SizedBox(height: 2),
                   Text(
-                    'Xem hồ sơ trước khi xác nhận thuê.',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF666666)),
+                    'Xem hồ sơ và xác nhận thuê$countdownText.',
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF666666)),
                   ),
                 ],
               ),
@@ -610,6 +705,25 @@ class _DriverFoundCard extends StatelessWidget {
             const Icon(Icons.chevron_right_rounded, color: Color(0xFF006B70)),
           ],
         ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: onTap,
+                  child: const Text('Xem hồ sơ'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton(
+                  onPressed: onConfirmTap,
+                  child: const Text('Xác nhận thuê'),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

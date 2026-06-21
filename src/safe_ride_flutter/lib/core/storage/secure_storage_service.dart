@@ -18,6 +18,14 @@ class SecureStorageService {
     ]);
   }
 
+  Future<void> saveUserProfile(String profileJson) {
+    return _storage.write(key: StorageKeys.userProfile, value: profileJson);
+  }
+
+  Future<String?> readUserProfile() {
+    return _storage.read(key: StorageKeys.userProfile);
+  }
+
   Future<String?> readRefreshToken() {
     return _storage.read(key: StorageKeys.refreshToken);
   }
@@ -42,6 +50,7 @@ class SecureStorageService {
     await Future.wait([
       _storage.delete(key: StorageKeys.accessToken),
       _storage.delete(key: StorageKeys.refreshToken),
+      _storage.delete(key: StorageKeys.userProfile),
     ]);
   }
 }
