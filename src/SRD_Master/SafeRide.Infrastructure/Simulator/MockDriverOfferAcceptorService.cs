@@ -101,6 +101,23 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
                     ? DriverWorkStatus.Busy.ToString()
                     : DriverWorkStatus.Online.ToString();
 
+                var driverProfile = await dbContext.DriverProfiles
+                    .FirstOrDefaultAsync(
+                        profile => profile.DriverId == mockDriver.DriverId,
+                        cancellationToken);
+                if (driverProfile is not null)
+                {
+                    var nextWorkStatus = hasActiveTrip
+                        ? DriverWorkStatus.Busy
+                        : DriverWorkStatus.Online;
+                    if (driverProfile.WorkStatus != nextWorkStatus)
+                    {
+                        driverProfile.WorkStatus = nextWorkStatus;
+                        driverProfile.LastActiveAt = DateTime.UtcNow;
+                        driverProfile.UpdatedAt = DateTime.UtcNow;
+                    }
+                }
+
                 await redisService.SetAsync(RedisKeys.DriverOnline(mockDriver.DriverId), "1", TimeSpan.FromMinutes(30));
                 await redisService.SetAsync(RedisKeys.DriverStatus(mockDriver.DriverId), nextStatus, TimeSpan.FromMinutes(30));
 
@@ -115,6 +132,8 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
                 _logger.LogError(ex, "Failed to initialize mock driver {DriverId}", mockDriver.DriverId);
             }
         }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private async Task ProcessOffersAsync(CancellationToken cancellationToken)
@@ -165,6 +184,7 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
                 }
                 catch (Exception ex)
                 {
+                    mockDriver.ProcessedOffers.Remove(offer.Id);
                     _logger.LogError(ex, "Mock driver {DriverId} ({Name}) failed to accept offer {OfferId}", mockDriver.DriverId, mockDriver.Name, offer.Id);
                 }
             }
