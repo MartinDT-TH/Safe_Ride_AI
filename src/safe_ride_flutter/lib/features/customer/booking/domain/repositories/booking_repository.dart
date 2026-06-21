@@ -43,6 +43,17 @@ abstract class BookingRepository {
     required int bookingId,
   });
 
+  Future<BookingResponse> confirmDriverOffer(
+    String accessToken, {
+    required int bookingId,
+    required int offerId,
+  });
+
+  Future<void> completeTrip(
+    String accessToken, {
+    required int tripId,
+  });
+
   Future<BookingResponse> rejectDriver(
     String accessToken, {
     required int bookingId,
