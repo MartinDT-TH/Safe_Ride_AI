@@ -9,6 +9,7 @@ import '../../data/models/booking_location.dart';
 import '../../data/models/booking_response.dart';
 import '../../data/models/create_booking_request.dart';
 import '../providers/booking_provider.dart';
+import '../../../home/presentation/providers/home_provider.dart';
 // import 'trip_tracking_page.dart';
 
 class ConfirmBookingPage extends StatelessWidget {
@@ -169,10 +170,17 @@ class ConfirmBookingPage extends StatelessWidget {
       return;
     }
 
-    final result = await context.read<BookingProvider>().confirmDriver(
-      token,
-      bookingId: booking!.bookingId,
-    );
+    final offerId = booking!.driverOffer?.offerId;
+    if (offerId == null) {
+      _showMessage(context, 'Không tìm thấy thông tin đề nghị của tài xế.');
+      return;
+    }
+
+    final result = await context.read<BookingProvider>().confirmDriverOffer(
+          token,
+          bookingId: booking!.bookingId,
+          offerId: offerId,
+        );
     if (!context.mounted) {
       return;
     }
@@ -203,21 +211,21 @@ class ConfirmBookingPage extends StatelessWidget {
           color: AppColors.primary,
           size: 52,
         ),
-        title: const Text('Đã xác nhận tài xế'),
+        title: const Text('Đã xác nhận thuê tài xế'),
         content: Text(
-          booking == null
-              ? '$driverName đã được chọn cho chuyến đi.'
-              : '$driverName sẽ nhận chuyến #${booking!.bookingId}.',
+          '$driverName sẽ nhận chuyến #${booking!.bookingId}. Đang chờ hệ thống điều phối...',
           textAlign: TextAlign.center,
         ),
         actions: [
           FilledButton(
             onPressed: () {
+              final homeProvider = context.read<HomeProvider>();
               Navigator.pop(dialogContext);
-              // Directly go back to home, it will automatically show the tracking tab
+              // Switch to tracking tab and go back to home
+              homeProvider.setSelectedIndex(1);
               Navigator.of(context).popUntil((route) => route.isFirst);
             },
-            child: const Text('Theo dõi chuyến đi'),
+            child: const Text('Đồng ý'),
           ),
         ],
       ),

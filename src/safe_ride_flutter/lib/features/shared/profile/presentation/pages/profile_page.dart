@@ -10,6 +10,7 @@ import '../../../../driver/registration/presentation/pages/identity_verification
 import 'edit_profile_page.dart';
 import '../widgets/profile_menu_tile.dart';
 import '../../../../driver/dashboard/presentation/pages/driver_dashboard_page.dart';
+import '../../../../customer/booking/presentation/providers/booking_provider.dart';
 import '../../../../customer/home/presentation/pages/customer_home_page.dart';
 import '../../../../shared/onboarding/presentation/providers/role_provider.dart';
 
@@ -36,16 +37,18 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final roleProvider = context.watch<RoleProvider>();
+    final bookingProvider = context.watch<BookingProvider>();
+    final hasActiveBooking = bookingProvider.activeBooking != null;
 
     return Scaffold(
       backgroundColor: const Color(0xFFFCF9F9), //0xFFFDFBFA), // Light warm background as seen in image
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0.5, //0
-        leading: IconButton( // tắt bỏ luôn cho đẹp
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF006B70)), // 0xFF263238
-          onPressed: () {}, //onPressed: () => Navigator.pop(context) // lỗi
-        ),
+        // leading: IconButton( // tắt bỏ luôn cho đẹp
+        //   icon: const Icon(Icons.arrow_back, color: Color(0xFF006B70)), // 0xFF263238
+        //   onPressed: () {}, //onPressed: () => Navigator.pop(context) // lỗi
+        // ),
         title: const Text(
           ProfileStrings.profileAndSettings,
           style: TextStyle(
@@ -57,82 +60,91 @@ class _ProfilePageState extends State<ProfilePage> {
         centerTitle: true,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(vertical: 20),
-        // physics: const BouncingScrollPhysics(),
-        // padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
+        // padding: const EdgeInsets.symmetric(vertical: 20),
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
         child: Column(
-          // crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // 1. Profile Summary Card
             _buildProfileSummary(auth),
             const SizedBox(height: 32),
 
             // 2. Chuyển sang chế độ Tài xế
-            
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE8F2F2),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.directions_car_rounded,
-                      color: AppColors.primary, //Color(0xFF006B70)
-                      size: 28,
-                    ),
-                    const SizedBox(width: 16),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            ProfileStrings.switchToDriver,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF006B70),
-                              fontSize: 15,
-                            ),
-                          ),
-                          Text(
-                            ProfileStrings.startReceivingTrips,
-                            style: TextStyle(
-                              color: Color(0xFF666666),
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
+            if (auth.isDriverEligible)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE8F2F2),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.directions_car_rounded,
+                        color: AppColors.primary, //Color(0xFF006B70)
+                        size: 28,
                       ),
-                    ),
-                    Switch(
-                      value: roleProvider.isDriver,
-                      onChanged: (val) async {
-                        final role = val ? AppValues.roleDriver : AppValues.roleCustomer;
-                        final navigator = Navigator.of(context);
-                        await roleProvider.selectRole(role);
+                      const SizedBox(width: 16),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              ProfileStrings.switchToDriver,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF006B70),
+                                fontSize: 15,
+                              ),
+                            ),
+                            Text(
+                              ProfileStrings.startReceivingTrips,
+                              style: TextStyle(
+                                color: Color(0xFF666666),
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: roleProvider.isDriver,
+                        onChanged: hasActiveBooking 
+                          ? (val) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Bạn không thể chuyển chế độ khi đang có chuyến đi hoạt động.'),
+                                ),
+                              );
+                            }
+                          : (val) async {
+                              final role = val ? AppValues.roleDriver : AppValues.roleCustomer;
+                              final navigator = Navigator.of(context);
+                              await roleProvider.selectRole(role);
 
-                        if (!mounted) return;
+                              if (!mounted) return;
 
-                        final Widget destination = val
-                            ? const DriverDashboardPage()
-                            : const CustomerHomePage();
+                              final Widget destination = val
+                                  ? const DriverDashboardPage()
+                                  : const CustomerHomePage();
 
-                        navigator.pushAndRemoveUntil(
-                          MaterialPageRoute(builder: (_) => destination),
-                          (route) => false,
-                        );
-                      },
-                      activeThumbColor: Colors.white,
-                      activeTrackColor: const Color(0xFF006B70),
-                    ),
-                  ],
+                              navigator.pushAndRemoveUntil(
+                                MaterialPageRoute(builder: (_) => destination),
+                                (route) => false,
+                              );
+                            },
+                        activeThumbColor: Colors.white,
+                        activeTrackColor: const Color(0xFF006B70),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
+
+              const SizedBox(height: 24),
 
 
 
@@ -140,7 +152,7 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildSectionLabel(ProfileStrings.accountSection),
             _buildMenuContainer([
               ProfileMenuTile(
-                icon: Icons.person_outline_rounded, // Icons.person_search_outlined,
+                icon: Icons.person_search_outlined,
                 title: ProfileStrings.editProfile,
                 onTap: () => _navigateToEditProfile(auth),
               ),
@@ -150,19 +162,18 @@ class _ProfilePageState extends State<ProfilePage> {
                 trailingWidget: _buildLinkedAccountStatus(auth),
                 onTap: auth.isLoading ? null : () => _handleLinkedAccounts(auth),
               ),
-              if (!auth.isDriverEligible)
-                ProfileMenuTile(
-                  icon: Icons.badge_outlined,
-                  title: 'Đăng ký tài xế',
-                  showDivider: false,
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const IdentityVerificationPage(),
-                      ),
-                    );
-                  },
-                ),
+              ProfileMenuTile(
+                icon: Icons.badge_outlined,
+                title: 'Đăng ký tài xế',
+                showDivider: false,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const IdentityVerificationPage(),
+                    ),
+                  );
+                },
+              ),
             ]),
             const SizedBox(height: 24),
 
@@ -327,7 +338,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-    Widget _buildSectionLabel(String label) {
+  Widget _buildSectionLabel(String label) {
     return Padding(
       padding: const EdgeInsets.only(left: 24, bottom: 10),
       child: Align(
@@ -485,11 +496,9 @@ class _ProfilePageState extends State<ProfilePage> {
 
 
 
-
   Widget _buildLogoutButton(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 54,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: OutlinedButton(
         onPressed: () => _confirmLogout(context),
         style: OutlinedButton.styleFrom(

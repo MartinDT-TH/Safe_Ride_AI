@@ -21,6 +21,15 @@ class HomeProvider extends ChangeNotifier {
 
   List<TripModel> get recentTrips => _recentTrips;
 
+  int _selectedIndex = 0;
+  int get selectedIndex => _selectedIndex;
+
+  void setSelectedIndex(int index) {
+    if (_selectedIndex == index) return;
+    _selectedIndex = index;
+    notifyListeners();
+  }
+
   Future<void> loadHomeData() async {
     _isLoading = true;
 
