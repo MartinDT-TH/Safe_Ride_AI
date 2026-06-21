@@ -10,11 +10,16 @@ public sealed class ApiExceptionMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<ApiExceptionMiddleware> _logger;
+    private readonly IHostEnvironment _environment;
 
-    public ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExceptionMiddleware> logger)
+    public ApiExceptionMiddleware(
+        RequestDelegate next,
+        ILogger<ApiExceptionMiddleware> logger,
+        IHostEnvironment environment)
     {
         _next = next;
         _logger = logger;
+        _environment = environment;
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -54,11 +59,16 @@ public sealed class ApiExceptionMiddleware
                 "Unhandled exception for {Method} {Path}.",
                 context.Request.Method,
                 context.Request.Path);
+
+            var detail = _environment.IsDevelopment()
+                ? exception.ToString()
+                : "Đã xảy ra lỗi không mong muốn trên hệ thống.";
+
             await WriteProblemAsync(
                 context,
                 StatusCodes.Status500InternalServerError,
                 "server.unexpected_error",
-                "Đã xảy ra lỗi không mong muốn.");
+                detail);
         }
     }
 

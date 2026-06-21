@@ -360,7 +360,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
                 user.UserName,
                 user.AvatarUrl,
                 profile.ExperienceYears,
-                LicenseClass = kyc.LicenseClass!.Value,
+                LicenseClass = kyc.LicenseClass ?? LicenseClass.A1,
                 driverOffer.ExpiresAt
             })
             .Take(1)
@@ -377,7 +377,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             .GroupBy(x => x.DriverId)
             .Select(group => new
             {
-                Rating = Math.Round(group.Average(x => (double)x.RatingScore), 1),
+                AverageRating = group.Average(x => (double)x.RatingScore),
                 TripCount = group.Count()
             })
             .FirstOrDefaultAsync(cancellationToken);
@@ -387,7 +387,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             confirmedOffer.DriverId,
             confirmedOffer.FullName ?? confirmedOffer.UserName ?? "Tài xế SafeRide",
             confirmedOffer.AvatarUrl,
-            ratingStats?.Rating ?? 0,
+            ratingStats is null ? 0 : Math.Round(ratingStats.AverageRating, 1),
             ratingStats?.TripCount ?? 0,
             confirmedOffer.ExperienceYears ?? 0,
             confirmedOffer.LicenseClass,
