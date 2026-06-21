@@ -245,6 +245,14 @@ abstract final class ApiEndpoints {
   static const bookingCatalog = '/bookings/catalog';
   static const bookingEstimate = '/bookings/estimate';
   static const nearbyDrivers = '/drivers/nearby';
+  static String acceptDriverOffer(int offerId) =>
+      '/drivers/offers/$offerId/accept';
+  static String rejectDriverOffer(int offerId) =>
+      '/drivers/offers/$offerId/reject';
+  static String confirmDriverOffer(int bookingId, int offerId) =>
+      '/bookings/$bookingId/confirm-driver-offer/$offerId';
+  static String tripStatus(int tripId) => '/trips/$tripId/status';
+  static String completeTrip(int tripId) => '/trips/$tripId/complete';
   static const identityVerificationDocuments =
       '/identity-verification/documents';
 }
@@ -309,6 +317,8 @@ abstract final class ApiKeys {
   static const experienceYears = 'experienceYears';
   static const licenseClass = 'licenseClass';
   static const expiresAt = 'expiresAt';
+  static const offerStatus = 'offerStatus';
+  static const customerConfirmRemainingSeconds = 'customerConfirmRemainingSeconds';
   static const estimatedHours = 'estimatedHours';
   static const vehicleId = 'vehicleId';
   static const serviceTypeId = 'serviceTypeId';
@@ -323,6 +333,9 @@ abstract final class ApiKeys {
   static const originalFare = 'originalFare';
   static const discountAmount = 'discountAmount';
   static const finalFare = 'finalFare';
+  static const currentSearchRadiusKm = 'currentSearchRadiusKm';
+  static const estimatedRemainingSeconds = 'estimatedRemainingSeconds';
+  static const matchingMessage = 'matchingMessage';
   static const userName = 'userName';
   static const recentTrips = 'recentTrips';
   static const pickup = 'pickup';

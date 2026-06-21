@@ -9,21 +9,23 @@ import 'cancel_booking_sheet.dart';
 bool isBookingCancellable(BookingResponse? booking) {
   final status = booking?.bookingStatus;
   final tripStatus = booking?.tripStatus;
-  if (status == null || status == 'Searching' || status == 'PendingSchedule') {
+  if (status == 'Searching') {
     return true;
   }
 
   return status == 'DriverAssigned' &&
-      tripStatus != 'IN_PROGRESS' &&
-      tripStatus != 'COMPLETED' &&
-      tripStatus != 'CANCELLED';
+      (tripStatus == 'ACCEPTED' ||
+          tripStatus == 'DRIVER_ARRIVING' ||
+          tripStatus == 'ARRIVED');
 }
 
 Future<void> handleBookingBack(
   BuildContext context, {
   required BookingResponse? booking,
 }) async {
-  debugPrint('CANCEL_FLOW: handleBookingBack for booking: ${booking?.bookingId}');
+  debugPrint(
+    'CANCEL_FLOW: handleBookingBack for booking: ${booking?.bookingId}',
+  );
 
   if (booking == null) {
     debugPrint('CANCEL_FLOW: booking is null, just popping');
@@ -32,7 +34,9 @@ Future<void> handleBookingBack(
   }
 
   if (!isBookingCancellable(booking)) {
-    debugPrint('CANCEL_FLOW: booking ${booking.bookingId} is not cancellable (Status: ${booking.bookingStatus}), going to root');
+    debugPrint(
+      'CANCEL_FLOW: booking ${booking.bookingId} is not cancellable (Status: ${booking.bookingStatus}), going to root',
+    );
     Navigator.of(context).popUntil((route) => route.isFirst);
     return;
   }
@@ -43,7 +47,9 @@ Future<void> handleBookingBack(
   );
 
   if (reason == null || !context.mounted) {
-    debugPrint('CANCEL_FLOW: Cancellation cancelled by user or context unmounted');
+    debugPrint(
+      'CANCEL_FLOW: Cancellation cancelled by user or context unmounted',
+    );
     return;
   }
 
@@ -54,7 +60,9 @@ Future<void> handleBookingBack(
     return;
   }
 
-  debugPrint('CANCEL_FLOW: Calling provider.cancelBooking for ${booking.bookingId}');
+  debugPrint(
+    'CANCEL_FLOW: Calling provider.cancelBooking for ${booking.bookingId}',
+  );
   final result = await context.read<BookingProvider>().cancelBooking(
     token,
     bookingId: booking.bookingId,
@@ -66,14 +74,13 @@ Future<void> handleBookingBack(
   if (result == null) {
     final error = context.read<BookingProvider>().errorMessage;
     debugPrint('CANCEL_FLOW: Cancellation failed: $error');
-    _showMessage(
-      context,
-      error ?? 'Không thể hủy chuyến. Vui lòng thử lại.',
-    );
+    _showMessage(context, error ?? 'Không thể hủy chuyến. Vui lòng thử lại.');
     return;
   }
 
-  debugPrint('CANCEL_FLOW: Cancellation success, result status: ${result.bookingStatus}');
+  debugPrint(
+    'CANCEL_FLOW: Cancellation success, result status: ${result.bookingStatus}',
+  );
 
   // Ensure we clear searching state
   final provider = context.read<BookingProvider>();

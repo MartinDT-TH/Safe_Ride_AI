@@ -278,6 +278,65 @@ class BookingRemoteDatasource {
     }
   }
 
+  Future<BookingResponse> confirmDriverOffer(
+    String accessToken, {
+    required int bookingId,
+    required int offerId,
+  }) async {
+    try {
+      final response = await _dio.post(
+        ApiEndpoints.confirmDriverOffer(bookingId, offerId),
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+        ),
+      );
+
+      return BookingResponse.fromJson(
+        Map<String, dynamic>.from(response.data as Map),
+      );
+    } on FormatException {
+      throw const BookingApiException(BookingStrings.sessionExpired);
+    } on DioException catch (exception) {
+      final data = exception.response?.data;
+      if (data is Map) {
+        final detail = data[ApiKeys.detail]?.toString();
+        final code = data['code']?.toString();
+        if (detail != null) {
+          throw BookingApiException(detail, code: code);
+        }
+      }
+      throw const BookingApiException(
+        'Không thể xác nhận thuê tài xế. Vui lòng thử lại.',
+      );
+    }
+  }
+
+  Future<void> completeTrip(
+    String accessToken, {
+    required int tripId,
+  }) async {
+    try {
+      await _dio.post(
+        ApiEndpoints.completeTrip(tripId),
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+        ),
+      );
+    } on DioException catch (exception) {
+      final data = exception.response?.data;
+      if (data is Map) {
+        final detail = data[ApiKeys.detail]?.toString();
+        final code = data['code']?.toString();
+        if (detail != null) {
+          throw BookingApiException(detail, code: code);
+        }
+      }
+      throw const BookingApiException(
+        'KhÃ´ng thá»ƒ káº¿t thÃºc chuyáº¿n. Vui lÃ²ng thá»­ láº¡i.',
+      );
+    }
+  }
+
   Future<BookingResponse> rejectDriver(
     String accessToken, {
     required int bookingId,

@@ -68,72 +68,71 @@ class _ProfilePageState extends State<ProfilePage> {
             const SizedBox(height: 32),
 
             // 2. Chuyển sang chế độ Tài xế
-            if (auth.isDriverEligible)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE8F2F2),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.directions_car_rounded,
-                        color: AppColors.primary, //Color(0xFF006B70)
-                        size: 28,
-                      ),
-                      const SizedBox(width: 16),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              ProfileStrings.switchToDriver,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF006B70),
-                                fontSize: 15,
-                              ),
+            
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F2F2),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.directions_car_rounded,
+                      color: AppColors.primary, //Color(0xFF006B70)
+                      size: 28,
+                    ),
+                    const SizedBox(width: 16),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            ProfileStrings.switchToDriver,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF006B70),
+                              fontSize: 15,
                             ),
-                            Text(
-                              ProfileStrings.startReceivingTrips,
-                              style: TextStyle(
-                                color: Color(0xFF666666),
-                                fontSize: 13,
-                              ),
+                          ),
+                          Text(
+                            ProfileStrings.startReceivingTrips,
+                            style: TextStyle(
+                              color: Color(0xFF666666),
+                              fontSize: 13,
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                      Switch(
-                        value: roleProvider.isDriver,
-                        onChanged: (val) async {
-                          final role = val ? AppValues.roleDriver : AppValues.roleCustomer;
-                          final navigator = Navigator.of(context);
-                          await roleProvider.selectRole(role);
+                    ),
+                    Switch(
+                      value: roleProvider.isDriver,
+                      onChanged: (val) async {
+                        final role = val ? AppValues.roleDriver : AppValues.roleCustomer;
+                        final navigator = Navigator.of(context);
+                        await roleProvider.selectRole(role);
 
-                          if (!mounted) return;
+                        if (!mounted) return;
 
-                          final Widget destination = val
-                              ? const DriverDashboardPage()
-                              : const CustomerHomePage();
+                        final Widget destination = val
+                            ? const DriverDashboardPage()
+                            : const CustomerHomePage();
 
-                          navigator.pushAndRemoveUntil(
-                            MaterialPageRoute(builder: (_) => destination),
-                            (route) => false,
-                          );
-                        },
-                        activeThumbColor: Colors.white,
-                        activeTrackColor: const Color(0xFF006B70),
-                      ),
-                    ],
-                  ),
+                        navigator.pushAndRemoveUntil(
+                          MaterialPageRoute(builder: (_) => destination),
+                          (route) => false,
+                        );
+                      },
+                      activeThumbColor: Colors.white,
+                      activeTrackColor: const Color(0xFF006B70),
+                    ),
+                  ],
                 ),
               ),
-
-              const SizedBox(height: 24),
+            ),
+            const SizedBox(height: 24),
 
 
 
@@ -230,6 +229,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
             // 6. Logout Button
             _buildLogoutButton(context),
+            const SizedBox(height: 24),
           ],
         ),
       ),
