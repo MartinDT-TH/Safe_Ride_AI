@@ -5,4 +5,5 @@ namespace SafeRide.Application.Features.Bookings.Commands.ConfirmDriver;
 
 public sealed record ConfirmDriverCommand(
     Guid CustomerId,
-    long BookingId) : IRequest<CreateBookingResponse>;
+    long BookingId,
+    long? OfferId = null) : IRequest<CreateBookingResponse>;

@@ -21,6 +21,7 @@ public sealed class ConfirmDriverCommandHandler
         return _assignmentService.ConfirmDriverAsync(
             request.CustomerId,
             request.BookingId,
+            request.OfferId,
             cancellationToken);
     }
 }
