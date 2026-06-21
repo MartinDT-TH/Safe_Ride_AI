@@ -1,9 +1,11 @@
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 #nullable disable
 
 namespace SafeRide.Infrastructure.Persistence.Migrations
 {
+    [DbContext(typeof(ApplicationDbContext))]
     [Migration("20260621120000_UpdateDriverOfferCustomerConfirmationFlow")]
     public partial class UpdateDriverOfferCustomerConfirmationFlow : Migration
     {
