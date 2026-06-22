@@ -187,13 +187,21 @@ public sealed class ResilientRedisService : IRedisService
                 maxAttempts);
             MarkPrimaryAvailable();
 
-            if (result == OtpVerificationResult.Missing)
+            if (result == OtpVerificationResult.Success)
             {
-                return await VerifyFallbackAsync();
+                await VerifyFallbackAsync();
+                return OtpVerificationResult.Success;
             }
 
-            await VerifyFallbackAsync();
-            return result;
+            var fallbackResult = await VerifyFallbackAsync();
+            if (fallbackResult == OtpVerificationResult.Success)
+            {
+                return OtpVerificationResult.Success;
+            }
+
+            return result == OtpVerificationResult.Missing
+                ? fallbackResult
+                : result;
         }
         catch (Exception exception)
         {
