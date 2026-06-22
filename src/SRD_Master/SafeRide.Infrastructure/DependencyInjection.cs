@@ -144,7 +144,8 @@ public static class DependencyInjection
             });
         }
 
-        if (environment.IsDevelopment())
+        if (environment.IsDevelopment()
+            && configuration.GetValue<bool>("Simulator:EnableMockDrivers"))
         {
             // services.AddSingleton<DriverLocationSimulator>();
             // Register V3 simulator with logger support

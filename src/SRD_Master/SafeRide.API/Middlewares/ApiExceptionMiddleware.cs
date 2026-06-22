@@ -34,7 +34,8 @@ public sealed class ApiExceptionMiddleware
                 context,
                 exception.StatusCode,
                 exception.Code,
-                exception.Message);
+                exception.Message,
+                exception.RetryAfterSeconds);
         }
         catch (BookingException exception)
         {
@@ -76,10 +77,16 @@ public sealed class ApiExceptionMiddleware
         HttpContext context,
         int statusCode,
         string code,
-        string detail)
+        string detail,
+        int? retryAfterSeconds = null)
     {
         context.Response.StatusCode = statusCode;
         context.Response.ContentType = "application/problem+json";
+        if (retryAfterSeconds is > 0)
+        {
+            context.Response.Headers.RetryAfter = retryAfterSeconds.Value.ToString();
+        }
+
         var problem = new ProblemDetails
         {
             Status = statusCode,
@@ -89,6 +96,11 @@ public sealed class ApiExceptionMiddleware
         };
         problem.Extensions["code"] = code;
         problem.Extensions["traceId"] = context.TraceIdentifier;
+        if (retryAfterSeconds is > 0)
+        {
+            problem.Extensions["retryAfterSeconds"] = retryAfterSeconds.Value;
+        }
+
         await context.Response.WriteAsJsonAsync(problem);
     }
 }

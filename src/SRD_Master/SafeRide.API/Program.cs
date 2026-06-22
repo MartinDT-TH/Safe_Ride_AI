@@ -12,6 +12,10 @@ using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
+
 if (builder.Environment.IsDevelopment())
 {
     builder.Configuration.AddJsonFile(
