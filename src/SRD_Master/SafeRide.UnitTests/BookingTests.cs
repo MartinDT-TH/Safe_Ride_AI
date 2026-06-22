@@ -419,14 +419,19 @@ public sealed class BookingTests
         public DateTime UtcNow { get; }
     }
 
-    private sealed class MapServiceFake : IGoogleMapsService
+    private sealed class MapServiceFake : IMapRoutingService
     {
         public Task<RouteEstimateResult> GetRouteEstimateAsync(
-            LocationPoint pickup,
-            LocationPoint destination,
+            RouteEstimateRequest request,
             CancellationToken cancellationToken)
         {
-            return Task.FromResult(new RouteEstimateResult(5.2, 30, "polyline"));
+            return Task.FromResult(new RouteEstimateResult
+            {
+                Provider = MapProvider.VietMap,
+                DistanceMeters = 5200,   // 5.2 km
+                DurationSeconds = 1800,  // 30 min
+                EncodedPolyline = "polyline"
+            });
         }
     }
 
