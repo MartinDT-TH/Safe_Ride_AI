@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../application/services/identity_ocr_scanner.dart';
@@ -20,7 +19,9 @@ class UploadCccdPage extends StatefulWidget {
 class _UploadCccdPageState extends State<UploadCccdPage> {
   File? _frontImage;
   File? _backImage;
-  String? _documentNumber;
+  final TextEditingController _fullNameController = TextEditingController();
+  final TextEditingController _documentNumberController =
+      TextEditingController();
   bool _isScanning = false;
   final ImagePicker _picker = ImagePicker();
   final IdentityOcrScanner _ocrScanner = IdentityOcrScanner();
@@ -28,6 +29,9 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
 
   bool get _hasFrontImage => _frontImage != null;
   bool get _hasBackImage => _backImage != null;
+  bool get _hasFullName => _fullNameController.text.trim().isNotEmpty;
+  bool get _hasDocumentNumber =>
+      _documentNumberController.text.trim().isNotEmpty;
 
   @override
   void initState() {
@@ -35,7 +39,8 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
     _submission = widget.submission ?? IdentityVerificationSubmission();
     _frontImage = _submission.cccdFrontImage;
     _backImage = _submission.cccdBackImage;
-    _documentNumber = _submission.cccdNumber;
+    _fullNameController.text = _submission.cccdFullName ?? '';
+    _documentNumberController.text = _submission.cccdNumber ?? '';
   }
 
   Future<void> _pickImage(bool isFront) async {
@@ -60,7 +65,11 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
       debugPrint('Error picking image: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Không thể mở camera. Vui lòng kiểm tra quyền truy cập.')),
+          const SnackBar(
+            content: Text(
+              'Không thể mở camera. Vui lòng kiểm tra quyền truy cập.',
+            ),
+          ),
         );
       }
     }
@@ -74,10 +83,17 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
         documentType: IdentityOcrDocumentType.idCard,
       );
       if (!mounted) return;
-      setState(() => _documentNumber = result.documentNumber ?? _documentNumber);
-      if (result.documentNumber != null) {
+      setState(() {
+        if (result.fullName != null) {
+          _fullNameController.text = result.fullName!;
+        }
+        if (result.documentNumber != null) {
+          _documentNumberController.text = result.documentNumber!;
+        }
+      });
+      if (result.documentNumber != null || result.fullName != null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Đã quét CCCD: ${result.documentNumber}')),
+          const SnackBar(content: Text('Đã quét thông tin CCCD.')),
         );
       }
     } catch (e) {
@@ -88,6 +104,13 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
     } finally {
       if (mounted) setState(() => _isScanning = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _fullNameController.dispose();
+    _documentNumberController.dispose();
+    super.dispose();
   }
 
   @override
@@ -151,7 +174,9 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
                       value: 0.33,
                       minHeight: 8,
                       backgroundColor: Color(0xFFF0F0F0),
-                      valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        AppColors.primary,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 32),
@@ -177,12 +202,12 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
                   const SizedBox(height: 24),
                   // Tip Box
                   _buildTipBox(),
-                  if (_isScanning || _documentNumber != null) ...[
+                  if (_isScanning || _hasDocumentNumber || _hasFullName) ...[
                     const SizedBox(height: 12),
                     _buildOcrStatus(),
                   ],
                   const SizedBox(height: 32),
-                  
+
                   // Front Photo Box
                   _PhotoUploadBox(
                     label: 'Mặt trước CCCD',
@@ -190,12 +215,70 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
                     onTap: () => _pickImage(true),
                   ),
                   const SizedBox(height: 20),
-                  
+
                   // Back Photo Box
                   _PhotoUploadBox(
                     label: 'Mặt sau CCCD',
                     image: _backImage,
                     onTap: () => _pickImage(false),
+                  ),
+                  const SizedBox(height: 24),
+                  _buildInputField(
+                    label: 'Họ và Tên',
+                    child: TextField(
+                      controller: _fullNameController,
+                      textCapitalization: TextCapitalization.words,
+                      onChanged: (_) => setState(() {}),
+                      decoration: const InputDecoration(
+                        hintText: 'Nhập họ và tên trên CCCD',
+                        hintStyle: TextStyle(
+                          color: Color(0xFF919191),
+                          fontSize: 15,
+                        ),
+                        border: OutlineInputBorder(
+                          borderSide: BorderSide(color: Color(0xFFCFD8DC)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Color(0xFFCFD8DC)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: AppColors.primary),
+                        ),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  _buildInputField(
+                    label: 'Số CCCD',
+                    child: TextField(
+                      controller: _documentNumberController,
+                      keyboardType: TextInputType.number,
+                      onChanged: (_) => setState(() {}),
+                      decoration: const InputDecoration(
+                        hintText: 'Nhập số CCCD',
+                        hintStyle: TextStyle(
+                          color: Color(0xFF919191),
+                          fontSize: 15,
+                        ),
+                        border: OutlineInputBorder(
+                          borderSide: BorderSide(color: Color(0xFFCFD8DC)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Color(0xFFCFD8DC)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: AppColors.primary),
+                        ),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 14,
+                        ),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 40),
                 ],
@@ -210,7 +293,7 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, -5),
             ),
@@ -219,11 +302,15 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
         child: CustomButton(
           text: 'Tiếp tục',
           onPressed: () {
-            if (_hasFrontImage && _hasBackImage) {
+            if (_hasFrontImage &&
+                _hasBackImage &&
+                _hasFullName &&
+                _hasDocumentNumber) {
               _submission
                 ..cccdFrontImage = _frontImage
                 ..cccdBackImage = _backImage
-                ..cccdNumber = _documentNumber;
+                ..cccdFullName = _fullNameController.text.trim()
+                ..cccdNumber = _documentNumberController.text.trim();
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -232,7 +319,11 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
               );
             } else {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Vui lòng chụp đầy đủ mặt trước và mặt sau CCCD')),
+                const SnackBar(
+                  content: Text(
+                    'Vui lòng chụp đủ ảnh và kiểm tra Họ và Tên, Số CCCD.',
+                  ),
+                ),
               );
             }
           },
@@ -269,6 +360,24 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
     );
   }
 
+  Widget _buildInputField({required String label, required Widget child}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF455A64),
+          ),
+        ),
+        const SizedBox(height: 8),
+        child,
+      ],
+    );
+  }
+
   Widget _buildOcrStatus() {
     return Container(
       width: double.infinity,
@@ -290,7 +399,7 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
             child: Text(
               _isScanning
                   ? 'Đang quét OCR trên thiết bị...'
-                  : 'Số CCCD đã quét: $_documentNumber',
+                  : 'OCR đã tự điền thông tin CCCD',
               style: const TextStyle(
                 color: Color(0xFF455A64),
                 fontSize: 13,
@@ -309,11 +418,7 @@ class _PhotoUploadBox extends StatelessWidget {
   final File? image;
   final VoidCallback onTap;
 
-  const _PhotoUploadBox({
-    required this.label,
-    this.image,
-    required this.onTap,
-  });
+  const _PhotoUploadBox({required this.label, this.image, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -323,7 +428,9 @@ class _PhotoUploadBox extends StatelessWidget {
         children: [
           CustomPaint(
             painter: _DashedRectPainter(
-              color: image != null ? AppColors.primary : const Color(0xFFCFD8DC),
+              color: image != null
+                  ? AppColors.primary
+                  : const Color(0xFFCFD8DC),
             ),
             child: Container(
               width: double.infinity,
@@ -388,11 +495,7 @@ class _PhotoUploadBox extends StatelessWidget {
                   color: AppColors.primary,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
-                  Icons.check,
-                  color: Colors.white,
-                  size: 16,
-                ),
+                child: const Icon(Icons.check, color: Colors.white, size: 16),
               ),
             ),
         ],
@@ -403,14 +506,10 @@ class _PhotoUploadBox extends StatelessWidget {
 
 class _DashedRectPainter extends CustomPainter {
   final Color color;
-  final double strokeWidth;
-  final double gap;
+  static const double strokeWidth = 1.5;
+  static const double gap = 5.0;
 
-  _DashedRectPainter({
-    this.color = Colors.grey,
-    this.strokeWidth = 1.5,
-    this.gap = 5.0,
-  });
+  _DashedRectPainter({this.color = Colors.grey});
 
   @override
   void paint(Canvas canvas, Size size) {

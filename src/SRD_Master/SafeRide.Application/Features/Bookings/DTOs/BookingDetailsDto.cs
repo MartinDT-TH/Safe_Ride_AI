@@ -34,4 +34,8 @@ public sealed record BookingDetailsDto(
     BookingLocationDto? Destination,
     BookingVehicleSummaryDto Vehicle,
     long? TripId,
-    TripStatus? TripStatus);
+    TripStatus? TripStatus,
+    double? CurrentSearchRadiusKm = null,
+    DateTime? ExpiresAt = null,
+    int? EstimatedRemainingSeconds = null,
+    string? MatchingMessage = null);

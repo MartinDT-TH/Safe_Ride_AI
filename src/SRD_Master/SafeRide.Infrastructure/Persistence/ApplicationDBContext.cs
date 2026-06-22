@@ -123,20 +123,22 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
 
             entity.ToTable(tb =>
             {
-                tb.HasCheckConstraint("CK_BookingDriverOffers_OfferStatus", "[OfferStatus] IN ('Offered', 'Confirmed', 'Expired', 'Cancelled')");
+                tb.HasCheckConstraint("CK_BookingDriverOffers_OfferStatus", "[OfferStatus] IN ('Sent', 'DriverAccepted', 'CustomerConfirmed', 'Rejected', 'Expired', 'Cancelled')");
                 tb.HasCheckConstraint("CK_BookingDriverOffers_ExpiresAt", "[ExpiresAt] > [OfferedAt]");
             });
 
             entity.Property(e => e.OfferStatus)
                 .HasConversion<string>()
-                .HasMaxLength(20)
-                .HasDefaultValue(DriverOfferStatus.Offered);
+                .HasMaxLength(20);
             entity.Property(e => e.OfferedAt).HasDefaultValueSql("(getutcdate())");
 
             entity.HasIndex(e => e.BookingId);
             entity.HasIndex(e => e.DriverId);
             entity.HasIndex(e => new { e.BookingId, e.OfferStatus });
+            entity.HasIndex(e => new { e.OfferStatus, e.ExpiresAt });
             entity.HasIndex(e => new { e.DriverId, e.OfferStatus });
+            entity.HasIndex(e => new { e.BookingId, e.DriverId })
+                .IsUnique();
 
             entity.HasOne(e => e.Booking)
                 .WithMany(e => e.DriverOffers)

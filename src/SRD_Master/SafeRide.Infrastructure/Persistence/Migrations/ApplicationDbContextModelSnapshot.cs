@@ -411,10 +411,8 @@ namespace SafeRide.Infrastructure.Migrations
 
                     b.Property<string>("OfferStatus")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
                         .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)")
-                        .HasDefaultValue("Offered");
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<DateTime>("OfferedAt")
                         .ValueGeneratedOnAdd()
@@ -428,15 +426,20 @@ namespace SafeRide.Infrastructure.Migrations
 
                     b.HasIndex("DriverId");
 
+                    b.HasIndex("BookingId", "DriverId")
+                        .IsUnique();
+
                     b.HasIndex("BookingId", "OfferStatus");
 
                     b.HasIndex("DriverId", "OfferStatus");
+
+                    b.HasIndex("OfferStatus", "ExpiresAt");
 
                     b.ToTable("BookingDriverOffers", t =>
                         {
                             t.HasCheckConstraint("CK_BookingDriverOffers_ExpiresAt", "[ExpiresAt] > [OfferedAt]");
 
-                            t.HasCheckConstraint("CK_BookingDriverOffers_OfferStatus", "[OfferStatus] IN ('Offered', 'Confirmed', 'Expired', 'Cancelled')");
+                            t.HasCheckConstraint("CK_BookingDriverOffers_OfferStatus", "[OfferStatus] IN ('Sent', 'DriverAccepted', 'CustomerConfirmed', 'Rejected', 'Expired', 'Cancelled')");
                         });
                 });
 

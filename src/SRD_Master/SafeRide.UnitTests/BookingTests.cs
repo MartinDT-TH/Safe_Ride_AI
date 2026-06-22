@@ -191,7 +191,8 @@ public sealed class BookingTests
                 MatchingService,
                 new VehicleLicenseRequirementService(),
                 new RealtimeNotificationServiceFake(),
-                Repository);
+                Repository,
+                new MatchingPolicyProviderFake());
         }
 
         public static readonly Guid CustomerId =
@@ -418,14 +419,19 @@ public sealed class BookingTests
         public DateTime UtcNow { get; }
     }
 
-    private sealed class MapServiceFake : IGoogleMapsService
+    private sealed class MapServiceFake : IMapRoutingService
     {
         public Task<RouteEstimateResult> GetRouteEstimateAsync(
-            LocationPoint pickup,
-            LocationPoint destination,
+            RouteEstimateRequest request,
             CancellationToken cancellationToken)
         {
-            return Task.FromResult(new RouteEstimateResult(5.2, 30, "polyline"));
+            return Task.FromResult(new RouteEstimateResult
+            {
+                Provider = MapProvider.VietMap,
+                DistanceMeters = 5200,   // 5.2 km
+                DurationSeconds = 1800,  // 30 min
+                EncodedPolyline = "polyline"
+            });
         }
     }
 
@@ -442,6 +448,30 @@ public sealed class BookingTests
         }
     }
 
+    private sealed class MatchingPolicyProviderFake : IMatchingPolicyProvider
+    {
+        public MatchingOptions Current { get; } = new();
+
+        public DateTime? GetMatchingStartedAt(Booking booking)
+        {
+            return booking.BookingType == BookingType.Now
+                ? booking.CreatedAt
+                : booking.UpdatedAt;
+        }
+
+        public BookingMatchingSnapshot GetSnapshot(Booking booking, DateTime utcNow)
+        {
+            var startedAt = GetMatchingStartedAt(booking) ?? utcNow;
+            var expiresAt = startedAt.AddMinutes(Current.BookingExpireAfterMinutes);
+            return new BookingMatchingSnapshot(
+                Current.InitialRadiusKm,
+                expiresAt,
+                Math.Max(0, (int)Math.Ceiling((expiresAt - utcNow).TotalSeconds)),
+                "SafeRide đang tìm tài xế gần bạn trong bán kính 5km.",
+                false);
+        }
+    }
+
     private sealed class RealtimeNotificationServiceFake
         : IRealtimeNotificationService
     {
@@ -450,8 +480,18 @@ public sealed class BookingTests
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
+        public Task PublishBookingSearchingStartedAsync(
+            BookingSearchingStartedEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
         public Task PublishTripCreatedAsync(
             TripCreatedEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task PublishBookingDriverAssignedAsync(
+            BookingDriverAssignedEvent notification,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
@@ -470,13 +510,48 @@ public sealed class BookingTests
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
+        public Task PublishDriverOfferReceivedAsync(
+            DriverOfferReceivedEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
         public Task PublishDriverOfferRejectedAsync(
             DriverOfferRejectedEvent notification,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
+        public Task PublishDriverOfferAcceptedAsync(
+            DriverOfferAcceptedEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task PublishDriverOfferExpiredAsync(
+            DriverOfferExpiredEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task PublishDriverOfferCancelledAsync(
+            DriverOfferCancelledEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
         public Task PublishDriverMatchedAsync(
             DriverMatchedEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task PublishCustomerConfirmedDriverOfferAsync(
+            CustomerConfirmedDriverOfferEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task PublishBookingSearchRadiusExpandedAsync(
+            BookingSearchRadiusExpandedEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task PublishBookingExpiredAsync(
+            BookingExpiredEvent notification,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
     }

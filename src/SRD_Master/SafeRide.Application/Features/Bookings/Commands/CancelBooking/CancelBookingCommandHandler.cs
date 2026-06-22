@@ -60,11 +60,11 @@ public sealed class CancelBookingCommandHandler
             return ToResponse(booking, "Chuyến đã hết thời gian chờ và được tự động kết thúc.");
         }
 
-        if (!CanCancel(booking.BookingStatus))
+        if (!CanCancel(booking))
         {
             throw new BookingException(
                 "booking.cannot_cancel",
-                "Chuyến này đã có tài xế hoặc đã kết thúc, không thể hủy bằng thao tác quay lại.",
+                "Chỉ có thể hủy chuyến khi tài xế đang đến điểm đón.",
                 409);
         }
 
@@ -110,14 +110,37 @@ public sealed class CancelBookingCommandHandler
                 utcNow),
             cancellationToken);
 
+        if (booking.Trip?.TripStatus == TripStatus.CANCELLED)
+        {
+            await _realtimeNotificationService.PublishTripStatusChangedAsync(
+                new TripStatusChangedEvent(
+                    booking.Trip.Id,
+                    booking.BookingId,
+                    booking.CustomerId,
+                    booking.Trip.DriverId,
+                    booking.Trip.TripStatus,
+                    utcNow),
+                cancellationToken);
+        }
+
         return ToResponse(booking, "Đã hủy chuyến thành công.");
     }
 
-    private static bool CanCancel(BookingStatus status)
+    private static bool CanCancel(Domain.Entities.Booking booking)
     {
-        return status is BookingStatus.Searching
-            or BookingStatus.PendingSchedule
-            or BookingStatus.DriverAssigned;
+        if (booking.BookingStatus == BookingStatus.Searching)
+        {
+            return true;
+        }
+
+        if (booking.BookingStatus == BookingStatus.DriverAssigned)
+        {
+            return booking.Trip?.TripStatus == TripStatus.ACCEPTED
+                || booking.Trip?.TripStatus == TripStatus.DRIVER_ARRIVING
+                || booking.Trip?.TripStatus == TripStatus.ARRIVED;
+        }
+
+        return false;
     }
 
     private static string? NormalizeReason(string? reason)

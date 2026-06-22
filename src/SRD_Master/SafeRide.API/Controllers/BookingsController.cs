@@ -141,7 +141,13 @@ public sealed class BookingsController : ControllerBase
             result.FinalFare,
             result.EncodedPolyline,
             result.Message,
-            result.DriverOffer);
+            result.DriverOffer,
+            result.CurrentSearchRadiusKm,
+            result.ExpiresAt,
+            result.EstimatedRemainingSeconds,
+            result.MatchingMessage,
+            result.TripId,
+            result.TripStatus);
 
         return StatusCode(StatusCodes.Status201Created, response);
     }
@@ -221,6 +227,49 @@ public sealed class BookingsController : ControllerBase
             result.EncodedPolyline,
             result.Message,
             result.DriverOffer));
+    }
+
+    [HttpPost("{bookingId:long}/confirm-driver-offer/{offerId:long}")]
+    [ProducesResponseType<BookingResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<BookingResponse>> ConfirmDriverOffer(
+        long bookingId,
+        long offerId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCustomerId(out var customerId))
+        {
+            return Unauthorized(CreateUnauthorizedProblem());
+        }
+
+        var result = await _sender.Send(
+            new ConfirmDriverCommand(customerId, bookingId, offerId),
+            cancellationToken);
+
+        return Ok(ToResponse(
+            result.BookingId,
+            result.BookingType,
+            result.BookingStatus,
+            result.ScheduledAt,
+            result.EstimatedDistanceKm,
+            result.EstimatedDurationMinutes,
+            result.EstimatedFare,
+            result.OriginalFare,
+            result.PromotionCode,
+            result.DiscountAmount,
+            result.FinalFare,
+            result.EncodedPolyline,
+            result.Message,
+            result.DriverOffer,
+            result.CurrentSearchRadiusKm,
+            result.ExpiresAt,
+            result.EstimatedRemainingSeconds,
+            result.MatchingMessage,
+            result.TripId,
+            result.TripStatus));
     }
 
     [HttpPost("{bookingId:long}/reject-driver")]
@@ -341,7 +390,52 @@ public sealed class BookingsController : ControllerBase
         decimal finalFare,
         string? encodedPolyline,
         string message,
-        BookingDriverOfferDto? driverOffer)
+        BookingDriverOfferDto? driverOffer,
+        long? tripId = null,
+        Domain.Enums.TripStatus? tripStatus = null)
+        => ToResponse(
+            bookingId,
+            bookingType,
+            bookingStatus,
+            scheduledAt,
+            estimatedDistanceKm,
+            estimatedDurationMinutes,
+            estimatedFare,
+            originalFare,
+            promotionCode,
+            discountAmount,
+            finalFare,
+            encodedPolyline,
+            message,
+            driverOffer,
+            null,
+            null,
+            null,
+            null,
+            tripId,
+            tripStatus);
+
+    private static BookingResponse ToResponse(
+        long bookingId,
+        Domain.Enums.BookingType bookingType,
+        Domain.Enums.BookingStatus bookingStatus,
+        DateTime? scheduledAt,
+        double estimatedDistanceKm,
+        int estimatedDurationMinutes,
+        decimal estimatedFare,
+        decimal originalFare,
+        string? promotionCode,
+        decimal discountAmount,
+        decimal finalFare,
+        string? encodedPolyline,
+        string message,
+        BookingDriverOfferDto? driverOffer,
+        double? currentSearchRadiusKm,
+        DateTime? expiresAt,
+        int? estimatedRemainingSeconds,
+        string? matchingMessage,
+        long? tripId = null,
+        Domain.Enums.TripStatus? tripStatus = null)
     {
         return new BookingResponse(
             bookingId,
@@ -364,11 +458,19 @@ public sealed class BookingsController : ControllerBase
                     driverOffer.TripCount,
                     driverOffer.ExperienceYears,
                     driverOffer.LicenseClass,
-                    driverOffer.ExpiresAt),
+                    driverOffer.ExpiresAt,
+                    driverOffer.OfferStatus,
+                    driverOffer.CustomerConfirmRemainingSeconds),
+            TripStatus: tripStatus,
+            TripId: tripId,
             OriginalFare: originalFare,
             PromotionCode: promotionCode,
             DiscountAmount: discountAmount,
-            FinalFare: finalFare);
+            FinalFare: finalFare,
+            CurrentSearchRadiusKm: currentSearchRadiusKm,
+            ExpiresAt: expiresAt,
+            EstimatedRemainingSeconds: estimatedRemainingSeconds,
+            MatchingMessage: matchingMessage);
     }
 
     private static BookingResponse ToResponse(BookingDetailsDto result)
@@ -394,7 +496,9 @@ public sealed class BookingsController : ControllerBase
                     result.DriverOffer.TripCount,
                     result.DriverOffer.ExperienceYears,
                     result.DriverOffer.LicenseClass,
-                    result.DriverOffer.ExpiresAt),
+                    result.DriverOffer.ExpiresAt,
+                    result.DriverOffer.OfferStatus,
+                    result.DriverOffer.CustomerConfirmRemainingSeconds),
             new BookingLocationResponse(
                 result.Pickup.Address,
                 result.Pickup.Latitude,
@@ -417,7 +521,11 @@ public sealed class BookingsController : ControllerBase
             OriginalFare: result.OriginalFare,
             PromotionCode: result.PromotionCode,
             DiscountAmount: result.DiscountAmount,
-            FinalFare: result.FinalFare);
+            FinalFare: result.FinalFare,
+            CurrentSearchRadiusKm: result.CurrentSearchRadiusKm,
+            ExpiresAt: result.ExpiresAt,
+            EstimatedRemainingSeconds: result.EstimatedRemainingSeconds,
+            MatchingMessage: result.MatchingMessage);
     }
 
     private bool TryGetCustomerId(out Guid customerId)

@@ -10,15 +10,18 @@ public sealed class GetActiveBookingQueryHandler
     private readonly IBookingRepository _bookingRepository;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IGoogleMapsService _googleMapsService;
+    private readonly IMatchingPolicyProvider _matchingPolicyProvider;
 
     public GetActiveBookingQueryHandler(
         IBookingRepository bookingRepository,
         IDateTimeProvider dateTimeProvider,
-        IGoogleMapsService googleMapsService)
+        IGoogleMapsService googleMapsService,
+        IMatchingPolicyProvider matchingPolicyProvider)
     {
         _bookingRepository = bookingRepository;
         _dateTimeProvider = dateTimeProvider;
         _googleMapsService = googleMapsService;
+        _matchingPolicyProvider = matchingPolicyProvider;
     }
 
     public async Task<BookingDetailsDto?> Handle(
@@ -42,6 +45,8 @@ public sealed class GetActiveBookingQueryHandler
             booking,
             _bookingRepository,
             _googleMapsService,
+            _matchingPolicyProvider,
+            _dateTimeProvider.UtcNow,
             cancellationToken);
     }
 }

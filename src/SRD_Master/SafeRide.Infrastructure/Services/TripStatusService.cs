@@ -49,6 +49,55 @@ public sealed class TripStatusService : ITripStatusService
                 404);
         }
 
+        await ApplyTripStatusAsync(
+            trip,
+            tripStatus,
+            driverId,
+            cancellationToken);
+    }
+
+    public async Task CompleteTripAsync(
+        Guid userId,
+        long tripId,
+        CancellationToken cancellationToken)
+    {
+        var trip = await _dbContext.Trips
+            .Include(x => x.Booking)
+                .ThenInclude(x => x.BookingPromotions)
+                    .ThenInclude(x => x.Promotion)
+            .FirstOrDefaultAsync(
+                x => x.Id == tripId
+                    && (x.DriverId == userId || x.Booking.CustomerId == userId),
+                cancellationToken);
+        if (trip is null)
+        {
+            throw new BookingException(
+                "trip.not_found",
+                "Không tìm thấy chuyến đi.",
+                404);
+        }
+
+        if (trip.TripStatus != TripStatus.IN_PROGRESS)
+        {
+            throw new BookingException(
+                "trip.invalid_status_transition",
+                "Chỉ có thể kết thúc chuyến khi chuyến đang di chuyển.",
+                409);
+        }
+
+        await ApplyTripStatusAsync(
+            trip,
+            TripStatus.COMPLETED,
+            userId,
+            cancellationToken);
+    }
+
+    private async Task ApplyTripStatusAsync(
+        Domain.Entities.Trip trip,
+        TripStatus tripStatus,
+        Guid changedByUserId,
+        CancellationToken cancellationToken)
+    {
         if (!CanTransition(trip.TripStatus, tripStatus))
         {
             throw new BookingException(
@@ -70,6 +119,7 @@ public sealed class TripStatusService : ITripStatusService
                 trip.StartedAt ??= utcNow;
                 break;
             case TripStatus.COMPLETED:
+                trip.StartedAt ??= utcNow;
                 trip.CompletedAt ??= utcNow;
                 trip.Booking.BookingStatus = BookingStatus.Completed;
                 trip.Booking.UpdatedAt = utcNow;
@@ -78,10 +128,10 @@ public sealed class TripStatusService : ITripStatusService
                 {
                     IncrementPromotionUsage(trip.Booking);
                 }
-                await ReleaseDriverAsync(driverId, utcNow, cancellationToken);
+                await ReleaseDriverAsync(trip.DriverId, utcNow, cancellationToken);
                 break;
             case TripStatus.CANCELLED:
-                trip.CancelledByUserId = driverId;
+                trip.CancelledByUserId = changedByUserId;
                 trip.Booking.BookingStatus = BookingStatus.Cancelled;
                 trip.Booking.UpdatedAt = utcNow;
                 if (previousTripStatus != TripStatus.COMPLETED &&
@@ -89,12 +139,19 @@ public sealed class TripStatusService : ITripStatusService
                 {
                     RemoveBookingPromotions(trip.Booking);
                 }
-                await ReleaseDriverAsync(driverId, utcNow, cancellationToken);
+                await ReleaseDriverAsync(trip.DriverId, utcNow, cancellationToken);
                 break;
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
-        await CacheTripLiveAsync(trip, utcNow);
+        if (tripStatus is TripStatus.COMPLETED or TripStatus.CANCELLED)
+        {
+            await _redisService.RemoveAsync(RedisKeys.TripLive(trip.Id));
+        }
+        else
+        {
+            await CacheTripLiveAsync(trip, utcNow);
+        }
 
         await _realtimeNotificationService.PublishTripStatusChangedAsync(
             new TripStatusChangedEvent(
@@ -103,7 +160,8 @@ public sealed class TripStatusService : ITripStatusService
                 trip.Booking.CustomerId,
                 trip.DriverId,
                 trip.TripStatus,
-                utcNow),
+                utcNow,
+                trip.Booking.BookingStatus),
             cancellationToken);
 
         if (tripStatus is TripStatus.COMPLETED or TripStatus.CANCELLED)
@@ -196,8 +254,7 @@ public sealed class TripStatusService : ITripStatusService
                 or TripStatus.CANCELLED,
             TripStatus.ARRIVED => requested is TripStatus.IN_PROGRESS
                 or TripStatus.CANCELLED,
-            TripStatus.IN_PROGRESS => requested is TripStatus.COMPLETED
-                or TripStatus.CANCELLED,
+            TripStatus.IN_PROGRESS => requested is TripStatus.COMPLETED,
             _ => false
         };
     }

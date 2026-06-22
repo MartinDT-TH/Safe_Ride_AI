@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../../core/constants/app_strings.dart';
@@ -16,7 +17,6 @@ import '../../../../customer/booking/data/models/booking_catalog.dart';
 import '../../../../customer/booking/data/models/booking_response.dart';
 import '../../../../customer/booking/presentation/pages/booking_options_page.dart';
 import '../../../../customer/booking/presentation/pages/promotion_page.dart';
-import '../../../../customer/booking/presentation/pages/searching_driver_page.dart';
 import '../../../../customer/booking/presentation/pages/trip_tracking_page.dart';
 import '../../../../customer/booking/presentation/providers/booking_provider.dart';
 import '../../../../shared/history/presentation/pages/history_page.dart';
@@ -29,7 +29,6 @@ class CustomerHomePage extends StatefulWidget {
 }
 
 class _CustomerHomePageState extends State<CustomerHomePage> {
-  int _selectedIndex = 0;
   bool _handledAuthGate = false;
 
   @override
@@ -77,126 +76,164 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
   Future<void> _loadActiveBooking(String? token) async {
     if (token == null || token.isEmpty) return;
-    await context.read<BookingProvider>().loadActiveBooking(token);
+    final booking = await context.read<BookingProvider>().loadActiveBooking(token);
+    if (booking != null && mounted) {
+      context.read<HomeProvider>().setSelectedIndex(1);
+    }
   }
-
-  // Hàm tiện ích để tạo item cho BottomNavigationBar với hiệu ứng pill background
-  // Chuyển sang dùng CustomerBottomNavBar để đồng bộ
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final bookingProvider = context.watch<BookingProvider>();
+    final homeProvider = context.watch<HomeProvider>();
+
+    final activeBooking = bookingProvider.activeBooking;
+    final activePickup = bookingProvider.activePickup ?? activeBooking?.pickup;
+    final activeDestination = bookingProvider.activeDestination ?? activeBooking?.destination;
+    final activeVehicle = bookingProvider.activeVehicle ?? activeBooking?.vehicle;
 
     final List<Widget> pages = [
       _buildHomeContent(auth, bookingProvider),
-      bookingProvider.activeBooking != null
+      (activeBooking != null && activePickup != null)
           ? TripTrackingPage(
-              state: _trackingState(bookingProvider.activeBooking!),
-              booking: bookingProvider.activeBooking!,
-              pickup: (bookingProvider.activePickup ??
-                  bookingProvider.activeBooking!.pickup)!,
-              destination: bookingProvider.activeDestination ??
-                  bookingProvider.activeBooking!.destination,
-              vehicle: bookingProvider.activeVehicle ??
-                  bookingProvider.activeBooking!.vehicle,
-              onSwitchTab: (index) => setState(() => _selectedIndex = index),
+              state: _trackingState(activeBooking),
+              booking: activeBooking,
+              pickup: activePickup,
+              destination: activeDestination,
+              vehicle: activeVehicle,
+              onSwitchTab: (index) => homeProvider.setSelectedIndex(index),
             )
           : const HistoryPage(),
       const ProfilePage(),
     ];
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFFCF9F9),
-      appBar: _selectedIndex == 0
-          ? AppBar(
-              backgroundColor: Colors.white,
-              elevation: 0.5,
-              leading: GestureDetector(
-                onTap: () => setState(
-                  () => _selectedIndex = 2,
-                ), // Chuyển sang tab Profile khi ấn Avatar
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 16, top: 8, bottom: 8),
-                  child: CircleAvatar(
-                    backgroundColor: const Color(0xFFE8F2F2),
-                    backgroundImage: _avatarImage(auth.avatarUrl),
-                    child: _avatarImage(auth.avatarUrl) == null
-                        ? Text(
-                            _initials(auth.fullName),
-                            style: const TextStyle(
-                              color: Color(0xFF006B70),
-                              fontWeight: FontWeight.bold,
-                            ),
-                          )
-                        : null,
+    final selectedIndex = homeProvider.selectedIndex;
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+
+        if (selectedIndex != 0) {
+          homeProvider.setSelectedIndex(0);
+        } else {
+          final shouldExit = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Text('Thoát ứng dụng?'),
+              content: const Text('Bạn có chắc chắn muốn thoát khỏi SafeRide không?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: TextButton.styleFrom(foregroundColor: Colors.red),
+                  child: const Text('Thoát'),
+                ),
+              ],
+            ),
+          );
+
+          if (shouldExit == true) {
+            await SystemNavigator.pop();
+          }
+        }
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFCF9F9),
+        appBar: selectedIndex == 0
+            ? AppBar(
+                backgroundColor: Colors.white,
+                elevation: 0.5,
+                leading: GestureDetector(
+                  onTap: () => homeProvider.setSelectedIndex(2),
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 16, top: 8, bottom: 8),
+                    child: CircleAvatar(
+                      backgroundColor: const Color(0xFFE8F2F2),
+                      backgroundImage: _avatarImage(auth.avatarUrl),
+                      child: _avatarImage(auth.avatarUrl) == null
+                          ? Text(
+                              _initials(auth.fullName),
+                              style: const TextStyle(
+                                color: Color(0xFF006B70),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            )
+                          : null,
+                    ),
                   ),
                 ),
-              ),
-              title: const Text(
-                AppStrings.appName,
-                style: TextStyle(
-                  color: Color(0xFF006B70),
-                  fontWeight: FontWeight.bold,
-                  fontSize: 22,
+                title: const Text(
+                  AppStrings.appName,
+                  style: TextStyle(
+                    color: Color(0xFF006B70),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 22,
+                  ),
                 ),
-              ),
-              centerTitle: true,
-              actions: [
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    IconButton(
-                      icon: const Icon(
-                        Icons.notifications_none_rounded,
-                        color: Color(0xFF006B70),
-                        size: 28,
+                centerTitle: true,
+                actions: [
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.notifications_none_rounded,
+                          color: Color(0xFF006B70),
+                          size: 28,
+                        ),
+                        onPressed: () {},
                       ),
-                      onPressed: () {},
-                    ),
-                    Positioned(
-                      top: 14,
-                      right: 14,
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: Colors.red,
-                          shape: BoxShape.circle,
+                      Positioned(
+                        top: 14,
+                        right: 14,
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(width: 8),
-              ],
-            )
-          : (_selectedIndex == 1 && bookingProvider.activeBooking == null
-              ? AppBar(
-                  backgroundColor: Colors.white,
-                  elevation: 0,
-                  title: const Text(
-                    'Hoạt động',
-                    style: TextStyle(
-                      color: Color(0xFF1A1A1A),
-                      fontWeight: FontWeight.bold,
-                    ),
+                    ],
                   ),
-                  centerTitle: true,
-                )
-              : null),
-      body: IndexedStack(index: _selectedIndex, children: pages),
-      bottomNavigationBar: CustomerBottomNavBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() => _selectedIndex = index);
-        },
+                  const SizedBox(width: 8),
+                ],
+              )
+            : (selectedIndex == 1 && activeBooking == null
+                ? AppBar(
+                    backgroundColor: Colors.white,
+                    elevation: 0,
+                    title: const Text(
+                      'Hoạt động',
+                      style: TextStyle(
+                        color: Color(0xFF1A1A1A),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    centerTitle: true,
+                  )
+                : null),
+        body: IndexedStack(index: selectedIndex, children: pages),
+        bottomNavigationBar: CustomerBottomNavBar(
+          currentIndex: selectedIndex,
+          onTap: (index) {
+            homeProvider.setSelectedIndex(index);
+          },
+        ),
       ),
     );
   }
 
   Widget _buildHomeContent(AuthProvider auth, BookingProvider bookingProvider) {
     final hasActiveBooking = bookingProvider.activeBooking != null;
+    final homeProvider = context.read<HomeProvider>();
 
     return Consumer<HomeProvider>(
       builder: (_, provider, child) {
@@ -233,7 +270,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                           _showMessage(
                             'Bạn đang có chuyến đang hoạt động. Vui lòng theo dõi ở mục Hoạt động.',
                           );
-                          setState(() => _selectedIndex = 1);
+                          homeProvider.setSelectedIndex(1);
                         }
                       : () => _openBooking(context, BookingType.now),
                   borderRadius: BorderRadius.circular(20),
@@ -455,7 +492,8 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
   }
 
   TripTrackingState _trackingState(BookingResponse booking) {
-    return booking.tripStatus == 'IN_PROGRESS'
+    return booking.tripStatus == 'IN_PROGRESS' ||
+            booking.tripStatus == 'COMPLETED'
         ? TripTrackingState.inProgress
         : TripTrackingState.arriving;
   }

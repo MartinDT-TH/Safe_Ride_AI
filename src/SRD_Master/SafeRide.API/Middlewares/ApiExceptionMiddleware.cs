@@ -10,11 +10,16 @@ public sealed class ApiExceptionMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<ApiExceptionMiddleware> _logger;
+    private readonly IHostEnvironment _environment;
 
-    public ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExceptionMiddleware> logger)
+    public ApiExceptionMiddleware(
+        RequestDelegate next,
+        ILogger<ApiExceptionMiddleware> logger,
+        IHostEnvironment environment)
     {
         _next = next;
         _logger = logger;
+        _environment = environment;
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -29,7 +34,8 @@ public sealed class ApiExceptionMiddleware
                 context,
                 exception.StatusCode,
                 exception.Code,
-                exception.Message);
+                exception.Message,
+                exception.RetryAfterSeconds);
         }
         catch (BookingException exception)
         {
@@ -54,11 +60,16 @@ public sealed class ApiExceptionMiddleware
                 "Unhandled exception for {Method} {Path}.",
                 context.Request.Method,
                 context.Request.Path);
+
+            var detail = _environment.IsDevelopment()
+                ? exception.ToString()
+                : "Đã xảy ra lỗi không mong muốn trên hệ thống.";
+
             await WriteProblemAsync(
                 context,
                 StatusCodes.Status500InternalServerError,
                 "server.unexpected_error",
-                "Đã xảy ra lỗi không mong muốn.");
+                detail);
         }
     }
 
@@ -66,10 +77,16 @@ public sealed class ApiExceptionMiddleware
         HttpContext context,
         int statusCode,
         string code,
-        string detail)
+        string detail,
+        int? retryAfterSeconds = null)
     {
         context.Response.StatusCode = statusCode;
         context.Response.ContentType = "application/problem+json";
+        if (retryAfterSeconds is > 0)
+        {
+            context.Response.Headers.RetryAfter = retryAfterSeconds.Value.ToString();
+        }
+
         var problem = new ProblemDetails
         {
             Status = statusCode,
@@ -79,6 +96,11 @@ public sealed class ApiExceptionMiddleware
         };
         problem.Extensions["code"] = code;
         problem.Extensions["traceId"] = context.TraceIdentifier;
+        if (retryAfterSeconds is > 0)
+        {
+            problem.Extensions["retryAfterSeconds"] = retryAfterSeconds.Value;
+        }
+
         await context.Response.WriteAsJsonAsync(problem);
     }
 }

@@ -11,7 +11,9 @@ public sealed record BookingDriverOfferResponse(
     int TripCount,
     int ExperienceYears,
     LicenseClass LicenseClass,
-    DateTime ExpiresAt);
+    DateTime ExpiresAt,
+    DriverOfferStatus OfferStatus,
+    int? CustomerConfirmRemainingSeconds = null);
 
 public sealed record BookingLocationResponse(
     string Address,
@@ -45,4 +47,8 @@ public sealed record BookingResponse(
     decimal OriginalFare = 0m,
     string? PromotionCode = null,
     decimal DiscountAmount = 0m,
-    decimal FinalFare = 0m);
+    decimal FinalFare = 0m,
+    double? CurrentSearchRadiusKm = null,
+    DateTime? ExpiresAt = null,
+    int? EstimatedRemainingSeconds = null,
+    string? MatchingMessage = null);

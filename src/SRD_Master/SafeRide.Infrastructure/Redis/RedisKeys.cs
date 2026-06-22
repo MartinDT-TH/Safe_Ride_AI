@@ -31,6 +31,9 @@ public static class RedisKeys
     public static string MatchingDriverLock(Guid driverId) =>
         $"sr:matching:driver-lock:{driverId}";
 
+    public static string BookingRadiusExpandedNotified(long bookingId) =>
+        $"sr:booking:radius-expanded-notified:{bookingId}";
+
     public static string TripLive(long tripId) =>
         $"sr:trip:live:{tripId}";
 

@@ -111,8 +111,10 @@ public enum BookingStatus
 
 public enum DriverOfferStatus
 {
-    Offered,
-    Confirmed,
+    Sent,
+    DriverAccepted,
+    CustomerConfirmed,
+    Rejected,
     Expired,
     Cancelled
 }

@@ -38,8 +38,12 @@ class BookingRemoteDatasource {
       throw const BookingApiException(BookingStrings.sessionExpired);
     } on DioException catch (exception) {
       final data = exception.response?.data;
-      if (data is Map && data[ApiKeys.detail] != null) {
-        throw BookingApiException(data[ApiKeys.detail].toString());
+      if (data is Map) {
+        final detail = data[ApiKeys.detail]?.toString();
+        final code = data['code']?.toString();
+        if (detail != null) {
+          throw BookingApiException(detail, code: code);
+        }
       }
       throw const BookingApiException(
         'Không thể lấy danh sách khuyến mãi. Vui lòng thử lại.',
@@ -80,8 +84,12 @@ class BookingRemoteDatasource {
       throw const BookingApiException(BookingStrings.sessionExpired);
     } on DioException catch (exception) {
       final data = exception.response?.data;
-      if (data is Map && data[ApiKeys.detail] != null) {
-        throw BookingApiException(data[ApiKeys.detail].toString());
+      if (data is Map) {
+        final detail = data[ApiKeys.detail]?.toString();
+        final code = data['code']?.toString();
+        if (detail != null) {
+          throw BookingApiException(detail, code: code);
+        }
       }
       throw const BookingApiException(
         'Không thể tính tuyến đường. Vui lòng thử lại.',
@@ -109,8 +117,12 @@ class BookingRemoteDatasource {
       throw const BookingApiException(BookingStrings.sessionExpired);
     } on DioException catch (exception) {
       final data = exception.response?.data;
-      if (data is Map && data[ApiKeys.detail] != null) {
-        throw BookingApiException(data[ApiKeys.detail].toString());
+      if (data is Map) {
+        final detail = data[ApiKeys.detail]?.toString();
+        final code = data['code']?.toString();
+        if (detail != null) {
+          throw BookingApiException(detail, code: code);
+        }
       }
       throw const BookingApiException(BookingStrings.bookingFailed);
     }
@@ -135,8 +147,12 @@ class BookingRemoteDatasource {
       throw const BookingApiException(BookingStrings.sessionExpired);
     } on DioException catch (exception) {
       final data = exception.response?.data;
-      if (data is Map && data[ApiKeys.detail] != null) {
-        throw BookingApiException(data[ApiKeys.detail].toString());
+      if (data is Map) {
+        final detail = data[ApiKeys.detail]?.toString();
+        final code = data['code']?.toString();
+        if (detail != null) {
+          throw BookingApiException(detail, code: code);
+        }
       }
       throw const BookingApiException(
         'Không thể lấy thông tin chuyến đi. Vui lòng thử lại.',
@@ -164,8 +180,12 @@ class BookingRemoteDatasource {
       throw const BookingApiException(BookingStrings.sessionExpired);
     } on DioException catch (exception) {
       final data = exception.response?.data;
-      if (data is Map && data[ApiKeys.detail] != null) {
-        throw BookingApiException(data[ApiKeys.detail].toString());
+      if (data is Map) {
+        final detail = data[ApiKeys.detail]?.toString();
+        final code = data['code']?.toString();
+        if (detail != null) {
+          throw BookingApiException(detail, code: code);
+        }
       }
       throw const BookingApiException(
         'KhÃ´ng thá»ƒ láº¥y chuyáº¿n Ä‘ang hoáº¡t Ä‘á»™ng. Vui lÃ²ng thá»­ láº¡i.',
@@ -245,11 +265,74 @@ class BookingRemoteDatasource {
       throw const BookingApiException(BookingStrings.sessionExpired);
     } on DioException catch (exception) {
       final data = exception.response?.data;
-      if (data is Map && data[ApiKeys.detail] != null) {
-        throw BookingApiException(data[ApiKeys.detail].toString());
+      if (data is Map) {
+        final detail = data[ApiKeys.detail]?.toString();
+        final code = data['code']?.toString();
+        if (detail != null) {
+          throw BookingApiException(detail, code: code);
+        }
       }
       throw const BookingApiException(
         'Không thể xác nhận tài xế. Vui lòng thử lại.',
+      );
+    }
+  }
+
+  Future<BookingResponse> confirmDriverOffer(
+    String accessToken, {
+    required int bookingId,
+    required int offerId,
+  }) async {
+    try {
+      final response = await _dio.post(
+        ApiEndpoints.confirmDriverOffer(bookingId, offerId),
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+        ),
+      );
+
+      return BookingResponse.fromJson(
+        Map<String, dynamic>.from(response.data as Map),
+      );
+    } on FormatException {
+      throw const BookingApiException(BookingStrings.sessionExpired);
+    } on DioException catch (exception) {
+      final data = exception.response?.data;
+      if (data is Map) {
+        final detail = data[ApiKeys.detail]?.toString();
+        final code = data['code']?.toString();
+        if (detail != null) {
+          throw BookingApiException(detail, code: code);
+        }
+      }
+      throw const BookingApiException(
+        'Không thể xác nhận thuê tài xế. Vui lòng thử lại.',
+      );
+    }
+  }
+
+  Future<void> completeTrip(
+    String accessToken, {
+    required int tripId,
+  }) async {
+    try {
+      await _dio.post(
+        ApiEndpoints.completeTrip(tripId),
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+        ),
+      );
+    } on DioException catch (exception) {
+      final data = exception.response?.data;
+      if (data is Map) {
+        final detail = data[ApiKeys.detail]?.toString();
+        final code = data['code']?.toString();
+        if (detail != null) {
+          throw BookingApiException(detail, code: code);
+        }
+      }
+      throw const BookingApiException(
+        'KhÃ´ng thá»ƒ káº¿t thÃºc chuyáº¿n. Vui lÃ²ng thá»­ láº¡i.',
       );
     }
   }
@@ -273,8 +356,12 @@ class BookingRemoteDatasource {
       throw const BookingApiException(BookingStrings.sessionExpired);
     } on DioException catch (exception) {
       final data = exception.response?.data;
-      if (data is Map && data[ApiKeys.detail] != null) {
-        throw BookingApiException(data[ApiKeys.detail].toString());
+      if (data is Map) {
+        final detail = data[ApiKeys.detail]?.toString();
+        final code = data['code']?.toString();
+        if (detail != null) {
+          throw BookingApiException(detail, code: code);
+        }
       }
       throw const BookingApiException(
         'Không thể từ chối tài xế. Vui lòng thử lại.',
@@ -312,9 +399,10 @@ class BookingRemoteDatasource {
 }
 
 class BookingApiException implements Exception {
-  const BookingApiException(this.message);
+  const BookingApiException(this.message, {this.code});
 
   final String message;
+  final String? code;
 
   @override
   String toString() => message;
