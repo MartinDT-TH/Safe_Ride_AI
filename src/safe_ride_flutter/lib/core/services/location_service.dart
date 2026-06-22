@@ -1,10 +1,16 @@
-import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../constants/app_strings.dart';
 import '../../features/customer/booking/data/models/booking_location.dart';
+import '../maps/models/map_api_models.dart';
+import 'map_api_service.dart';
 
 class LocationService {
+  final MapApiService _mapApiService;
+
+  LocationService({MapApiService? mapApiService})
+    : _mapApiService = mapApiService ?? MapApiService();
+
   Future<BookingLocation> getCurrentLocation() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
       throw const LocationServiceException(LocationStrings.serviceDisabled);
@@ -64,19 +70,52 @@ class LocationService {
     }
 
     try {
-      final locations = await locationFromAddress(normalizedAddress);
+      final locations = await _mapApiService.getGeocode(normalizedAddress);
       if (locations.isEmpty) {
         throw const LocationServiceException(LocationStrings.locationNotFound);
       }
 
       final location = locations.first;
       return BookingLocation(
-        address: normalizedAddress,
+        address: location.address.isNotEmpty
+            ? location.address
+            : normalizedAddress,
         latitude: location.latitude,
         longitude: location.longitude,
       );
-    } on NoResultFoundException {
+    } catch (_) {
       throw const LocationServiceException(LocationStrings.locationNotFound);
+    }
+  }
+
+  Future<BookingLocation> resolvePlaceId(String placeId) async {
+    try {
+      final place = await _mapApiService.getPlaceDetail(placeId);
+      return BookingLocation(
+        address: place.address,
+        latitude: place.latitude,
+        longitude: place.longitude,
+      );
+    } catch (_) {
+      throw const LocationServiceException(LocationStrings.locationNotFound);
+    }
+  }
+
+  Future<List<PlaceAutocompleteResult>> autocompleteAddress(
+    String query, {
+    double? lat,
+    double? lng,
+  }) async {
+    final normalizedQuery = query.trim();
+    if (normalizedQuery.isEmpty) return [];
+    try {
+      return await _mapApiService.getAutocomplete(
+        query: normalizedQuery,
+        lat: lat,
+        lng: lng,
+      );
+    } catch (_) {
+      return [];
     }
   }
 
@@ -93,20 +132,13 @@ class LocationService {
 
   Future<String> _reverseGeocode(double latitude, double longitude) async {
     try {
-      final placemarks = await placemarkFromCoordinates(
-        latitude,
-        longitude,
-      ).timeout(const Duration(seconds: 4));
-      if (placemarks.isEmpty) return LocationStrings.currentLocation;
-
-      final place = placemarks.first;
-      return [
-        place.street,
-        place.subAdministrativeArea,
-        place.administrativeArea,
-      ].whereType<String>().where((part) => part.trim().isNotEmpty).join(', ');
+      final place = await _mapApiService.getReverseGeocode(latitude, longitude);
+      if (place.address.isEmpty) {
+        return '${latitude.toStringAsFixed(4)}, ${longitude.toStringAsFixed(4)}';
+      }
+      return place.address;
     } catch (_) {
-      return LocationStrings.currentLocation;
+      return '${latitude.toStringAsFixed(4)}, ${longitude.toStringAsFixed(4)}';
     }
   }
 }
