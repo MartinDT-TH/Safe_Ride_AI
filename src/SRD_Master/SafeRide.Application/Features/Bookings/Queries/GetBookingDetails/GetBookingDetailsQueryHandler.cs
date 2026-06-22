@@ -9,18 +9,18 @@ public sealed class GetBookingDetailsQueryHandler
 {
     private readonly IBookingRepository _bookingRepository;
     private readonly IDateTimeProvider _dateTimeProvider;
-    private readonly IGoogleMapsService _googleMapsService;
+    private readonly IMapRoutingService _mapRoutingService;
     private readonly IMatchingPolicyProvider _matchingPolicyProvider;
 
     public GetBookingDetailsQueryHandler(
         IBookingRepository bookingRepository,
         IDateTimeProvider dateTimeProvider,
-        IGoogleMapsService googleMapsService,
+        IMapRoutingService mapRoutingService,
         IMatchingPolicyProvider matchingPolicyProvider)
     {
         _bookingRepository = bookingRepository;
         _dateTimeProvider = dateTimeProvider;
-        _googleMapsService = googleMapsService;
+        _mapRoutingService = mapRoutingService;
         _matchingPolicyProvider = matchingPolicyProvider;
     }
 
@@ -48,7 +48,7 @@ public sealed class GetBookingDetailsQueryHandler
         return await BookingDetailsMapper.ToDtoAsync(
             booking,
             _bookingRepository,
-            _googleMapsService,
+            _mapRoutingService,
             _matchingPolicyProvider,
             _dateTimeProvider.UtcNow,
             cancellationToken);
