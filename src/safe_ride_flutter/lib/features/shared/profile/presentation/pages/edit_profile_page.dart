@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -24,6 +25,9 @@ class EditProfilePage extends StatefulWidget {
 }
 
 class _EditProfilePageState extends State<EditProfilePage> {
+  static const String _otpAttemptsExceededCode = 'auth.otp_attempts_exceeded';
+  static const int _fallbackOtpLockSeconds = 30;
+
   late TextEditingController _nameController;
   late TextEditingController _phoneController;
   late TextEditingController _emailController;
@@ -558,7 +562,15 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   Future<bool?> _showPhoneOtpDialog(AuthProvider provider, String phoneNumber) {
     final otpController = TextEditingController();
+    Timer? otpLockTimer;
     String? otpError;
+    int otpLockRemainingSeconds = 0;
+
+    String formatOtpCountdown(int totalSeconds) {
+      final minutes = (totalSeconds ~/ 60).toString().padLeft(2, '0');
+      final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
+      return '$minutes:$seconds';
+    }
 
     return showDialog<bool>(
       context: context,
@@ -566,17 +578,57 @@ class _EditProfilePageState extends State<EditProfilePage> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            final isOtpLocked = otpLockRemainingSeconds > 0;
+
+            void startOtpLockTimer(int seconds) {
+              otpLockTimer?.cancel();
+              setDialogState(() => otpLockRemainingSeconds = seconds);
+              otpLockTimer = Timer.periodic(const Duration(seconds: 1), (
+                timer,
+              ) {
+                if (!dialogContext.mounted) {
+                  timer.cancel();
+                  return;
+                }
+
+                if (otpLockRemainingSeconds <= 1) {
+                  timer.cancel();
+                  setDialogState(() => otpLockRemainingSeconds = 0);
+                  return;
+                }
+
+                setDialogState(() => otpLockRemainingSeconds--);
+              });
+            }
+
             return AlertDialog(
               title: const Text(AuthStrings.otpTitle),
-              content: TextField(
-                controller: otpController,
-                keyboardType: TextInputType.number,
-                maxLength: 6,
-                decoration: InputDecoration(
-                  hintText: '123456',
-                  errorText: otpError,
-                  counterText: '',
-                ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: otpController,
+                    enabled: !provider.isLoading && !isOtpLocked,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    decoration: InputDecoration(
+                      hintText: '123456',
+                      errorText: otpError,
+                      counterText: '',
+                    ),
+                  ),
+                  if (isOtpLocked) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      '${AuthStrings.otpLockedPrefix}${formatOtpCountdown(otpLockRemainingSeconds)}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Color(0xFFC62828),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ],
               ),
               actions: [
                 TextButton(
@@ -586,7 +638,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                   child: const Text(AppStrings.cancel),
                 ),
                 TextButton(
-                  onPressed: provider.isLoading
+                  onPressed: provider.isLoading || isOtpLocked
                       ? null
                       : () async {
                           final otp = otpController.text.trim();
@@ -607,9 +659,22 @@ class _EditProfilePageState extends State<EditProfilePage> {
                             return;
                           }
 
-                          setDialogState(() {
-                            otpError = _otpErrorText(provider.lastErrorCode);
-                          });
+                          final retryAfterSeconds =
+                              provider.otpRetryAfterSeconds ??
+                              (provider.lastErrorCode ==
+                                      _otpAttemptsExceededCode
+                                  ? _fallbackOtpLockSeconds
+                                  : null);
+                          if (retryAfterSeconds != null) {
+                            setDialogState(() {
+                              otpError = null;
+                            });
+                            startOtpLockTimer(retryAfterSeconds);
+                          } else {
+                            setDialogState(() {
+                              otpError = _otpErrorText(provider.lastErrorCode);
+                            });
+                          }
                         },
                   child: provider.isLoading
                       ? const SizedBox(
@@ -624,7 +689,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
           },
         );
       },
-    ).whenComplete(otpController.dispose);
+    ).whenComplete(() {
+      otpLockTimer?.cancel();
+      otpController.dispose();
+    });
   }
 
   String _otpErrorText(String? code) {
