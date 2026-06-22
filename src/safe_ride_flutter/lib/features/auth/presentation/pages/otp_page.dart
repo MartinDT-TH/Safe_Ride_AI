@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:pin_code_fields/pin_code_fields.dart';
 import 'package:provider/provider.dart';
@@ -23,6 +25,81 @@ class OtpPage extends StatefulWidget {
 
 class _OtpPageState extends State<OtpPage> {
   String otpCode = '';
+  Timer? _resendTimer;
+  Timer? _otpLockTimer;
+  int _resendRemainingSeconds = 60;
+  int _otpLockRemainingSeconds = 0;
+
+  static const String _otpAttemptsExceededCode = 'auth.otp_attempts_exceeded';
+  static const int _fallbackOtpLockSeconds = 30;
+
+  bool get _canResendOtp => _resendRemainingSeconds == 0;
+  bool get _canVerifyOtp => _otpLockRemainingSeconds == 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _startResendTimer();
+  }
+
+  @override
+  void dispose() {
+    _resendTimer?.cancel();
+    _otpLockTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startResendTimer() {
+    _resendTimer?.cancel();
+    setState(() => _resendRemainingSeconds = 60);
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      if (_resendRemainingSeconds <= 1) {
+        timer.cancel();
+        setState(() => _resendRemainingSeconds = 0);
+        return;
+      }
+
+      setState(() => _resendRemainingSeconds--);
+    });
+  }
+
+  String _formatResendTime() {
+    return _formatDuration(_resendRemainingSeconds);
+  }
+
+  void _startOtpLockTimer(int seconds) {
+    _otpLockTimer?.cancel();
+    setState(() => _otpLockRemainingSeconds = seconds);
+    _otpLockTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      if (_otpLockRemainingSeconds <= 1) {
+        timer.cancel();
+        setState(() => _otpLockRemainingSeconds = 0);
+        return;
+      }
+
+      setState(() => _otpLockRemainingSeconds--);
+    });
+  }
+
+  String _formatOtpLockTime() {
+    return _formatDuration(_otpLockRemainingSeconds);
+  }
+
+  String _formatDuration(int totalSeconds) {
+    final minutes = (totalSeconds ~/ 60).toString().padLeft(2, '0');
+    final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
 
   Future<Widget> _getDestination(BuildContext context, AuthProvider auth, RoleProvider roleProvider) async {
     // 1. Check for active booking first
@@ -115,6 +192,7 @@ class _OtpPageState extends State<OtpPage> {
                       PinCodeTextField(
                         appContext: context,
                         length: 6,
+                        enabled: _canVerifyOtp,
                         keyboardType: TextInputType.number,
                         onChanged: (value) {
                           otpCode = value;
@@ -137,15 +215,34 @@ class _OtpPageState extends State<OtpPage> {
                         animationType: AnimationType.fade,
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       ),
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 16),
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        child: _canVerifyOtp
+                            ? const SizedBox(height: 20)
+                            : Text(
+                                '${AuthStrings.otpLockedPrefix}${_formatOtpLockTime()}',
+                                key: const ValueKey('otp-lock-countdown'),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Color(0xFFC62828),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                      ),
+                      const SizedBox(height: 16),
                       RichText(
-                        text: const TextSpan(
-                          style: TextStyle(fontSize: 15, color: Colors.grey),
+                        text: TextSpan(
+                          style: const TextStyle(
+                            fontSize: 15,
+                            color: Colors.grey,
+                          ),
                           children: [
-                            TextSpan(text: AuthStrings.resendAfter),
+                            const TextSpan(text: AuthStrings.resendAfter),
                             TextSpan(
-                              text: AuthStrings.resendTimer,
-                              style: TextStyle(
+                              text: _formatResendTime(),
+                              style: const TextStyle(
                                 color: Color(0xFF006B70),
                                 fontWeight: FontWeight.bold,
                               ),
@@ -155,23 +252,38 @@ class _OtpPageState extends State<OtpPage> {
                       ),
                       const SizedBox(height: 8),
                       TextButton(
-                        onPressed: () async {
-                          final provider = context.read<AuthProvider>();
-                          final ok = await provider.login(widget.phoneNumber);
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                ok
-                                    ? AuthStrings.otpResent
-                                    : AuthStrings.resendOtpFailed,
-                              ),
-                            ),
-                          );
-                        },
-                        child: const Text(
+                        onPressed: _canResendOtp
+                            ? () async {
+                                final provider = context.read<AuthProvider>();
+                                final ok = await provider.login(
+                                  widget.phoneNumber,
+                                );
+                                if (!context.mounted) return;
+                                if (ok) {
+                                  _startResendTimer();
+                                }
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      ok
+                                          ? AuthStrings.otpResent
+                                          : AuthStrings.resendOtpFailed,
+                                    ),
+                                  ),
+                                );
+                              }
+                            : null,
+                        child: Text(
                           AuthStrings.resendOtp,
-                          style: TextStyle(color: Colors.grey, fontSize: 15),
+                          style: TextStyle(
+                            color: _canResendOtp
+                                ? const Color(0xFF006B70)
+                                : Colors.grey,
+                            fontSize: 15,
+                            fontWeight: _canResendOtp
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                          ),
                         ),
                       ),
                     ],

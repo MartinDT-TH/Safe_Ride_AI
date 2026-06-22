@@ -13,6 +13,7 @@ public static class AuthErrorCodes
     public const string InvalidOtp = "auth.invalid_otp";
     public const string OtpExpired = "auth.otp_expired";
     public const string OtpAttemptsExceeded = "auth.otp_attempts_exceeded";
+    public const string OtpSendCooldown = "auth.otp_send_cooldown";
     public const string OtpUnavailable = "auth.otp_unavailable";
     public const string InvalidGoogleToken = "auth.invalid_google_token";
     public const string ConfigurationUnavailable = "auth.configuration_unavailable";
