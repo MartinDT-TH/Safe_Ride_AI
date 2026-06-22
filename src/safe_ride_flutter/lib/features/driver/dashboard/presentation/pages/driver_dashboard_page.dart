@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
+
 import '../providers/driver_dashboard_provider.dart';
 import '../widgets/driver_bottom_nav_bar.dart';
-import '../../../../auth/presentation/providers/auth_provider.dart';
+import '../../../../../core/constants/app_strings.dart';
+import '../../../../customer/booking/presentation/providers/booking_provider.dart';
+import '../../../../customer/home/presentation/pages/customer_home_page.dart';
 import '../../../../shared/history/presentation/pages/history_page.dart';
+import '../../../../shared/onboarding/presentation/providers/role_provider.dart';
+import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../shared/profile/presentation/pages/profile_page.dart';
 
 class DriverDashboardPage extends StatefulWidget {
@@ -28,7 +33,22 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
       if (token != null) {
         context.read<DriverDashboardProvider>().initializeRealtime(token);
       }
+      _checkActiveCustomerBooking();
     });
+  }
+
+  void _checkActiveCustomerBooking() {
+    final bookingProvider = context.read<BookingProvider>();
+    final roleProvider = context.read<RoleProvider>();
+    
+    if (bookingProvider.activeBooking != null) {
+      debugPrint('DRIVER_DASHBOARD: Active customer booking detected. Forcing switch to customer mode.');
+      roleProvider.setRole(AppValues.roleCustomer);
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const CustomerHomePage()),
+        (route) => false,
+      );
+    }
   }
 
   @override

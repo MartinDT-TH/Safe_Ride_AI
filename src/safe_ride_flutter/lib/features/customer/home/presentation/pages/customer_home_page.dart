@@ -492,8 +492,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
   }
 
   TripTrackingState _trackingState(BookingResponse booking) {
-    return booking.tripStatus == 'ARRIVED' ||
-            booking.tripStatus == 'IN_PROGRESS' ||
+    return booking.tripStatus == 'IN_PROGRESS' ||
             booking.tripStatus == 'COMPLETED'
         ? TripTrackingState.inProgress
         : TripTrackingState.arriving;
