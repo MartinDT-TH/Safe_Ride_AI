@@ -101,11 +101,15 @@ class _OtpPageState extends State<OtpPage> {
     return '$minutes:$seconds';
   }
 
-  Future<Widget> _getDestination(BuildContext context, AuthProvider auth, RoleProvider roleProvider) async {
+  Future<Widget> _getDestination(
+    BuildContext context,
+    AuthProvider auth,
+    RoleProvider roleProvider,
+  ) async {
     // 1. Check for active booking first
     final bookingProvider = context.read<BookingProvider>();
     final activeBooking = await bookingProvider.loadActiveBooking(auth.token!);
-    
+
     if (activeBooking != null) {
       // Force customer role
       roleProvider.setRole(AppValues.roleCustomer);
@@ -295,53 +299,80 @@ class _OtpPageState extends State<OtpPage> {
                   return CustomButton(
                     text: AppStrings.confirm,
                     isLoading: provider.isLoading,
-                    onPressed: () async {
-                      if (otpCode.length != 6) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(AuthStrings.otpRequired),
-                          ),
-                        );
-                        return;
-                      }
+                    onPressed: _canVerifyOtp
+                        ? () async {
+                            if (otpCode.length != 6) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(AuthStrings.otpRequired),
+                                ),
+                              );
+                              return;
+                            }
 
-                      final ok = await provider.verifyOtp(
-                        widget.phoneNumber,
-                        otpCode,
-                      );
-                      if (!context.mounted) return;
+                            final ok = await provider.verifyOtp(
+                              widget.phoneNumber,
+                              otpCode,
+                            );
+                            if (!context.mounted) return;
 
-                      if (ok) {
-                        final roleProvider = context.read<RoleProvider>();
-                        if (provider.lastSelectedRole != null) {
-                          roleProvider.setRole(provider.lastSelectedRole!);
-                        } else if (provider.roles.isNotEmpty &&
-                            provider.roles.length == 1) {
-                          roleProvider.setRole(provider.roles.first);
-                        }
+                            if (ok) {
+                              final roleProvider = context.read<RoleProvider>();
+                              if (provider.lastSelectedRole != null) {
+                                roleProvider.setRole(
+                                  provider.lastSelectedRole!,
+                                );
+                              } else if (provider.roles.isNotEmpty &&
+                                  provider.roles.length == 1) {
+                                roleProvider.setRole(provider.roles.first);
+                              }
 
-                        final Widget destination = switch (provider.nextStep) {
-                          AuthNextStep.completeProfile => EditProfilePage(
-                            requiredCompletion: true,
-                            phoneNumber:
-                                provider.phoneNumber ?? widget.phoneNumber,
-                          ),
-                          AuthNextStep.selectRole => const RoleSelectionPage(),
-                          AuthNextStep.customerHome =>
-                            await _getDestination(context, provider, roleProvider),
-                        };
+                              final Widget destination = switch (provider
+                                  .nextStep) {
+                                AuthNextStep.completeProfile => EditProfilePage(
+                                  requiredCompletion: true,
+                                  phoneNumber:
+                                      provider.phoneNumber ??
+                                      widget.phoneNumber,
+                                ),
+                                AuthNextStep.selectRole =>
+                                  const RoleSelectionPage(),
+                                AuthNextStep.customerHome =>
+                                  await _getDestination(
+                                    context,
+                                    provider,
+                                    roleProvider,
+                                  ),
+                              };
 
-                        if (!context.mounted) return;
-                        Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(builder: (_) => destination),
-                          (_) => false,
-                        );
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text(AuthStrings.invalidOtp)),
-                        );
-                      }
-                    },
+                              if (!context.mounted) return;
+                              Navigator.of(context).pushAndRemoveUntil(
+                                MaterialPageRoute(builder: (_) => destination),
+                                (_) => false,
+                              );
+                            } else {
+                              final retryAfterSeconds =
+                                  provider.otpRetryAfterSeconds ??
+                                  (provider.lastErrorCode ==
+                                          _otpAttemptsExceededCode
+                                      ? _fallbackOtpLockSeconds
+                                      : null);
+                              if (retryAfterSeconds != null) {
+                                _startOtpLockTimer(retryAfterSeconds);
+                              }
+
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    retryAfterSeconds == null
+                                        ? AuthStrings.invalidOtp
+                                        : '${AuthStrings.otpLockedPrefix}${_formatDuration(retryAfterSeconds)}',
+                                  ),
+                                ),
+                              );
+                            }
+                          }
+                        : null,
                   );
                 },
               ),
