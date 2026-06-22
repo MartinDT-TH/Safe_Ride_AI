@@ -3,9 +3,10 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
+import '../../../../../core/maps/models/map_models.dart';
+import '../../../../../core/maps/widgets/map_renderer_widget.dart';
 import '../../../../../core/services/socket_service.dart';
 import '../../../../../dependency_injection/injection.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
@@ -44,12 +45,13 @@ class TripTrackingPage extends StatefulWidget {
 
 class _TripTrackingPageState extends State<TripTrackingPage>
     with TickerProviderStateMixin {
-  GoogleMapController? _mapController;
+  AppMapController? _mapController;
   late AnimationController _pulseController;
   final SocketService _socketService = getIt<SocketService>();
-  final List<LatLng> _arrivalRoutePoints = [];
-  final List<LatLng> _tripRoutePoints = [];
-  LatLng? _driverPosition;
+  final List<AppLatLng> _arrivalRoutePoints = [];
+  final List<AppLatLng> _tripRoutePoints = [];
+  final List<AppLatLng> _driverCurrentRoute = [];
+  AppLatLng? _driverPosition;
   double _driverHeading = 0;
   int? _joinedTripId;
   Timer? _tripStatusPollingTimer;
@@ -59,8 +61,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   static const _tealColor = Color(0xFF006B70);
 
   TripTrackingState get _trackingState {
-    return _currentTripStatus == 'ARRIVED' ||
-            _currentTripStatus == 'IN_PROGRESS' ||
+    return _currentTripStatus == 'IN_PROGRESS' ||
             _currentTripStatus == 'COMPLETED'
         ? TripTrackingState.inProgress
         : TripTrackingState.arriving;
@@ -97,12 +98,10 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       });
     }
 
-    // Trigger socket connection if tripId was missing and is now available
     if (oldWidget.booking.tripId == null && widget.booking.tripId != null) {
       unawaited(_connectTripSocket());
     }
 
-    // Re-initialize routes if they were empty but are now provided
     if ((_arrivalRoutePoints.isEmpty && widget.booking.arrivalPolyline != null) ||
         (_tripRoutePoints.isEmpty && widget.booking.encodedPolyline.isNotEmpty)) {
       _initializeRoutes();
@@ -115,7 +114,6 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     _pulseController.dispose();
     final joinedTripId = _joinedTripId;
     if (joinedTripId != null) {
-      // Use a separate fire-and-forget call for clean up
       _cleanupSocketHandlers(joinedTripId);
     }
     super.dispose();
@@ -181,10 +179,11 @@ class _TripTrackingPageState extends State<TripTrackingPage>
           return;
         }
 
-        final nextPosition = LatLng(update.latitude, update.longitude);
+        final nextPosition = AppLatLng(update.latitude, update.longitude);
         setState(() {
           if (_driverPosition != null) {
             _driverHeading = _calculateHeading(_driverPosition!, nextPosition);
+            _driverCurrentRoute.add(_driverPosition!);
           }
           _driverPosition = nextPosition;
         });
@@ -203,6 +202,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         );
         setState(() {
           _currentTripStatus = update.tripStatus;
+          if (_currentTripStatus == 'ARRIVED' || _currentTripStatus == 'IN_PROGRESS') {
+            _driverCurrentRoute.clear();
+          }
         });
 
         if (_isCompletedStatus(update.tripStatus)) {
@@ -224,7 +226,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     }
   }
 
-  double _calculateHeading(LatLng start, LatLng end) {
+  double _calculateHeading(AppLatLng start, AppLatLng end) {
     final lat1 = start.latitude * (math.pi / 180);
     final lon1 = start.longitude * (math.pi / 180);
     final lat2 = end.latitude * (math.pi / 180);
@@ -238,6 +240,92 @@ class _TripTrackingPageState extends State<TripTrackingPage>
 
     final radians = math.atan2(y, x);
     return (radians * 180 / math.pi + 360) % 360;
+  }
+
+  double _calculateDirectDistance(AppLatLng start, AppLatLng end) {
+    const double earthRadiusKm = 6371.0;
+    final lat1 = start.latitude * (math.pi / 180);
+    final lon1 = start.longitude * (math.pi / 180);
+    final lat2 = end.latitude * (math.pi / 180);
+    final lon2 = end.longitude * (math.pi / 180);
+
+    final dLat = lat2 - lat1;
+    final dLon = lon2 - lon1;
+
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1) * math.cos(lat2) *
+        math.sin(dLon / 2) * math.sin(dLon / 2);
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+
+    return earthRadiusKm * c;
+  }
+
+  int _getArrivalDurationMinutes() {
+    if (_arrivalRoutePoints.isEmpty) {
+      if (_driverPosition != null) {
+        final distanceKm = _calculateDirectDistance(
+          _driverPosition!,
+          AppLatLng(widget.pickup.latitude, widget.pickup.longitude),
+        );
+        final minutes = (distanceKm / 25 * 60).round();
+        return minutes > 0 ? minutes : 1;
+      }
+      return 3;
+    }
+
+    final driverPos = _driverPosition ?? _arrivalRoutePoints.first;
+    int closestIndex = 0;
+    double minDistance = double.infinity;
+    for (int i = 0; i < _arrivalRoutePoints.length; i++) {
+      final dist = _calculateDirectDistance(driverPos, _arrivalRoutePoints[i]);
+      if (dist < minDistance) {
+        minDistance = dist;
+        closestIndex = i;
+      }
+    }
+
+    double remainingDistanceKm = 0;
+    for (int i = closestIndex; i < _arrivalRoutePoints.length - 1; i++) {
+      remainingDistanceKm += _calculateDirectDistance(
+        _arrivalRoutePoints[i],
+        _arrivalRoutePoints[i + 1],
+      );
+    }
+
+    final minutes = (remainingDistanceKm / 25 * 60).round();
+    return minutes > 0 ? minutes : 1;
+  }
+
+  int _getTripDurationMinutes() {
+    if (_tripRoutePoints.isEmpty) {
+      return widget.booking.estimatedDurationMinutes > 0
+          ? widget.booking.estimatedDurationMinutes
+          : 12;
+    }
+
+    final driverPos = _driverPosition ?? _tripRoutePoints.first;
+    int closestIndex = 0;
+    double minDistance = double.infinity;
+    for (int i = 0; i < _tripRoutePoints.length; i++) {
+      final dist = _calculateDirectDistance(driverPos, _tripRoutePoints[i]);
+      if (dist < minDistance) {
+        minDistance = dist;
+        closestIndex = i;
+      }
+    }
+
+    double remainingDistanceKm = 0;
+    for (int i = closestIndex; i < _tripRoutePoints.length - 1; i++) {
+      remainingDistanceKm += _calculateDirectDistance(
+        _tripRoutePoints[i],
+        _tripRoutePoints[i + 1],
+      );
+    }
+
+    if (remainingDistanceKm < 0.05) return 1;
+
+    final minutes = (remainingDistanceKm / 30 * 60).round();
+    return minutes > 0 ? minutes : 1;
   }
 
   void _showMessage(String message) {
@@ -270,47 +358,37 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   }
 
   Widget _buildMap() {
-    return GoogleMap(
-      initialCameraPosition: CameraPosition(
-        target: LatLng(widget.pickup.latitude, widget.pickup.longitude),
+    return MapRendererWidget(
+      initialCameraPosition: AppCameraPosition(
+        target: AppLatLng(widget.pickup.latitude, widget.pickup.longitude),
         zoom: 15,
       ),
       onMapCreated: (controller) {
         _mapController = controller;
         _fitMapToVisibleRoute();
       },
-      zoomControlsEnabled: false,
-      myLocationButtonEnabled: false,
-      mapToolbarEnabled: false,
-      myLocationEnabled: true,
+      myLocationButtonEnabled: true,
       markers: _buildMarkers(),
       polylines: _buildPolylines(),
     );
   }
 
-  Set<Marker> _buildMarkers() {
-    final markers = <Marker>{
-      Marker(
-        markerId: const MarkerId('pickup'),
-        position: LatLng(widget.pickup.latitude, widget.pickup.longitude),
-        anchor: const Offset(0.5, 0.5),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-        infoWindow: const InfoWindow(title: 'Pickup'),
+  Set<AppMarker> _buildMarkers() {
+    final markers = <AppMarker>{
+      AppMarker(
+        id: 'pickup',
+        position: AppLatLng(widget.pickup.latitude, widget.pickup.longitude),
+        hue: 210.0, // Azure
       ),
     };
 
     final driverPosition = _driverPosition;
     if (driverPosition != null) {
       markers.add(
-        Marker(
-          markerId: const MarkerId('driver'),
+        AppMarker(
+          id: 'driver',
           position: driverPosition,
-          rotation: _driverHeading,
-          anchor: const Offset(0.5, 0.5),
-          icon: BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueOrange,
-          ),
-          infoWindow: const InfoWindow(title: 'Driver'),
+          hue: 30.0, // Orange
         ),
       );
     }
@@ -318,11 +396,10 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     final destination = widget.destination;
     if (destination != null) {
       markers.add(
-        Marker(
-          markerId: const MarkerId('destination'),
-          position: LatLng(destination.latitude, destination.longitude),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-          infoWindow: const InfoWindow(title: 'Destination'),
+        AppMarker(
+          id: 'destination',
+          position: AppLatLng(destination.latitude, destination.longitude),
+          hue: 0.0, // Red
         ),
       );
     }
@@ -330,53 +407,52 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     return markers;
   }
 
-  Set<Polyline> _buildPolylines() {
-    final polylines = <Polyline>{};
+  Set<AppPolyline> _buildPolylines() {
+    final polylines = <AppPolyline>{};
     final bool isArriving = _trackingState == TripTrackingState.arriving;
 
-    // 1. Background (Static/Faded) Routes
-    // Trip Route (Faded)
-    if (_tripRoutePoints.isNotEmpty) {
+    if (_tripRoutePoints.isNotEmpty && !isArriving) {
       polylines.add(
-        Polyline(
-          polylineId: const PolylineId('trip-route-static'),
+        AppPolyline(
+          id: 'trip-route-static',
           points: _tripRoutePoints,
           color: _tealColor.withValues(alpha: 0.2),
           width: 4,
-          zIndex: 1,
-          jointType: JointType.round,
         ),
       );
     }
 
-    // Arrival Route (Faded)
-    if (_arrivalRoutePoints.isNotEmpty && isArriving) {
+    if (_arrivalRoutePoints.isNotEmpty && isArriving && _driverCurrentRoute.isEmpty) {
       polylines.add(
-        Polyline(
-          polylineId: const PolylineId('arrival-route-static'),
+        AppPolyline(
+          id: 'arrival-route-static',
           points: _arrivalRoutePoints,
           color: const Color(0xFF2F80ED).withValues(alpha: 0.2),
           width: 4,
-          zIndex: 1,
-          jointType: JointType.round,
         ),
       );
     }
 
-    // 2. Foreground (Dynamic/Solid) Routes
+    if (_driverCurrentRoute.isNotEmpty && isArriving) {
+      polylines.add(
+        AppPolyline(
+          id: 'driver-current-route',
+          points: _driverCurrentRoute,
+          color: Colors.blue,
+          width: 5,
+        ),
+      );
+    }
+
     if (_tripRoutePoints.isNotEmpty && !isArriving) {
       final tripPoints = _getDynamicTripPoints();
       if (tripPoints.length >= 2) {
         polylines.add(
-          Polyline(
-            polylineId: const PolylineId('trip-route-active'),
+          AppPolyline(
+            id: 'trip-route-active',
             points: tripPoints,
             color: _tealColor,
             width: 6,
-            zIndex: 3,
-            jointType: JointType.round,
-            startCap: Cap.roundCap,
-            endCap: Cap.roundCap,
           ),
         );
       }
@@ -386,16 +462,11 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       final arrivalPoints = _getDynamicArrivalPoints();
       if (arrivalPoints.length >= 2) {
         polylines.add(
-          Polyline(
-            polylineId: const PolylineId('arrival-route-active'),
+          AppPolyline(
+            id: 'arrival-route-active',
             points: arrivalPoints,
             color: const Color(0xFF2F80ED),
             width: 5,
-            patterns: [PatternItem.dash(12), PatternItem.gap(8)],
-            zIndex: 4,
-            jointType: JointType.round,
-            startCap: Cap.roundCap,
-            endCap: Cap.roundCap,
           ),
         );
       }
@@ -404,34 +475,29 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     return polylines;
   }
 
-  List<LatLng> _getDynamicTripPoints() {
+  List<AppLatLng> _getDynamicTripPoints() {
     final driverPos = _driverPosition;
     if (driverPos == null || _tripRoutePoints.isEmpty) return _tripRoutePoints;
     int closestIdx = _findClosestPointIndex(driverPos, _tripRoutePoints);
 
-    // Return the route starting from the car's real position,
-    // followed by all remaining points in the static route.
     final points = [driverPos, ..._tripRoutePoints.skip(closestIdx + 1)];
     return points.length < 2 ? [driverPos, _tripRoutePoints.last] : points;
   }
 
-  List<LatLng> _getDynamicArrivalPoints() {
+  List<AppLatLng> _getDynamicArrivalPoints() {
     final driverPos = _driverPosition;
     if (driverPos == null) return const [];
     if (_arrivalRoutePoints.isEmpty) {
-      return [driverPos, LatLng(widget.pickup.latitude, widget.pickup.longitude)];
+      return [driverPos, AppLatLng(widget.pickup.latitude, widget.pickup.longitude)];
     }
 
-    // Find the closest point index in the static route to the current driver position
     int closestIdx = _findClosestPointIndex(driverPos, _arrivalRoutePoints);
 
-    // Return the route starting from the car's real position,
-    // followed by all remaining points in the static route.
     final points = [driverPos, ..._arrivalRoutePoints.skip(closestIdx + 1)];
     return points.length < 2 ? [driverPos, _arrivalRoutePoints.last] : points;
   }
 
-  int _findClosestPointIndex(LatLng target, List<LatLng> points) {
+  int _findClosestPointIndex(AppLatLng target, List<AppLatLng> points) {
     if (points.isEmpty) return 0;
     int closestIdx = 0;
     double minDistSq = double.maxFinite;
@@ -451,12 +517,10 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     if (_mapController == null || !mounted) return;
 
     final driverPosition = _driverPosition;
-    final pickupPos = LatLng(widget.pickup.latitude, widget.pickup.longitude);
+    final pickupPos = AppLatLng(widget.pickup.latitude, widget.pickup.longitude);
     final destination = widget.destination;
 
-    // When the driver is arriving, we want to focus on the area between the driver and the pickup
-    // instead of the entire (potentially very long) route.
-    List<LatLng> focusPoints = [];
+    List<AppLatLng> focusPoints = [];
     if (_trackingState == TripTrackingState.arriving && driverPosition != null) {
       focusPoints = [driverPosition, pickupPos];
     } else if (_trackingState == TripTrackingState.inProgress &&
@@ -464,11 +528,11 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         destination != null) {
       focusPoints = [
         driverPosition,
-        LatLng(destination.latitude, destination.longitude),
+        AppLatLng(destination.latitude, destination.longitude),
       ];
     } else {
       focusPoints = [pickupPos];
-      if (destination != null) focusPoints.add(LatLng(destination.latitude, destination.longitude));
+      if (destination != null) focusPoints.add(AppLatLng(destination.latitude, destination.longitude));
       if (driverPosition != null) focusPoints.add(driverPosition);
     }
 
@@ -476,7 +540,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       if (focusPoints.length == 1 && _mapController != null) {
         unawaited(
           _mapController!.animateCamera(
-            CameraUpdate.newLatLngZoom(focusPoints.first, 15),
+            AppCameraPosition(target: focusPoints.first, zoom: 15),
           ),
         );
       }
@@ -484,10 +548,10 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     }
 
     final bounds = _boundsFor(focusPoints);
-    unawaited(_mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 80)));
+    unawaited(_mapController!.animateCameraToBounds(bounds.$1, bounds.$2, 80));
   }
 
-  LatLngBounds _boundsFor(List<LatLng> points) {
+  (AppLatLng, AppLatLng) _boundsFor(List<AppLatLng> points) {
     var minLat = points.first.latitude;
     var maxLat = points.first.latitude;
     var minLng = points.first.longitude;
@@ -500,10 +564,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       maxLng = math.max(maxLng, point.longitude);
     }
 
-    return LatLngBounds(
-      southwest: LatLng(minLat, minLng),
-      northeast: LatLng(maxLat, maxLng),
-    );
+    return (AppLatLng(minLat, minLng), AppLatLng(maxLat, maxLng));
   }
 
   Widget _buildTopHeader() {
@@ -547,7 +608,11 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                         const SizedBox(width: 8),
                         Flexible(
                           child: Text(
-                            isArriving ? 'Tài xế đang đến • 3 phút' : 'Đang di chuyển • 12 phút',
+                            _currentTripStatus == 'ARRIVED'
+                                ? 'Tài xế đã đến điểm đón'
+                                : isArriving
+                                    ? 'Tài xế đang đến • ${_getArrivalDurationMinutes()} phút'
+                                    : 'Đang di chuyển • ${_getTripDurationMinutes()} phút',
                             style: const TextStyle(
                               fontWeight: FontWeight.w800,
                               fontSize: 13,

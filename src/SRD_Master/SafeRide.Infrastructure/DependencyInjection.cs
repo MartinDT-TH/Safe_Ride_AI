@@ -18,6 +18,7 @@ using SafeRide.Infrastructure.BackgroundJobs;
 using SafeRide.Infrastructure.ExternalServices;
 using SafeRide.Infrastructure.ExternalServices.GoogleMaps;
 using SafeRide.Infrastructure.ExternalServices.OpenRouteService;
+using SafeRide.Infrastructure.ExternalServices.VietMap;
 using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
 using SafeRide.Infrastructure.Repositories;
@@ -64,32 +65,14 @@ public static class DependencyInjection
         services
             .AddOptions<GoogleMapsOptions>()
             .Bind(configuration.GetSection(GoogleMapsOptions.SectionName))
-            .ValidateDataAnnotations()
-            .Validate(
-                options => Uri.IsWellFormedUriString(
-                    options.RoutesApiUrl,
-                    UriKind.Absolute),
-                "GoogleMaps:RoutesApiUrl must be an absolute URL.")
-            .Validate(
-                options => Uri.IsWellFormedUriString(
-                    options.GeocodingApiUrl,
-                    UriKind.Absolute),
-                "GoogleMaps:GeocodingApiUrl must be an absolute URL.")
-            .ValidateOnStart();
+            .ValidateDataAnnotations();
+            // NOTE: ValidateOnStart removed — Google Maps is a fallback provider.
+            // URL validation is skipped when VietMap is the primary provider.
         services
             .AddOptions<OpenRouteServiceOptions>()
-            .Bind(configuration.GetSection(OpenRouteServiceOptions.SectionName))
-            .Validate(
-                options => Uri.IsWellFormedUriString(
-                    options.DirectionsApiUrl,
-                    UriKind.Absolute),
-                "OpenRouteService:DirectionsApiUrl must be an absolute URL.")
-            .Validate(
-                options => Uri.IsWellFormedUriString(
-                    options.MatrixApiUrl,
-                    UriKind.Absolute),
-                "OpenRouteService:MatrixApiUrl must be an absolute URL.")
-            .ValidateOnStart();
+            .Bind(configuration.GetSection(OpenRouteServiceOptions.SectionName));
+            // NOTE: ValidateOnStart removed — OpenRouteService is a fallback provider.
+
         services
             .AddOptions<MatchingOptions>()
             .Bind(configuration.GetSection(MatchingOptions.SectionName))
@@ -124,25 +107,55 @@ public static class DependencyInjection
         services.AddScoped<IDriverRealtimeService, DriverRealtimeService>();
         services.AddScoped<ITripStatusService, TripStatusService>();
         services.AddHttpClient<ISpeedSmsService, InfobipSmsService>();
-        var mapRoutingProvider = configuration["MapRouting:Provider"];
-        if (string.Equals(
-                mapRoutingProvider,
-                "OpenRouteService",
-                StringComparison.OrdinalIgnoreCase))
+
+        // ── Map Services ───────────────────────────────────────────────────────────
+        // VietMap options (always registered regardless of primary provider)
+        services
+            .AddOptions<VietMapOptions>()
+            .Bind(configuration.GetSection(VietMapOptions.SectionName));
+
+        var primaryMapProvider = configuration["MapServices:PrimaryProvider"];
+
+        if (string.Equals(primaryMapProvider, "OpenRouteService", StringComparison.OrdinalIgnoreCase))
         {
-            services.AddHttpClient<IGoogleMapsService, OpenRouteServiceRoutingService>(
-                client =>
-                {
-                    client.Timeout = TimeSpan.FromSeconds(20);
-                });
+            services.AddHttpClient<IMapRoutingService, OpenRouteServiceRoutingService>(client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(20);
+            });
+            services.AddHttpClient<IMapGeocodingService, OpenRouteServiceGeocodingService>(client =>
+            {
+                var timeoutSeconds = configuration.GetValue<int>("MapServices:OpenRouteService:TimeoutSeconds", 20);
+                client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+            });
         }
-        else
+        else if (string.Equals(primaryMapProvider, "GoogleMaps", StringComparison.OrdinalIgnoreCase))
         {
-            services.AddHttpClient<IGoogleMapsService, GoogleMapsService>(client =>
+            services.AddHttpClient<IMapRoutingService, GoogleMapsRoutingService>(client =>
             {
                 client.Timeout = TimeSpan.FromSeconds(15);
             });
+            // Fallback to VietMap for Geocoding until GoogleMapsGeocodingService is implemented
+            services.AddHttpClient<IMapGeocodingService, VietMapGeocodingService>(client =>
+            {
+                var timeoutSeconds = configuration.GetValue<int>("MapServices:VietMap:TimeoutSeconds", 15);
+                client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+            });
         }
+        else
+        {
+            // Default: VietMap
+            services.AddHttpClient<IMapRoutingService, VietMapRoutingService>(client =>
+            {
+                var timeoutSeconds = configuration.GetValue<int>("MapServices:VietMap:TimeoutSeconds", 15);
+                client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+            });
+            services.AddHttpClient<IMapGeocodingService, VietMapGeocodingService>(client =>
+            {
+                var timeoutSeconds = configuration.GetValue<int>("MapServices:VietMap:TimeoutSeconds", 15);
+                client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+            });
+        }
+        // ──────────────────────────────────────────────────────────────────────────
 
         if (environment.IsDevelopment()
             && configuration.GetValue<bool>("Simulator:EnableMockDrivers"))

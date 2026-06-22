@@ -5,6 +5,7 @@ import '../../../../../core/services/location_service.dart';
 import '../../../../../core/services/socket_service.dart';
 import '../../data/models/promo_model.dart';
 import '../../data/datasources/booking_remote_datasource.dart';
+import '../../../../../core/maps/models/map_api_models.dart';
 import '../../data/models/booking_catalog.dart';
 import '../../data/models/booking_fare_estimate.dart';
 import '../../data/models/booking_location.dart';
@@ -14,7 +15,11 @@ import '../../data/models/nearby_driver.dart';
 import '../../domain/repositories/booking_repository.dart';
 
 class BookingProvider extends ChangeNotifier {
-  BookingProvider(this._repository, this._locationService, [this._socketService]);
+  BookingProvider(
+    this._repository,
+    this._locationService, [
+    this._socketService,
+  ]);
 
   final BookingRepository _repository;
   final LocationService _locationService;
@@ -73,12 +78,16 @@ class BookingProvider extends ChangeNotifier {
   void _setupBookingRealtime(int bookingId) {
     debugPrint('PROVIDER: Setting up SignalR for Booking $bookingId');
     _socketService?.onBookingUpdated((update) {
-      debugPrint('PROVIDER: SIGNALR RECEIVED for Booking ${update.bookingId}. Status: ${update.status}');
+      debugPrint(
+        'PROVIDER: SIGNALR RECEIVED for Booking ${update.bookingId}. Status: ${update.status}',
+      );
       if (update.bookingId != bookingId) return;
 
       final current = _searchingBooking ?? _activeBooking;
       if (current == null) {
-        debugPrint('PROVIDER: Received update but no current booking in provider');
+        debugPrint(
+          'PROVIDER: Received update but no current booking in provider',
+        );
         return;
       }
 
@@ -87,7 +96,8 @@ class BookingProvider extends ChangeNotifier {
         currentSearchRadiusKm:
             update.currentSearchRadiusKm ?? current.currentSearchRadiusKm,
         estimatedRemainingSeconds:
-            update.estimatedRemainingSeconds ?? current.estimatedRemainingSeconds,
+            update.estimatedRemainingSeconds ??
+            current.estimatedRemainingSeconds,
         matchingMessage: update.matchingMessage ?? current.matchingMessage,
         driverOffer: update.driverOffer != null
             ? BookingDriverOffer.fromJson(update.driverOffer!)
@@ -96,7 +106,9 @@ class BookingProvider extends ChangeNotifier {
         tripStatus: update.tripStatus ?? current.tripStatus,
       );
 
-      debugPrint('PROVIDER: Updated status: ${updatedBooking.bookingStatus}, Offer: ${updatedBooking.driverOffer?.driverName}');
+      debugPrint(
+        'PROVIDER: Updated status: ${updatedBooking.bookingStatus}, Offer: ${updatedBooking.driverOffer?.driverName}',
+      );
 
       if (_isTerminalBooking(updatedBooking)) {
         debugPrint('PROVIDER: Booking $bookingId is terminal, clearing state');
@@ -134,7 +146,7 @@ class BookingProvider extends ChangeNotifier {
           (current != null && current.bookingId == newBooking.bookingId)
           ? current.mergeWithPreservedPromotion(newBooking)
           : newBooking;
-      
+
       debugPrint(
         'PROVIDER: polling booking ${booking.bookingId} status=${booking.bookingStatus} trip=${booking.tripStatus} offer=${booking.driverOffer?.offerStatus}/${booking.driverOffer?.driverName}',
       );
@@ -182,9 +194,10 @@ class BookingProvider extends ChangeNotifier {
       if (_isActiveNowBooking(booking) || booking.tripStatus != null) {
         _setActiveBookingFromResponse(booking);
         // If it's searching, also set searchingBooking
-        if (booking.bookingStatus == 'Searching' || booking.bookingStatus == 'DriverAssigned') {
-           _searchingBooking = booking;
-           _setupBookingRealtime(booking.bookingId);
+        if (booking.bookingStatus == 'Searching' ||
+            booking.bookingStatus == 'DriverAssigned') {
+          _searchingBooking = booking;
+          _setupBookingRealtime(booking.bookingId);
         }
       } else {
         _activeBooking = null;
@@ -285,7 +298,7 @@ class BookingProvider extends ChangeNotifier {
     );
 
     if (tripStatus == 'CANCELLED' || tripStatus == 'COMPLETED') {
-       // We keep activeBooking for the summary page, but effectively it's finishing
+      // We keep activeBooking for the summary page, but effectively it's finishing
     }
 
     notifyListeners();
@@ -357,6 +370,22 @@ class BookingProvider extends ChangeNotifier {
   ) async {
     return _runLocation(
       () => _locationService.resolveCoordinates(latitude, longitude),
+    );
+  }
+
+  Future<BookingLocation?> resolvePlaceId(String placeId) async {
+    return _runLocation(() => _locationService.resolvePlaceId(placeId));
+  }
+
+  Future<List<PlaceAutocompleteResult>> autocompleteAddress(
+    String query, {
+    double? lat,
+    double? lng,
+  }) async {
+    return await _locationService.autocompleteAddress(
+      query,
+      lat: lat,
+      lng: lng,
     );
   }
 
@@ -449,10 +478,7 @@ class BookingProvider extends ChangeNotifier {
     });
   }
 
-  Future<bool> completeTrip(
-    String accessToken, {
-    required int tripId,
-  }) async {
+  Future<bool> completeTrip(String accessToken, {required int tripId}) async {
     final ok = await _run(() async {
       await _repository.completeTrip(accessToken, tripId: tripId);
       return true;

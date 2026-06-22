@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../../core/maps/models/map_models.dart';
+import '../../../../../core/maps/widgets/map_renderer_widget.dart';
 import '../../../../../core/config/api_keys_config.dart';
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
@@ -583,13 +584,13 @@ class _MapPreview extends StatefulWidget {
 }
 
 class _MapPreviewState extends State<_MapPreview> {
-  static const _fallback = LatLng(10.7769, 106.7009);
-  GoogleMapController? _controller;
+  static const _fallback = AppLatLng(10.7769, 106.7009);
+  AppMapController? _controller;
 
-  List<LatLng> _cachedPoints = const [];
+  List<AppLatLng> _cachedPoints = const [];
   String? _lastEncodedPolyline;
 
-  List<LatLng> get _routePoints {
+  List<AppLatLng> get _routePoints {
     final encoded = widget.estimate?.encodedPolyline;
     if (encoded == null || encoded.isEmpty) return const [];
 
@@ -606,13 +607,13 @@ class _MapPreviewState extends State<_MapPreview> {
     }
   }
 
-  LatLng get _pickup => widget.pickup == null
+  AppLatLng get _pickup => widget.pickup == null
       ? _fallback
-      : LatLng(widget.pickup!.latitude, widget.pickup!.longitude);
+      : AppLatLng(widget.pickup!.latitude, widget.pickup!.longitude);
 
-  LatLng? get _destination => widget.destination == null
+  AppLatLng? get _destination => widget.destination == null
       ? null
-      : LatLng(widget.destination!.latitude, widget.destination!.longitude);
+      : AppLatLng(widget.destination!.latitude, widget.destination!.longitude);
 
   @override
   void dispose() {
@@ -644,7 +645,7 @@ class _MapPreviewState extends State<_MapPreview> {
         : [_pickup, destination];
 
     if (boundsPoints.length == 1) {
-      await controller.animateCamera(CameraUpdate.newLatLngZoom(_pickup, 15));
+      await controller.animateCamera(AppCameraPosition(target: _pickup, zoom: 15));
       return;
     }
 
@@ -663,83 +664,57 @@ class _MapPreviewState extends State<_MapPreview> {
           : maxLongitude;
     }
 
-    await controller.animateCamera(
-      CameraUpdate.newLatLngBounds(
-        LatLngBounds(
-          southwest: LatLng(minLatitude, minLongitude),
-          northeast: LatLng(maxLatitude, maxLongitude),
-        ),
-        80, // Increased padding for better visibility
-      ),
+    await controller.animateCameraToBounds(
+      AppLatLng(minLatitude, minLongitude),
+      AppLatLng(maxLatitude, maxLongitude),
+      80, // Increased padding for better visibility
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!ApiKeysConfig.hasGoogleMapsKey) {
-      return _MapConfigurationError(onBack: widget.onBack);
-    }
-
     final destination = _destination;
     final routePoints = _routePoints;
     return Stack(
       fit: StackFit.expand,
       children: [
-        GoogleMap(
-          initialCameraPosition: CameraPosition(target: _pickup, zoom: 14),
+        MapRendererWidget(
+          initialCameraPosition: AppCameraPosition(target: _pickup, zoom: 14),
           markers: {
             if (widget.pickup != null)
-              Marker(
-                markerId: const MarkerId('pickup'),
+              AppMarker(
+                id: 'pickup',
                 position: _pickup,
-                infoWindow: InfoWindow(
-                  title: BookingStrings.pickupLabel,
-                  snippet: widget.pickup!.address,
-                ),
+                hue: 210.0, // Azure
               ),
             if (destination != null)
-              Marker(
-                markerId: const MarkerId('destination'),
+              AppMarker(
+                id: 'destination',
                 position: destination,
-                icon: BitmapDescriptor.defaultMarkerWithHue(
-                  BitmapDescriptor.hueRed,
-                ),
-                infoWindow: InfoWindow(
-                  title: BookingStrings.destinationLabel,
-                  snippet: widget.destination!.address,
-                ),
+                hue: 0.0, // Red
               ),
           },
           polylines: {
             if (routePoints.isNotEmpty)
-              Polyline(
-                polylineId: const PolylineId('route'),
+              AppPolyline(
+                id: 'route',
                 points: routePoints,
                 color: AppColors.primary,
                 width: 5,
-                jointType: JointType.round,
-                startCap: Cap.roundCap,
-                endCap: Cap.roundCap,
-                zIndex: 1,
               )
             else if (widget.pickup != null && destination != null)
-              Polyline(
-                polylineId: const PolylineId('direct_route'),
+              AppPolyline(
+                id: 'direct_route',
                 points: [_pickup, destination],
                 color: AppColors.primary.withOpacity(0.5),
                 width: 4,
-                patterns: [PatternItem.dash(20), PatternItem.gap(10)],
-                zIndex: 0,
               ),
           },
-          zoomControlsEnabled: false,
-          mapToolbarEnabled: false,
-          myLocationButtonEnabled: false,
-          compassEnabled: false,
           onMapCreated: (controller) {
             _controller = controller;
             WidgetsBinding.instance.addPostFrameCallback((_) => _fitRoute());
           },
+          myLocationButtonEnabled: false,
         ),
         // Nút quay lại được bọc trong SafeArea để tránh bị lấp bởi Status Bar
         Positioned(

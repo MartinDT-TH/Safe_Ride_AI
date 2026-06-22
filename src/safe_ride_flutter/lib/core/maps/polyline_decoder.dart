@@ -1,7 +1,7 @@
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'models/map_models.dart';
 
-List<LatLng> decodePolyline(String encoded) {
-  final points = <LatLng>[];
+List<AppLatLng> decodePolyline(String encoded) {
+  final points = <AppLatLng>[];
   var index = 0;
   var latitude = 0;
   var longitude = 0;
@@ -19,7 +19,7 @@ List<LatLng> decodePolyline(String encoded) {
     index = longitudeChunk.nextIndex;
     longitude += longitudeChunk.delta;
 
-    points.add(LatLng(latitude / 1e5, longitude / 1e5));
+    points.add(AppLatLng(latitude / 1e5, longitude / 1e5));
   }
 
   return points;
