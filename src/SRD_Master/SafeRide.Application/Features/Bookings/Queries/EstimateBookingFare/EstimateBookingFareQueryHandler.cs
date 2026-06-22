@@ -3,6 +3,8 @@ using SafeRide.Application.Common.Exceptions;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
 using SafeRide.Domain.Entities;
+using SafeRide.Domain.Enums;
+
 
 namespace SafeRide.Application.Features.Bookings.Queries.EstimateBookingFare;
 
@@ -10,18 +12,18 @@ public sealed class EstimateBookingFareQueryHandler
     : IRequestHandler<EstimateBookingFareQuery, EstimateBookingFareResult>
 {
     private readonly IBookingRepository _bookingRepository;
-    private readonly IGoogleMapsService _googleMapsService;
+    private readonly IMapRoutingService _mapRoutingService;
     private readonly IFareEstimationService _fareEstimationService;
     private readonly IVehicleLicenseRequirementService _vehicleLicenseRequirementService;
 
     public EstimateBookingFareQueryHandler(
         IBookingRepository bookingRepository,
-        IGoogleMapsService googleMapsService,
+        IMapRoutingService mapRoutingService,
         IFareEstimationService fareEstimationService,
         IVehicleLicenseRequirementService vehicleLicenseRequirementService)
     {
         _bookingRepository = bookingRepository;
-        _googleMapsService = googleMapsService;
+        _mapRoutingService = mapRoutingService;
         _fareEstimationService = fareEstimationService;
         _vehicleLicenseRequirementService = vehicleLicenseRequirementService;
     }
@@ -87,13 +89,20 @@ public sealed class EstimateBookingFareQueryHandler
         RouteEstimateResult route;
         try
         {
-            route = await _googleMapsService.GetRouteEstimateAsync(
-                new LocationPoint(
-                    request.PickupLatitude,
-                    request.PickupLongitude),
-                new LocationPoint(
-                    request.DestinationLatitude,
-                    request.DestinationLongitude),
+            route = await _mapRoutingService.GetRouteEstimateAsync(
+                new RouteEstimateRequest
+                {
+                    Origin = new LocationPoint(
+                        request.PickupLatitude,
+                        request.PickupLongitude),
+                    Destination = new LocationPoint(
+                        request.DestinationLatitude,
+                        request.DestinationLongitude),
+                    Provider = MapProvider.Auto,
+                    TravelMode = MapTravelMode.Car,
+                    IncludePolyline = true,
+                    RequestSource = "EstimateFare"
+                },
                 cancellationToken);
         }
         catch (MapServiceException exception)

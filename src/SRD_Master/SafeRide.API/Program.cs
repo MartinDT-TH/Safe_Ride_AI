@@ -24,8 +24,12 @@ if (builder.Environment.IsDevelopment())
         reloadOnChange: true);
 }
 
-const string mapRoutingProvider = "OpenRouteService"; // Use "OpenRouteService" or "Google" to switch provider
-builder.Configuration["MapRouting:Provider"] = mapRoutingProvider;
+// TODO: REMOVE BEFORE FINAL — dev-only provider override.
+// Change the value below to switch map provider without editing appsettings.
+// "VietMap" | "GoogleMaps" | "OpenRouteService"
+// const string devMapProvider = "OpenRouteService";
+// builder.Configuration["MapServices:PrimaryProvider"] = devMapProvider;
+
 
 builder.Services
     .AddControllers()

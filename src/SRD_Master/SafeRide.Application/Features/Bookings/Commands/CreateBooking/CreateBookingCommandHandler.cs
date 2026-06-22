@@ -16,7 +16,7 @@ public sealed class CreateBookingCommandHandler
     private readonly IBookingRepository _bookingRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IDateTimeProvider _dateTimeProvider;
-    private readonly IGoogleMapsService _googleMapsService;
+    private readonly IMapRoutingService _mapRoutingService;
     private readonly IFareEstimationService _fareEstimationService;
     private readonly IBookingMatchingService _matchingService;
     private readonly IVehicleLicenseRequirementService _vehicleLicenseRequirementService;
@@ -28,7 +28,7 @@ public sealed class CreateBookingCommandHandler
         IBookingRepository bookingRepository,
         IUnitOfWork unitOfWork,
         IDateTimeProvider dateTimeProvider,
-        IGoogleMapsService googleMapsService,
+        IMapRoutingService mapRoutingService,
         IFareEstimationService fareEstimationService,
         IBookingMatchingService matchingService,
         IVehicleLicenseRequirementService vehicleLicenseRequirementService,
@@ -39,7 +39,7 @@ public sealed class CreateBookingCommandHandler
         _bookingRepository = bookingRepository;
         _unitOfWork = unitOfWork;
         _dateTimeProvider = dateTimeProvider;
-        _googleMapsService = googleMapsService;
+        _mapRoutingService = mapRoutingService;
         _fareEstimationService = fareEstimationService;
         _matchingService = matchingService;
         _vehicleLicenseRequirementService = vehicleLicenseRequirementService;
@@ -118,11 +118,18 @@ public sealed class CreateBookingCommandHandler
             RouteEstimateResult route;
             try
             {
-                route = await _googleMapsService.GetRouteEstimateAsync(
-                    new LocationPoint(request.PickupLatitude, request.PickupLongitude),
-                    new LocationPoint(
-                        request.DestinationLatitude,
-                        request.DestinationLongitude),
+                route = await _mapRoutingService.GetRouteEstimateAsync(
+                    new RouteEstimateRequest
+                    {
+                        Origin = new LocationPoint(request.PickupLatitude, request.PickupLongitude),
+                        Destination = new LocationPoint(
+                            request.DestinationLatitude,
+                            request.DestinationLongitude),
+                        Provider = MapProvider.Auto,
+                        TravelMode = MapTravelMode.Car,
+                        IncludePolyline = true,
+                        RequestSource = "CreateBooking"
+                    },
                     cancellationToken);
             }
             catch (MapServiceException exception)

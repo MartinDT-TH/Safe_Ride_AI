@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 
 abstract final class ApiKeysConfig {
   static const googleMaps = String.fromEnvironment('GOOGLE_MAPS_API_KEY');
+  static const vietMap = String.fromEnvironment('VIETMAP_API_KEY');
+
   static const googleServerClientId = String.fromEnvironment(
     'GOOGLE_SERVER_CLIENT_ID',
   );
@@ -15,5 +17,6 @@ abstract final class ApiKeysConfig {
       googleMaps.trim().isNotEmpty || hasNativeAndroidConfig;
   static bool get hasGoogleServerClientId =>
       googleServerClientId.trim().isNotEmpty || hasNativeAndroidConfig;
+  static bool get hasVietMapKey => vietMap.trim().isNotEmpty;
 }
 

@@ -258,7 +258,44 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
                 cancellationToken);
             trip = await dbContext.Trips.AsNoTracking().FirstAsync(t => t.Id == trip.Id, cancellationToken);
 
-            var arrivalPath = new List<(double Lat, double Lng)> { (mockDriver.CurrentLat, mockDriver.CurrentLng), (booking.PickupLocation.Y, booking.PickupLocation.X) };
+            var mapRoutingService = scope.ServiceProvider.GetRequiredService<IMapRoutingService>();
+            List<(double Lat, double Lng)> arrivalPath;
+            try
+            {
+                var routeEstimate = await mapRoutingService.GetRouteEstimateAsync(
+                    new RouteEstimateRequest
+                    {
+                        Origin = new LocationPoint(mockDriver.CurrentLat, mockDriver.CurrentLng),
+                        Destination = new LocationPoint(booking.PickupLocation.Y, booking.PickupLocation.X),
+                        Provider = MapProvider.Auto,
+                        TravelMode = MapTravelMode.Car,
+                        IncludePolyline = true,
+                        RequestSource = "DriverMatching"
+                    },
+                    cancellationToken);
+
+                if (!string.IsNullOrEmpty(routeEstimate?.EncodedPolyline))
+                {
+                    var decodedPath = PolylineUtils.Decode(routeEstimate.EncodedPolyline);
+                    // OpenRouteService geometry polyline might be encoded as [lng, lat]
+                    // If Lat > 90, we know it's swapped (for Vietnam, Lat is ~16, Lng is ~108)
+                    if (decodedPath.Count > 0 && Math.Abs(decodedPath[0].Lat) > 90)
+                    {
+                        decodedPath = decodedPath.Select(p => (p.Lng, p.Lat)).ToList();
+                    }
+                    arrivalPath = decodedPath;
+                }
+                else
+                {
+                    arrivalPath = new List<(double Lat, double Lng)> { (mockDriver.CurrentLat, mockDriver.CurrentLng), (booking.PickupLocation.Y, booking.PickupLocation.X) };
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to get route estimate for driver arrival path. Falling back to direct line.");
+                arrivalPath = new List<(double Lat, double Lng)> { (mockDriver.CurrentLat, mockDriver.CurrentLng), (booking.PickupLocation.Y, booking.PickupLocation.X) };
+            }
+
             bool arrived = await MoveDriverAlongPathAsync(mockDriver, arrivalPath, 13.8, booking, trip, realtimeService, redisService, dateTimeProvider, logger, cancellationToken);
             if (!arrived) return;
 
@@ -300,6 +337,10 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
             else
             {
                 var decodedPath = PolylineUtils.Decode(booking.RoutePolyline);
+                if (decodedPath.Count > 0 && Math.Abs(decodedPath[0].Lat) > 90)
+                {
+                    decodedPath = decodedPath.Select(p => (p.Lng, p.Lat)).ToList();
+                }
                 completed = await MoveDriverAlongPathAsync(mockDriver, decodedPath, 11.1, booking, trip, realtimeService, redisService, dateTimeProvider, logger, cancellationToken);
             }
 

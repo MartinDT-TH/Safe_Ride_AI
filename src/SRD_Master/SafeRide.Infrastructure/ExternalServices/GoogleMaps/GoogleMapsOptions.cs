@@ -4,7 +4,7 @@ namespace SafeRide.Infrastructure.ExternalServices.GoogleMaps;
 
 public sealed class GoogleMapsOptions
 {
-    public const string SectionName = "GoogleMaps";
+    public const string SectionName = "MapServices:GoogleMaps";
 
     [Required]
     public string ApiKey { get; init; } = string.Empty;
