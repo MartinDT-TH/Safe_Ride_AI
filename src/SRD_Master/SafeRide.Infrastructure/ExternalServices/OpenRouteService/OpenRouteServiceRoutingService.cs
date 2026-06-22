@@ -5,10 +5,12 @@ using Microsoft.Extensions.Options;
 using SafeRide.Application.Common.Exceptions;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
+using SafeRide.Domain.Enums;
+
 
 namespace SafeRide.Infrastructure.ExternalServices.OpenRouteService;
 
-public sealed class OpenRouteServiceRoutingService : IGoogleMapsService
+public sealed class OpenRouteServiceRoutingService : IMapRoutingService
 {
     private readonly HttpClient _httpClient;
     private readonly OpenRouteServiceOptions _options;
@@ -25,11 +27,13 @@ public sealed class OpenRouteServiceRoutingService : IGoogleMapsService
     }
 
     public async Task<RouteEstimateResult> GetRouteEstimateAsync(
-        LocationPoint pickup,
-        LocationPoint destination,
+        RouteEstimateRequest request,
         CancellationToken cancellationToken)
     {
         ValidateConfiguration();
+
+        var pickup = request.Origin;
+        var destination = request.Destination;
 
         try
         {
@@ -39,10 +43,14 @@ public sealed class OpenRouteServiceRoutingService : IGoogleMapsService
                 destination,
                 cancellationToken);
 
-            return new RouteEstimateResult(
-                Math.Round(matrix.DistanceMeters / 1000d, 2, MidpointRounding.AwayFromZero),
-                Math.Max(1, (int)Math.Ceiling(matrix.DurationSeconds / 60d)),
-                encodedPolyline);
+            return new RouteEstimateResult
+            {
+                Provider = MapProvider.OpenRouteService,
+                DistanceMeters = matrix.DistanceMeters,
+                DurationSeconds = matrix.DurationSeconds,
+                EncodedPolyline = encodedPolyline,
+                PolylineFormat = "polyline5"
+            };
         }
         catch (JsonException exception)
         {
