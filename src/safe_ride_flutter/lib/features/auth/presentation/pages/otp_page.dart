@@ -11,6 +11,7 @@ import '../../../shared/onboarding/presentation/pages/role_selection_page.dart';
 import '../../../customer/home/presentation/pages/customer_home_page.dart';
 import '../../../shared/profile/presentation/pages/edit_profile_page.dart';
 import '../../../shared/onboarding/presentation/providers/role_provider.dart';
+import '../../../customer/booking/presentation/providers/booking_provider.dart';
 import '../../../driver/dashboard/presentation/pages/driver_dashboard_page.dart';
 
 class OtpPage extends StatefulWidget {
@@ -100,7 +101,18 @@ class _OtpPageState extends State<OtpPage> {
     return '$minutes:$seconds';
   }
 
-  Widget _getHomeByRole(RoleProvider roleProvider) {
+  Future<Widget> _getDestination(BuildContext context, AuthProvider auth, RoleProvider roleProvider) async {
+    // 1. Check for active booking first
+    final bookingProvider = context.read<BookingProvider>();
+    final activeBooking = await bookingProvider.loadActiveBooking(auth.token!);
+    
+    if (activeBooking != null) {
+      // Force customer role
+      roleProvider.setRole(AppValues.roleCustomer);
+      return const CustomerHomePage();
+    }
+
+    // 2. No active booking, fallback to role logic
     if (roleProvider.isDriver) {
       return const DriverDashboardPage();
     }
@@ -170,7 +182,7 @@ class _OtpPageState extends State<OtpPage> {
                       Text(
                         AuthStrings.otpDescription(widget.phoneNumber),
                         textAlign: TextAlign.center,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 15,
                           color: Color(0xFF666666),
                           height: 1.5,
@@ -283,80 +295,53 @@ class _OtpPageState extends State<OtpPage> {
                   return CustomButton(
                     text: AppStrings.confirm,
                     isLoading: provider.isLoading,
-                    onPressed: _canVerifyOtp
-                        ? () async {
-                            if (otpCode.length != 6) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(AuthStrings.otpRequired),
-                                ),
-                              );
-                              return;
-                            }
+                    onPressed: () async {
+                      if (otpCode.length != 6) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(AuthStrings.otpRequired),
+                          ),
+                        );
+                        return;
+                      }
 
-                            final ok = await provider.verifyOtp(
-                              widget.phoneNumber,
-                              otpCode,
-                            );
-                            if (!context.mounted) return;
+                      final ok = await provider.verifyOtp(
+                        widget.phoneNumber,
+                        otpCode,
+                      );
+                      if (!context.mounted) return;
 
-                            if (ok) {
-                              if (context.mounted) {
-                                final roleProvider =
-                                    context.read<RoleProvider>();
-                                if (provider.lastSelectedRole != null) {
-                                  roleProvider.setRole(
-                                    provider.lastSelectedRole!,
-                                  );
-                                } else if (provider.roles.isNotEmpty &&
-                                    provider.roles.length == 1) {
-                                  roleProvider.setRole(provider.roles.first);
-                                }
+                      if (ok) {
+                        final roleProvider = context.read<RoleProvider>();
+                        if (provider.lastSelectedRole != null) {
+                          roleProvider.setRole(provider.lastSelectedRole!);
+                        } else if (provider.roles.isNotEmpty &&
+                            provider.roles.length == 1) {
+                          roleProvider.setRole(provider.roles.first);
+                        }
 
-                                final Widget destination =
-                                    switch (provider.nextStep) {
-                                      AuthNextStep.completeProfile =>
-                                        EditProfilePage(
-                                          requiredCompletion: true,
-                                          phoneNumber:
-                                              provider.phoneNumber ??
-                                              widget.phoneNumber,
-                                        ),
-                                      AuthNextStep.selectRole =>
-                                        const RoleSelectionPage(),
-                                      AuthNextStep.customerHome =>
-                                        _getHomeByRole(roleProvider),
-                                    };
-                                Navigator.pushReplacement(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => destination,
-                                  ),
-                                );
-                              }
-                            } else {
-                              final retryAfterSeconds =
-                                  provider.otpRetryAfterSeconds ??
-                                  (provider.lastErrorCode ==
-                                          _otpAttemptsExceededCode
-                                      ? _fallbackOtpLockSeconds
-                                      : null);
-                              if (retryAfterSeconds != null) {
-                                _startOtpLockTimer(retryAfterSeconds);
-                              }
+                        final Widget destination = switch (provider.nextStep) {
+                          AuthNextStep.completeProfile => EditProfilePage(
+                            requiredCompletion: true,
+                            phoneNumber:
+                                provider.phoneNumber ?? widget.phoneNumber,
+                          ),
+                          AuthNextStep.selectRole => const RoleSelectionPage(),
+                          AuthNextStep.customerHome =>
+                            await _getDestination(context, provider, roleProvider),
+                        };
 
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    retryAfterSeconds == null
-                                        ? AuthStrings.invalidOtp
-                                        : '${AuthStrings.otpLockedPrefix}${_formatDuration(retryAfterSeconds)}',
-                                  ),
-                                ),
-                              );
-                            }
-                          }
-                        : null,
+                        if (!context.mounted) return;
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(builder: (_) => destination),
+                          (_) => false,
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text(AuthStrings.invalidOtp)),
+                        );
+                      }
+                    },
                   );
                 },
               ),

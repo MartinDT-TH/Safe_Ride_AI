@@ -112,30 +112,34 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                       Switch(
                         value: roleProvider.isDriver,
-                        onChanged: hasActiveBooking 
-                          ? (val) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Bạn không thể chuyển chế độ khi đang có chuyến đi hoạt động.'),
-                                ),
-                              );
-                            }
-                          : (val) async {
-                              final role = val ? AppValues.roleDriver : AppValues.roleCustomer;
-                              final navigator = Navigator.of(context);
-                              await roleProvider.selectRole(role);
+                        onChanged: (val) async {
+                          // Allow switching BACK to customer regardless of active booking 
+                          // (since they are ALREADY in customer mode conceptually if hasActiveBooking is true)
+                          if (val && hasActiveBooking) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Bạn không thể chuyển sang chế độ Tài xế khi đang có chuyến đi hoạt động.'),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                            return;
+                          }
 
-                              if (!mounted) return;
+                          final role = val ? AppValues.roleDriver : AppValues.roleCustomer;
+                          final navigator = Navigator.of(context);
+                          await roleProvider.selectRole(role);
 
-                              final Widget destination = val
-                                  ? const DriverDashboardPage()
-                                  : const CustomerHomePage();
+                          if (!mounted) return;
 
-                              navigator.pushAndRemoveUntil(
-                                MaterialPageRoute(builder: (_) => destination),
-                                (route) => false,
-                              );
-                            },
+                          final Widget destination = val
+                              ? const DriverDashboardPage()
+                              : const CustomerHomePage();
+
+                          navigator.pushAndRemoveUntil(
+                            MaterialPageRoute(builder: (_) => destination),
+                            (route) => false,
+                          );
+                        },
                         activeThumbColor: Colors.white,
                         activeTrackColor: const Color(0xFF006B70),
                       ),
