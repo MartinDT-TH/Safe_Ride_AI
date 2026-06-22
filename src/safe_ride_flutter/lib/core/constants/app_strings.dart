@@ -31,6 +31,7 @@ abstract final class AuthStrings {
   static const resendOtpFailed = 'Không thể gửi lại OTP.';
   static const otpRequired = 'Vui lòng nhập đủ 6 số OTP';
   static const invalidOtp = 'OTP không đúng hoặc đã hết hạn';
+  static const otpLockedPrefix = 'Bạn nhập sai OTP quá nhiều lần. Thử lại sau ';
   static const otpAttemptsExceeded =
       'Bạn đã nhập sai OTP quá nhiều lần. Vui lòng yêu cầu mã mới.';
 
@@ -217,7 +218,7 @@ abstract final class LocationStrings {
 abstract final class AppConfig {
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:5026/api/',
+    defaultValue: 'http://192.168.1.36:5026/api/',
   );
   static const fontFamily = 'SFProDisplay';
   static const logoUrl =
@@ -288,6 +289,7 @@ abstract final class ApiKeys {
   static const nextStep = 'nextStep';
   static const detail = 'detail';
   static const code = 'code';
+  static const retryAfterSeconds = 'retryAfterSeconds';
   static const phoneNumberConfirmed = 'phoneNumberConfirmed';
   static const phoneLinked = 'phoneLinked';
   static const googleLinked = 'googleLinked';
