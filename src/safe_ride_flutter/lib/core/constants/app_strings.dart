@@ -254,6 +254,7 @@ abstract final class ApiEndpoints {
       '/bookings/$bookingId/confirm-driver-offer/$offerId';
   static String tripStatus(int tripId) => '/trips/$tripId/status';
   static String completeTrip(int tripId) => '/trips/$tripId/complete';
+  static String submitTripRating(int tripId) => '/trips/$tripId/rating';
   static const identityVerificationDocuments =
       '/identity-verification/documents';
 }
@@ -315,12 +316,15 @@ abstract final class ApiKeys {
   static const driverName = 'driverName';
   static const driverAvatarUrl = 'driverAvatarUrl';
   static const rating = 'rating';
+  static const ratingScore = 'ratingScore';
+  static const comment = 'comment';
   static const tripCount = 'tripCount';
   static const experienceYears = 'experienceYears';
   static const licenseClass = 'licenseClass';
   static const expiresAt = 'expiresAt';
   static const offerStatus = 'offerStatus';
-  static const customerConfirmRemainingSeconds = 'customerConfirmRemainingSeconds';
+  static const customerConfirmRemainingSeconds =
+      'customerConfirmRemainingSeconds';
   static const estimatedHours = 'estimatedHours';
   static const vehicleId = 'vehicleId';
   static const serviceTypeId = 'serviceTypeId';

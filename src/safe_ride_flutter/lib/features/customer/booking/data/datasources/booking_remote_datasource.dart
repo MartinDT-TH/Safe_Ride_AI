@@ -28,8 +28,8 @@ class BookingRemoteDatasource {
       final List data = (response.data is List)
           ? response.data
           : (response.data is Map && response.data['data'] is List)
-              ? response.data['data']
-              : [];
+          ? response.data['data']
+          : [];
 
       return data
           .map((item) => PromoModel.fromJson(Map<String, dynamic>.from(item)))
@@ -201,7 +201,9 @@ class BookingRemoteDatasource {
     final url = '${ApiEndpoints.bookings}/$bookingId/cancel';
     debugPrint('CANCEL_BOOKING: Requesting $url');
     debugPrint('CANCEL_BOOKING: BookingID: $bookingId, Reason: $reason');
-    debugPrint('CANCEL_BOOKING: Token exists: ${accessToken.isNotEmpty}, Length: ${accessToken.length}');
+    debugPrint(
+      'CANCEL_BOOKING: Token exists: ${accessToken.isNotEmpty}, Length: ${accessToken.length}',
+    );
 
     try {
       final response = await _dio.post(
@@ -232,9 +234,13 @@ class BookingRemoteDatasource {
       }
 
       if (status == 401) {
-        throw const BookingApiException('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        throw const BookingApiException(
+          'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
+        );
       } else if (status == 403) {
-        throw const BookingApiException('Bạn không có quyền hủy chuyến đi này.');
+        throw const BookingApiException(
+          'Bạn không có quyền hủy chuyến đi này.',
+        );
       }
 
       throw const BookingApiException(
@@ -242,7 +248,9 @@ class BookingRemoteDatasource {
       );
     } catch (e) {
       debugPrint('CANCEL_BOOKING: Unknown Error: $e');
-      throw const BookingApiException('Đã xảy ra lỗi không xác định khi hủy chuyến.');
+      throw const BookingApiException(
+        'Đã xảy ra lỗi không xác định khi hủy chuyến.',
+      );
     }
   }
 
@@ -311,10 +319,7 @@ class BookingRemoteDatasource {
     }
   }
 
-  Future<void> completeTrip(
-    String accessToken, {
-    required int tripId,
-  }) async {
+  Future<void> completeTrip(String accessToken, {required int tripId}) async {
     try {
       await _dio.post(
         ApiEndpoints.completeTrip(tripId),
@@ -333,6 +338,45 @@ class BookingRemoteDatasource {
       }
       throw const BookingApiException(
         'KhÃ´ng thá»ƒ káº¿t thÃºc chuyáº¿n. Vui lÃ²ng thá»­ láº¡i.',
+      );
+    }
+  }
+
+  Future<void> submitTripRating(
+    String accessToken, {
+    required int tripId,
+    required int ratingScore,
+    String? comment,
+  }) async {
+    try {
+      await _dio.post(
+        ApiEndpoints.submitTripRating(tripId),
+        data: {ApiKeys.ratingScore: ratingScore, ApiKeys.comment: comment},
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+        ),
+      );
+    } on DioException catch (exception) {
+      final statusCode = exception.response?.statusCode;
+      if (statusCode != null && statusCode >= 500) {
+        throw BookingApiException(
+          'Máy chủ đang gặp sự cố. Bạn có thể thử lại hoặc đánh giá sau.',
+          statusCode: statusCode,
+        );
+      }
+
+      final data = exception.response?.data;
+      if (data is Map) {
+        final detail = data[ApiKeys.detail]?.toString();
+        final code = data[ApiKeys.code]?.toString();
+        if (detail != null) {
+          throw BookingApiException(detail, code: code, statusCode: statusCode);
+        }
+      }
+
+      throw BookingApiException(
+        'Không thể gửi đánh giá. Vui lòng thử lại.',
+        statusCode: statusCode,
       );
     }
   }
@@ -399,10 +443,11 @@ class BookingRemoteDatasource {
 }
 
 class BookingApiException implements Exception {
-  const BookingApiException(this.message, {this.code});
+  const BookingApiException(this.message, {this.code, this.statusCode});
 
   final String message;
   final String? code;
+  final int? statusCode;
 
   @override
   String toString() => message;

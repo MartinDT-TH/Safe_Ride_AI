@@ -15,7 +15,6 @@ import '../../data/models/booking_catalog.dart';
 import '../../data/models/booking_location.dart';
 import '../../data/models/booking_response.dart';
 import '../providers/booking_provider.dart';
-import '../../../home/presentation/providers/home_provider.dart';
 import '../widgets/booking_cancel_flow.dart';
 
 import 'trip_summary_page.dart';
@@ -387,7 +386,12 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       myLocationButtonEnabled: true,
       markers: _buildMarkers(),
       polylines: _buildPolylines(),
-      padding: const EdgeInsets.only(top: 130, bottom: 320, left: 24, right: 24),
+      padding: const EdgeInsets.only(
+        top: 130,
+        bottom: 320,
+        left: 24,
+        right: 24,
+      ),
     );
   }
 
@@ -805,7 +809,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     }
 
     final bounds = _boundsFor(focusPoints);
-    final paddingVal = _trackingState == TripTrackingState.inProgress ? 60.0 : 80.0;
+    final paddingVal = _trackingState == TripTrackingState.inProgress
+        ? 60.0
+        : 80.0;
     unawaited(
       _mapController!.animateCameraToBounds(
         bounds.$1,
@@ -1372,15 +1378,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         completedBooking ?? bookingProvider.activeBooking ?? widget.booking;
 
     await Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(
-        builder: (_) => TripSummaryPage(
-          booking: booking,
-          onConfirmedVehicleReturned: () {
-            bookingProvider.clearActiveBooking();
-            context.read<HomeProvider>().setSelectedIndex(0);
-          },
-        ),
-      ),
+      MaterialPageRoute(builder: (_) => TripSummaryPage(booking: booking)),
       (route) => false,
     );
   }
