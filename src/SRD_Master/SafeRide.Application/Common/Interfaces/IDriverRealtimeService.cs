@@ -17,4 +17,8 @@ public interface IDriverRealtimeService
     Task SetDriverOfflineAsync(
         Guid driverId,
         CancellationToken cancellationToken = default);
+
+    Task RemoveDriverFromOnlineGeoAsync(
+        Guid driverId,
+        CancellationToken cancellationToken = default);
 }
