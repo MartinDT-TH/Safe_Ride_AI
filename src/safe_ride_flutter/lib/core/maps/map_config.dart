@@ -6,5 +6,5 @@ enum MapRenderProvider {
 class MapConfig {
   /// The active map render provider for the entire application.
   /// Hardcoded based on user request.
-  static const MapRenderProvider activeMapProvider = MapRenderProvider.vietMap;
+  static const MapRenderProvider activeMapProvider = MapRenderProvider.googleMaps;
 }

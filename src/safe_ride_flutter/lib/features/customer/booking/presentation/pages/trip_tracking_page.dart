@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
 import '../../../../../core/maps/models/map_models.dart';
 import '../../../../../core/maps/widgets/map_renderer_widget.dart';
+import '../../../../../core/services/map_api_service.dart';
 import '../../../../../core/services/socket_service.dart';
 import '../../../../../dependency_injection/injection.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
@@ -48,17 +49,29 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   AppMapController? _mapController;
   late AnimationController _pulseController;
   final SocketService _socketService = getIt<SocketService>();
+  final MapApiService _mapApiService = MapApiService();
   final List<AppLatLng> _arrivalRoutePoints = [];
   final List<AppLatLng> _tripRoutePoints = [];
-  final List<AppLatLng> _driverCurrentRoute = [];
   AppLatLng? _driverPosition;
   double _driverHeading = 0;
+  double _arrivalRouteProgress = 0;
+  double _tripRouteProgress = 0;
+  DateTime? _lastCameraFitAt;
+  DateTime? _lastArrivalRouteRefreshAt;
+  AppLatLng? _lastArrivalRouteRefreshOrigin;
   int? _joinedTripId;
   Timer? _tripStatusPollingTimer;
   bool _summaryOpened = false;
   bool _isCompletingTrip = false;
+  bool _arrivalRouteRefreshInProgress = false;
   late String? _currentTripStatus;
   static const _tealColor = Color(0xFF006B70);
+  static const double _snapToRouteThresholdMeters = 45;
+  static const double _arrivalRerouteThresholdMeters = 35;
+  static const double _arrivalRerouteMinMoveMeters = 80;
+  static const double _offRouteThresholdMeters = 90;
+  static const Duration _cameraFitInterval = Duration(seconds: 3);
+  static const Duration _arrivalRouteRefreshInterval = Duration(seconds: 12);
 
   TripTrackingState get _trackingState {
     return _currentTripStatus == 'IN_PROGRESS' ||
@@ -74,7 +87,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
-    _currentTripStatus = widget.booking.tripStatus ??
+    _currentTripStatus =
+        widget.booking.tripStatus ??
         (widget.state == TripTrackingState.inProgress
             ? 'IN_PROGRESS'
             : 'DRIVER_ARRIVING');
@@ -102,8 +116,10 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       unawaited(_connectTripSocket());
     }
 
-    if ((_arrivalRoutePoints.isEmpty && widget.booking.arrivalPolyline != null) ||
-        (_tripRoutePoints.isEmpty && widget.booking.encodedPolyline.isNotEmpty)) {
+    if ((_arrivalRoutePoints.isEmpty &&
+            widget.booking.arrivalPolyline != null) ||
+        (_tripRoutePoints.isEmpty &&
+            widget.booking.encodedPolyline.isNotEmpty)) {
       _initializeRoutes();
     }
   }
@@ -121,8 +137,12 @@ class _TripTrackingPageState extends State<TripTrackingPage>
 
   Future<void> _cleanupSocketHandlers(int tripId) async {
     try {
-      _socketService.removeDriverLocationUpdatedHandler(_driverLocationHandlerKey(tripId));
-      _socketService.removeTripStatusChangedHandler(_tripStatusHandlerKey(tripId));
+      _socketService.removeDriverLocationUpdatedHandler(
+        _driverLocationHandlerKey(tripId),
+      );
+      _socketService.removeTripStatusChangedHandler(
+        _tripStatusHandlerKey(tripId),
+      );
       await _socketService.leaveTrip(tripId);
     } catch (e) {
       debugPrint('Tracking: Error during socket cleanup: $e');
@@ -179,16 +199,17 @@ class _TripTrackingPageState extends State<TripTrackingPage>
           return;
         }
 
-        final nextPosition = AppLatLng(update.latitude, update.longitude);
+        final rawPosition = AppLatLng(update.latitude, update.longitude);
         setState(() {
+          final nextPosition = _resolveDriverDisplayPosition(rawPosition);
           if (_driverPosition != null) {
             _driverHeading = _calculateHeading(_driverPosition!, nextPosition);
-            _driverCurrentRoute.add(_driverPosition!);
           }
           _driverPosition = nextPosition;
         });
 
-        _fitMapToVisibleRoute();
+        _fitMapToVisibleRoute(throttled: true);
+        unawaited(_refreshArrivalRouteIfNeeded(rawPosition));
       }, key: _driverLocationHandlerKey(tripId));
 
       _socketService.onTripStatusChanged((update) {
@@ -202,9 +223,6 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         );
         setState(() {
           _currentTripStatus = update.tripStatus;
-          if (_currentTripStatus == 'ARRIVED' || _currentTripStatus == 'IN_PROGRESS') {
-            _driverCurrentRoute.clear();
-          }
         });
 
         if (_isCompletedStatus(update.tripStatus)) {
@@ -252,9 +270,12 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     final dLat = lat2 - lat1;
     final dLon = lon2 - lon1;
 
-    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(lat1) * math.cos(lat2) *
-        math.sin(dLon / 2) * math.sin(dLon / 2);
+    final a =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1) *
+            math.cos(lat2) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
     final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
 
     return earthRadiusKm * c;
@@ -348,11 +369,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(
-        children: [
-          _buildMap(),
-          _buildTopHeader(),
-          _buildBottomPanel(),
-        ],
+        children: [_buildMap(), _buildTopHeader(), _buildBottomPanel()],
       ),
     );
   }
@@ -370,6 +387,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       myLocationButtonEnabled: true,
       markers: _buildMarkers(),
       polylines: _buildPolylines(),
+      padding: const EdgeInsets.only(top: 130, bottom: 320, left: 24, right: 24),
     );
   }
 
@@ -378,7 +396,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       AppMarker(
         id: 'pickup',
         position: AppLatLng(widget.pickup.latitude, widget.pickup.longitude),
-        hue: 210.0, // Azure
+        markerType: AppMarkerType.pickup,
       ),
     };
 
@@ -388,7 +406,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         AppMarker(
           id: 'driver',
           position: driverPosition,
-          hue: 30.0, // Orange
+          markerType: AppMarkerType.driver,
+          rotation: _driverHeading,
         ),
       );
     }
@@ -399,7 +418,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         AppMarker(
           id: 'destination',
           position: AppLatLng(destination.latitude, destination.longitude),
-          hue: 0.0, // Red
+          markerType: AppMarkerType.destination,
         ),
       );
     }
@@ -411,39 +430,63 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     final polylines = <AppPolyline>{};
     final bool isArriving = _trackingState == TripTrackingState.arriving;
 
+    // Very faded full-route background (whole route outline) — zIndex: 1
     if (_tripRoutePoints.isNotEmpty && !isArriving) {
       polylines.add(
         AppPolyline(
           id: 'trip-route-static',
           points: _tripRoutePoints,
-          color: _tealColor.withValues(alpha: 0.2),
+          color: _tealColor.withValues(alpha: 0.15),
           width: 4,
+          zIndex: 1,
         ),
       );
     }
 
-    if (_arrivalRoutePoints.isNotEmpty && isArriving && _driverCurrentRoute.isEmpty) {
+    if (_arrivalRoutePoints.isNotEmpty && isArriving) {
       polylines.add(
         AppPolyline(
           id: 'arrival-route-static',
           points: _arrivalRoutePoints,
-          color: const Color(0xFF2F80ED).withValues(alpha: 0.2),
+          color: const Color(0xFF2F80ED).withValues(alpha: 0.15),
           width: 4,
+          zIndex: 1,
         ),
       );
     }
 
-    if (_driverCurrentRoute.isNotEmpty && isArriving) {
-      polylines.add(
-        AppPolyline(
-          id: 'driver-current-route',
-          points: _driverCurrentRoute,
-          color: Colors.blue,
-          width: 5,
-        ),
-      );
+    // Passed (already driven) portion — extra faded grey, zIndex: 2
+    if (!isArriving) {
+      final passedPoints = _getPassedTripPoints();
+      if (passedPoints.length >= 2) {
+        polylines.add(
+          AppPolyline(
+            id: 'trip-route-passed',
+            points: passedPoints,
+            color: Colors.grey.withValues(alpha: 0.35),
+            width: 5,
+            zIndex: 2,
+            endCapRound: true,
+          ),
+        );
+      }
+    } else {
+      final passedArrival = _getPassedArrivalPoints();
+      if (passedArrival.length >= 2) {
+        polylines.add(
+          AppPolyline(
+            id: 'arrival-route-passed',
+            points: passedArrival,
+            color: Colors.grey.withValues(alpha: 0.35),
+            width: 5,
+            zIndex: 2,
+            endCapRound: true,
+          ),
+        );
+      }
     }
 
+    // Active (remaining) routes on top — zIndex: 3/4
     if (_tripRoutePoints.isNotEmpty && !isArriving) {
       final tripPoints = _getDynamicTripPoints();
       if (tripPoints.length >= 2) {
@@ -453,12 +496,14 @@ class _TripTrackingPageState extends State<TripTrackingPage>
             points: tripPoints,
             color: _tealColor,
             width: 6,
+            zIndex: 3,
+            endCapRound: true,
           ),
         );
       }
     }
 
-    if (_arrivalRoutePoints.isNotEmpty && isArriving) {
+    if (isArriving) {
       final arrivalPoints = _getDynamicArrivalPoints();
       if (arrivalPoints.length >= 2) {
         polylines.add(
@@ -467,6 +512,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
             points: arrivalPoints,
             color: const Color(0xFF2F80ED),
             width: 5,
+            zIndex: 4,
+            isDashed: true,
+            endCapRound: true,
           ),
         );
       }
@@ -476,79 +524,299 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   }
 
   List<AppLatLng> _getDynamicTripPoints() {
-    final driverPos = _driverPosition;
-    if (driverPos == null || _tripRoutePoints.isEmpty) return _tripRoutePoints;
-    int closestIdx = _findClosestPointIndex(driverPos, _tripRoutePoints);
+    if (_tripRoutePoints.isEmpty) return const [];
+    final progress = _routePositionAtProgress(
+      _tripRoutePoints,
+      _tripRouteProgress,
+    );
+    if (progress == null) return _tripRoutePoints;
 
-    final points = [driverPos, ..._tripRoutePoints.skip(closestIdx + 1)];
-    return points.length < 2 ? [driverPos, _tripRoutePoints.last] : points;
+    final points = [
+      progress.point,
+      ..._tripRoutePoints.skip(progress.segmentIndex + 1),
+    ];
+    return points.length < 2 ? [progress.point, _tripRoutePoints.last] : points;
   }
 
   List<AppLatLng> _getDynamicArrivalPoints() {
     final driverPos = _driverPosition;
     if (driverPos == null) return const [];
     if (_arrivalRoutePoints.isEmpty) {
-      return [driverPos, AppLatLng(widget.pickup.latitude, widget.pickup.longitude)];
+      return [
+        driverPos,
+        AppLatLng(widget.pickup.latitude, widget.pickup.longitude),
+      ];
     }
 
-    int closestIdx = _findClosestPointIndex(driverPos, _arrivalRoutePoints);
+    final progress = _routePositionAtProgress(
+      _arrivalRoutePoints,
+      _arrivalRouteProgress,
+    );
+    if (progress == null) return _arrivalRoutePoints;
 
-    final points = [driverPos, ..._arrivalRoutePoints.skip(closestIdx + 1)];
-    return points.length < 2 ? [driverPos, _arrivalRoutePoints.last] : points;
+    final points = [
+      progress.point,
+      ..._arrivalRoutePoints.skip(progress.segmentIndex + 1),
+    ];
+    return points.length < 2
+        ? [progress.point, _arrivalRoutePoints.last]
+        : points;
   }
 
-  int _findClosestPointIndex(AppLatLng target, List<AppLatLng> points) {
-    if (points.isEmpty) return 0;
-    int closestIdx = 0;
-    double minDistSq = double.maxFinite;
-    for (int i = 0; i < points.length; i++) {
-      final dx = target.latitude - points[i].latitude;
-      final dy = target.longitude - points[i].longitude;
-      final distSq = dx * dx + dy * dy;
-      if (distSq < minDistSq) {
-        minDistSq = distSq;
-        closestIdx = i;
+  List<AppLatLng> _getPassedTripPoints() {
+    if (_tripRoutePoints.isEmpty || _tripRouteProgress <= 0) return const [];
+    final progress = _routePositionAtProgress(
+      _tripRoutePoints,
+      _tripRouteProgress,
+    );
+    if (progress == null) return const [];
+    return [
+      ..._tripRoutePoints.take(progress.segmentIndex + 1),
+      progress.point,
+    ];
+  }
+
+  List<AppLatLng> _getPassedArrivalPoints() {
+    if (_arrivalRoutePoints.isEmpty || _arrivalRouteProgress <= 0) {
+      return const [];
+    }
+    final progress = _routePositionAtProgress(
+      _arrivalRoutePoints,
+      _arrivalRouteProgress,
+    );
+    if (progress == null) return const [];
+    return [
+      ..._arrivalRoutePoints.take(progress.segmentIndex + 1),
+      progress.point,
+    ];
+  }
+
+  AppLatLng _resolveDriverDisplayPosition(AppLatLng rawPosition) {
+    final isArriving = _trackingState == TripTrackingState.arriving;
+    final route = isArriving ? _arrivalRoutePoints : _tripRoutePoints;
+    if (route.length < 2) return rawPosition;
+
+    final snap = _findClosestRouteSnap(rawPosition, route);
+    if (snap == null || snap.distanceMeters > _offRouteThresholdMeters) {
+      return rawPosition;
+    }
+
+    if (isArriving) {
+      _arrivalRouteProgress = math.max(_arrivalRouteProgress, snap.progress);
+    } else {
+      _tripRouteProgress = math.max(_tripRouteProgress, snap.progress);
+    }
+
+    if (snap.distanceMeters <= _snapToRouteThresholdMeters) {
+      return _routePositionAtProgress(
+            route,
+            isArriving ? _arrivalRouteProgress : _tripRouteProgress,
+          )?.point ??
+          snap.point;
+    }
+
+    return rawPosition;
+  }
+
+  Future<void> _refreshArrivalRouteIfNeeded(AppLatLng rawPosition) async {
+    if (_trackingState != TripTrackingState.arriving ||
+        _arrivalRouteRefreshInProgress) {
+      return;
+    }
+
+    final now = DateTime.now();
+    final lastRefreshAt = _lastArrivalRouteRefreshAt;
+    if (lastRefreshAt != null &&
+        now.difference(lastRefreshAt) < _arrivalRouteRefreshInterval) {
+      return;
+    }
+
+    final lastOrigin = _lastArrivalRouteRefreshOrigin;
+    if (lastOrigin != null &&
+        _calculateDirectDistance(lastOrigin, rawPosition) * 1000 <
+            _arrivalRerouteMinMoveMeters) {
+      return;
+    }
+
+    final snap = _findClosestRouteSnap(rawPosition, _arrivalRoutePoints);
+    final shouldRefresh =
+        _arrivalRoutePoints.length < 2 ||
+        snap == null ||
+        snap.distanceMeters > _arrivalRerouteThresholdMeters;
+    if (!shouldRefresh) return;
+
+    _arrivalRouteRefreshInProgress = true;
+    _lastArrivalRouteRefreshAt = now;
+    _lastArrivalRouteRefreshOrigin = rawPosition;
+    try {
+      final pickup = AppLatLng(widget.pickup.latitude, widget.pickup.longitude);
+      final route = await _mapApiService.estimateRoute(
+        rawPosition.latitude,
+        rawPosition.longitude,
+        pickup.latitude,
+        pickup.longitude,
+      );
+      final points = decodePolyline(route.encodedPolyline);
+      if (!mounted ||
+          _trackingState != TripTrackingState.arriving ||
+          points.length < 2) {
+        return;
+      }
+
+      setState(() {
+        _arrivalRoutePoints
+          ..clear()
+          ..addAll(points);
+        _arrivalRouteProgress = 0;
+        final nextPosition = _resolveDriverDisplayPosition(rawPosition);
+        if (_driverPosition != null) {
+          _driverHeading = _calculateHeading(_driverPosition!, nextPosition);
+        }
+        _driverPosition = nextPosition;
+      });
+    } catch (e) {
+      debugPrint('Tracking: Failed to refresh arrival route: $e');
+    } finally {
+      _arrivalRouteRefreshInProgress = false;
+    }
+  }
+
+  _RouteProgress? _routePositionAtProgress(
+    List<AppLatLng> route,
+    double progress,
+  ) {
+    if (route.length < 2) return null;
+    final clampedProgress = progress.clamp(0, route.length - 1).toDouble();
+    final segmentIndex = math.min(clampedProgress.floor(), route.length - 2);
+    final fraction = (clampedProgress - segmentIndex).clamp(0, 1).toDouble();
+    return _RouteProgress(
+      point: _interpolate(
+        route[segmentIndex],
+        route[segmentIndex + 1],
+        fraction,
+      ),
+      segmentIndex: segmentIndex,
+      progress: segmentIndex + fraction,
+    );
+  }
+
+  _RouteProgress? _findClosestRouteSnap(
+    AppLatLng target,
+    List<AppLatLng> route,
+  ) {
+    if (route.length < 2) return null;
+
+    _RouteProgress? closest;
+    for (int i = 0; i < route.length - 1; i++) {
+      final snap = _projectPointOnSegment(target, route[i], route[i + 1], i);
+      if (closest == null || snap.distanceMeters < closest.distanceMeters) {
+        closest = snap;
       }
     }
-    return closestIdx;
+    return closest;
   }
 
-  void _fitMapToVisibleRoute() {
+  _RouteProgress _projectPointOnSegment(
+    AppLatLng target,
+    AppLatLng start,
+    AppLatLng end,
+    int segmentIndex,
+  ) {
+    final metersPerLat = 111320.0;
+    final metersPerLng = 111320.0 * math.cos(target.latitude * math.pi / 180);
+    final ax = (start.longitude - target.longitude) * metersPerLng;
+    final ay = (start.latitude - target.latitude) * metersPerLat;
+    final bx = (end.longitude - target.longitude) * metersPerLng;
+    final by = (end.latitude - target.latitude) * metersPerLat;
+    final abx = bx - ax;
+    final aby = by - ay;
+    final abLengthSquared = abx * abx + aby * aby;
+    final fraction = abLengthSquared == 0
+        ? 0.0
+        : ((-ax * abx - ay * aby) / abLengthSquared).clamp(0, 1).toDouble();
+    final point = _interpolate(start, end, fraction);
+    final distanceMeters = _calculateDirectDistance(target, point) * 1000;
+
+    return _RouteProgress(
+      point: point,
+      segmentIndex: segmentIndex,
+      progress: segmentIndex + fraction,
+      distanceMeters: distanceMeters,
+    );
+  }
+
+  AppLatLng _interpolate(AppLatLng start, AppLatLng end, double fraction) {
+    return AppLatLng(
+      start.latitude + (end.latitude - start.latitude) * fraction,
+      start.longitude + (end.longitude - start.longitude) * fraction,
+    );
+  }
+
+  void _fitMapToVisibleRoute({bool throttled = false}) {
     if (_mapController == null || !mounted) return;
+    if (throttled) {
+      final now = DateTime.now();
+      final lastFit = _lastCameraFitAt;
+      if (lastFit != null && now.difference(lastFit) < _cameraFitInterval) {
+        return;
+      }
+      _lastCameraFitAt = now;
+    }
 
     final driverPosition = _driverPosition;
-    final pickupPos = AppLatLng(widget.pickup.latitude, widget.pickup.longitude);
+    final pickupPos = AppLatLng(
+      widget.pickup.latitude,
+      widget.pickup.longitude,
+    );
     final destination = widget.destination;
 
     List<AppLatLng> focusPoints = [];
-    if (_trackingState == TripTrackingState.arriving && driverPosition != null) {
+    if (_trackingState == TripTrackingState.arriving &&
+        driverPosition != null) {
+      // Arriving: keep driver + pickup visible
       focusPoints = [driverPosition, pickupPos];
     } else if (_trackingState == TripTrackingState.inProgress &&
         driverPosition != null &&
         destination != null) {
+      // InProgress: keep driver + destination visible (tight follow)
       focusPoints = [
         driverPosition,
         AppLatLng(destination.latitude, destination.longitude),
       ];
     } else {
       focusPoints = [pickupPos];
-      if (destination != null) focusPoints.add(AppLatLng(destination.latitude, destination.longitude));
+      if (destination != null) {
+        focusPoints.add(AppLatLng(destination.latitude, destination.longitude));
+      }
       if (driverPosition != null) focusPoints.add(driverPosition);
     }
 
     if (focusPoints.length < 2) {
-      if (focusPoints.length == 1 && _mapController != null) {
-        unawaited(
-          _mapController!.animateCamera(
-            AppCameraPosition(target: focusPoints.first, zoom: 15),
-          ),
-        );
+      if (focusPoints.length == 1) {
+        final p = focusPoints.first;
+        // Create a small bounding box around the single point to force bounds padding calculations
+        focusPoints = [
+          AppLatLng(p.latitude - 0.001, p.longitude - 0.001),
+          AppLatLng(p.latitude + 0.001, p.longitude + 0.001),
+        ];
+      } else {
+        return;
       }
-      return;
     }
 
     final bounds = _boundsFor(focusPoints);
-    unawaited(_mapController!.animateCameraToBounds(bounds.$1, bounds.$2, 80));
+    final paddingVal = _trackingState == TripTrackingState.inProgress ? 60.0 : 80.0;
+    unawaited(
+      _mapController!.animateCameraToBounds(
+        bounds.$1,
+        bounds.$2,
+        paddingVal,
+        top: 130,
+        bottom: 320,
+        left: 24,
+        right: 24,
+      ),
+    );
   }
 
   (AppLatLng, AppLatLng) _boundsFor(List<AppLatLng> points) {
@@ -589,13 +857,16 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                 const SizedBox(width: 12),
                 Expanded(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(30),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.12),
+                          color: Colors.black.withValues(alpha: 0.12),
                           blurRadius: 16,
                           offset: const Offset(0, 4),
                         ),
@@ -611,8 +882,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                             _currentTripStatus == 'ARRIVED'
                                 ? 'Tài xế đã đến điểm đón'
                                 : isArriving
-                                    ? 'Tài xế đang đến • ${_getArrivalDurationMinutes()} phút'
-                                    : 'Đang di chuyển • ${_getTripDurationMinutes()} phút',
+                                ? 'Tài xế đang đến • ${_getArrivalDurationMinutes()} phút'
+                                : 'Đang di chuyển • ${_getTripDurationMinutes()} phút',
                             style: const TextStyle(
                               fontWeight: FontWeight.w800,
                               fontSize: 13,
@@ -628,20 +899,26 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                 const SizedBox(width: 12),
                 const Opacity(
                   opacity: 0,
-                  child: _CircleIconButton(icon: Icons.arrow_back, onPressed: null),
+                  child: _CircleIconButton(
+                    icon: Icons.arrow_back,
+                    onPressed: null,
+                  ),
                 ),
               ],
             ),
             if (!isArriving && widget.destination != null) ...[
               const SizedBox(height: 12),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
+                      color: Colors.black.withValues(alpha: 0.08),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
@@ -650,7 +927,11 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.location_on_rounded, color: Colors.redAccent, size: 18),
+                    const Icon(
+                      Icons.location_on_rounded,
+                      color: Colors.redAccent,
+                      size: 18,
+                    ),
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(
@@ -682,7 +963,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         decoration: const BoxDecoration(
           color: Colors.red,
           shape: BoxShape.circle,
-          boxShadow: [BoxShadow(color: Colors.redAccent, blurRadius: 4, spreadRadius: 2)],
+          boxShadow: [
+            BoxShadow(color: Colors.redAccent, blurRadius: 4, spreadRadius: 2),
+          ],
         ),
       ),
     );
@@ -704,7 +987,11 @@ class _TripTrackingPageState extends State<TripTrackingPage>
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
           boxShadow: [
-            BoxShadow(color: Colors.black12, blurRadius: 24, offset: Offset(0, -10)),
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 24,
+              offset: Offset(0, -10),
+            ),
           ],
         ),
         child: Column(
@@ -714,7 +1001,10 @@ class _TripTrackingPageState extends State<TripTrackingPage>
               width: 40,
               height: 4,
               margin: const EdgeInsets.only(bottom: 24),
-              decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(2)),
+              decoration: BoxDecoration(
+                color: Colors.grey[200],
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
             if (!isArriving) ...[
               Row(
@@ -722,15 +1012,25 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                 children: [
                   const Row(
                     children: [
-                      Icon(Icons.check_circle_rounded, color: _tealColor, size: 22),
+                      Icon(
+                        Icons.check_circle_rounded,
+                        color: _tealColor,
+                        size: 22,
+                      ),
                       SizedBox(width: 10),
                       Text(
                         'Bạn đang đi đúng lộ trình',
-                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: Colors.black87),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                          color: Colors.black87,
+                        ),
                       ),
                     ],
                   ),
-                  _SosButton(onTap: () => _showMessage('Đã gửi tín hiệu SOS khẩn cấp!')),
+                  _SosButton(
+                    onTap: () => _showMessage('Đã gửi tín hiệu SOS khẩn cấp!'),
+                  ),
                 ],
               ),
               const SizedBox(height: 24),
@@ -742,24 +1042,47 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                     CircleAvatar(
                       radius: 30,
                       backgroundColor: Colors.grey[200],
-                      backgroundImage: offer?.driverAvatarUrl != null ? NetworkImage(offer!.driverAvatarUrl!) : null,
-                      child: offer?.driverAvatarUrl == null ? const Icon(Icons.person, size: 30, color: Colors.grey) : null,
+                      backgroundImage: offer?.driverAvatarUrl != null
+                          ? NetworkImage(offer!.driverAvatarUrl!)
+                          : null,
+                      child: offer?.driverAvatarUrl == null
+                          ? const Icon(
+                              Icons.person,
+                              size: 30,
+                              color: Colors.grey,
+                            )
+                          : null,
                     ),
                     Positioned(
                       bottom: 0,
                       right: 0,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(12),
-                          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)],
+                          boxShadow: const [
+                            BoxShadow(color: Colors.black12, blurRadius: 4),
+                          ],
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.star_rounded, color: Colors.amber, size: 14),
-                            Text(offer == null ? ' --' : ' ${offer.rating}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+                            const Icon(
+                              Icons.star_rounded,
+                              color: Colors.amber,
+                              size: 14,
+                            ),
+                            Text(
+                              offer == null ? ' --' : ' ${offer.rating}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -771,19 +1094,55 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(offer?.driverName ?? 'Tài xế SafeRide', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFF1A1A1A))),
+                      Text(
+                        offer?.driverName ?? 'Tài xế SafeRide',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF1A1A1A),
+                        ),
+                      ),
                       const SizedBox(height: 4),
-                      Text(vehicle == null ? 'Đang cập nhật xe' : '${vehicle.name} - ${vehicle.color}', style: TextStyle(color: Colors.grey[600], fontSize: 13, fontWeight: FontWeight.w500)),
+                      Text(
+                        vehicle == null
+                            ? 'Đang cập nhật xe'
+                            : '${vehicle.name} - ${vehicle.color}',
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(color: const Color(0xFFF2F4F7), borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF2F4F7),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   child: Column(
                     children: [
-                      Text(plateParts.isNotEmpty ? plateParts.first.trim() : '--', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF667085))),
-                      Text(plateParts.length > 1 ? plateParts.last.trim() : '--', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFF1D2939))),
+                      Text(
+                        plateParts.isNotEmpty ? plateParts.first.trim() : '--',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF667085),
+                        ),
+                      ),
+                      Text(
+                        plateParts.length > 1 ? plateParts.last.trim() : '--',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF1D2939),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -793,7 +1152,14 @@ class _TripTrackingPageState extends State<TripTrackingPage>
             if (isArriving) ...[
               Row(
                 children: [
-                  Expanded(child: _ActionButton(icon: Icons.chat_bubble_rounded, label: 'Nhắn tin', onPressed: () => _showMessage('Chức năng nhắn tin đang phát triển'))),
+                  Expanded(
+                    child: _ActionButton(
+                      icon: Icons.chat_bubble_rounded,
+                      label: 'Nhắn tin',
+                      onPressed: () =>
+                          _showMessage('Chức năng nhắn tin đang phát triển'),
+                    ),
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     flex: 2,
@@ -801,27 +1167,89 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                       onPressed: () => _showMessage('Đang kết nối cuộc gọi...'),
                       icon: const Icon(Icons.phone_in_talk_rounded),
                       label: const Text('Gọi điện'),
-                      style: ElevatedButton.styleFrom(backgroundColor: _tealColor, foregroundColor: Colors.white, elevation: 0, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), textStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _tealColor,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        textStyle: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
-                  _SosButton(isCircle: true, onTap: () => _showMessage('Đã gửi tín hiệu SOS khẩn cấp!')),
+                  _SosButton(
+                    isCircle: true,
+                    onTap: () => _showMessage('Đã gửi tín hiệu SOS khẩn cấp!'),
+                  ),
                 ],
               ),
               const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  InkWell(onTap: _showShareModal, borderRadius: BorderRadius.circular(8), child: const Padding(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4), child: Row(children: [Icon(Icons.share_outlined, color: Colors.black54, size: 20), SizedBox(width: 8), Text('Chia sẻ', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 14))]))),
-                  TextButton(onPressed: () => handleBookingBack(context, booking: widget.booking), child: const Text('Hủy chuyến', style: TextStyle(color: Color(0xFFE53935), fontWeight: FontWeight.w700, fontSize: 14))),
+                  InkWell(
+                    onTap: _showShareModal,
+                    borderRadius: BorderRadius.circular(8),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.share_outlined,
+                            color: Colors.black54,
+                            size: 20,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Chia sẻ',
+                            style: TextStyle(
+                              color: Colors.black87,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () =>
+                        handleBookingBack(context, booking: widget.booking),
+                    child: const Text(
+                      'Hủy chuyến',
+                      style: TextStyle(
+                        color: Color(0xFFE53935),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ] else ...[
               Row(
                 children: [
-                  Expanded(child: _CircleActionButton(icon: Icons.share_rounded, onPressed: _showShareModal, label: 'Chia sẻ')),
+                  Expanded(
+                    child: _CircleActionButton(
+                      icon: Icons.share_rounded,
+                      onPressed: _showShareModal,
+                      label: 'Chia sẻ',
+                    ),
+                  ),
                   const SizedBox(width: 16),
-                  Expanded(child: _CircleActionButton(icon: Icons.phone_in_talk_rounded, onPressed: () {}, label: 'Gọi điện')),
+                  Expanded(
+                    child: _CircleActionButton(
+                      icon: Icons.phone_in_talk_rounded,
+                      onPressed: () {},
+                      label: 'Gọi điện',
+                    ),
+                  ),
                 ],
               ),
               if (_currentTripStatus == 'IN_PROGRESS') ...[
@@ -830,9 +1258,26 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     onPressed: _isCompletingTrip ? null : _completeTrip,
-                    icon: _isCompletingTrip ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.check_circle_rounded),
-                    label: Text(_isCompletingTrip ? 'Đang kết thúc...' : 'Kết thúc chuyến'),
-                    style: ElevatedButton.styleFrom(backgroundColor: _tealColor, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                    icon: _isCompletingTrip
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.check_circle_rounded),
+                    label: Text(
+                      _isCompletingTrip
+                          ? 'Đang kết thúc...'
+                          : 'Kết thúc chuyến',
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _tealColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -844,7 +1289,10 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   }
 
   void _showShareModal() {
-    showDialog(context: context, builder: (context) => const Center(child: ShareTripModal()));
+    showDialog(
+      context: context,
+      builder: (context) => const Center(child: ShareTripModal()),
+    );
   }
 
   void _startTripStatusPolling() {
@@ -860,12 +1308,18 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     final accessToken = context.read<AuthProvider>().token;
     if (accessToken == null || accessToken.isEmpty) return;
 
-    final booking = await context.read<BookingProvider>().refreshActiveBookingDetails(accessToken, bookingId: widget.booking.bookingId);
+    final booking = await context
+        .read<BookingProvider>()
+        .refreshActiveBookingDetails(
+          accessToken,
+          bookingId: widget.booking.bookingId,
+        );
     if (!mounted || booking == null) return;
 
     if (_isCompletedStatus(booking.tripStatus)) {
       await _openSummaryPage(booking);
-    } else if (booking.tripStatus == 'CANCELLED' || booking.bookingStatus == 'Cancelled') {
+    } else if (booking.tripStatus == 'CANCELLED' ||
+        booking.bookingStatus == 'Cancelled') {
       _showMessage('Chuyến đi đã được hủy.');
       Navigator.of(context).popUntil((route) => route.isFirst);
     } else {
@@ -884,12 +1338,18 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     }
 
     setState(() => _isCompletingTrip = true);
-    final ok = await context.read<BookingProvider>().completeTrip(accessToken, tripId: tripId);
+    final ok = await context.read<BookingProvider>().completeTrip(
+      accessToken,
+      tripId: tripId,
+    );
     if (!mounted) return;
 
     setState(() => _isCompletingTrip = false);
     if (!ok) {
-      _showMessage(context.read<BookingProvider>().errorMessage ?? 'Không thể kết thúc chuyến. Vui lòng thử lại.');
+      _showMessage(
+        context.read<BookingProvider>().errorMessage ??
+            'Không thể kết thúc chuyến. Vui lòng thử lại.',
+      );
       return;
     }
 
@@ -908,7 +1368,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     _tripStatusPollingTimer?.cancel();
 
     final bookingProvider = context.read<BookingProvider>();
-    final booking = completedBooking ?? bookingProvider.activeBooking ?? widget.booking;
+    final booking =
+        completedBooking ?? bookingProvider.activeBooking ?? widget.booking;
 
     await Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
@@ -925,8 +1386,24 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   }
 
   static String _tripStatusHandlerKey(int tripId) => 'tripTracking:$tripId';
-  static String _driverLocationHandlerKey(int tripId) => 'tripTrackingLocation:$tripId';
-  static bool _isCompletedStatus(String? status) => status == 'COMPLETED' || status == '4';
+  static String _driverLocationHandlerKey(int tripId) =>
+      'tripTrackingLocation:$tripId';
+  static bool _isCompletedStatus(String? status) =>
+      status == 'COMPLETED' || status == '4';
+}
+
+class _RouteProgress {
+  final AppLatLng point;
+  final int segmentIndex;
+  final double progress;
+  final double distanceMeters;
+
+  const _RouteProgress({
+    required this.point,
+    required this.segmentIndex,
+    required this.progress,
+    this.distanceMeters = 0,
+  });
 }
 
 class _CircleIconButton extends StatelessWidget {
@@ -937,8 +1414,21 @@ class _CircleIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 10, offset: const Offset(0, 4))]),
-      child: IconButton(icon: Icon(icon, color: Colors.black87), onPressed: onPressed),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: IconButton(
+        icon: Icon(icon, color: Colors.black87),
+        onPressed: onPressed,
+      ),
     );
   }
 }
@@ -947,7 +1437,11 @@ class _ActionButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onPressed;
-  const _ActionButton({required this.icon, required this.label, required this.onPressed});
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -955,7 +1449,13 @@ class _ActionButton extends StatelessWidget {
       onPressed: onPressed,
       icon: Icon(icon, size: 20),
       label: Text(label),
-      style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFF1A1A1A), side: BorderSide(color: Colors.grey[200]!, width: 1.5), padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: const Color(0xFF1A1A1A),
+        side: BorderSide(color: Colors.grey[200]!, width: 1.5),
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+      ),
     );
   }
 }
@@ -964,7 +1464,11 @@ class _CircleActionButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;
   final String? label;
-  const _CircleActionButton({required this.icon, required this.onPressed, this.label});
+  const _CircleActionButton({
+    required this.icon,
+    required this.onPressed,
+    this.label,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -973,12 +1477,25 @@ class _CircleActionButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(30),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(color: const Color(0xFFEAF4F4), borderRadius: BorderRadius.circular(30)),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEAF4F4),
+          borderRadius: BorderRadius.circular(30),
+        ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(icon, color: const Color(0xFF006B70), size: 22),
-            if (label != null) ...[const SizedBox(width: 8), Text(label!, style: const TextStyle(color: Color(0xFF006B70), fontWeight: FontWeight.w800, fontSize: 15))],
+            if (label != null) ...[
+              const SizedBox(width: 8),
+              Text(
+                label!,
+                style: const TextStyle(
+                  color: Color(0xFF006B70),
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -996,9 +1513,29 @@ class _SosButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: isCircle ? const EdgeInsets.all(16) : const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(color: const Color(0xFFE53935), shape: isCircle ? BoxShape.circle : BoxShape.rectangle, borderRadius: isCircle ? null : BorderRadius.circular(20), boxShadow: [BoxShadow(color: const Color(0xFFE53935).withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))]),
-        child: const Text('SOS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 12)),
+        padding: isCircle
+            ? const EdgeInsets.all(16)
+            : const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE53935),
+          shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
+          borderRadius: isCircle ? null : BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFE53935).withValues(alpha: 0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: const Text(
+          'SOS',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+            fontSize: 12,
+          ),
+        ),
       ),
     );
   }
@@ -1013,27 +1550,101 @@ class ShareTripModal extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.all(28),
         padding: const EdgeInsets.all(28),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 30, offset: const Offset(0, 10))]),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.15),
+              blurRadius: 30,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Chia sẻ lộ trình', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF1A1A1A))),
+            const Text(
+              'Chia sẻ lộ trình',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF1A1A1A),
+              ),
+            ),
             const SizedBox(height: 16),
-            const Text('Gửi link bên dưới cho người thân để theo dõi chuyến đi của bạn theo thời gian thực.', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF667085), fontSize: 15, fontWeight: FontWeight.w500, height: 1.5)),
+            const Text(
+              'Gửi link bên dưới cho người thân để theo dõi chuyến đi của bạn theo thời gian thực.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Color(0xFF667085),
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                height: 1.5,
+              ),
+            ),
             const SizedBox(height: 28),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(color: const Color(0xFFF2F4F7), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFEAECF0))),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF2F4F7),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFEAECF0)),
+              ),
               child: Row(
                 children: [
-                  const Expanded(child: Text('saferide.vn/track/SR94210', style: TextStyle(fontSize: 15, color: Color(0xFF1D2939), fontWeight: FontWeight.w600))),
+                  const Expanded(
+                    child: Text(
+                      'saferide.vn/track/SR94210',
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: Color(0xFF1D2939),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
                   const SizedBox(width: 8),
-                  InkWell(onTap: () { Clipboard.setData(const ClipboardData(text: 'saferide.vn/track/SR94210')); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã sao chép liên kết'), behavior: SnackBarBehavior.floating)); }, child: const Icon(Icons.copy_rounded, size: 20, color: Color(0xFF006B70))),
+                  InkWell(
+                    onTap: () {
+                      Clipboard.setData(
+                        const ClipboardData(text: 'saferide.vn/track/SR94210'),
+                      );
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Đã sao chép liên kết'),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    },
+                    child: const Icon(
+                      Icons.copy_rounded,
+                      size: 20,
+                      color: Color(0xFF006B70),
+                    ),
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 28),
-            SizedBox(width: double.infinity, child: ElevatedButton(onPressed: () => Navigator.pop(context), style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF006B70), foregroundColor: Colors.white, elevation: 0, padding: const EdgeInsets.symmetric(vertical: 18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))), child: const Text('Đóng', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)))),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF006B70),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                ),
+                child: const Text(
+                  'Đóng',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                ),
+              ),
+            ),
           ],
         ),
       ),
