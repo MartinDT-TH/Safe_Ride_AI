@@ -192,7 +192,8 @@ public sealed class BookingTests
                 new VehicleLicenseRequirementService(),
                 new RealtimeNotificationServiceFake(),
                 Repository,
-                new MatchingPolicyProviderFake());
+                new MatchingPolicyProviderFake(),
+                new BookingLifecycleJobSchedulerFake());
         }
 
         public static readonly Guid CustomerId =
@@ -554,5 +555,13 @@ public sealed class BookingTests
             BookingExpiredEvent notification,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
+    }
+
+    private sealed class BookingLifecycleJobSchedulerFake : IBookingLifecycleJobScheduler
+    {
+        public void ScheduleExpandRadius(long bookingId, TimeSpan delay) { }
+        public void ScheduleExpireBooking(long bookingId, TimeSpan delay) { }
+        public Task CancelJobsForBookingAsync(long bookingId, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
     }
 }

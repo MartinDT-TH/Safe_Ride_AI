@@ -68,6 +68,21 @@ public sealed class ResilientRedisServiceTests
         Assert.Equal(2, count);
     }
 
+    [Fact]
+    public async Task GeoRemoveAsync_RemovesMemberFromMirroredStores()
+    {
+        var primary = new RedisServiceStub();
+        var service = CreateService(primary);
+        await service.GeoAddAsync("geo", 108.0, 16.0, "driver-1");
+
+        await service.GeoRemoveAsync("geo", "driver-1");
+
+        var serviceResults = await service.GeoRadiusAsync("geo", 108.0, 16.0, 5, 10);
+        var primaryResults = await primary.GeoRadiusAsync("geo", 108.0, 16.0, 5, 10);
+        Assert.DoesNotContain("driver-1", serviceResults);
+        Assert.DoesNotContain("driver-1", primaryResults);
+    }
+
     private static ResilientRedisService CreateService(
         RedisServiceStub primary)
     {
@@ -131,6 +146,15 @@ public sealed class ResilientRedisServiceTests
         {
             BeforeCall();
             return _storage.GeoAddAsync(key, longitude, latitude, member);
+        }
+
+        public Task GeoRemoveAsync(
+            string key,
+            string member,
+            CancellationToken cancellationToken = default)
+        {
+            BeforeCall();
+            return _storage.GeoRemoveAsync(key, member, cancellationToken);
         }
 
         public Task<IReadOnlyList<string>> GeoRadiusAsync(
