@@ -63,7 +63,31 @@ class _LoginPageState extends State<LoginPage> {
               children: [
                 const SizedBox(height: 80),
                 
-                // ... (Logo UI)
+                Container(
+                  width: 150,
+                  height: 150,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withValues(alpha: 0.2),
+                        spreadRadius: 2,
+                        blurRadius: 10,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Image.network(AppConfig.logoUrl, height: 60),
+                        const SizedBox(height: 8),
+                      ],
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 32),
 
                 const Text(
