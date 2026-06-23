@@ -332,7 +332,10 @@ public sealed class BookingMatchingService : IBookingMatchingService
                 RedisKeys.DriverOnline(driverId));
             var status = await _redisService.GetAsync(
                 RedisKeys.DriverStatus(driverId));
+            var location = await _redisService.GetAsync(
+                RedisKeys.DriverLocation(driverId));
             if (online is not null
+                && location is not null
                 && string.Equals(
                     status,
                     DriverWorkStatus.Online.ToString(),

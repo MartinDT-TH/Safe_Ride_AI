@@ -23,6 +23,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
     private readonly IRealtimeNotificationService _realtimeNotificationService;
     private readonly IBookingMatchingService _bookingMatchingService;
     private readonly IMatchingPolicyProvider _matchingPolicyProvider;
+    private readonly IBookingLifecycleJobScheduler _jobScheduler;
 
     public BookingAssignmentService(
         ApplicationDbContext dbContext,
@@ -32,7 +33,8 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         IRedisService redisService,
         IRealtimeNotificationService realtimeNotificationService,
         IBookingMatchingService bookingMatchingService,
-        IMatchingPolicyProvider matchingPolicyProvider)
+        IMatchingPolicyProvider matchingPolicyProvider,
+        IBookingLifecycleJobScheduler jobScheduler)
     {
         _dbContext = dbContext;
         _dateTimeProvider = dateTimeProvider;
@@ -42,6 +44,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         _realtimeNotificationService = realtimeNotificationService;
         _bookingMatchingService = bookingMatchingService;
         _matchingPolicyProvider = matchingPolicyProvider;
+        _jobScheduler = jobScheduler;
     }
 
     public async Task<CreateBookingResponse> ConfirmDriverAsync(
@@ -191,6 +194,9 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         await _dbContext.Trips.AddAsync(trip, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+
+        // Cancel scheduled Hangfire lifecycle jobs — booking is no longer Searching.
+        await _jobScheduler.CancelJobsForBookingAsync(booking.BookingId, cancellationToken);
 
         await CacheTripLiveAsync(trip, booking.CustomerId);
         await RemoveMatchingKeysAsync(booking.BookingId, offer.DriverId);

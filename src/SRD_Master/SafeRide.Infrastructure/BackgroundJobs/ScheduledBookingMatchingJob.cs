@@ -65,6 +65,19 @@ public sealed class ScheduledBookingMatchingJob : BackgroundService
                         booking.BookingId,
                         cancellationToken);
                     await unitOfWork.SaveChangesAsync(cancellationToken);
+
+                    // Schedule Hangfire delayed jobs for lifecycle management.
+                    var options = scope.ServiceProvider
+                        .GetRequiredService<IMatchingPolicyProvider>().Current;
+                    var jobScheduler = scope.ServiceProvider
+                        .GetRequiredService<IBookingLifecycleJobScheduler>();
+                    jobScheduler.ScheduleExpandRadius(
+                        booking.BookingId,
+                        TimeSpan.FromMinutes(options.ExpandAfterMinutes));
+                    jobScheduler.ScheduleExpireBooking(
+                        booking.BookingId,
+                        TimeSpan.FromMinutes(options.BookingExpireAfterMinutes));
+
                     await realtimeNotificationService.PublishBookingStatusChangedAsync(
                         new BookingStatusChangedEvent(
                             booking.BookingId,
