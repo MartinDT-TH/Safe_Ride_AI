@@ -73,8 +73,8 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
   }
 
   Future<gmap.BitmapDescriptor> _createMarkerImage(AppMarkerType type) async {
-    final double width = 72.0;
-    final double height = type == AppMarkerType.driver ? 72.0 : 90.0;
+    final double width = type == AppMarkerType.driver ? 56.0 : 56.0;
+    final double height = type == AppMarkerType.driver ? 56.0 : 72.0;
 
     final ui.PictureRecorder recorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(recorder);
@@ -87,40 +87,80 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
       case AppMarkerType.pickup:
         color = const Color(0xFF1565C0);
         iconData = Icons.person_pin_circle_rounded;
-        iconSize = 36.0;
+        iconSize = 28.0;
         break;
       case AppMarkerType.destination:
         color = const Color(0xFFC62828);
         iconData = Icons.flag_rounded;
-        iconSize = 32.0;
+        iconSize = 24.0;
         break;
       case AppMarkerType.driver:
         color = const Color(0xFF006B70);
         iconData = Icons.directions_car_filled_rounded;
-        iconSize = 36.0;
+        iconSize = 28.0;
         break;
       case AppMarkerType.custom:
         color = Colors.red;
         iconData = Icons.location_on;
-        iconSize = 36.0;
+        iconSize = 28.0;
         break;
     }
 
     final shadowPaint = Paint()
       ..color = Colors.black.withValues(alpha: 0.3)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
-    canvas.drawCircle(const Offset(36, 36), 26, shadowPaint);
 
     final mainPaint = Paint()..color = color;
-    canvas.drawCircle(const Offset(36, 36), 26, mainPaint);
 
     if (type != AppMarkerType.driver) {
-      final path = Path()
-        ..moveTo(26, 52)
-        ..lineTo(46, 52)
-        ..lineTo(36, 76)
-        ..close();
-      canvas.drawPath(path, mainPaint);
+      final double radius = (width - 12.0) / 2; // leave margin for shadow
+      final double xc = width / 2;
+      final double yc = radius + 6.0; // margin at top
+      final double yp = height - 8.0; // margin at bottom
+
+      final double d = yp - yc;
+      if (d > radius) {
+        final double cosAlpha = radius / d;
+        final double sinAlpha = sqrt(1.0 - cosAlpha * cosAlpha);
+
+        final double xtLeft = xc - radius * sinAlpha;
+        final double xtRight = xc + radius * sinAlpha;
+        final double yt = yc + radius * cosAlpha;
+
+        final path = Path();
+        path.moveTo(xtLeft, yt);
+        path.arcToPoint(
+          Offset(xtRight, yt),
+          radius: Radius.circular(radius),
+          largeArc: true,
+          clockwise: true,
+        );
+        path.lineTo(xc, yp);
+        path.lineTo(xtLeft, yt);
+        path.close();
+
+        canvas.drawPath(path, shadowPaint);
+        canvas.drawPath(path, mainPaint);
+      } else {
+        // Fallback
+        final path = Path();
+        path.moveTo(6.0, yc);
+        path.arcToPoint(
+          Offset(width - 6.0, yc),
+          radius: Radius.circular(radius),
+          clockwise: true,
+        );
+        path.quadraticBezierTo(width - 6.0, height * 0.7, width / 2, height - 8.0);
+        path.quadraticBezierTo(6.0, height * 0.7, 6.0, yc);
+        path.close();
+
+        canvas.drawPath(path, shadowPaint);
+        canvas.drawPath(path, mainPaint);
+      }
+    } else {
+      // Driver circular pin
+      canvas.drawCircle(Offset(width / 2, height / 2), 20, shadowPaint);
+      canvas.drawCircle(Offset(width / 2, height / 2), 20, mainPaint);
     }
 
     final textPainter = TextPainter(textDirection: TextDirection.ltr);
@@ -134,8 +174,10 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
     );
     textPainter.layout();
 
-    final double textX = 36 - (textPainter.width / 2);
-    final double textY = 36 - (textPainter.height / 2);
+    final double centerX = 28.0;
+    final double centerY = 28.0;
+    final double textX = centerX - (textPainter.width / 2);
+    final double textY = centerY - (textPainter.height / 2);
     textPainter.paint(canvas, Offset(textX, textY));
 
     final ui.Picture picture = recorder.endRecording();
@@ -263,7 +305,7 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
 
       final anchor = m.markerType == AppMarkerType.driver
           ? const Offset(0.5, 0.5)
-          : const Offset(0.5, 0.844);
+          : const Offset(0.5, 0.889);
 
       return gmap.Marker(
         markerId: gmap.MarkerId(m.id),
@@ -390,40 +432,51 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
 // Custom Marker Widgets
 // ---------------------------------------------------------------------------
 
+class _TeardropPinWidget extends StatelessWidget {
+  final Color color;
+  final IconData icon;
+
+  const _TeardropPinWidget({required this.color, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    const double width = 32.0;
+    const double height = 44.0;
+
+    return CustomPaint(
+      size: const Size(width, height),
+      painter: _PinPainter(color),
+      child: SizedBox(
+        width: width,
+        height: height,
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: SizedBox(
+            width: width,
+            height: width, // 32x32 area for the circle
+            child: Center(
+              child: Icon(
+                icon,
+                color: Colors.white,
+                size: 18,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Blue pin for pickup location
 class _PickupMarkerWidget extends StatelessWidget {
   const _PickupMarkerWidget();
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: const Color(0xFF1565C0),
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: const Icon(
-            Icons.person_pin_circle_rounded,
-            color: Colors.white,
-            size: 22,
-          ),
-        ),
-        CustomPaint(
-          size: const Size(12, 7),
-          painter: _DownArrowPainter(const Color(0xFF1565C0)),
-        ),
-      ],
+    return const _TeardropPinWidget(
+      color: Color(0xFF1565C0),
+      icon: Icons.person_pin_circle_rounded,
     );
   }
 }
@@ -434,30 +487,9 @@ class _DestinationMarkerWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: const Color(0xFFC62828),
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: const Icon(Icons.flag_rounded, color: Colors.white, size: 20),
-        ),
-        CustomPaint(
-          size: const Size(12, 7),
-          painter: _DownArrowPainter(const Color(0xFFC62828)),
-        ),
-      ],
+    return const _TeardropPinWidget(
+      color: Color(0xFFC62828),
+      icon: Icons.flag_rounded,
     );
   }
 }
@@ -509,24 +541,66 @@ class _DefaultPinWidget extends StatelessWidget {
   }
 }
 
-/// Triangle "tip" at the bottom of circular pins
-class _DownArrowPainter extends CustomPainter {
+class _PinPainter extends CustomPainter {
   final Color color;
-  const _DownArrowPainter(this.color);
+  const _PinPainter(this.color);
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()..color = color;
-    final path = Path()
-      ..moveTo(0, 0)
-      ..lineTo(size.width, 0)
-      ..lineTo(size.width / 2, size.height)
-      ..close();
-    canvas.drawPath(path, paint);
+    final shadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.3)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+
+    final double width = size.width;
+    final double height = size.height;
+    final double radius = width / 2;
+    final double xc = radius;
+    final double yc = radius;
+    final double yp = height;
+
+    final double d = yp - yc;
+    if (d > radius) {
+      final double cosAlpha = radius / d;
+      final double sinAlpha = sqrt(1.0 - cosAlpha * cosAlpha);
+
+      final double xtLeft = xc - radius * sinAlpha;
+      final double xtRight = xc + radius * sinAlpha;
+      final double yt = yc + radius * cosAlpha;
+
+      final path = Path();
+      path.moveTo(xtLeft, yt);
+      path.arcToPoint(
+        Offset(xtRight, yt),
+        radius: Radius.circular(radius),
+        largeArc: true,
+        clockwise: true,
+      );
+      path.lineTo(xc, yp);
+      path.lineTo(xtLeft, yt);
+      path.close();
+
+      canvas.drawPath(path, shadowPaint);
+      canvas.drawPath(path, paint);
+    } else {
+      final path = Path();
+      path.moveTo(0, radius);
+      path.arcToPoint(
+        Offset(width, radius),
+        radius: Radius.circular(radius),
+        clockwise: true,
+      );
+      path.quadraticBezierTo(width, height * 0.7, width / 2, height);
+      path.quadraticBezierTo(0, height * 0.7, 0, radius);
+      path.close();
+
+      canvas.drawPath(path, shadowPaint);
+      canvas.drawPath(path, paint);
+    }
   }
 
   @override
-  bool shouldRepaint(_DownArrowPainter old) => old.color != color;
+  bool shouldRepaint(_PinPainter old) => old.color != color;
 }
 
 // ---------------------------------------------------------------------------

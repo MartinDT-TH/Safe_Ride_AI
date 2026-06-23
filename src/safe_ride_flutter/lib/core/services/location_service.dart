@@ -1,3 +1,6 @@
+import 'dart:math';
+
+import 'package:flutter/cupertino.dart';
 import 'package:geocoding/geocoding.dart' as native_geo;
 import 'package:geolocator/geolocator.dart';
 
@@ -70,26 +73,69 @@ class LocationService {
       throw const LocationServiceException(LocationStrings.destinationRequired);
     }
 
+    // 1st attempt: backend API
     try {
       final locations = await _mapApiService.getGeocode(normalizedAddress);
-      if (locations.isEmpty) {
-        throw const LocationServiceException(LocationStrings.locationNotFound);
+      if (locations.isNotEmpty) {
+        final location = locations.first;
+        return BookingLocation(
+          address: location.address.isNotEmpty
+              ? location.address
+              : normalizedAddress,
+          latitude: location.latitude,
+          longitude: location.longitude,
+        );
       }
-
-      final location = locations.first;
-      return BookingLocation(
-        address: location.address.isNotEmpty
-            ? location.address
-            : normalizedAddress,
-        latitude: location.latitude,
-        longitude: location.longitude,
-      );
     } catch (_) {
-      throw const LocationServiceException(LocationStrings.locationNotFound);
+      // Backend failed or returned no results; fall through to native geocoding
     }
+
+    // 2nd attempt: native device geocoder (Android Geocoder / iOS CLGeocoder)
+    try {
+      debugPrint("native");
+      final nativeLocations =
+          await native_geo.locationFromAddress(normalizedAddress);
+      if (nativeLocations.isNotEmpty) {
+        final loc = nativeLocations.first;
+        // Reverse geocode to normalize the address text instead of returning raw coordinates or user input
+        final normalizedText = await _reverseGeocode(
+          loc.latitude,
+          loc.longitude,
+        );
+        return BookingLocation(
+          address:
+              normalizedText.isNotEmpty ? normalizedText : normalizedAddress,
+          latitude: loc.latitude,
+          longitude: loc.longitude,
+        );
+      }
+    } catch (_) {
+      // Native geocoding also failed
+    }
+
+    throw const LocationServiceException(LocationStrings.locationNotFound);
   }
 
   Future<BookingLocation> resolvePlaceId(String placeId) async {
+    if (placeId.startsWith('native:')) {
+      try {
+        final coords = placeId.replaceFirst('native:', '').split(',');
+        if (coords.length == 2) {
+          final lat = double.parse(coords[0]);
+          final lng = double.parse(coords[1]);
+          final address = await _reverseGeocode(lat, lng);
+          return BookingLocation(
+            address: address,
+            latitude: lat,
+            longitude: lng,
+          );
+        }
+      } catch (_) {
+        // Parse error, fall through to error
+      }
+      throw const LocationServiceException(LocationStrings.locationNotFound);
+    }
+
     try {
       final place = await _mapApiService.getPlaceDetail(placeId);
       return BookingLocation(
@@ -166,6 +212,7 @@ class LocationService {
   /// Fallback: convert search query into results using native geocoder.
   Future<List<PlaceAutocompleteResult>> _nativeGeocode(String query) async {
     try {
+      debugPrint("native");
       final locations = await native_geo.locationFromAddress(query);
       if (locations.isEmpty) return [];
       return await Future.wait(

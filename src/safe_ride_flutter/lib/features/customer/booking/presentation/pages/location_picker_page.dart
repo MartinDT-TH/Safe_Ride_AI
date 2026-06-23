@@ -265,6 +265,9 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                                   controller: _searchController,
                                   textInputAction: TextInputAction.search,
                                   onSubmitted: (_) => _search(),
+                                  // enableSuggestions: false, // <-- Tắt gợi ý
+                                  // autocorrect: false,        // <-- Tắt tự động sửa lỗi
+                                  // autofillHints: const [],   // <-- Tắt lưu trữ tự động điền của OS
                                   decoration: InputDecoration(
                                     hintText: _isPickup
                                         ? 'Tìm điểm đón'

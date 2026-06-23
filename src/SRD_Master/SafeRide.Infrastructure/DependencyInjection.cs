@@ -19,6 +19,7 @@ using SafeRide.Infrastructure.ExternalServices;
 using SafeRide.Infrastructure.ExternalServices.GoogleMaps;
 using SafeRide.Infrastructure.ExternalServices.OpenRouteService;
 using SafeRide.Infrastructure.ExternalServices.VietMap;
+using SafeRide.Infrastructure.ExternalServices.NoOp;
 using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
 using SafeRide.Infrastructure.Repositories;
@@ -122,11 +123,19 @@ public static class DependencyInjection
             {
                 client.Timeout = TimeSpan.FromSeconds(20);
             });
-            services.AddHttpClient<IMapGeocodingService, OpenRouteServiceGeocodingService>(client =>
+            if(!configuration.GetValue<bool>("MapServices:TurnGeocodingOffForOpenRouteServiceFallback")) 
             {
-                var timeoutSeconds = configuration.GetValue<int>("MapServices:OpenRouteService:TimeoutSeconds", 20);
-                client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
-            });
+                services.AddHttpClient<IMapGeocodingService, OpenRouteServiceGeocodingService>(client =>
+                {
+                    var timeoutSeconds = configuration.GetValue<int>("MapServices:OpenRouteService:TimeoutSeconds", 20);
+                    client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+                });
+            }
+            else
+            {
+                services.AddSingleton<IMapGeocodingService, NoOpGeocodingService>();
+            }
+            
         }
         else if (string.Equals(primaryMapProvider, "GoogleMaps", StringComparison.OrdinalIgnoreCase))
         {
