@@ -30,6 +30,11 @@ namespace SafeRide.Infrastructure.Redis
             double latitude,
             string member);
 
+        Task GeoRemoveAsync(
+            string key,
+            string member,
+            CancellationToken cancellationToken = default);
+
         Task<IReadOnlyList<string>> GeoRadiusAsync(
             string key,
             double longitude,

@@ -40,6 +40,12 @@ public static class RedisKeys
     public static string BookingRadiusExpandedNotified(long bookingId) =>
         $"sr:booking:radius-expanded-notified:{bookingId}";
 
+    public static string HangfireExpandRadiusJobId(long bookingId) =>
+        $"sr:booking:hf-expand-job:{bookingId}";
+
+    public static string HangfireExpireBookingJobId(long bookingId) =>
+        $"sr:booking:hf-expire-job:{bookingId}";
+
     public static string TripLive(long tripId) =>
         $"sr:trip:live:{tripId}";
 

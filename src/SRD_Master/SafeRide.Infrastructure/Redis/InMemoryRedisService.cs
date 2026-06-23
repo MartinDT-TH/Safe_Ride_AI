@@ -82,6 +82,20 @@ public sealed class InMemoryRedisService : IRedisService
         return Task.CompletedTask;
     }
 
+    public Task GeoRemoveAsync(
+        string key,
+        string member,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_geoEntries.TryGetValue(key, out var members))
+        {
+            members.TryRemove(member, out _);
+        }
+
+        return Task.CompletedTask;
+    }
+
     public Task<IReadOnlyList<string>> GeoRadiusAsync(
         string key,
         double longitude,
