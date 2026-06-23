@@ -3,6 +3,9 @@ import 'package:flutter/foundation.dart';
 
 import '../constants/app_strings.dart';
 import 'auth_token_refresh_interceptor.dart';
+import '../../dependency_injection/injection.dart';
+import '../services/connectivity_service.dart';
+import '../widgets/app_snackbar.dart';
 
 class DioClient {
   factory DioClient() => _instance;
@@ -36,6 +39,8 @@ class DioClient {
       AuthTokenRefreshInterceptor(refreshClient: _refreshDio),
     );
 
+    dio.interceptors.add(DioErrorInterceptor());
+
     if (kDebugMode) {
       dio.interceptors.add(
         LogInterceptor(
@@ -48,5 +53,40 @@ class DioClient {
     }
 
     return dio;
+  }
+}
+
+class DioErrorInterceptor extends Interceptor {
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) {
+    _handleError(err);
+    super.onError(err, handler);
+  }
+
+  void _handleError(DioException err) {
+    final isServerError = err.type == DioExceptionType.connectionTimeout ||
+        err.type == DioExceptionType.receiveTimeout ||
+        err.type == DioExceptionType.sendTimeout ||
+        err.type == DioExceptionType.connectionError ||
+        (err.response != null && err.response!.statusCode != null && err.response!.statusCode! >= 500);
+
+    if (isServerError) {
+      // Use getIt to get ConnectivityService and show the notification globally
+      try {
+        final connectivityService =
+            getIt<ConnectivityService>();
+        
+        AppSnackBar.showGlobal(
+          connectivityService.messengerKey,
+          message: 'Lỗi kết nối máy chủ. Vui lòng kiểm tra lại hoặc tải lại.',
+          type: AppSnackBarType.serverError,
+          title: 'Lỗi máy chủ',
+          actionLabel: 'Đã hiểu',
+          onAction: () {},
+        );
+      } catch (e) {
+        debugPrint('Cannot show global server error: $e');
+      }
+    }
   }
 }

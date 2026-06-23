@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 
+import '../widgets/app_snackbar.dart';
+
 class ConnectivityService {
   final Connectivity _connectivity = Connectivity();
   StreamSubscription<List<ConnectivityResult>>? _subscription;
@@ -46,44 +48,22 @@ class ConnectivityService {
   }
 
   void _showNoInternetSnackBar() {
-    final state = messengerKey.currentState;
-    if (state == null) return;
-
-    state.hideCurrentSnackBar();
-    state.showSnackBar(
-      const SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.wifi_off, color: Colors.white),
-            SizedBox(width: 12),
-            Text('Không có kết nối internet'),
-          ],
-        ),
-        backgroundColor: Colors.redAccent,
-        duration: Duration(days: 1), // Keep it until online
-        behavior: SnackBarBehavior.floating,
-      ),
+    AppSnackBar.showGlobal(
+      messengerKey,
+      message: 'Không có kết nối internet',
+      type: AppSnackBarType.error,
+      title: 'Mất kết nối',
+      duration: const Duration(days: 1), // Keep it until online
     );
   }
 
   void _showBackOnlineSnackBar() {
-    final state = messengerKey.currentState;
-    if (state == null) return;
-
-    state.hideCurrentSnackBar();
-    state.showSnackBar(
-      const SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.wifi, color: Colors.white),
-            SizedBox(width: 12),
-            Text('Đã khôi phục kết nối internet'),
-          ],
-        ),
-        backgroundColor: Colors.green,
-        duration: Duration(seconds: 3),
-        behavior: SnackBarBehavior.floating,
-      ),
+    AppSnackBar.showGlobal(
+      messengerKey,
+      message: 'Đã khôi phục kết nối internet',
+      type: AppSnackBarType.success,
+      title: 'Đã trực tuyến',
+      duration: const Duration(seconds: 3),
     );
   }
 

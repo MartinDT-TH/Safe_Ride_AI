@@ -238,7 +238,73 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     return Consumer<HomeProvider>(
       builder: (_, provider, child) {
         if (provider.isLoading && provider.recentTrips.isEmpty) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(child: CircularProgressIndicator(color: Color(0xFF006B70)));
+        }
+
+        if (provider.errorMessage != null && provider.recentTrips.isEmpty) {
+          return RefreshIndicator(
+            onRefresh: () => provider.loadHomeData(),
+            color: const Color(0xFF006B70),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.cloud_off_rounded,
+                              size: 80,
+                              color: Colors.grey,
+                            ),
+                            const SizedBox(height: 16),
+                            const Text(
+                              'Lỗi kết nối máy chủ',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1A1A1A),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              provider.errorMessage!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 15, color: Colors.black54),
+                            ),
+                            const SizedBox(height: 32),
+                            ElevatedButton.icon(
+                              onPressed: () => provider.loadHomeData(),
+                              icon: const Icon(Icons.refresh_rounded),
+                              label: const Text(
+                                'Thử lại',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF006B70),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 32, vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                elevation: 0,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          );
         }
 
         return RefreshIndicator(

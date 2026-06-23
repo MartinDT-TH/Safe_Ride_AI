@@ -158,24 +158,67 @@ class _MyVehiclesPageState extends State<MyVehiclesPage> {
     }
 
     if (provider.errorMessage != null && provider.vehicles.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                provider.errorMessage!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Color(0xFF6B7280)),
+      return RefreshIndicator(
+        onRefresh: provider.loadVehicles,
+        color: const Color(0xFF006B70),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.cloud_off_rounded,
+                          size: 80,
+                          color: Colors.grey,
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Lỗi kết nối máy chủ',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1A1A1A),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          provider.errorMessage!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 15, color: Colors.black54),
+                        ),
+                        const SizedBox(height: 32),
+                        ElevatedButton.icon(
+                          onPressed: provider.loadVehicles,
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text(
+                            'Thử lại',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF006B70),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 32, vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            elevation: 0,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-              const SizedBox(height: 16),
-              OutlinedButton(
-                onPressed: provider.loadVehicles,
-                child: const Text('Thử lại'),
-              ),
-            ],
-          ),
+            );
+          },
         ),
       );
     }
