@@ -10,15 +10,15 @@ class HomeProvider extends ChangeNotifier {
   HomeProvider(this.repository);
 
   bool _isLoading = false;
-
   bool get isLoading => _isLoading;
 
-  String _userName = '';
+  String? _errorMessage;
+  String? get errorMessage => _errorMessage;
 
+  String _userName = '';
   String get userName => _userName;
 
   List<TripModel> _recentTrips = [];
-
   List<TripModel> get recentTrips => _recentTrips;
 
   int _selectedIndex = 0;
@@ -32,20 +32,18 @@ class HomeProvider extends ChangeNotifier {
 
   Future<void> loadHomeData() async {
     _isLoading = true;
-
     notifyListeners();
 
     try {
       final data = await repository.getHomeData();
-
       _userName = data.userName;
-
       _recentTrips = data.recentTrips;
+      _errorMessage = null;
     } catch (e) {
-      debugPrint(e.toString());
+      debugPrint('HomeProvider error: $e');
+      _errorMessage = 'Không thể kết nối đến máy chủ. Vui lòng thử lại.';
     } finally {
       _isLoading = false;
-
       notifyListeners();
     }
   }

@@ -8,6 +8,7 @@ import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
 import '../../../../../core/widgets/app_loading_screen.dart';
+import '../../../../../core/widgets/server_error_card.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/models/booking_catalog.dart';
 import '../../data/models/booking_fare_estimate.dart';
@@ -408,14 +409,16 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                   if (catalog == null ||
                       catalog.services.isEmpty ||
                       catalog.vehicles.isEmpty) ...[
-                    const _EmptyCatalogMessage(),
-                    if (hasError) ...[
-                      const SizedBox(height: 10),
-                      Text(
-                        provider.errorMessage!,
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    ],
+                    if (hasError)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 24),
+                        child: ServerErrorCard(
+                          message: provider.errorMessage!,
+                          onRetry: _loadInitialData,
+                        ),
+                      )
+                    else
+                      const _EmptyCatalogMessage(),
                   ] else ...[
                     _ServiceSelector(
                       services: catalog.services,
@@ -445,13 +448,14 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                           : () => _pickLocation(LocationPickerType.destination),
                       estimatedHours: _isHourly ? _estimatedHours : null,
                     ),
-                    if (hasError) ...[
-                      const SizedBox(height: 10),
-                      Text(
-                        provider.errorMessage!,
-                        style: const TextStyle(color: Colors.red),
+                    if (hasError)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 16),
+                        child: ServerErrorCard(
+                          message: provider.errorMessage!,
+                          onRetry: _refreshEstimate,
+                        ),
                       ),
-                    ],
                     if (_isHourly) ...[
                       const SizedBox(height: 16),
                       _HourInput(

@@ -107,9 +107,14 @@ class _IdentityVerificationPageState extends State<IdentityVerificationPage> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+      body: RefreshIndicator(
+        onRefresh: _loadDocuments,
+        color: AppColors.primary,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics(),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20),
         child: Column(
           children: [
             const SizedBox(height: 32),
@@ -235,6 +240,7 @@ class _IdentityVerificationPageState extends State<IdentityVerificationPage> {
           ],
         ),
       ),
+      ),
       bottomNavigationBar: Container(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
         decoration: BoxDecoration(
@@ -325,28 +331,57 @@ class _IdentityVerificationPageState extends State<IdentityVerificationPage> {
   Widget _buildLoadError(String message) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF8E1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFFFE082)),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: Row(
+      child: Column(
         children: [
-          const Icon(Icons.info_outline, color: Color(0xFFFFA000)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              message,
-              style: const TextStyle(
-                color: Color(0xFF795548),
-                fontWeight: FontWeight.w600,
-              ),
+          const Icon(Icons.cloud_off_rounded, size: 64, color: Colors.grey),
+          const SizedBox(height: 16),
+          const Text(
+            'Lỗi kết nối máy chủ',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1F1F1F),
             ),
           ),
-          TextButton(
+          const SizedBox(height: 8),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 14,
+              color: Color(0xFF78909C),
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
             onPressed: _loadDocuments,
-            child: const Text('Thử lại'),
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text(
+              'Thử lại',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 0,
+            ),
           ),
         ],
       ),

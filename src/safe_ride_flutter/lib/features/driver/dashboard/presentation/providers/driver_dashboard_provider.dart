@@ -41,6 +41,12 @@ class DriverDashboardProvider extends ChangeNotifier {
   ActiveDriverTrip? _activeTrip;
   ActiveDriverTrip? get activeTrip => _activeTrip;
 
+  bool _isLoadingActiveTrip = false;
+  bool get isLoadingActiveTrip => _isLoadingActiveTrip;
+
+  String? _errorMessage;
+  String? get errorMessage => _errorMessage;
+
   Future<void> initializeRealtime(String accessToken) async {
     if (accessToken.isEmpty) {
       return;
@@ -262,31 +268,41 @@ class DriverDashboardProvider extends ChangeNotifier {
       return;
     }
 
-    final response = await _dio.get(
-      '/drivers/trips/active',
-      options: Options(headers: {ApiKeys.authorization: AuthHeader.bearer(token)}),
-    );
-    if (response.statusCode == 204 || response.data == null) {
-      _activeTrip = null;
-      notifyListeners();
-      return;
-    }
+    _isLoadingActiveTrip = true;
+    _errorMessage = null;
+    notifyListeners();
 
-    if (response.data is Map) {
-      final data = Map<String, dynamic>.from(response.data as Map);
-      final bookingId = (data[ApiKeys.bookingId] ?? data['BookingId']) as num?;
-      final tripId = (data[ApiKeys.tripId] ?? data['TripId']) as num?;
-      final tripStatus = _normalizeTripStatus(
-        data[ApiKeys.tripStatus] ?? data['TripStatus'],
+    try {
+      final response = await _dio.get(
+        '/drivers/trips/active',
+        options: Options(headers: {ApiKeys.authorization: AuthHeader.bearer(token)}),
       );
-      if (bookingId != null && tripId != null && tripStatus != null) {
-        _activeTrip = ActiveDriverTrip(
-          bookingId: bookingId.toInt(),
-          tripId: tripId.toInt(),
-          tripStatus: tripStatus,
-        );
-        notifyListeners();
+      if (response.statusCode == 204 || response.data == null) {
+        _activeTrip = null;
+        return;
       }
+
+      if (response.data is Map) {
+        final data = Map<String, dynamic>.from(response.data as Map);
+        final bookingId = (data[ApiKeys.bookingId] ?? data['BookingId']) as num?;
+        final tripId = (data[ApiKeys.tripId] ?? data['TripId']) as num?;
+        final tripStatus = _normalizeTripStatus(
+          data[ApiKeys.tripStatus] ?? data['TripStatus'],
+        );
+        if (bookingId != null && tripId != null && tripStatus != null) {
+          _activeTrip = ActiveDriverTrip(
+            bookingId: bookingId.toInt(),
+            tripId: tripId.toInt(),
+            tripStatus: tripStatus,
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading active trip: $e');
+      _errorMessage = 'Không thể tải dữ liệu chuyến đi hiện tại. Vui lòng thử lại.';
+    } finally {
+      _isLoadingActiveTrip = false;
+      notifyListeners();
     }
   }
 
