@@ -561,6 +561,9 @@ public sealed class BookingTests
     {
         public void ScheduleExpandRadius(long bookingId, TimeSpan delay) { }
         public void ScheduleExpireBooking(long bookingId, TimeSpan delay) { }
+        public void ScheduleExpireDriverOffer(long offerId, TimeSpan delay) { }
+        public Task CancelExpireDriverOfferAsync(long offerId, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
         public Task CancelJobsForBookingAsync(long bookingId, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
     }

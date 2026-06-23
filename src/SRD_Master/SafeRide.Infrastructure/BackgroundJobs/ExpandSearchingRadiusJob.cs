@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Realtime;
 using SafeRide.Domain.Entities;
@@ -21,6 +22,7 @@ public sealed class ExpandSearchingRadiusJob
     private readonly IRedisService _redisService;
     private readonly IRealtimeNotificationService _realtimeService;
     private readonly IDateTimeProvider _clock;
+    private readonly IOptionsMonitor<ExpandSearchingRadiusJobOptions> _jobOptions;
     private readonly ILogger<ExpandSearchingRadiusJob> _logger;
 
     public ExpandSearchingRadiusJob(
@@ -29,6 +31,7 @@ public sealed class ExpandSearchingRadiusJob
         IRedisService redisService,
         IRealtimeNotificationService realtimeService,
         IDateTimeProvider clock,
+        IOptionsMonitor<ExpandSearchingRadiusJobOptions> jobOptions,
         ILogger<ExpandSearchingRadiusJob> logger)
     {
         _dbContext = dbContext;
@@ -36,6 +39,7 @@ public sealed class ExpandSearchingRadiusJob
         _redisService = redisService;
         _realtimeService = realtimeService;
         _clock = clock;
+        _jobOptions = jobOptions;
         _logger = logger;
     }
 
@@ -70,7 +74,7 @@ public sealed class ExpandSearchingRadiusJob
         var notified = await _redisService.SetIfNotExistsAsync(
             RedisKeys.BookingRadiusExpandedNotified(bookingId),
             "1",
-            TimeSpan.FromMinutes(15));
+            TimeSpan.FromMinutes(_jobOptions.CurrentValue.RadiusExpandedNotificationTtlMinutes));
 
         if (!notified)
         {

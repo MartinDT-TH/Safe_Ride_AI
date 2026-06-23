@@ -1,3 +1,5 @@
+using Hangfire;
+using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
@@ -77,15 +79,65 @@ public static class DependencyInjection
         services
             .AddOptions<MatchingOptions>()
             .Bind(configuration.GetSection(MatchingOptions.SectionName))
-            .Validate(options => options.InitialRadiusKm > 0, "MatchingOptions:InitialRadiusKm must be greater than zero.")
-            .Validate(options => options.ExpandedRadiusKm >= options.InitialRadiusKm, "MatchingOptions:ExpandedRadiusKm must be greater than or equal to InitialRadiusKm.")
-            .Validate(options => options.ExpandAfterMinutes > 0, "MatchingOptions:ExpandAfterMinutes must be greater than zero.")
-            .Validate(options => options.BookingExpireAfterMinutes > options.ExpandAfterMinutes, "MatchingOptions:BookingExpireAfterMinutes must be greater than ExpandAfterMinutes.")
-            .Validate(options => options.OfferExpireSeconds > 0, "MatchingOptions:OfferExpireSeconds must be greater than zero.")
-            .Validate(options => options.CustomerConfirmExpireSeconds > 0, "MatchingOptions:CustomerConfirmExpireSeconds must be greater than zero.")
-            .Validate(options => options.MatchingTickSeconds > 0, "MatchingOptions:MatchingTickSeconds must be greater than zero.")
-            .Validate(options => options.MockDriverTtlRefreshSeconds > 0, "MatchingOptions:MockDriverTtlRefreshSeconds must be greater than zero.")
+            .Validate(options => options.InitialRadiusKm > 0, "BackgroundJobs:MatchingOptions:InitialRadiusKm must be greater than zero.")
+            .Validate(options => options.ExpandedRadiusKm >= options.InitialRadiusKm, "BackgroundJobs:MatchingOptions:ExpandedRadiusKm must be greater than or equal to InitialRadiusKm.")
+            .Validate(options => options.ExpandAfterMinutes > 0, "BackgroundJobs:MatchingOptions:ExpandAfterMinutes must be greater than zero.")
+            .Validate(options => options.BookingExpireAfterMinutes > options.ExpandAfterMinutes, "BackgroundJobs:MatchingOptions:BookingExpireAfterMinutes must be greater than ExpandAfterMinutes.")
+            .Validate(options => options.OfferExpireSeconds > 0, "BackgroundJobs:MatchingOptions:OfferExpireSeconds must be greater than zero.")
+            .Validate(options => options.CustomerConfirmExpireSeconds > 0, "BackgroundJobs:MatchingOptions:CustomerConfirmExpireSeconds must be greater than zero.")
+            .Validate(options => options.MatchingTickSeconds > 0, "BackgroundJobs:MatchingOptions:MatchingTickSeconds must be greater than zero.")
             .ValidateOnStart();
+
+        services
+            .AddOptions<ScheduledBookingMatchingOptions>()
+            .Bind(configuration.GetSection(ScheduledBookingMatchingOptions.SectionName))
+            .Validate(options => options.StartMatchingBeforeMinutes > 0, "BackgroundJobs:ScheduledBookingMatching:StartMatchingBeforeMinutes must be greater than zero.")
+            .Validate(options => options.PollingIntervalSeconds > 0, "BackgroundJobs:ScheduledBookingMatching:PollingIntervalSeconds must be greater than zero.")
+            .ValidateOnStart();
+
+        services
+            .AddOptions<ExpandSearchingRadiusJobOptions>()
+            .Bind(configuration.GetSection(ExpandSearchingRadiusJobOptions.SectionName))
+            .Validate(options => options.RadiusExpandedNotificationTtlMinutes > 0, "BackgroundJobs:ExpandSearchingRadius:RadiusExpandedNotificationTtlMinutes must be greater than zero.")
+            .ValidateOnStart();
+
+        services
+            .AddOptions<CleanupStaleDriverLocationJobOptions>()
+            .Bind(configuration.GetSection(CleanupStaleDriverLocationJobOptions.SectionName))
+            .Validate(options => options.StaleAfterMinutes > 0, "BackgroundJobs:CleanupStaleDriverLocation:StaleAfterMinutes must be greater than zero.")
+            .ValidateOnStart();
+
+        services
+            .AddOptions<BookingLifecycleJobSchedulerOptions>()
+            .Bind(configuration.GetSection(BookingLifecycleJobSchedulerOptions.SectionName))
+            .Validate(options => options.JobIdTtlHours > 0, "BackgroundJobs:BookingLifecycleJobScheduler:JobIdTtlHours must be greater than zero.")
+            .ValidateOnStart();
+
+        services
+            .AddOptions<SimulatorOptions>()
+            .Bind(configuration.GetSection(SimulatorOptions.SectionName))
+            .Validate(options => options.MockDriverTtlRefreshSeconds > 0, "SimulatorOptions:MockDriverTtlRefreshSeconds must be greater than zero.")
+            .ValidateOnStart();
+
+        // ── Hangfire ───────────────────────────────────────────────────────────────
+        services.AddHangfire(config => config
+            .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+            .UseSimpleAssemblyNameTypeSerializer()
+            .UseRecommendedSerializerSettings()
+            .UseSqlServerStorage(
+                configuration.GetConnectionString("DefaultConnection"),
+                new SqlServerStorageOptions
+                {
+                    CommandBatchMaxTimeout = TimeSpan.FromMinutes(5),
+                    SlidingInvisibilityTimeout = TimeSpan.FromMinutes(5),
+                    QueuePollInterval = TimeSpan.Zero,
+                    UseRecommendedIsolationLevel = true,
+                    DisableGlobalLocks = true
+                }));
+        services.AddHangfireServer();
+        services.AddScoped<IBookingLifecycleJobScheduler, HangfireBookingLifecycleJobScheduler>();
+        // ──────────────────────────────────────────────────────────────────────────
+
         services.AddSingleton<RedisService>();
         services.AddSingleton<InMemoryRedisService>();
         services.AddSingleton<IRedisService>(provider =>

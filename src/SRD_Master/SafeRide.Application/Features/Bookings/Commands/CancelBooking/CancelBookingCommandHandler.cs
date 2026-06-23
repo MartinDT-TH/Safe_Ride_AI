@@ -99,6 +99,8 @@ public sealed class CancelBookingCommandHandler
             booking.BookingId,
             cancellationToken);
 
+        await _jobScheduler.CancelJobsForBookingAsync(booking.BookingId, cancellationToken);
+
         await _bookingRepository.CancelActiveDriverOffersAsync(
             booking.BookingId,
             utcNow,

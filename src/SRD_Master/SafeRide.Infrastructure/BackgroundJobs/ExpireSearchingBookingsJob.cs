@@ -19,6 +19,7 @@ public sealed class ExpireSearchingBookingsJob
     private readonly ApplicationDbContext _dbContext;
     private readonly IRedisService _redisService;
     private readonly IRealtimeNotificationService _realtimeService;
+    private readonly IBookingLifecycleJobScheduler _jobScheduler;
     private readonly IDateTimeProvider _clock;
     private readonly ILogger<ExpireSearchingBookingsJob> _logger;
 
@@ -26,12 +27,14 @@ public sealed class ExpireSearchingBookingsJob
         ApplicationDbContext dbContext,
         IRedisService redisService,
         IRealtimeNotificationService realtimeService,
+        IBookingLifecycleJobScheduler jobScheduler,
         IDateTimeProvider clock,
         ILogger<ExpireSearchingBookingsJob> logger)
     {
         _dbContext = dbContext;
         _redisService = redisService;
         _realtimeService = realtimeService;
+        _jobScheduler = jobScheduler;
         _clock = clock;
         _logger = logger;
     }
@@ -112,6 +115,7 @@ public sealed class ExpireSearchingBookingsJob
 
             await _redisService.RemoveAsync(RedisKeys.MatchingOffer(offer.BookingId, offer.DriverId));
             await _redisService.RemoveAsync(RedisKeys.MatchingDriverLock(offer.DriverId));
+            await _jobScheduler.CancelExpireDriverOfferAsync(offer.Id, cancellationToken);
         }
 
         await _redisService.RemoveAsync(RedisKeys.MatchingBooking(bookingId));

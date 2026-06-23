@@ -56,31 +56,11 @@ public sealed class BookingMatchingBackgroundService : BackgroundService
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var clock = scope.ServiceProvider.GetRequiredService<IDateTimeProvider>();
-        var redisService = scope.ServiceProvider.GetRequiredService<IRedisService>();
-        var realtimeService = scope.ServiceProvider.GetRequiredService<IRealtimeNotificationService>();
         var matchingService = scope.ServiceProvider.GetRequiredService<IBookingMatchingService>();
-
-        var utcNow = clock.UtcNow;
-        var expiredOfferEvents = await ExpireDriverOffersAsync(
-            dbContext,
-            redisService,
-            utcNow,
-            cancellationToken);
 
         var bookingIdsToRetry = await GetSearchingBookingIdsAsync(
             dbContext,
             cancellationToken);
-
-        if (expiredOfferEvents.Count > 0)
-        {
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
-
-        foreach (var notification in expiredOfferEvents)
-        {
-            await realtimeService.PublishDriverOfferExpiredAsync(notification, cancellationToken);
-        }
 
         foreach (var bookingId in bookingIdsToRetry)
         {

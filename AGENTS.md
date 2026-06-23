@@ -26,6 +26,31 @@ Flutter:
 - For database changes, check EF entities, configurations, migrations, and DTOs together.
 - For Flutter changes, check service, provider/state, page/widget, model DTO, and route usage together.
 
+## Configuration Rules
+
+Do not hard-code operational values in code.
+
+Move these values into strongly typed Options sections in appsettings.Development.json:
+- timeout values
+- interval values
+- Redis TTL values
+- Hangfire cron expressions
+- Hangfire recurring job ids
+- cleanup retention days
+- cleanup batch sizes
+- notification titles
+- notification types
+- SignalR event names/types
+- matching expiration durations
+- offer expiration durations
+
+Use the Options pattern:
+- Each Options class must have a SectionName constant.
+- Bind Options during dependency injection.
+- Inject IOptions<T> or IOptionsMonitor<T>.
+- Domain must not reference IConfiguration or IOptions.
+- Avoid direct IConfiguration access except in composition root or infrastructure setup.
+
 ## Verification
 Backend:
 - dotnet build

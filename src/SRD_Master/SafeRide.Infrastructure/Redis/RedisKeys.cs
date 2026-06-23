@@ -46,6 +46,9 @@ public static class RedisKeys
     public static string HangfireExpireBookingJobId(long bookingId) =>
         $"sr:booking:hf-expire-job:{bookingId}";
 
+    public static string HangfireExpireDriverOfferJobId(long offerId) =>
+        $"sr:booking:hf-expire-offer-job:{offerId}";
+
     public static string TripLive(long tripId) =>
         $"sr:trip:live:{tripId}";
 

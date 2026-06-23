@@ -19,7 +19,18 @@ public interface IBookingLifecycleJobScheduler
     void ScheduleExpireBooking(long bookingId, TimeSpan delay);
 
     /// <summary>
-    /// Deletes the scheduled expand-radius and expire-booking jobs for the given
+    /// Schedules the driver-offer expiry job to run after <paramref name="delay"/>.
+    /// Stores the resulting Hangfire job ID in Redis so it can be cancelled later.
+    /// </summary>
+    void ScheduleExpireDriverOffer(long offerId, TimeSpan delay);
+
+    /// <summary>
+    /// Deletes the scheduled driver-offer expiry job if it still exists.
+    /// </summary>
+    Task CancelExpireDriverOfferAsync(long offerId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes the scheduled expand-radius, expire-booking, and active-offer jobs for the given
     /// booking (if they still exist in Hangfire). Should be called when the booking
     /// leaves the Searching state before the timers fire.
     /// </summary>
