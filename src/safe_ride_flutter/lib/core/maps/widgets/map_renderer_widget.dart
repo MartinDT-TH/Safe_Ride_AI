@@ -16,6 +16,7 @@ class MapRendererWidget extends StatefulWidget {
   final VoidCallback? onCameraMove;
   final VoidCallback? onCameraIdle;
   final bool myLocationButtonEnabled;
+  final EdgeInsets padding;
 
   const MapRendererWidget({
     super.key,
@@ -27,6 +28,7 @@ class MapRendererWidget extends StatefulWidget {
     this.onCameraMove,
     this.onCameraIdle,
     this.myLocationButtonEnabled = false,
+    this.padding = EdgeInsets.zero,
   });
 
   @override
@@ -35,53 +37,80 @@ class MapRendererWidget extends StatefulWidget {
 
 class _MapRendererWidgetState extends State<MapRendererWidget> {
   vmap.VietmapController? _vmapController;
+  final Map<String, vmap.Line> _vmapPolylineHandles = {};
+  bool _vmapPolylineSyncInProgress = false;
+  bool _vmapPolylineSyncPending = false;
 
   @override
   void didUpdateWidget(MapRendererWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (MapConfig.activeMapProvider == MapRenderProvider.vietMap && _vmapController != null) {
-      _syncVietmap();
+    if (MapConfig.activeMapProvider == MapRenderProvider.vietMap &&
+        _vmapController != null) {
+      _syncVietmapPolylines();
     }
   }
 
-  void _syncVietmap() async {
+  /// Only syncs polylines; markers are handled by the MarkerLayer widget overlay.
+  void _syncVietmapPolylines() async {
     if (_vmapController == null) return;
-    try {
-      await _vmapController!.clearSymbols();
-      await _vmapController!.clearCircles();
-      await _vmapController!.clearPolylines();
+    if (_vmapPolylineSyncInProgress) {
+      _vmapPolylineSyncPending = true;
+      return;
+    }
 
-      for (var marker in widget.markers) {
-        final isRed = marker.hue == null || marker.hue! < 100;
-        final color = isRed ? const Color(0xFFD71920) : const Color(0xFF007BFF);
-        await _vmapController!.addCircle(
-          vmap.CircleOptions(
-            geometry: vmap.LatLng(marker.position.latitude, marker.position.longitude),
-            circleColor: color,
-            circleRadius: 8,
-            circleStrokeWidth: 2,
-            circleStrokeColor: const Color(0xFFFFFFFF),
-          ),
-        );
+    _vmapPolylineSyncInProgress = true;
+    try {
+      final nextPolylines = {
+        for (final polyline in widget.polylines) polyline.id: polyline,
+      };
+      final removedIds = _vmapPolylineHandles.keys
+          .where((id) => !nextPolylines.containsKey(id))
+          .toList();
+
+      for (final id in removedIds) {
+        final handle = _vmapPolylineHandles.remove(id);
+        if (handle != null) {
+          await _vmapController!.removePolyline(handle);
+        }
       }
 
-      for (var polyline in widget.polylines) {
-        await _vmapController!.addPolyline(
-          vmap.PolylineOptions(
-            geometry: polyline.points.map((p) => vmap.LatLng(p.latitude, p.longitude)).toList(),
-            polylineColor: polyline.color,
-            polylineWidth: polyline.width.toDouble(),
-          ),
-        );
+      final sortedPolylines = widget.polylines.toList()
+        ..sort((a, b) => a.zIndex.compareTo(b.zIndex));
+      for (final polyline in sortedPolylines) {
+        final options = _toVietmapPolylineOptions(polyline);
+        final handle = _vmapPolylineHandles[polyline.id];
+        if (handle == null) {
+          _vmapPolylineHandles[polyline.id] = await _vmapController!
+              .addPolyline(options);
+        } else {
+          await _vmapController!.updatePolyline(handle, options);
+        }
       }
     } catch (_) {}
+    _vmapPolylineSyncInProgress = false;
+    if (_vmapPolylineSyncPending) {
+      _vmapPolylineSyncPending = false;
+      _syncVietmapPolylines();
+    }
+  }
+
+  vmap.PolylineOptions _toVietmapPolylineOptions(AppPolyline polyline) {
+    return vmap.PolylineOptions(
+      geometry: polyline.points
+          .map((p) => vmap.LatLng(p.latitude, p.longitude))
+          .toList(),
+      polylineColor: polyline.color,
+      polylineWidth: polyline.width.toDouble(),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     if (MapConfig.activeMapProvider == MapRenderProvider.googleMaps) {
       if (!ApiKeysConfig.hasGoogleMapsKey) {
-        return const _MissingConfigWidget(message: 'Thiếu cấu hình Google Maps.');
+        return const _MissingConfigWidget(
+          message: 'Thiếu cấu hình Google Maps.',
+        );
       }
       return _buildGoogleMap();
     } else {
@@ -94,21 +123,55 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
 
   Widget _buildGoogleMap() {
     final gMarkers = widget.markers.map((m) {
+      gmap.BitmapDescriptor icon;
+      switch (m.markerType) {
+        case AppMarkerType.pickup:
+          icon = gmap.BitmapDescriptor.defaultMarkerWithHue(
+            gmap.BitmapDescriptor.hueAzure,
+          );
+          break;
+        case AppMarkerType.destination:
+          icon = gmap.BitmapDescriptor.defaultMarkerWithHue(
+            gmap.BitmapDescriptor.hueRed,
+          );
+          break;
+        case AppMarkerType.driver:
+          icon = gmap.BitmapDescriptor.defaultMarkerWithHue(
+            gmap.BitmapDescriptor.hueOrange,
+          );
+          break;
+        case AppMarkerType.custom:
+          icon = m.hue != null
+              ? gmap.BitmapDescriptor.defaultMarkerWithHue(m.hue!)
+              : gmap.BitmapDescriptor.defaultMarker;
+          break;
+      }
+
       return gmap.Marker(
         markerId: gmap.MarkerId(m.id),
         position: gmap.LatLng(m.position.latitude, m.position.longitude),
-        icon: m.hue != null 
-          ? gmap.BitmapDescriptor.defaultMarkerWithHue(m.hue!)
-          : gmap.BitmapDescriptor.defaultMarker,
+        icon: icon,
+        rotation: m.rotation,
+        anchor: const Offset(0.5, 1.0),
+        infoWindow: gmap.InfoWindow.noText,
       );
     }).toSet();
 
     final gPolylines = widget.polylines.map((p) {
       return gmap.Polyline(
         polylineId: gmap.PolylineId(p.id),
-        points: p.points.map((pt) => gmap.LatLng(pt.latitude, pt.longitude)).toList(),
+        points: p.points
+            .map((pt) => gmap.LatLng(pt.latitude, pt.longitude))
+            .toList(),
         color: p.color,
         width: p.width,
+        zIndex: p.zIndex,
+        patterns: p.isDashed
+            ? [gmap.PatternItem.dash(12), gmap.PatternItem.gap(8)]
+            : [],
+        startCap: p.endCapRound ? gmap.Cap.roundCap : gmap.Cap.buttCap,
+        endCap: p.endCapRound ? gmap.Cap.roundCap : gmap.Cap.buttCap,
+        jointType: gmap.JointType.round,
       );
     }).toSet();
 
@@ -129,6 +192,7 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
       myLocationButtonEnabled: widget.myLocationButtonEnabled,
       zoomControlsEnabled: false,
       mapToolbarEnabled: false,
+      padding: widget.padding,
       onCameraMove: (_) => widget.onCameraMove?.call(),
       onCameraIdle: widget.onCameraIdle,
       onMapCreated: (controller) {
@@ -140,35 +204,216 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
   }
 
   Widget _buildVietMap() {
-    return vmap.VietmapGL(
-      styleString: 'https://maps.vietmap.vn/api/maps/light/styles.json?apikey=${ApiKeysConfig.vietMap}',
-      initialCameraPosition: vmap.CameraPosition(
-        target: vmap.LatLng(
-          widget.initialCameraPosition.target.latitude,
-          widget.initialCameraPosition.target.longitude,
+    return Stack(
+      children: [
+        vmap.VietmapGL(
+          styleString:
+              'https://maps.vietmap.vn/api/maps/light/styles.json?apikey=${ApiKeysConfig.vietMap}',
+          initialCameraPosition: vmap.CameraPosition(
+            target: vmap.LatLng(
+              widget.initialCameraPosition.target.latitude,
+              widget.initialCameraPosition.target.longitude,
+            ),
+            zoom: widget.initialCameraPosition.zoom,
+          ),
+          onMapClick: (point, latlng) {
+            if (widget.onTap != null) {
+              widget.onTap!(AppLatLng(latlng.latitude, latlng.longitude));
+            }
+          },
+          onMapCreated: (controller) {
+            setState(() {
+              _vmapController = controller;
+              _vmapPolylineHandles.clear();
+            });
+            _syncVietmapPolylines();
+            if (widget.onMapCreated != null) {
+              widget.onMapCreated!(_VietMapControllerWrapper(controller));
+            }
+          },
+          myLocationEnabled: true,
+          myLocationRenderMode: widget.myLocationButtonEnabled
+              ? vmap.MyLocationRenderMode.compass
+              : vmap.MyLocationRenderMode.normal,
+          onCameraIdle: widget.onCameraIdle,
+          trackCameraPosition: true,
         ),
-        zoom: widget.initialCameraPosition.zoom,
-      ),
-      onMapClick: (point, latlng) {
-        if (widget.onTap != null) {
-          widget.onTap!(AppLatLng(latlng.latitude, latlng.longitude));
-        }
-      },
-      onMapCreated: (controller) {
-        _vmapController = controller;
-        _syncVietmap();
-        if (widget.onMapCreated != null) {
-          widget.onMapCreated!(_VietMapControllerWrapper(controller));
-        }
-      },
-      myLocationEnabled: true,
-      myLocationRenderMode: widget.myLocationButtonEnabled 
-          ? vmap.MyLocationRenderMode.compass 
-          : vmap.MyLocationRenderMode.normal,
-      onCameraIdle: widget.onCameraIdle,
+        // Marker Widget Overlay — renders Flutter widgets on top of VietMap
+        if (_vmapController != null)
+          vmap.MarkerLayer(
+            ignorePointer: true,
+            mapController: _vmapController!,
+            markers: widget.markers.map((m) {
+              return vmap.Marker(
+                latLng: vmap.LatLng(m.position.latitude, m.position.longitude),
+                child: _buildMarkerWidget(m),
+              );
+            }).toList(),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildMarkerWidget(AppMarker marker) {
+    switch (marker.markerType) {
+      case AppMarkerType.pickup:
+        return const _PickupMarkerWidget();
+      case AppMarkerType.destination:
+        return const _DestinationMarkerWidget();
+      case AppMarkerType.driver:
+        return _DriverMarkerWidget(heading: marker.rotation);
+      case AppMarkerType.custom:
+        return marker.iconWidget ?? _DefaultPinWidget(hue: marker.hue);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Custom Marker Widgets
+// ---------------------------------------------------------------------------
+
+/// Blue pin for pickup location
+class _PickupMarkerWidget extends StatelessWidget {
+  const _PickupMarkerWidget();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1565C0),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.person_pin_circle_rounded,
+            color: Colors.white,
+            size: 22,
+          ),
+        ),
+        CustomPaint(
+          size: const Size(12, 7),
+          painter: _DownArrowPainter(const Color(0xFF1565C0)),
+        ),
+      ],
     );
   }
 }
+
+/// Red pin for destination
+class _DestinationMarkerWidget extends StatelessWidget {
+  const _DestinationMarkerWidget();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: const Color(0xFFC62828),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: const Icon(Icons.flag_rounded, color: Colors.white, size: 20),
+        ),
+        CustomPaint(
+          size: const Size(12, 7),
+          painter: _DownArrowPainter(const Color(0xFFC62828)),
+        ),
+      ],
+    );
+  }
+}
+
+/// Animated car icon for driver, rotates based on heading
+class _DriverMarkerWidget extends StatelessWidget {
+  final double heading;
+  const _DriverMarkerWidget({this.heading = 0});
+
+  @override
+  Widget build(BuildContext context) {
+    return Transform.rotate(
+      angle: heading * (3.14159265358979 / 180),
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: const Color(0xFF006B70),
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: const Icon(
+          Icons.directions_car_filled_rounded,
+          color: Colors.white,
+          size: 22,
+        ),
+      ),
+    );
+  }
+}
+
+/// Fallback pin using hue
+class _DefaultPinWidget extends StatelessWidget {
+  final double? hue;
+  const _DefaultPinWidget({this.hue});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = hue != null
+        ? HSVColor.fromAHSV(1, hue!, 0.8, 0.85).toColor()
+        : Colors.red;
+    return Icon(Icons.location_on, color: color, size: 36);
+  }
+}
+
+/// Triangle "tip" at the bottom of circular pins
+class _DownArrowPainter extends CustomPainter {
+  final Color color;
+  const _DownArrowPainter(this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_DownArrowPainter old) => old.color != color;
+}
+
+// ---------------------------------------------------------------------------
+// Controller Wrappers
+// ---------------------------------------------------------------------------
 
 class _GoogleMapControllerWrapper implements AppMapController {
   final gmap.GoogleMapController _controller;
@@ -196,7 +441,15 @@ class _GoogleMapControllerWrapper implements AppMapController {
   }
 
   @override
-  Future<void> animateCameraToBounds(AppLatLng southwest, AppLatLng northeast, double padding) async {
+  Future<void> animateCameraToBounds(
+    AppLatLng southwest,
+    AppLatLng northeast,
+    double padding, {
+    double top = 0,
+    double bottom = 0,
+    double left = 0,
+    double right = 0,
+  }) async {
     await _controller.animateCamera(
       gmap.CameraUpdate.newLatLngBounds(
         gmap.LatLngBounds(
@@ -248,17 +501,25 @@ class _VietMapControllerWrapper implements AppMapController {
   }
 
   @override
-  Future<void> animateCameraToBounds(AppLatLng southwest, AppLatLng northeast, double padding) async {
+  Future<void> animateCameraToBounds(
+    AppLatLng southwest,
+    AppLatLng northeast,
+    double padding, {
+    double top = 0,
+    double bottom = 0,
+    double left = 0,
+    double right = 0,
+  }) async {
     await _controller.animateCamera(
       vmap.CameraUpdate.newLatLngBounds(
         vmap.LatLngBounds(
           southwest: vmap.LatLng(southwest.latitude, southwest.longitude),
           northeast: vmap.LatLng(northeast.latitude, northeast.longitude),
         ),
-        left: padding,
-        top: padding,
-        right: padding,
-        bottom: padding,
+        left: left != 0 ? left : padding,
+        top: top != 0 ? top : padding,
+        right: right != 0 ? right : padding,
+        bottom: bottom != 0 ? bottom : padding,
       ),
     );
   }
@@ -286,12 +547,7 @@ class _MissingConfigWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return ColoredBox(
       color: const Color(0xFFE9EEEE),
-      child: Center(
-        child: Text(
-          message,
-          textAlign: TextAlign.center,
-        ),
-      ),
+      child: Center(child: Text(message, textAlign: TextAlign.center)),
     );
   }
 }

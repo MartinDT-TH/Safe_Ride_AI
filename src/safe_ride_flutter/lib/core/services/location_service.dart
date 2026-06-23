@@ -1,3 +1,4 @@
+import 'package:geocoding/geocoding.dart' as native_geo;
 import 'package:geolocator/geolocator.dart';
 
 import '../constants/app_strings.dart';
@@ -109,13 +110,16 @@ class LocationService {
     final normalizedQuery = query.trim();
     if (normalizedQuery.isEmpty) return [];
     try {
-      return await _mapApiService.getAutocomplete(
+      final results = await _mapApiService.getAutocomplete(
         query: normalizedQuery,
         lat: lat,
         lng: lng,
       );
+      if (results.isNotEmpty) return results;
+      // Fallback: use native geocoding to search by address string
+      return await _nativeGeocode(normalizedQuery);
     } catch (_) {
-      return [];
+      return await _nativeGeocode(normalizedQuery);
     }
   }
 
@@ -131,14 +135,70 @@ class LocationService {
   }
 
   Future<String> _reverseGeocode(double latitude, double longitude) async {
+    // 1st attempt: backend API
     try {
       final place = await _mapApiService.getReverseGeocode(latitude, longitude);
-      if (place.address.isEmpty) {
-        return '${latitude.toStringAsFixed(4)}, ${longitude.toStringAsFixed(4)}';
+      if (place.address.isNotEmpty) return place.address;
+    } catch (_) {}
+
+    // 2nd attempt: native device geocoder (geocoding package)
+    try {
+      final placemarks = await native_geo.placemarkFromCoordinates(
+        latitude,
+        longitude,
+      );
+      if (placemarks.isNotEmpty) {
+        final p = placemarks.first;
+        final parts = [
+          p.street,
+          p.subLocality,
+          p.locality,
+          p.administrativeArea,
+        ].where((s) => s != null && s.isNotEmpty).toList();
+        if (parts.isNotEmpty) return parts.join(', ');
       }
-      return place.address;
+    } catch (_) {}
+
+    // Final fallback: raw coordinates
+    return '${latitude.toStringAsFixed(5)}, ${longitude.toStringAsFixed(5)}';
+  }
+
+  /// Fallback: convert search query into results using native geocoder.
+  Future<List<PlaceAutocompleteResult>> _nativeGeocode(String query) async {
+    try {
+      final locations = await native_geo.locationFromAddress(query);
+      if (locations.isEmpty) return [];
+      return await Future.wait(
+        locations.take(5).map((loc) async {
+          String address = query;
+          try {
+            final placemarks = await native_geo.placemarkFromCoordinates(
+              loc.latitude,
+              loc.longitude,
+            );
+            if (placemarks.isNotEmpty) {
+              final p = placemarks.first;
+              final parts = [
+                p.street,
+                p.subLocality,
+                p.locality,
+                p.administrativeArea,
+              ].where((s) => s != null && s.isNotEmpty).toList();
+              if (parts.isNotEmpty) address = parts.join(', ');
+            }
+          } catch (_) {}
+          return PlaceAutocompleteResult(
+            providerPlaceId:
+                'native:${loc.latitude.toStringAsFixed(6)},${loc.longitude.toStringAsFixed(6)}',
+            primaryText: address,
+            secondaryText: '',
+            latitude: loc.latitude,
+            longitude: loc.longitude,
+          );
+        }),
+      );
     } catch (_) {
-      return '${latitude.toStringAsFixed(4)}, ${longitude.toStringAsFixed(4)}';
+      return [];
     }
   }
 }

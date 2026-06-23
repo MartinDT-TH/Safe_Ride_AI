@@ -58,6 +58,8 @@ dependencies:
   signalr_netcore: ^1.4.4
   connectivity_plus: ^7.1.1
   vietmap_flutter_gl: ^4.1.0
+  widget_to_marker: ^1.0.6
+  geocoding: ^4.0.0
 
 dev_dependencies:
   flutter_test:

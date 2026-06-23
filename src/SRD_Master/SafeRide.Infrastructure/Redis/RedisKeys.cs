@@ -8,6 +8,12 @@ public static class RedisKeys
     public static string OtpAttempts(string phoneNumber) =>
         $"auth:otp:attempts:{phoneNumber}";
 
+    public static string OtpSendCooldown(string phoneNumber) =>
+        $"auth:otp:cooldown:{phoneNumber}";
+
+    public static string OtpLock(string phoneNumber) =>
+        $"auth:otp:lock:{phoneNumber}";
+
     public static string RefreshToken(string tokenHash) =>
         $"auth:refresh-token:{tokenHash}";
 
