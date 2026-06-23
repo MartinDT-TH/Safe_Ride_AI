@@ -11,7 +11,7 @@ internal static class BookingDetailsMapper
     public static async Task<BookingDetailsDto> ToDtoAsync(
         Booking booking,
         IBookingRepository repository,
-        IGoogleMapsService googleMapsService,
+        IMapRoutingService mapRoutingService,
         IMatchingPolicyProvider matchingPolicyProvider,
         DateTime utcNow,
         CancellationToken cancellationToken)
@@ -23,7 +23,7 @@ internal static class BookingDetailsMapper
             booking,
             driverOffer,
             repository,
-            googleMapsService,
+            mapRoutingService,
             cancellationToken);
         var price = BookingPriceMapper.FromBooking(booking);
         var matchingSnapshot = matchingPolicyProvider.GetSnapshot(booking, utcNow);
@@ -75,7 +75,7 @@ internal static class BookingDetailsMapper
         Booking booking,
         BookingDriverOfferDto? driverOffer,
         IBookingRepository repository,
-        IGoogleMapsService googleMapsService,
+        IMapRoutingService mapRoutingService,
         CancellationToken cancellationToken)
     {
         if (booking.BookingStatus != BookingStatus.DriverAssigned
@@ -98,11 +98,18 @@ internal static class BookingDetailsMapper
 
         try
         {
-            var route = await googleMapsService.GetRouteEstimateAsync(
-                driverLocation,
-                new LocationPoint(
-                    booking.PickupLocation.Y,
-                    booking.PickupLocation.X),
+            var route = await mapRoutingService.GetRouteEstimateAsync(
+                new RouteEstimateRequest
+                {
+                    Origin = driverLocation,
+                    Destination = new LocationPoint(
+                        booking.PickupLocation.Y,
+                        booking.PickupLocation.X),
+                    Provider = MapProvider.Auto,
+                    TravelMode = MapTravelMode.Car,
+                    IncludePolyline = true,
+                    RequestSource = "DriverArrival"
+                },
                 cancellationToken);
 
             return route.EncodedPolyline;

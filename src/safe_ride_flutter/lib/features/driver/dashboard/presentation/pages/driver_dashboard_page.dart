@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
+
+import '../../../../../core/maps/models/map_models.dart';
+import '../../../../../core/maps/widgets/map_renderer_widget.dart';
 
 import '../providers/driver_dashboard_provider.dart';
 import '../widgets/driver_bottom_nav_bar.dart';
@@ -20,7 +22,7 @@ class DriverDashboardPage extends StatefulWidget {
 }
 
 class _DriverDashboardPageState extends State<DriverDashboardPage> {
-  GoogleMapController? _mapController;
+  AppMapController? _mapController;
   int _selectedIndex = 0;
 
   static const _tealColor = Color(0xFF006B70);
@@ -73,13 +75,12 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     return Stack(
       children: [
         // 1. Map Background
-        GoogleMap(
-          initialCameraPosition: const CameraPosition(
-            target: LatLng(10.762622, 106.660172), // HCM City
+        MapRendererWidget(
+          initialCameraPosition: const AppCameraPosition(
+            target: AppLatLng(10.762622, 106.660172), // HCM City
             zoom: 14,
           ),
           onMapCreated: (controller) => _mapController = controller,
-          zoomControlsEnabled: false,
           myLocationButtonEnabled: false,
         ),
 

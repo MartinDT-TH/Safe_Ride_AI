@@ -7,22 +7,24 @@ using Microsoft.Extensions.Options;
 using SafeRide.Application.Common.Exceptions;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
+using SafeRide.Domain.Enums;
+
 
 namespace SafeRide.Infrastructure.ExternalServices.GoogleMaps;
 
-public sealed class GoogleMapsService : IGoogleMapsService
+public sealed class GoogleMapsRoutingService : IMapRoutingService
 {
     private const string FieldMask =
         "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline";
 
     private readonly HttpClient _httpClient;
     private readonly GoogleMapsOptions _options;
-    private readonly ILogger<GoogleMapsService> _logger;
+    private readonly ILogger<GoogleMapsRoutingService> _logger;
 
-    public GoogleMapsService(
+    public GoogleMapsRoutingService(
         HttpClient httpClient,
         IOptions<GoogleMapsOptions> options,
-        ILogger<GoogleMapsService> logger)
+        ILogger<GoogleMapsRoutingService> logger)
     {
         _httpClient = httpClient;
         _options = options.Value;
@@ -30,8 +32,7 @@ public sealed class GoogleMapsService : IGoogleMapsService
     }
 
     public async Task<RouteEstimateResult> GetRouteEstimateAsync(
-        LocationPoint pickup,
-        LocationPoint destination,
+        RouteEstimateRequest request,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_options.ApiKey))
@@ -48,11 +49,11 @@ public sealed class GoogleMapsService : IGoogleMapsService
 
         var requestBody = new
         {
-            origin = CreateWaypoint(pickup),
-            destination = CreateWaypoint(destination),
+            origin = CreateWaypoint(request.Origin),
+            destination = CreateWaypoint(request.Destination),
             travelMode = "DRIVE",
             routingPreference = "TRAFFIC_AWARE",
-            languageCode = "vi-VN",
+            languageCode = request.Language ?? "vi-VN",
             units = "METRIC"
         };
 
@@ -61,17 +62,16 @@ public sealed class GoogleMapsService : IGoogleMapsService
             "key",
             _options.ApiKey);
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, requestUrl)
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUrl)
         {
             Content = JsonContent.Create(requestBody)
         };
-        // request.Headers.Add("X-Goog-Api-Key", _options.ApiKey);
-        request.Headers.Add("X-Goog-FieldMask", FieldMask);
+        httpRequest.Headers.Add("X-Goog-FieldMask", FieldMask);
 
         try
         {
             using var response = await _httpClient.SendAsync(
-                request,
+                httpRequest,
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);
 
@@ -79,9 +79,10 @@ public sealed class GoogleMapsService : IGoogleMapsService
             {
                 var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
                 _logger.LogWarning(
-                    "Google Routes API returned {StatusCode}: {ErrorBody}",
+                    "Google Routes API returned {StatusCode}: {ErrorBody}. Source={Source}",
                     (int)response.StatusCode,
-                    errorBody);
+                    errorBody,
+                    request.RequestSource);
                 throw new MapServiceException(
                     "Không thể tính tuyến đường. Vui lòng kiểm tra lại điểm đón và điểm đến.");
             }
@@ -92,7 +93,7 @@ public sealed class GoogleMapsService : IGoogleMapsService
 
             if (route is null
                 || route.DistanceMeters <= 0
-                || !TryParseDurationMinutes(route.Duration, out var durationMinutes)
+                || !TryParseDurationSeconds(route.Duration, out var durationSeconds)
                 || string.IsNullOrWhiteSpace(route.Polyline?.EncodedPolyline))
             {
                 throw new MapServiceException(
@@ -101,10 +102,11 @@ public sealed class GoogleMapsService : IGoogleMapsService
 
             return new RouteEstimateResult
             {
-                Provider = SafeRide.Domain.Enums.MapProvider.GoogleMaps,
+                Provider = MapProvider.GoogleMaps,
                 DistanceMeters = route.DistanceMeters,
-                DurationSeconds = durationMinutes * 60d, // durationMinutes is returned from TryParse, though seconds would be better
-                EncodedPolyline = route.Polyline.EncodedPolyline
+                DurationSeconds = durationSeconds,
+                EncodedPolyline = route.Polyline.EncodedPolyline,
+                PolylineFormat = "polyline5"
             };
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -114,14 +116,14 @@ public sealed class GoogleMapsService : IGoogleMapsService
         }
         catch (HttpRequestException exception)
         {
-            _logger.LogError(exception, "Could not call Google Routes API.");
+            _logger.LogError(exception, "Could not call Google Routes API. Source={Source}", request.RequestSource);
             throw new MapServiceException(
                 "Không thể tính tuyến đường. Vui lòng kiểm tra lại điểm đón và điểm đến.",
                 exception);
         }
         catch (JsonException exception)
         {
-            _logger.LogError(exception, "Google Routes API returned invalid JSON.");
+            _logger.LogError(exception, "Google Routes API returned invalid JSON. Source={Source}", request.RequestSource);
             throw new MapServiceException(
                 "Không thể tính tuyến đường. Vui lòng kiểm tra lại điểm đón và điểm đến.",
                 exception);
@@ -143,11 +145,11 @@ public sealed class GoogleMapsService : IGoogleMapsService
         };
     }
 
-    private static bool TryParseDurationMinutes(
+    private static bool TryParseDurationSeconds(
         string value,
-        out int durationMinutes)
+        out double durationSeconds)
     {
-        durationMinutes = 0;
+        durationSeconds = 0;
         if (string.IsNullOrWhiteSpace(value) || !value.EndsWith('s'))
         {
             return false;
@@ -163,7 +165,7 @@ public sealed class GoogleMapsService : IGoogleMapsService
             return false;
         }
 
-        durationMinutes = Math.Max(1, (int)Math.Ceiling(seconds / 60d));
+        durationSeconds = seconds;
         return true;
     }
 }

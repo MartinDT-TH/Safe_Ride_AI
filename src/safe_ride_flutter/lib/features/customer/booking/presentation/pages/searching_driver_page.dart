@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
+import '../../../../../core/maps/models/map_models.dart';
+import '../../../../../core/maps/widgets/map_renderer_widget.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
 import '../../../../../core/services/socket_service.dart';
@@ -39,7 +40,7 @@ class SearchingDriverPage extends StatefulWidget {
 }
 
 class _SearchingDriverPageState extends State<SearchingDriverPage> {
-  GoogleMapController? _controller;
+  AppMapController? _controller;
   static const _tealColor = Color(0xFF006B70);
   Offset? _markerScreenOffset;
   StreamSubscription? _nearbyDriversSubscription;
@@ -48,10 +49,10 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
   final SocketService _socketService = getIt<SocketService>();
   int? _joinedBookingId;
 
-  List<LatLng> _cachedPoints = const [];
+  List<AppLatLng> _cachedPoints = const [];
   String? _lastEncodedPolyline;
 
-  List<LatLng> get _routePoints {
+  List<AppLatLng> get _routePoints {
     final encoded = widget.fareEstimate?.encodedPolyline;
     if (encoded == null || encoded.isEmpty) return const [];
 
@@ -93,7 +94,7 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
     super.dispose();
   }
 
-  void _onMapCreated(GoogleMapController controller) {
+  void _onMapCreated(AppMapController controller) {
     _controller = controller;
     _fitRoute();
     // Delay slightly to ensure map is fully rendered before getting coordinates
@@ -255,7 +256,7 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
   Future<void> _updateMarkerOffset() async {
     if (_controller == null) return;
     try {
-      final pos = LatLng(widget.pickup.latitude, widget.pickup.longitude);
+      final pos = AppLatLng(widget.pickup.latitude, widget.pickup.longitude);
       final screenPos = await _controller!.getScreenCoordinate(pos);
       if (mounted) {
         setState(() {
@@ -274,12 +275,12 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
     final controller = _controller;
     if (controller == null) return;
 
-    final pickup = LatLng(widget.pickup.latitude, widget.pickup.longitude);
-    final points = <LatLng>[pickup];
+    final pickup = AppLatLng(widget.pickup.latitude, widget.pickup.longitude);
+    final points = <AppLatLng>[pickup];
 
     if (widget.destination != null) {
       points.add(
-        LatLng(widget.destination!.latitude, widget.destination!.longitude),
+        AppLatLng(widget.destination!.latitude, widget.destination!.longitude),
       );
     }
 
@@ -288,7 +289,7 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
     }
 
     if (points.length == 1) {
-      await controller.animateCamera(CameraUpdate.newLatLngZoom(pickup, 15));
+      await controller.animateCamera(AppCameraPosition(target: pickup, zoom: 15));
       return;
     }
 
@@ -304,22 +305,18 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
       maxLng = math.max(maxLng, p.longitude);
     }
 
-    await controller.animateCamera(
-      CameraUpdate.newLatLngBounds(
-        LatLngBounds(
-          southwest: LatLng(minLat, minLng),
-          northeast: LatLng(maxLat, maxLng),
-        ),
-        100,
-      ),
+    await controller.animateCameraToBounds(
+      AppLatLng(minLat, minLng),
+      AppLatLng(maxLat, maxLng),
+      100,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final pickupPos = LatLng(widget.pickup.latitude, widget.pickup.longitude);
+    final pickupPos = AppLatLng(widget.pickup.latitude, widget.pickup.longitude);
     final destPos = widget.destination != null
-        ? LatLng(widget.destination!.latitude, widget.destination!.longitude)
+        ? AppLatLng(widget.destination!.latitude, widget.destination!.longitude)
         : null;
 
     final bookingProvider = context.watch<BookingProvider>();
@@ -340,68 +337,52 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
       child: Scaffold(
         body: Stack(
           children: [
-            GoogleMap(
-              initialCameraPosition: CameraPosition(
+            MapRendererWidget(
+              initialCameraPosition: AppCameraPosition(
                 target: pickupPos,
                 zoom: 15,
               ),
               onMapCreated: _onMapCreated,
               // Update on every camera move to keep radar attached
-              onCameraMove: (_) => _updateMarkerOffset(),
+              onCameraMove: _updateMarkerOffset,
               onCameraIdle: _updateMarkerOffset,
               markers: {
-                Marker(
-                  markerId: const MarkerId('pickup'),
+                AppMarker(
+                  id: 'pickup',
                   position: pickupPos,
-                  // Using a more visible anchor for the center of the radar
-                  anchor: const Offset(0.5, 0.5),
-                  icon: BitmapDescriptor.defaultMarkerWithHue(
-                    BitmapDescriptor.hueAzure,
-                  ),
+                  hue: 210.0, // Azure
                 ),
                 if (destPos != null)
-                  Marker(
-                    markerId: const MarkerId('destination'),
+                  AppMarker(
+                    id: 'destination',
                     position: destPos,
-                    icon: BitmapDescriptor.defaultMarkerWithHue(
-                      BitmapDescriptor.hueRed,
-                    ),
+                    hue: 0.0, // Red
                   ),
                 ...nearbyDrivers.map(
-                  (driver) => Marker(
-                    markerId: MarkerId('driver_${driver.driverId}'),
-                    position: LatLng(driver.latitude, driver.longitude),
-                    icon: BitmapDescriptor.defaultMarkerWithHue(
-                      BitmapDescriptor.hueOrange,
-                    ),
-                    anchor: const Offset(0.5, 0.5),
+                  (driver) => AppMarker(
+                    id: 'driver_${driver.driverId}',
+                    position: AppLatLng(driver.latitude, driver.longitude),
+                    hue: 30.0, // Orange
                   ),
                 ),
               },
               polylines: {
                 if (_routePoints.isNotEmpty)
-                  Polyline(
-                    polylineId: const PolylineId('route'),
+                  AppPolyline(
+                    id: 'route',
                     points: _routePoints,
                     color: _tealColor,
                     width: 5,
-                    jointType: JointType.round,
-                    startCap: Cap.roundCap,
-                    endCap: Cap.roundCap,
-                    zIndex: 1,
                   ),
                 if (destPos != null && _routePoints.isEmpty)
-                  Polyline(
-                    polylineId: const PolylineId('direct_route'),
+                  AppPolyline(
+                    id: 'direct_route',
                     points: [pickupPos, destPos],
                     color: _tealColor.withOpacity(0.5),
                     width: 4,
-                    patterns: [PatternItem.dash(20), PatternItem.gap(10)],
                   ),
               },
-              zoomControlsEnabled: false,
               myLocationButtonEnabled: false,
-              compassEnabled: false,
             ),
 
             // Radar Scanner Overlay positioned over the pickup marker center
