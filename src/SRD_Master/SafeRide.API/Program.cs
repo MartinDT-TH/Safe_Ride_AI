@@ -1,7 +1,10 @@
+using Hangfire;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.OpenApi.Models;
+using SafeRide.API;
 using SafeRide.Application;
+using SafeRide.API.Filters;
 using SafeRide.API.Middlewares;
 using SafeRide.Infrastructure;
 using SafeRide.Infrastructure.Persistence;
@@ -56,6 +59,7 @@ builder.Services
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
+builder.Services.AddSafeRideApiJobs(builder.Configuration);
 builder.Services.AddSafeRideRealtime();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -149,6 +153,18 @@ app.UseAuthorization();
 await app.Services.SeedIdentityAsync();
 app.MapControllers();
 app.MapHub<SafeRideHub>("/hubs/saferide");
+app.UseSafeRideApiJobs();
+
+// ── Hangfire Dashboard (Admin only) ───────────────────────────────────────────
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
+{
+    Authorization =
+    [
+        new HangfireAdminAuthorizationFilter()
+    ]
+});
+// ───────────────────────────────────────────────────────────────
+
 app.Run();
 
 public partial class Program;
