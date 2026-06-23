@@ -23,6 +23,7 @@ public sealed class CreateBookingCommandHandler
     private readonly IRealtimeNotificationService _realtimeNotificationService;
     private readonly IPromotionRepository _promotionRepository;
     private readonly IMatchingPolicyProvider _matchingPolicyProvider;
+    private readonly IBookingLifecycleJobScheduler _jobScheduler;
 
     public CreateBookingCommandHandler(
         IBookingRepository bookingRepository,
@@ -34,7 +35,8 @@ public sealed class CreateBookingCommandHandler
         IVehicleLicenseRequirementService vehicleLicenseRequirementService,
         IRealtimeNotificationService realtimeNotificationService,
         IPromotionRepository promotionRepository,
-        IMatchingPolicyProvider matchingPolicyProvider)
+        IMatchingPolicyProvider matchingPolicyProvider,
+        IBookingLifecycleJobScheduler jobScheduler)
     {
         _bookingRepository = bookingRepository;
         _unitOfWork = unitOfWork;
@@ -46,6 +48,7 @@ public sealed class CreateBookingCommandHandler
         _realtimeNotificationService = realtimeNotificationService;
         _promotionRepository = promotionRepository;
         _matchingPolicyProvider = matchingPolicyProvider;
+        _jobScheduler = jobScheduler;
     }
 
     public async Task<CreateBookingResponse> Handle(
@@ -215,6 +218,15 @@ public sealed class CreateBookingCommandHandler
             await _matchingService.StartMatchingAsync(
                 booking.BookingId,
                 cancellationToken);
+
+            // Schedule Hangfire delayed jobs for lifecycle management.
+            var options = _matchingPolicyProvider.Current;
+            _jobScheduler.ScheduleExpandRadius(
+                booking.BookingId,
+                TimeSpan.FromMinutes(options.ExpandAfterMinutes));
+            _jobScheduler.ScheduleExpireBooking(
+                booking.BookingId,
+                TimeSpan.FromMinutes(options.BookingExpireAfterMinutes));
         }
 
         var matchingSnapshot = _matchingPolicyProvider.GetSnapshot(
