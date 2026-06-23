@@ -1,4 +1,6 @@
 import 'dart:math';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart' as gmap;
 import 'package:vietmap_flutter_gl/vietmap_flutter_gl.dart' as vmap;
@@ -40,6 +42,112 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
   final Map<String, vmap.Line> _vmapPolylineHandles = {};
   bool _vmapPolylineSyncInProgress = false;
   bool _vmapPolylineSyncPending = false;
+  final Map<AppMarkerType, gmap.BitmapDescriptor> _cachedGoogleMarkerIcons = {};
+
+  @override
+  void initState() {
+    super.initState();
+    if (MapConfig.activeMapProvider == MapRenderProvider.googleMaps) {
+      _initGoogleMarkerIcons();
+    }
+  }
+
+  Future<void> _initGoogleMarkerIcons() async {
+    try {
+      final pickup = await _createMarkerImage(AppMarkerType.pickup);
+      final dest = await _createMarkerImage(AppMarkerType.destination);
+      final driver = await _createMarkerImage(AppMarkerType.driver);
+      final custom = await _createMarkerImage(AppMarkerType.custom);
+
+      if (mounted) {
+        setState(() {
+          _cachedGoogleMarkerIcons[AppMarkerType.pickup] = pickup;
+          _cachedGoogleMarkerIcons[AppMarkerType.destination] = dest;
+          _cachedGoogleMarkerIcons[AppMarkerType.driver] = driver;
+          _cachedGoogleMarkerIcons[AppMarkerType.custom] = custom;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error generating Google Maps custom markers: $e');
+    }
+  }
+
+  Future<gmap.BitmapDescriptor> _createMarkerImage(AppMarkerType type) async {
+    final double width = 72.0;
+    final double height = type == AppMarkerType.driver ? 72.0 : 90.0;
+
+    final ui.PictureRecorder recorder = ui.PictureRecorder();
+    final Canvas canvas = Canvas(recorder);
+
+    Color color;
+    IconData iconData;
+    double iconSize;
+
+    switch (type) {
+      case AppMarkerType.pickup:
+        color = const Color(0xFF1565C0);
+        iconData = Icons.person_pin_circle_rounded;
+        iconSize = 36.0;
+        break;
+      case AppMarkerType.destination:
+        color = const Color(0xFFC62828);
+        iconData = Icons.flag_rounded;
+        iconSize = 32.0;
+        break;
+      case AppMarkerType.driver:
+        color = const Color(0xFF006B70);
+        iconData = Icons.directions_car_filled_rounded;
+        iconSize = 36.0;
+        break;
+      case AppMarkerType.custom:
+        color = Colors.red;
+        iconData = Icons.location_on;
+        iconSize = 36.0;
+        break;
+    }
+
+    final shadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.3)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+    canvas.drawCircle(const Offset(36, 36), 26, shadowPaint);
+
+    final mainPaint = Paint()..color = color;
+    canvas.drawCircle(const Offset(36, 36), 26, mainPaint);
+
+    if (type != AppMarkerType.driver) {
+      final path = Path()
+        ..moveTo(26, 52)
+        ..lineTo(46, 52)
+        ..lineTo(36, 76)
+        ..close();
+      canvas.drawPath(path, mainPaint);
+    }
+
+    final textPainter = TextPainter(textDirection: TextDirection.ltr);
+    textPainter.text = TextSpan(
+      text: String.fromCharCode(iconData.codePoint),
+      style: TextStyle(
+        fontSize: iconSize,
+        fontFamily: 'MaterialIcons',
+        color: Colors.white,
+      ),
+    );
+    textPainter.layout();
+
+    final double textX = 36 - (textPainter.width / 2);
+    final double textY = 36 - (textPainter.height / 2);
+    textPainter.paint(canvas, Offset(textX, textY));
+
+    final ui.Picture picture = recorder.endRecording();
+    final ui.Image image = await picture.toImage(width.toInt(), height.toInt());
+    final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+
+    if (byteData == null) {
+      return gmap.BitmapDescriptor.defaultMarker;
+    }
+
+    return gmap.BitmapDescriptor.bytes(byteData.buffer.asUint8List());
+  }
 
   @override
   void didUpdateWidget(MapRendererWidget oldWidget) {
@@ -123,36 +231,46 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
 
   Widget _buildGoogleMap() {
     final gMarkers = widget.markers.map((m) {
-      gmap.BitmapDescriptor icon;
-      switch (m.markerType) {
-        case AppMarkerType.pickup:
-          icon = gmap.BitmapDescriptor.defaultMarkerWithHue(
-            gmap.BitmapDescriptor.hueAzure,
-          );
-          break;
-        case AppMarkerType.destination:
-          icon = gmap.BitmapDescriptor.defaultMarkerWithHue(
-            gmap.BitmapDescriptor.hueRed,
-          );
-          break;
-        case AppMarkerType.driver:
-          icon = gmap.BitmapDescriptor.defaultMarkerWithHue(
-            gmap.BitmapDescriptor.hueOrange,
-          );
-          break;
-        case AppMarkerType.custom:
-          icon = m.hue != null
-              ? gmap.BitmapDescriptor.defaultMarkerWithHue(m.hue!)
-              : gmap.BitmapDescriptor.defaultMarker;
-          break;
+      gmap.BitmapDescriptor icon = gmap.BitmapDescriptor.defaultMarker;
+
+      final cachedIcon = _cachedGoogleMarkerIcons[m.markerType];
+      if (cachedIcon != null) {
+        icon = cachedIcon;
+      } else {
+        switch (m.markerType) {
+          case AppMarkerType.pickup:
+            icon = gmap.BitmapDescriptor.defaultMarkerWithHue(
+              gmap.BitmapDescriptor.hueAzure,
+            );
+            break;
+          case AppMarkerType.destination:
+            icon = gmap.BitmapDescriptor.defaultMarkerWithHue(
+              gmap.BitmapDescriptor.hueRed,
+            );
+            break;
+          case AppMarkerType.driver:
+            icon = gmap.BitmapDescriptor.defaultMarkerWithHue(
+              gmap.BitmapDescriptor.hueOrange,
+            );
+            break;
+          case AppMarkerType.custom:
+            icon = m.hue != null
+                ? gmap.BitmapDescriptor.defaultMarkerWithHue(m.hue!)
+                : gmap.BitmapDescriptor.defaultMarker;
+            break;
+        }
       }
+
+      final anchor = m.markerType == AppMarkerType.driver
+          ? const Offset(0.5, 0.5)
+          : const Offset(0.5, 0.844);
 
       return gmap.Marker(
         markerId: gmap.MarkerId(m.id),
         position: gmap.LatLng(m.position.latitude, m.position.longitude),
         icon: icon,
         rotation: m.rotation,
-        anchor: const Offset(0.5, 1.0),
+        anchor: anchor,
         infoWindow: gmap.InfoWindow.noText,
       );
     }).toSet();
