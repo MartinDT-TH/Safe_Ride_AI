@@ -82,3 +82,14 @@ Run targeted verification first based on the files changed. Avoid fixing unrelat
 - Report changed files.
 - Summarize why each change was needed.
 - Mention commands run and whether they passed.
+
+
+## Clarification and Assumption Rules
+
+* Do not guess important product, architecture, database, security, configuration, or workflow decisions.
+* If a task has multiple valid implementation approaches, ask for confirmation before changing code.
+* Ask before introducing new infrastructure, new packages, new database tables, new migrations, new background jobs, new external providers, or new business flows.
+* Ask before changing existing booking, matching, offer, trip, payment, promotion, authentication, Redis, Hangfire, SignalR, or map-routing behavior.
+* Ask before performing destructive or history-changing actions such as deleting files, removing migrations, dropping databases, resetting branches, rebasing, force-pushing, or deleting branches.
+* For small, low-risk, obvious implementation details, proceed with the most consistent existing pattern and report the assumption in the final summary.
+* When uncertain, prefer a short implementation plan and wait for approval before editing.
