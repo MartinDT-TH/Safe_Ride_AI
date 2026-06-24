@@ -4,4 +4,5 @@ public sealed record BookingFareEstimateResponse(
     double EstimatedDistanceKm,
     int EstimatedDurationMinutes,
     string? EncodedPolyline,
-    decimal EstimatedFare);
+    decimal EstimatedFare,
+    decimal? SurgeMultiplier);
