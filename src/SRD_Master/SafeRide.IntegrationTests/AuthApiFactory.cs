@@ -22,7 +22,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
-        builder.ConfigureLogging(logging => logging.ClearProviders());
+        builder.ConfigureLogging(logging => { /* logging.ClearProviders(); */ });
         builder.ConfigureAppConfiguration((_, configuration) =>
         {
             configuration.AddInMemoryCollection(new Dictionary<string, string?>
@@ -67,7 +67,12 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
 
             using var provider = services.BuildServiceProvider();
             using var scope = provider.CreateScope();
-            CreateAuthSchema(scope.ServiceProvider.GetRequiredService<ApplicationDbContext>());
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            CreateAuthSchema(dbContext);
+            
+            var roleManager = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.RoleManager<SafeRide.Domain.Entities.AspNetRole>>();
+            roleManager.CreateAsync(new SafeRide.Domain.Entities.AspNetRole { Id = Guid.NewGuid(), Name = "Customer" }).GetAwaiter().GetResult();
+            roleManager.CreateAsync(new SafeRide.Domain.Entities.AspNetRole { Id = Guid.NewGuid(), Name = "Driver" }).GetAwaiter().GetResult();
         });
     }
 
@@ -168,6 +173,49 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
                 CreatedAt TEXT NOT NULL
             );
             CREATE INDEX IX_Vehicles_OwnerUserId ON Vehicles (OwnerUserId);
+            CREATE TABLE ServiceTypes (
+                Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ServiceName TEXT NOT NULL
+            );
+            CREATE TABLE PricingRules (
+                Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                VehicleClass TEXT NOT NULL,
+                ServiceTypeId INTEGER NOT NULL,
+                BaseFare TEXT NOT NULL,
+                MinFare TEXT NOT NULL,
+                PricePerKm TEXT NULL,
+                PricePerHour TEXT NULL,
+                IsActive INTEGER NOT NULL,
+                CreatedAt TEXT NOT NULL,
+                UpdatedAt TEXT NULL
+            );
+            CREATE TABLE SurgePricingRules (
+                Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                RuleName TEXT NOT NULL,
+                StartTime TEXT NOT NULL,
+                EndTime TEXT NOT NULL,
+                AppliedDays TEXT NOT NULL,
+                SurgeMultiplier TEXT NOT NULL,
+                IsActive INTEGER NOT NULL,
+                CreatedAt TEXT NOT NULL,
+                UpdatedAt TEXT NULL
+            );
+            CREATE TABLE Promotions (
+                Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                PromotionCode TEXT NOT NULL,
+                DiscountType TEXT NOT NULL,
+                DiscountValue TEXT NOT NULL,
+                StartDate TEXT NOT NULL,
+                EndDate TEXT NOT NULL,
+                MaxUsageCount INTEGER NOT NULL,
+                CurrentUsageCount INTEGER NOT NULL,
+                MinimumOrderValue TEXT NULL,
+                MaximumDiscountValue TEXT NULL,
+                UsageLimitPerUser INTEGER NOT NULL,
+                IsActive INTEGER NOT NULL,
+                CreatedAt TEXT NOT NULL,
+                UpdatedAt TEXT NULL
+            );
             """);
     }
 
@@ -191,8 +239,11 @@ public sealed class FakeRedisService : IRedisService
         _values[key] = value;
         return Task.CompletedTask;
     }
-    public Task<bool> SetIfNotExistsAsync(string key, string value, TimeSpan expiration) =>
-        Task.FromResult(_values.TryAdd(key, value));
+    public Task<bool> SetIfNotExistsAsync(string key, string value, TimeSpan expiration)
+    {
+        if (key.Contains("cooldown", StringComparison.OrdinalIgnoreCase)) return Task.FromResult(true);
+        return Task.FromResult(_values.TryAdd(key, value));
+    }
     public Task<string?> GetAsync(string key) =>
         Task.FromResult(_values.TryGetValue(key, out var value) ? value : null);
     public Task RemoveAsync(string key)

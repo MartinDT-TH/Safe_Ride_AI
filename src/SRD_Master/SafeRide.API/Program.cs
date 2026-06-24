@@ -150,7 +150,9 @@ app.UseAuthentication();
 app.UseMiddleware<ProfileCompletionMiddleware>();
 app.UseAuthorization();
 
-await app.Services.SeedIdentityAsync();
+// await app.Services.SeedIdentityAsync(app.Lifetime.ApplicationStopping);
+// await app.Services.SeedPricingAndSurgeRulesAsync(app.Lifetime.ApplicationStopping);
+// await app.Services.SeedBookingFeaturesAsync(app.Lifetime.ApplicationStopping);
 app.MapControllers();
 app.MapHub<SafeRideHub>("/hubs/saferide");
 app.UseSafeRideApiJobs();
