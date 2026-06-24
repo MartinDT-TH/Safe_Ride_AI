@@ -355,6 +355,72 @@ public sealed class BookingRepository : IBookingRepository
         return rules;
     }
 
+    public async Task<SurgePricingRule?> GetActiveSurgePricingRuleAsync(
+        DateTime currentUtcTime,
+        CancellationToken cancellationToken)
+    {
+        var activeRules = await GetActiveSurgePricingRulesAsync(cancellationToken);
+        
+        var localTime = TimeZoneInfo.ConvertTimeFromUtc(
+            currentUtcTime,
+            TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time"));
+        
+        var currentTime = TimeOnly.FromDateTime(localTime);
+        var currentDayString = localTime.DayOfWeek.ToString();
+
+        return activeRules.FirstOrDefault(rule =>
+        {
+            if (currentTime < rule.StartTime || currentTime > rule.EndTime)
+            {
+                return false;
+            }
+
+            var days = rule.AppliedDays.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            return days.Contains(currentDayString, StringComparer.OrdinalIgnoreCase);
+        });
+    }
+
+    private async Task<IReadOnlyList<SurgePricingRule>> GetActiveSurgePricingRulesAsync(
+        CancellationToken cancellationToken)
+    {
+        var cached = await _redisService.GetAsync(RedisKeys.ActiveSurgePricingRules);
+        if (!string.IsNullOrWhiteSpace(cached))
+        {
+            try
+            {
+                var cachedItems = JsonSerializer.Deserialize<List<SurgePricingRuleCacheItem>>(
+                    cached,
+                    JsonOptions);
+                if (cachedItems is not null)
+                {
+                    return cachedItems
+                        .Select(item => item.ToEntity())
+                        .ToList();
+                }
+            }
+            catch (JsonException)
+            {
+                await _redisService.RemoveAsync(RedisKeys.ActiveSurgePricingRules);
+            }
+        }
+
+        var rules = await _dbContext.SurgePricingRules
+            .AsNoTracking()
+            .Where(rule => rule.IsActive)
+            .OrderByDescending(rule => rule.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        var cacheItems = rules
+            .Select(rule => rule.ToCacheItem())
+            .ToList();
+        await _redisService.SetAsync(
+            RedisKeys.ActiveSurgePricingRules,
+            JsonSerializer.Serialize(cacheItems, JsonOptions),
+            TimeSpan.FromMinutes(10));
+
+        return rules;
+    }
+
     public async Task<IReadOnlyList<Booking>> GetScheduledBookingsReadyForMatchingAsync(
         DateTime matchingCutoffUtc,
         CancellationToken cancellationToken)

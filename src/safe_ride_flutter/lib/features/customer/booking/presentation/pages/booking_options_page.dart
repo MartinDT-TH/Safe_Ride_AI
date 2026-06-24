@@ -801,7 +801,7 @@ class _RouteSummary extends StatelessWidget {
                 Text('Đang tính giá dự kiến...'),
               ],
             )
-          else if (estimate != null)
+          else if (estimate != null) ...[
             Row(
               children: [
                 Expanded(
@@ -828,6 +828,26 @@ class _RouteSummary extends StatelessWidget {
                 ),
               ],
             ),
+            if (estimate!.surgeMultiplier != null && estimate!.surgeMultiplier! > 1.0)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.trending_up, color: Colors.orange, size: 18),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Giá đang tăng do nhu cầu cao (x${estimate!.surgeMultiplier})',
+                      style: const TextStyle(
+                        color: Colors.orange,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
         ],
       ),
     );
