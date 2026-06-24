@@ -366,7 +366,7 @@ public sealed class BookingRepository : IBookingRepository
             TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time"));
         
         var currentTime = TimeOnly.FromDateTime(localTime);
-        var currentDayString = localTime.DayOfWeek.ToString();
+        var currentDayString = localTime.DayOfWeek.ToString().Substring(0, 3);
 
         return activeRules.FirstOrDefault(rule =>
         {
