@@ -1,66 +1,84 @@
 # SafeRide Agent Instructions
 
-## Project
-SafeRide is a .NET 8 Clean Architecture + Flutter project.
+## Project Map
+SafeRide is a .NET 8 Clean Architecture backend plus a Flutter mobile app.
 
 Backend:
-- src/SRD_Master/SafeRide.API
-- src/SRD_Master/SafeRide.Application
-- src/SRD_Master/SafeRide.Infrastructure
-- src/SRD_Master/SafeRide.Domain
+- Solution: `src/SRD_Master/SafeRide.slnx`
+- API: `src/SRD_Master/SafeRide.API`
+- Application: `src/SRD_Master/SafeRide.Application`
+- Domain: `src/SRD_Master/SafeRide.Domain`
+- Infrastructure: `src/SRD_Master/SafeRide.Infrastructure`
+- Realtime: `src/SRD_Master/SafeRide.Realtime`
+- Contracts, Shared, UnitTests, and IntegrationTests live beside those projects.
 
 Flutter:
-- src/safe_ride_flutter
+- App root: `src/safe_ride_flutter`
+- Uses Provider, GetIt, Dio, SignalR client, Google Maps/VietMap services, and feature-based folders.
 
-## Rules
-- Do not scan the whole repository unless the task truly requires it.
-- Start with targeted search and inspect only relevant files.
-- Prefer small, isolated patches.
-- Do not rewrite unrelated files.
-- Do not modify local/dev-only config unless explicitly asked:
-  - launchSettings.json
-  - android/gradle.properties
-  - local api key files
+## Layer Boundaries
+- API owns the composition root, controllers, middleware, Swagger, SignalR hub mapping, and recurring Hangfire registration.
+- Application owns MediatR features, interfaces, DTOs, Options models, and business logic.
+- Domain owns entities/enums only. It must not reference configuration, Redis, Hangfire, SignalR, or infrastructure.
+- Infrastructure owns EF Core, Identity, SQL Server, Redis, Hangfire jobs, external providers, Cloudinary, SMS, auth implementations, and realtime notification implementations.
+- Realtime owns SignalR hub and realtime notification plumbing, but hub mapping belongs in API composition.
+
+## SafeRide Business Invariants
+- Matching must create driver offers first. Do not create a Trip until the customer confirms a driver.
+- A driver becomes Busy only after a confirmed/assigned trip, not merely because an offer exists.
+- Multiple offers may exist for one booking, but guard against duplicate active trips for the same driver or booking.
+- When a driver accepts or is assigned to another trip, remaining conflicting offers must expire or be ignored safely.
+- Promotion usage must be counted only after a trip is completed. Cancelled or expired bookings must not increment promotion usage.
+- Customer-facing app messages must remain Vietnamese.
+
+## Redis, Realtime, and Background Jobs
+- Redis GEO indexes are sorted sets. Removing a driver from `OnlineDriversGeo` requires a Redis abstraction method that uses sorted-set member removal; normal key deletion does not remove GEO members.
+- Driver matching must validate GEO candidates against live Redis status/location data and database eligibility before creating offers.
+- Use Redis TTL for short-lived cache expiry where appropriate. Do not add Redis key scanning jobs unless explicitly needed.
+- Hangfire job implementations belong in Infrastructure.
+- Recurring Hangfire jobs must be registered from the API composition root through an Infrastructure extension.
+- Application and Domain must not reference Hangfire.
+- SignalR hub mapping belongs in API composition. Realtime notification implementations belong outside Domain.
+
+## Configuration and Secrets
+- Do not hard-code operational values in services, handlers, hubs, or jobs.
+- Move these values into strongly typed Options sections: timeouts, polling intervals, Redis TTLs, Hangfire cron expressions, Hangfire recurring job ids, cleanup retention days, cleanup batch sizes, notification titles/types, SignalR event names/types, matching expiration durations, offer expiration durations, and external provider timeouts.
+- Each Options class should expose a `SectionName` constant and be bound/validated during dependency injection.
+- Avoid direct `IConfiguration` access except in composition root or infrastructure setup.
+- Never commit real secrets, connection strings, API keys, JWT secrets, Redis passwords, OAuth IDs, Cloudinary secrets, SMS keys, or map keys.
+- Use user secrets, environment variables, ignored local files, or Flutter `env/*.local.json`.
+- Do not modify local/dev-only config unless explicitly asked, including `launchSettings.json`, `android/gradle.properties`, `appsettings.Development.json`, and local API key files.
+
+## Agent and Git Safety
+- Start with targeted search and inspect only relevant files. Do not scan the whole repository unless the task truly requires it.
+- Prefer small, isolated patches. Do not rewrite unrelated files or introduce unrelated formatting churn.
+- Do not edit generated/build output under `bin/`, `obj/`, `build/`, `.dart_tool/`, `.vs/`, or `artifacts/`.
 - Use English for code identifiers.
-- User-facing messages must be Vietnamese.
-- For database changes, check EF entities, configurations, migrations, and DTOs together.
+- Use read-only subagents for mapping, review, and risk discovery when available.
+- Only one writer agent should edit code for a task.
+- Subagents should return compact summaries with relevant files, current flow, risks, and edit points. Do not paste full files unless necessary.
+- Do not commit, push, reset, rebase, merge, delete branches, or run `git add .` unless explicitly requested.
+- Stage and report only intentional files when Git operations are requested.
+
+## Change Checks
+- For database changes, check EF entities, configurations, migrations, DTO/contracts, handlers/services, and tests together.
+- Only create, remove, update, drop, or rollback EF migrations/databases when explicitly requested. Use `SafeRide_EFCore_Migration_Workflow.md` for exact EF commands.
 - For Flutter changes, check service, provider/state, page/widget, model DTO, and route usage together.
 
-## Configuration Rules
-
-Do not hard-code operational values in code.
-
-Move these values into strongly typed Options sections in appsettings.Development.json:
-- timeout values
-- interval values
-- Redis TTL values
-- Hangfire cron expressions
-- Hangfire recurring job ids
-- cleanup retention days
-- cleanup batch sizes
-- notification titles
-- notification types
-- SignalR event names/types
-- matching expiration durations
-- offer expiration durations
-
-Use the Options pattern:
-- Each Options class must have a SectionName constant.
-- Bind Options during dependency injection.
-- Inject IOptions<T> or IOptionsMonitor<T>.
-- Domain must not reference IConfiguration or IOptions.
-- Avoid direct IConfiguration access except in composition root or infrastructure setup.
-
 ## Verification
-Backend:
-- dotnet build
-- Run targeted tests if available
+Backend from `src/SRD_Master`:
+- `dotnet build SafeRide.slnx`
+- `dotnet test SafeRide.UnitTests/SafeRide.UnitTests.csproj`
+- `dotnet test SafeRide.IntegrationTests/SafeRide.IntegrationTests.csproj`
 
-Flutter:
-- flutter analyze
-- Avoid fixing unrelated existing warnings unless requested
+Flutter from `src/safe_ride_flutter`:
+- `flutter pub get`
+- `flutter analyze`
+- `flutter test`
 
-## Output style
+Run targeted verification first based on the files changed. Avoid fixing unrelated existing warnings unless requested. For Markdown-only edits, manual diff review is enough.
+
+## Output Style
 - Report changed files.
 - Summarize why each change was needed.
 - Mention commands run and whether they passed.
