@@ -47,7 +47,7 @@ Flutter:
 - Avoid direct `IConfiguration` access except in composition root or infrastructure setup.
 - Never commit real secrets, connection strings, API keys, JWT secrets, Redis passwords, OAuth IDs, Cloudinary secrets, SMS keys, or map keys.
 - Use user secrets, environment variables, ignored local files, or Flutter `env/*.local.json`.
-- Do not modify local/dev-only config unless explicitly asked, including `launchSettings.json`, `android/gradle.properties`, `appsettings.Development.json`, and local API key files.
+- Ask before modify local/dev-only config , including `launchSettings.json`, `android/gradle.properties`, `appsettings.Development.json`, and local API key files.
 
 ## Agent and Git Safety
 - Start with targeted search and inspect only relevant files. Do not scan the whole repository unless the task truly requires it.
