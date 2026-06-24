@@ -4,7 +4,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Realtime;
-using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
 using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
@@ -57,64 +56,13 @@ public sealed class BookingMatchingBackgroundService : BackgroundService
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var clock = scope.ServiceProvider.GetRequiredService<IDateTimeProvider>();
-        var policyProvider = scope.ServiceProvider.GetRequiredService<IMatchingPolicyProvider>();
-        var redisService = scope.ServiceProvider.GetRequiredService<IRedisService>();
-        var realtimeService = scope.ServiceProvider.GetRequiredService<IRealtimeNotificationService>();
         var matchingService = scope.ServiceProvider.GetRequiredService<IBookingMatchingService>();
 
-        var utcNow = clock.UtcNow;
-        var expiredOfferEvents = await ExpireDriverOffersAsync(
+        var bookingIdsToRetry = await GetSearchingBookingIdsAsync(
             dbContext,
-            redisService,
-            utcNow,
             cancellationToken);
 
-        var bookingEvents = await ProcessSearchingBookingsAsync(
-            dbContext,
-            policyProvider,
-            redisService,
-            utcNow,
-            cancellationToken);
-
-        if (expiredOfferEvents.Count > 0 || bookingEvents.HasChanges)
-        {
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
-
-        foreach (var notification in expiredOfferEvents)
-        {
-            await realtimeService.PublishDriverOfferExpiredAsync(notification, cancellationToken);
-        }
-
-        foreach (var notification in bookingEvents.OfferExpiredEvents)
-        {
-            await realtimeService.PublishDriverOfferExpiredAsync(notification, cancellationToken);
-        }
-
-        foreach (var notification in bookingEvents.OfferCancelledEvents)
-        {
-            await realtimeService.PublishDriverOfferCancelledAsync(notification, cancellationToken);
-        }
-
-        foreach (var notification in bookingEvents.RadiusExpandedEvents)
-        {
-            await realtimeService.PublishBookingSearchRadiusExpandedAsync(notification, cancellationToken);
-        }
-
-        foreach (var notification in bookingEvents.BookingExpiredEvents)
-        {
-            await realtimeService.PublishBookingExpiredAsync(notification, cancellationToken);
-            await realtimeService.PublishBookingStatusChangedAsync(
-                new BookingStatusChangedEvent(
-                    notification.BookingId,
-                    notification.CustomerId,
-                    BookingStatus.Expired,
-                    notification.ExpiredAt),
-                cancellationToken);
-        }
-
-        foreach (var bookingId in bookingEvents.BookingsToRetry)
+        foreach (var bookingId in bookingIdsToRetry)
         {
             await matchingService.StartMatchingAsync(bookingId, cancellationToken);
         }
@@ -157,130 +105,17 @@ public sealed class BookingMatchingBackgroundService : BackgroundService
         return events;
     }
 
-    private static async Task<MatchingCycleEvents> ProcessSearchingBookingsAsync(
+    private static Task<List<long>> GetSearchingBookingIdsAsync(
         ApplicationDbContext dbContext,
-        IMatchingPolicyProvider policyProvider,
-        IRedisService redisService,
-        DateTime utcNow,
         CancellationToken cancellationToken)
     {
-        var bookings = await dbContext.Bookings
-            .Include(x => x.DriverOffers)
+        // Return just the IDs of bookings still actively searching so the
+        // matching loop can keep firing offers. Expire / expand logic has been
+        // moved to dedicated Hangfire delayed jobs.
+        return dbContext.Bookings
             .Where(x => x.BookingStatus == BookingStatus.Searching)
             .OrderBy(x => x.CreatedAt)
+            .Select(x => x.BookingId)
             .ToListAsync(cancellationToken);
-
-        var events = new MatchingCycleEvents();
-        foreach (var booking in bookings)
-        {
-            var snapshot = policyProvider.GetSnapshot(booking, utcNow);
-            if (snapshot.ExpiresAt.HasValue && utcNow >= snapshot.ExpiresAt.Value)
-            {
-                booking.BookingStatus = BookingStatus.Expired;
-                booking.UpdatedAt = utcNow;
-                events.HasChanges = true;
-
-                dbContext.Notifications.Add(new Notification
-                {
-                    UserId = booking.CustomerId,
-                    Title = "Booking đã hết hạn",
-                    Content = "Rất tiếc, SafeRide chưa tìm thấy tài xế phù hợp trong thời gian quy định. Booking đã hết hạn, bạn có thể thử đặt lại.",
-                    NotificationType = "BookingExpired",
-                    SentAt = utcNow
-                });
-
-                await redisService.RemoveAsync(RedisKeys.MatchingBooking(booking.BookingId));
-
-                foreach (var offer in booking.DriverOffers.Where(x => IsOpenOfferStatus(x.OfferStatus)))
-                {
-                    if (offer.ExpiresAt <= utcNow)
-                    {
-                        offer.OfferStatus = DriverOfferStatus.Expired;
-                        offer.ExpiredAt = utcNow;
-                        events.OfferExpiredEvents.Add(new DriverOfferExpiredEvent(
-                            offer.BookingId,
-                            booking.CustomerId,
-                            offer.DriverId,
-                            offer.Id,
-                            utcNow,
-                            "Yêu cầu nhận chuyến đã hết hạn."));
-                    }
-                    else
-                    {
-                        offer.OfferStatus = DriverOfferStatus.Cancelled;
-                        offer.CancelledAt = utcNow;
-                        events.OfferCancelledEvents.Add(new DriverOfferCancelledEvent(
-                            offer.BookingId,
-                            booking.CustomerId,
-                            offer.DriverId,
-                            offer.Id,
-                            utcNow,
-                            "Yêu cầu nhận chuyến đã được hủy vì booking đã hết hạn."));
-                    }
-
-                    await redisService.RemoveAsync(RedisKeys.MatchingOffer(offer.BookingId, offer.DriverId));
-                    await redisService.RemoveAsync(RedisKeys.MatchingDriverLock(offer.DriverId));
-                }
-
-                events.BookingExpiredEvents.Add(new BookingExpiredEvent(
-                    booking.BookingId,
-                    booking.CustomerId,
-                    utcNow,
-                    "Rất tiếc, SafeRide chưa tìm thấy tài xế phù hợp trong thời gian quy định. Booking đã hết hạn, bạn có thể thử đặt lại."));
-                continue;
-            }
-
-            if (snapshot.IsExpanded)
-            {
-                var notified = await redisService.SetIfNotExistsAsync(
-                    RedisKeys.BookingRadiusExpandedNotified(booking.BookingId),
-                    "1",
-                    TimeSpan.FromMinutes(15));
-                if (notified)
-                {
-                    dbContext.Notifications.Add(new Notification
-                    {
-                        UserId = booking.CustomerId,
-                        Title = "Mở rộng phạm vi tìm kiếm",
-                        Content = "Chưa tìm thấy tài xế phù hợp trong 5km. SafeRide đang mở rộng phạm vi tìm kiếm lên 10km.",
-                        NotificationType = "BookingSearchRadiusExpanded",
-                        SentAt = utcNow
-                    });
-                    events.HasChanges = true;
-                    events.RadiusExpandedEvents.Add(new BookingSearchRadiusExpandedEvent(
-                        booking.BookingId,
-                        booking.CustomerId,
-                        policyProvider.Current.InitialRadiusKm,
-                        policyProvider.Current.ExpandedRadiusKm,
-                        utcNow,
-                        "Chưa tìm thấy tài xế phù hợp trong 5km. SafeRide đang mở rộng phạm vi tìm kiếm lên 10km."));
-                }
-            }
-
-            events.BookingsToRetry.Add(booking.BookingId);
-        }
-
-        return events;
-    }
-
-    private static bool IsOpenOfferStatus(DriverOfferStatus status)
-    {
-        return status is DriverOfferStatus.Sent
-            or DriverOfferStatus.DriverAccepted;
-    }
-
-    private sealed class MatchingCycleEvents
-    {
-        public bool HasChanges { get; set; }
-
-        public List<DriverOfferExpiredEvent> OfferExpiredEvents { get; } = [];
-
-        public List<DriverOfferCancelledEvent> OfferCancelledEvents { get; } = [];
-
-        public List<BookingSearchRadiusExpandedEvent> RadiusExpandedEvents { get; } = [];
-
-        public List<BookingExpiredEvent> BookingExpiredEvents { get; } = [];
-
-        public List<long> BookingsToRetry { get; } = [];
     }
 }

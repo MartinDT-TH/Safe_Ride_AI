@@ -22,6 +22,7 @@ public sealed class BookingMatchingService : IBookingMatchingService
     private readonly IRedisService _redisService;
     private readonly IRealtimeNotificationService _realtimeNotificationService;
     private readonly IMatchingPolicyProvider _matchingPolicyProvider;
+    private readonly IBookingLifecycleJobScheduler _jobScheduler;
 
     public BookingMatchingService(
         ILogger<BookingMatchingService> logger,
@@ -31,7 +32,8 @@ public sealed class BookingMatchingService : IBookingMatchingService
         IDateTimeProvider dateTimeProvider,
         IRedisService redisService,
         IRealtimeNotificationService realtimeNotificationService,
-        IMatchingPolicyProvider matchingPolicyProvider)
+        IMatchingPolicyProvider matchingPolicyProvider,
+        IBookingLifecycleJobScheduler jobScheduler)
     {
         _logger = logger;
         _dbContext = dbContext;
@@ -41,6 +43,7 @@ public sealed class BookingMatchingService : IBookingMatchingService
         _redisService = redisService;
         _realtimeNotificationService = realtimeNotificationService;
         _matchingPolicyProvider = matchingPolicyProvider;
+        _jobScheduler = jobScheduler;
     }
 
     public async Task<BookingDriverOfferDto?> StartMatchingAsync(
@@ -108,7 +111,6 @@ public sealed class BookingMatchingService : IBookingMatchingService
             }
 
             await CacheMatchingBookingAsync(booking, cancellationToken);
-            await ExpireStaleOffersAsync(utcNow, cancellationToken);
 
             var existingOffer = await GetActiveOfferDtoAsync(bookingId, utcNow, cancellationToken);
             if (existingOffer is not null)
@@ -248,6 +250,9 @@ public sealed class BookingMatchingService : IBookingMatchingService
             await _dbContext.BookingDriverOffers.AddAsync(offer, cancellationToken);
             await _dbContext.SaveChangesAsync(cancellationToken);
             await CacheMatchingOfferAsync(offer);
+            _jobScheduler.ScheduleExpireDriverOffer(
+                offer.Id,
+                offer.ExpiresAt - utcNow);
 
             var offerDto = await GetActiveOfferDtoAsync(bookingId, utcNow, cancellationToken);
             if (offerDto is not null)
@@ -332,7 +337,10 @@ public sealed class BookingMatchingService : IBookingMatchingService
                 RedisKeys.DriverOnline(driverId));
             var status = await _redisService.GetAsync(
                 RedisKeys.DriverStatus(driverId));
+            var location = await _redisService.GetAsync(
+                RedisKeys.DriverLocation(driverId));
             if (online is not null
+                && location is not null
                 && string.Equals(
                     status,
                     DriverWorkStatus.Online.ToString(),

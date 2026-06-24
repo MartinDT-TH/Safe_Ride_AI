@@ -74,6 +74,15 @@ public sealed class RedisService : IRedisService, IDisposable
         string member) =>
         Database.GeoAddAsync(key, longitude, latitude, member);
 
+    public Task GeoRemoveAsync(
+        string key,
+        string member,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Database.SortedSetRemoveAsync(key, member);
+    }
+
     public async Task<IReadOnlyList<string>> GeoRadiusAsync(
         string key,
         double longitude,

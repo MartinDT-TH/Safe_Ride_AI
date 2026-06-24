@@ -23,6 +23,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
     private readonly IRealtimeNotificationService _realtimeNotificationService;
     private readonly IBookingMatchingService _bookingMatchingService;
     private readonly IMatchingPolicyProvider _matchingPolicyProvider;
+    private readonly IBookingLifecycleJobScheduler _jobScheduler;
 
     public BookingAssignmentService(
         ApplicationDbContext dbContext,
@@ -32,7 +33,8 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         IRedisService redisService,
         IRealtimeNotificationService realtimeNotificationService,
         IBookingMatchingService bookingMatchingService,
-        IMatchingPolicyProvider matchingPolicyProvider)
+        IMatchingPolicyProvider matchingPolicyProvider,
+        IBookingLifecycleJobScheduler jobScheduler)
     {
         _dbContext = dbContext;
         _dateTimeProvider = dateTimeProvider;
@@ -42,6 +44,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         _realtimeNotificationService = realtimeNotificationService;
         _bookingMatchingService = bookingMatchingService;
         _matchingPolicyProvider = matchingPolicyProvider;
+        _jobScheduler = jobScheduler;
     }
 
     public async Task<CreateBookingResponse> ConfirmDriverAsync(
@@ -125,6 +128,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             offer.ExpiredAt = utcNow;
             await _dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+            await _jobScheduler.CancelExpireDriverOfferAsync(offer.Id, cancellationToken);
             await RemoveOfferKeysAsync(offer.BookingId, offer.DriverId);
 
             throw new BookingException(
@@ -192,6 +196,10 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         await _dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
+        // Cancel scheduled Hangfire lifecycle jobs — booking is no longer Searching.
+        await _jobScheduler.CancelJobsForBookingAsync(booking.BookingId, cancellationToken);
+        await _jobScheduler.CancelExpireDriverOfferAsync(offer.Id, cancellationToken);
+
         await CacheTripLiveAsync(trip, booking.CustomerId);
         await RemoveMatchingKeysAsync(booking.BookingId, offer.DriverId);
         await _redisService.SetAsync(
@@ -201,6 +209,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
 
         foreach (var cancelledOffer in cancelledOffers)
         {
+            await _jobScheduler.CancelExpireDriverOfferAsync(cancelledOffer.Id, cancellationToken);
             await RemoveOfferKeysAsync(cancelledOffer.BookingId, cancelledOffer.DriverId);
         }
 
@@ -316,6 +325,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        await _jobScheduler.CancelExpireDriverOfferAsync(offer.Id, cancellationToken);
         await RemoveOfferKeysAsync(offer.BookingId, offer.DriverId);
 
         await _realtimeNotificationService.PublishDriverOfferRejectedAsync(
@@ -390,6 +400,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             offer.ExpiredAt = utcNow;
             await _dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+            await _jobScheduler.CancelExpireDriverOfferAsync(offer.Id, cancellationToken);
             await RemoveOfferKeysAsync(offer.BookingId, offer.DriverId);
 
             await _realtimeNotificationService.PublishDriverOfferExpiredAsync(
@@ -423,6 +434,10 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         await _dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
+        await _jobScheduler.CancelExpireDriverOfferAsync(offer.Id, cancellationToken);
+        _jobScheduler.ScheduleExpireDriverOffer(
+            offer.Id,
+            offer.ExpiresAt - utcNow);
         await CacheMatchingOfferAsync(offer);
         await _redisService.SetAsync(
             RedisKeys.MatchingDriverLock(driverId),
@@ -476,6 +491,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         offer.OfferStatus = DriverOfferStatus.Rejected;
         offer.CancelledAt = utcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await _jobScheduler.CancelExpireDriverOfferAsync(offer.Id, cancellationToken);
         await RemoveOfferKeysAsync(offer.BookingId, offer.DriverId);
 
         await _realtimeNotificationService.PublishDriverOfferRejectedAsync(

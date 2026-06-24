@@ -62,7 +62,8 @@ public sealed class BookingTests
             fixture.Repository,
             new MapServiceFake(),
             new FareEstimationService(),
-            new VehicleLicenseRequirementService());
+            new VehicleLicenseRequirementService(),
+            new DateTimeProviderFake(UtcNow));
 
         var result = await handler.Handle(
             new EstimateBookingFareQuery(
@@ -192,7 +193,8 @@ public sealed class BookingTests
                 new VehicleLicenseRequirementService(),
                 new RealtimeNotificationServiceFake(),
                 Repository,
-                new MatchingPolicyProviderFake());
+                new MatchingPolicyProviderFake(),
+                new BookingLifecycleJobSchedulerFake());
         }
 
         public static readonly Guid CustomerId =
@@ -321,6 +323,13 @@ public sealed class BookingTests
             CancellationToken cancellationToken)
         {
             return Task.FromResult(PricingRule);
+        }
+
+        public Task<SurgePricingRule?> GetActiveSurgePricingRuleAsync(
+            DateTime currentUtcTime,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult<SurgePricingRule?>(null);
         }
 
         public Task<IReadOnlyList<Booking>> GetScheduledBookingsReadyForMatchingAsync(
@@ -554,5 +563,16 @@ public sealed class BookingTests
             BookingExpiredEvent notification,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
+    }
+
+    private sealed class BookingLifecycleJobSchedulerFake : IBookingLifecycleJobScheduler
+    {
+        public void ScheduleExpandRadius(long bookingId, TimeSpan delay) { }
+        public void ScheduleExpireBooking(long bookingId, TimeSpan delay) { }
+        public void ScheduleExpireDriverOffer(long offerId, TimeSpan delay) { }
+        public Task CancelExpireDriverOfferAsync(long offerId, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+        public Task CancelJobsForBookingAsync(long bookingId, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
     }
 }

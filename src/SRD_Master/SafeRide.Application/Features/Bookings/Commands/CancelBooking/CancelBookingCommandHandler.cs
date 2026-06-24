@@ -13,19 +13,22 @@ public sealed class CancelBookingCommandHandler
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IRealtimeNotificationService _realtimeNotificationService;
     private readonly IPromotionRepository _promotionRepository;
+    private readonly IBookingLifecycleJobScheduler _jobScheduler;
 
     public CancelBookingCommandHandler(
         IBookingRepository bookingRepository,
         IUnitOfWork unitOfWork,
         IDateTimeProvider dateTimeProvider,
         IRealtimeNotificationService realtimeNotificationService,
-        IPromotionRepository promotionRepository)
+        IPromotionRepository promotionRepository,
+        IBookingLifecycleJobScheduler jobScheduler)
     {
         _bookingRepository = bookingRepository;
         _unitOfWork = unitOfWork;
         _dateTimeProvider = dateTimeProvider;
         _realtimeNotificationService = realtimeNotificationService;
         _promotionRepository = promotionRepository;
+        _jobScheduler = jobScheduler;
     }
 
     public async Task<CancelBookingResponse> Handle(
@@ -96,12 +99,18 @@ public sealed class CancelBookingCommandHandler
             booking.BookingId,
             cancellationToken);
 
+        await _jobScheduler.CancelJobsForBookingAsync(booking.BookingId, cancellationToken);
+
         await _bookingRepository.CancelActiveDriverOffersAsync(
             booking.BookingId,
             utcNow,
             cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // Cancel scheduled Hangfire lifecycle jobs — booking is no longer Searching.
+        await _jobScheduler.CancelJobsForBookingAsync(booking.BookingId, cancellationToken);
+
         await _realtimeNotificationService.PublishBookingStatusChangedAsync(
             new BookingStatusChangedEvent(
                 booking.BookingId,

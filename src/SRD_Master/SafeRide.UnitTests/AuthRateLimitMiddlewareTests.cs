@@ -59,6 +59,10 @@ public sealed class AuthRateLimitMiddlewareTests
             double longitude,
             double latitude,
             string member) => Task.CompletedTask;
+        public Task GeoRemoveAsync(
+            string key,
+            string member,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<IReadOnlyList<string>> GeoRadiusAsync(
             string key,
             double longitude,

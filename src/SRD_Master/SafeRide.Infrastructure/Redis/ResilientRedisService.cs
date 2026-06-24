@@ -130,6 +130,17 @@ public sealed class ResilientRedisService : IRedisService
             () => _primary.GeoAddAsync(key, longitude, latitude, member));
     }
 
+    public async Task GeoRemoveAsync(
+        string key,
+        string member,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await _fallback.GeoRemoveAsync(key, member, cancellationToken);
+        await TryPrimaryAsync(
+            () => _primary.GeoRemoveAsync(key, member, cancellationToken));
+    }
+
     public async Task<IReadOnlyList<string>> GeoRadiusAsync(
         string key,
         double longitude,

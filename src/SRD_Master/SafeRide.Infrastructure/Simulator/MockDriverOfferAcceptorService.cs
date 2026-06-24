@@ -21,18 +21,18 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<MockDriverOfferAcceptorService> _logger;
-    private readonly IOptionsMonitor<MatchingOptions> _matchingOptionsMonitor;
+    private readonly IOptionsMonitor<SimulatorOptions> _simulatorOptionsMonitor;
     private readonly List<MockDriver> _mockDrivers;
     private readonly Random _random;
 
     public MockDriverOfferAcceptorService(
         IServiceScopeFactory scopeFactory,
         ILogger<MockDriverOfferAcceptorService> logger,
-        IOptionsMonitor<MatchingOptions> matchingOptionsMonitor)
+        IOptionsMonitor<SimulatorOptions> simulatorOptionsMonitor)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
-        _matchingOptionsMonitor = matchingOptionsMonitor;
+        _simulatorOptionsMonitor = simulatorOptionsMonitor;
         _mockDrivers = MockDriverConfiguration.GetMockDrivers();
         _random = new Random();
     }
@@ -49,7 +49,7 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
         {
             try
             {
-                var options = _matchingOptionsMonitor.CurrentValue;
+                var options = _simulatorOptionsMonitor.CurrentValue;
                 if (DateTimeOffset.UtcNow - lastTtlRefresh >= TimeSpan.FromSeconds(options.MockDriverTtlRefreshSeconds))
                 {
                     await InitializeMockDriversInRedisAsync(stoppingToken);
@@ -175,17 +175,20 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
                 // Simulate response delay
                 await Task.Delay(mockDriver.ResponseDelaySeconds * 1000, cancellationToken);
 
-                try
+                if (_simulatorOptionsMonitor.CurrentValue.MockDriverAutoAcceptOffers)
                 {
-                    // Call AcceptDriverOfferAsync (This sets status to DriverAccepted, doesn't start trip yet)
-                    await bookingAssignmentService.AcceptDriverOfferAsync(mockDriver.DriverId, offer.Id, cancellationToken);
-                    _logger.LogInformation("Mock driver {DriverId} ({Name}) accepted offer {OfferId}. Waiting for customer confirmation.",
-                        mockDriver.DriverId, mockDriver.Name, offer.Id);
-                }
-                catch (Exception ex)
-                {
-                    mockDriver.ProcessedOffers.Remove(offer.Id);
-                    _logger.LogError(ex, "Mock driver {DriverId} ({Name}) failed to accept offer {OfferId}", mockDriver.DriverId, mockDriver.Name, offer.Id);
+                    try
+                    {
+                        // Call AcceptDriverOfferAsync (This sets status to DriverAccepted, doesn't start trip yet)
+                        await bookingAssignmentService.AcceptDriverOfferAsync(mockDriver.DriverId, offer.Id, cancellationToken);
+                        _logger.LogInformation("Mock driver {DriverId} ({Name}) accepted offer {OfferId}. Waiting for customer confirmation.",
+                            mockDriver.DriverId, mockDriver.Name, offer.Id);
+                    }
+                    catch (Exception ex)
+                    {
+                        mockDriver.ProcessedOffers.Remove(offer.Id);
+                        _logger.LogError(ex, "Mock driver {DriverId} ({Name}) failed to accept offer {OfferId}", mockDriver.DriverId, mockDriver.Name, offer.Id);
+                    }
                 }
             }
         }
@@ -193,7 +196,7 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
 
     private async Task ProcessConfirmedTripsAsync(CancellationToken cancellationToken)
     {
-        if (!_matchingOptionsMonitor.CurrentValue.MockDriverAutoProgressAfterConfirm)
+        if (!_simulatorOptionsMonitor.CurrentValue.MockDriverAutoProgressAfterConfirm)
         {
             return;
         }
@@ -239,7 +242,7 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
 
         try
         {
-            var autoCompleteTrips = _matchingOptionsMonitor.CurrentValue.MockDriverAutoCompleteTrips;
+            var autoCompleteTrips = _simulatorOptionsMonitor.CurrentValue.MockDriverAutoCompleteTrips;
             var trip = await dbContext.Trips
                 .AsNoTracking()
                 .FirstOrDefaultAsync(t => t.BookingId == bookingId && t.DriverId == mockDriver.DriverId, cancellationToken);

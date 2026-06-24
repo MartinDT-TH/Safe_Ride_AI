@@ -6,12 +6,14 @@ class BookingFareEstimate {
     required this.estimatedDurationMinutes,
     required this.encodedPolyline,
     required this.estimatedFare,
+    this.surgeMultiplier,
   });
 
   final double estimatedDistanceKm;
   final int estimatedDurationMinutes;
   final String encodedPolyline;
   final double estimatedFare;
+  final double? surgeMultiplier;
 
   factory BookingFareEstimate.fromJson(Map<String, dynamic> json) {
     return BookingFareEstimate(
@@ -21,6 +23,7 @@ class BookingFareEstimate {
           (json[ApiKeys.estimatedDurationMinutes] as num?)?.toInt() ?? 0,
       encodedPolyline: json[ApiKeys.encodedPolyline]?.toString() ?? '',
       estimatedFare: (json[ApiKeys.estimatedFare] as num?)?.toDouble() ?? 0,
+      surgeMultiplier: (json['surgeMultiplier'] as num?)?.toDouble(),
     );
   }
 }

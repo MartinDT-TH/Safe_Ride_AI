@@ -40,10 +40,21 @@ public static class RedisKeys
     public static string BookingRadiusExpandedNotified(long bookingId) =>
         $"sr:booking:radius-expanded-notified:{bookingId}";
 
+    public static string HangfireExpandRadiusJobId(long bookingId) =>
+        $"sr:booking:hf-expand-job:{bookingId}";
+
+    public static string HangfireExpireBookingJobId(long bookingId) =>
+        $"sr:booking:hf-expire-job:{bookingId}";
+
+    public static string HangfireExpireDriverOfferJobId(long offerId) =>
+        $"sr:booking:hf-expire-offer-job:{offerId}";
+
     public static string TripLive(long tripId) =>
         $"sr:trip:live:{tripId}";
 
     public const string ActivePricingRules = "sr:pricing:rules:active";
+
+    public const string ActiveSurgePricingRules = "sr:pricing:surge-rules:active";
 
     public static string SignalRUser(Guid userId) =>
         $"sr:signalr:user:{userId}";

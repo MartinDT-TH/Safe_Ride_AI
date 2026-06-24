@@ -689,13 +689,13 @@ class _MapPreviewState extends State<_MapPreview> {
               AppMarker(
                 id: 'pickup',
                 position: _pickup,
-                hue: 210.0, // Azure
+                markerType: AppMarkerType.pickup,
               ),
             if (destination != null)
               AppMarker(
                 id: 'destination',
                 position: destination,
-                hue: 0.0, // Red
+                markerType: AppMarkerType.destination,
               ),
           },
           polylines: {
@@ -773,8 +773,8 @@ class _RouteSummary extends StatelessWidget {
       child: Column(
         children: [
           _RouteRow(
-            icon: Icons.my_location,
-            color: AppColors.primary,
+            icon: Icons.person_pin_circle_rounded,
+            color: const Color(0xFF1565C0),
             label: BookingStrings.pickupLabel,
             value: pickup?.address ?? 'Chọn điểm đón',
             onTap: onPickupTap,
@@ -782,8 +782,8 @@ class _RouteSummary extends StatelessWidget {
           if (onDestinationTap != null) ...[
             const Divider(height: 22),
             _RouteRow(
-              icon: Icons.location_on,
-              color: const Color(0xFFC61E27),
+              icon: Icons.flag_rounded,
+              color: const Color(0xFFC62828),
               label: BookingStrings.destinationLabel,
               value: destination?.address ?? 'Chọn điểm đến',
               onTap: onDestinationTap!,
@@ -801,7 +801,7 @@ class _RouteSummary extends StatelessWidget {
                 Text('Đang tính giá dự kiến...'),
               ],
             )
-          else if (estimate != null)
+          else if (estimate != null) ...[
             Row(
               children: [
                 Expanded(
@@ -828,6 +828,26 @@ class _RouteSummary extends StatelessWidget {
                 ),
               ],
             ),
+            if (estimate!.surgeMultiplier != null && estimate!.surgeMultiplier! > 1.0)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.trending_up, color: Colors.orange, size: 18),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Giá đang tăng do nhu cầu cao (x${estimate!.surgeMultiplier})',
+                      style: const TextStyle(
+                        color: Colors.orange,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
         ],
       ),
     );

@@ -51,3 +51,42 @@ public static class PricingRuleCacheItemExtensions
             pricingRule.CreatedAt);
     }
 }
+
+public sealed record SurgePricingRuleCacheItem(
+    long Id,
+    string RuleName,
+    TimeOnly StartTime,
+    TimeOnly EndTime,
+    string AppliedDays,
+    decimal SurgeMultiplier,
+    DateTime CreatedAt);
+
+public static class SurgePricingRuleCacheItemExtensions
+{
+    public static SurgePricingRule ToEntity(this SurgePricingRuleCacheItem item)
+    {
+        return new SurgePricingRule
+        {
+            Id = item.Id,
+            RuleName = item.RuleName,
+            StartTime = item.StartTime,
+            EndTime = item.EndTime,
+            AppliedDays = item.AppliedDays,
+            SurgeMultiplier = item.SurgeMultiplier,
+            IsActive = true,
+            CreatedAt = item.CreatedAt
+        };
+    }
+
+    public static SurgePricingRuleCacheItem ToCacheItem(this SurgePricingRule rule)
+    {
+        return new SurgePricingRuleCacheItem(
+            rule.Id,
+            rule.RuleName,
+            rule.StartTime,
+            rule.EndTime,
+            rule.AppliedDays,
+            rule.SurgeMultiplier,
+            rule.CreatedAt);
+    }
+}

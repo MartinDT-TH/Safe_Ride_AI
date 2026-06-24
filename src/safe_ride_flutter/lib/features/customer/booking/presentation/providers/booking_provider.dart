@@ -29,6 +29,7 @@ class BookingProvider extends ChangeNotifier {
   bool _isEstimating = false;
   bool _isLoadingPromotions = false;
   String? _errorMessage;
+  int? _errorStatusCode;
   BookingCatalog? _catalog;
   BookingFareEstimate? _fareEstimate;
   List<NearbyDriver> _nearbyDrivers = [];
@@ -48,6 +49,7 @@ class BookingProvider extends ChangeNotifier {
   bool get isEstimating => _isEstimating;
   bool get isLoadingPromotions => _isLoadingPromotions;
   String? get errorMessage => _errorMessage;
+  int? get errorStatusCode => _errorStatusCode;
   String? get locationErrorMessage => _locationErrorMessage;
   BookingCatalog? get catalog => _catalog;
   BookingFareEstimate? get fareEstimate => _fareEstimate;
@@ -117,7 +119,7 @@ class BookingProvider extends ChangeNotifier {
         _activePickup = null;
         _activeDestination = null;
         _activeVehicle = null;
-        _socketService?.removeBookingUpdatedHandler('customer_booking');
+        _socketService.removeBookingUpdatedHandler('customer_booking');
       } else if (_isActiveNowBooking(updatedBooking)) {
         _searchingBooking = updatedBooking;
         _setActiveBookingFromResponse(updatedBooking);
@@ -486,6 +488,24 @@ class BookingProvider extends ChangeNotifier {
     return ok == true;
   }
 
+  Future<bool> submitTripRating(
+    String accessToken, {
+    required int tripId,
+    required int ratingScore,
+    String? comment,
+  }) async {
+    final ok = await _run(() async {
+      await _repository.submitTripRating(
+        accessToken,
+        tripId: tripId,
+        ratingScore: ratingScore,
+        comment: comment,
+      );
+      return true;
+    });
+    return ok == true;
+  }
+
   Future<BookingResponse?> rejectDriver(
     String accessToken, {
     required int bookingId,
@@ -546,6 +566,7 @@ class BookingProvider extends ChangeNotifier {
   Future<T?> _run<T>(Future<T> Function() action) async {
     _isLoading = true;
     _errorMessage = null;
+    _errorStatusCode = null;
     notifyListeners();
 
     try {
@@ -555,6 +576,7 @@ class BookingProvider extends ChangeNotifier {
       return null;
     } on BookingApiException catch (exception) {
       _errorMessage = exception.message;
+      _errorStatusCode = exception.statusCode;
       return null;
     } catch (_) {
       _errorMessage = AppStrings.genericError;

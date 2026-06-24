@@ -615,18 +615,17 @@ class _SearchingPanel extends StatelessWidget {
   String get _statusText {
     if (booking?.matchingMessage != null &&
         booking!.matchingMessage!.trim().isNotEmpty) {
-      final radius = booking?.currentSearchRadiusKm;
-      final radiusInfo = radius != null ? 'trong bán kính ${radius.toStringAsFixed(1)}km' : '';
       final remaining = booking!.estimatedRemainingSeconds;
+      final cleanMessage = booking!.matchingMessage!.trim().replaceAll(RegExp(r'\.$'), '');
       if (remaining != null && remaining > 0) {
         final minutes = remaining ~/ 60;
         final seconds = remaining % 60;
         final countdown =
             '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-        return '${booking!.matchingMessage!} $radiusInfo • Còn $countdown';
+        return '$cleanMessage - Còn $countdown';
       }
 
-      return '${booking!.matchingMessage!} $radiusInfo';
+      return booking!.matchingMessage!;
     }
 
     final bookingId = booking?.bookingId;
