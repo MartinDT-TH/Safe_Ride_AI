@@ -62,7 +62,8 @@ public sealed class BookingTests
             fixture.Repository,
             new MapServiceFake(),
             new FareEstimationService(),
-            new VehicleLicenseRequirementService());
+            new VehicleLicenseRequirementService(),
+            new DateTimeProviderFake(UtcNow));
 
         var result = await handler.Handle(
             new EstimateBookingFareQuery(
@@ -322,6 +323,13 @@ public sealed class BookingTests
             CancellationToken cancellationToken)
         {
             return Task.FromResult(PricingRule);
+        }
+
+        public Task<SurgePricingRule?> GetActiveSurgePricingRuleAsync(
+            DateTime currentUtcTime,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult<SurgePricingRule?>(null);
         }
 
         public Task<IReadOnlyList<Booking>> GetScheduledBookingsReadyForMatchingAsync(

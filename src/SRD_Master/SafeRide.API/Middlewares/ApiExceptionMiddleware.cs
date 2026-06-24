@@ -61,7 +61,7 @@ public sealed class ApiExceptionMiddleware
                 context.Request.Method,
                 context.Request.Path);
 
-            var detail = _environment.IsDevelopment()
+            var detail = _environment.IsDevelopment() || _environment.EnvironmentName == "Testing"
                 ? exception.ToString()
                 : "Đã xảy ra lỗi không mong muốn trên hệ thống.";
 

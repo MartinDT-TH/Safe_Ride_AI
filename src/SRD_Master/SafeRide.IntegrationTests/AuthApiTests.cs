@@ -29,6 +29,11 @@ public sealed class AuthApiTests
                 DeviceName = "Integration Test"
             });
 
+        if (!response.IsSuccessStatusCode)
+        {
+            var err = await response.Content.ReadAsStringAsync();
+            throw new Exception("SERVER ERROR: " + err);
+        }
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var login = await response.Content.ReadFromJsonAsync<AuthResponse>();
         Assert.NotNull(login);
@@ -493,7 +498,8 @@ public sealed class AuthApiTests
         Assert.Equal("auth.otp_attempts_exceeded", await ReadProblemCodeAsync(response));
 
         var validAfterBlock = await VerifyOtpAsync(client, phone, validCode);
-        Assert.Equal(HttpStatusCode.Unauthorized, validAfterBlock.StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, validAfterBlock.StatusCode);
+        Assert.Equal("auth.otp_attempts_exceeded", await ReadProblemCodeAsync(validAfterBlock));
     }
 
     [Fact]
@@ -682,6 +688,11 @@ public sealed class AuthApiTests
         var response = await client.PostAsJsonAsync(
             "/api/auth/send-otp",
             new SendOtpRequest { PhoneNumber = phone });
+        if (!response.IsSuccessStatusCode)
+        {
+            var err = await response.Content.ReadAsStringAsync();
+            throw new Exception("SERVER ERROR: " + err);
+        }
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var normalized = phone.StartsWith('0') ? $"+84{phone[1..]}" : phone;

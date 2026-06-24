@@ -54,6 +54,8 @@ public static class RedisKeys
 
     public const string ActivePricingRules = "sr:pricing:rules:active";
 
+    public const string ActiveSurgePricingRules = "sr:pricing:surge-rules:active";
+
     public static string SignalRUser(Guid userId) =>
         $"sr:signalr:user:{userId}";
 

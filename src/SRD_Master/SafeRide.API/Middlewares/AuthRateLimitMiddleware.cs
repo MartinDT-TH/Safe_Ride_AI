@@ -20,13 +20,16 @@ public sealed class AuthRateLimitMiddleware
 
     private readonly RequestDelegate _next;
     private readonly ILogger<AuthRateLimitMiddleware> _logger;
+    private readonly IHostEnvironment _environment;
 
     public AuthRateLimitMiddleware(
         RequestDelegate next,
-        ILogger<AuthRateLimitMiddleware> logger)
+        ILogger<AuthRateLimitMiddleware> logger,
+        IHostEnvironment environment)
     {
         _next = next;
         _logger = logger;
+        _environment = environment;
     }
 
     public async Task InvokeAsync(HttpContext context, IRedisService redis)
