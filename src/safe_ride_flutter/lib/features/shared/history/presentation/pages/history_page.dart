@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/widgets/app_loading_screen.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
+import '../../../../customer/booking/presentation/providers/booking_provider.dart';
+import '../../../../customer/booking/presentation/pages/rebook_trip_page.dart';
 import '../providers/history_provider.dart';
 import '../widgets/trip_history_card.dart';
 import '../widgets/interactive_button.dart';
@@ -75,8 +78,31 @@ class _HistoryPageState extends State<HistoryPage> {
                             final trip = provider.trips[index];
                             return TripHistoryCard(
                               trip: trip,
-                              onRebook: () {
-                                // Handle rebook logic
+                              onRebook: () async {
+                                final authProvider = context.read<AuthProvider>();
+                                final bookingProvider = context.read<BookingProvider>();
+                                if (authProvider.token == null) return;
+                                
+                                AppLoadingScreen.show(context);
+                                final details = await bookingProvider.getPastBookingDetails(
+                                  authProvider.token!,
+                                  bookingId: trip.id,
+                                );
+                                if (!context.mounted) return;
+                                AppLoadingScreen.hide(context);
+                                
+                                if (details != null) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => RebookTripPage(oldBooking: details),
+                                    ),
+                                  );
+                                } else if (bookingProvider.errorMessage != null) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text(bookingProvider.errorMessage!)),
+                                  );
+                                }
                               },
                             );
                           },
