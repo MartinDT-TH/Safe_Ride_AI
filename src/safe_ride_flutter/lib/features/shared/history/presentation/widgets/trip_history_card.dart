@@ -1,23 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../data/models/history_trip.dart';
 import './interactive_button.dart';
 
 class TripHistoryCard extends StatelessWidget {
-  const TripHistoryCard({super.key, required this.trip, required this.onRebook});
+  const TripHistoryCard({super.key, required this.trip, this.onRebook});
 
   final HistoryTrip trip;
-  final VoidCallback onRebook;
+  final VoidCallback? onRebook;
 
   @override
   Widget build(BuildContext context) {
     final isCancelled = trip.status == HistoryTripStatus.cancelled;
     final dateStr = DateFormat('HH:mm, d ThMM', 'vi').format(trip.time);
-    final fareStr = trip.fare > 0 
-        ? NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits: 0).format(trip.fare)
-        : '0đ';
+    final fareStr = trip.fare > 0
+        ? NumberFormat.currency(
+            locale: 'vi_VN',
+            symbol: '\u0111',
+            decimalDigits: 0,
+          ).format(trip.fare)
+        : '0\u0111';
+    final showFooter = isCancelled || trip.driverName != null || onRebook != null;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -37,18 +43,21 @@ class TripHistoryCard extends StatelessWidget {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            // Header: Icon, Time, Price
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
                   padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF5F5F5),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFF5F5F5),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
-                    isCancelled ? Icons.cancel_outlined : (trip.isMotorbike ? Icons.two_wheeler : Icons.directions_car),
+                    isCancelled
+                        ? Icons.cancel_outlined
+                        : (trip.isMotorbike
+                              ? Icons.two_wheeler
+                              : Icons.directions_car),
                     color: isCancelled ? Colors.grey : AppColors.textSecondary,
                     size: 20,
                   ),
@@ -66,7 +75,7 @@ class TripHistoryCard extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        '${trip.vehicleName} • ${trip.distanceKm} km',
+                        '${trip.vehicleName} \u2022 ${trip.distanceKm} km',
                         style: const TextStyle(
                           color: Colors.grey,
                           fontSize: 13,
@@ -86,75 +95,90 @@ class TripHistoryCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-
-            // Route
             _buildRouteLine(isCancelled),
-            
-            const SizedBox(height: 16),
-            const Divider(height: 1, color: Color(0xFFF0F0F0)),
-            const SizedBox(height: 16),
-
-            // Driver & Rebook Button
-            Row(
-              children: [
-                if (isCancelled) ...[
-                  Expanded(
-                    child: Text(
-                      HistoryStrings.cancelledByCustomer,
-                      style: const TextStyle(color: Colors.red, fontSize: 14),
-                    ),
-                  ),
-                ] else if (trip.driverName != null) ...[
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundImage: trip.driverAvatar != null ? NetworkImage(trip.driverAvatar!) : null,
-                    backgroundColor: const Color(0xFFE0E0E0),
-                    child: trip.driverAvatar == null ? const Icon(Icons.person, color: Colors.white) : null,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          trip.driverName!,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                        ),
-                        Row(
-                          children: [
-                            const Icon(Icons.star, color: Colors.orange, size: 14),
-                            const SizedBox(width: 2),
-                            Text(
-                              trip.driverRating?.toString() ?? '5.0',
-                              style: const TextStyle(color: Colors.grey, fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-                
-                InteractiveButton(
-                  onTap: onRebook,
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE8ECEF),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Text(
-                      HistoryStrings.rebook,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF626A6C),
+            if (showFooter) ...[
+              const SizedBox(height: 16),
+              const Divider(height: 1, color: Color(0xFFF0F0F0)),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  if (isCancelled) ...[
+                    Expanded(
+                      child: Text(
+                        HistoryStrings.cancelledByCustomer,
+                        style: const TextStyle(color: Colors.red, fontSize: 14),
                       ),
                     ),
-                  ),
-                ),
-              ],
-            ),
+                  ] else if (trip.driverName != null) ...[
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundImage: trip.driverAvatar != null
+                          ? NetworkImage(trip.driverAvatar!)
+                          : null,
+                      backgroundColor: const Color(0xFFE0E0E0),
+                      child: trip.driverAvatar == null
+                          ? const Icon(Icons.person, color: Colors.white)
+                          : null,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            trip.driverName!,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                          if (trip.driverRating != null)
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.star,
+                                  color: Colors.orange,
+                                  size: 14,
+                                ),
+                                const SizedBox(width: 2),
+                                Text(
+                                  trip.driverRating!.toString(),
+                                  style: const TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (onRebook != null)
+                    InteractiveButton(
+                      onTap: onRebook!,
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE8ECEF),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Text(
+                          HistoryStrings.rebook,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF626A6C),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
           ],
         ),
       ),

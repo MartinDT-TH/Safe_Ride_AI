@@ -7,7 +7,9 @@ import '../../../../../core/constants/app_strings.dart';
 import '../../../../auth/presentation/pages/login_page.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../customer/home/presentation/pages/customer_home_page.dart';
+import '../../../../driver/dashboard/presentation/pages/driver_dashboard_page.dart';
 import '../../../../shared/profile/presentation/pages/edit_profile_page.dart';
+import '../providers/role_provider.dart';
 import '../../presentation/pages/role_selection_page.dart';
 
 class SplashPage extends StatefulWidget {
@@ -77,11 +79,19 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
 
   void _navigateToNext(BuildContext context) {
     final auth = context.read<AuthProvider>();
+    final roleProvider = context.read<RoleProvider>();
+    final restoredRole = auth.lastSelectedRole;
+
+    if (restoredRole != null && roleProvider.selectedRole != restoredRole) {
+      roleProvider.setRole(restoredRole);
+    }
 
     Widget destination;
     if (auth.token != null && auth.token!.isNotEmpty) {
       if (auth.isProfileComplete) {
-        destination = const CustomerHomePage();
+        destination = restoredRole == AppValues.roleDriver
+            ? const DriverDashboardPage()
+            : const CustomerHomePage();
       } else if (auth.nextStep == AuthNextStep.completeProfile) {
         destination = EditProfilePage(
           requiredCompletion: true,

@@ -1,29 +1,43 @@
 import 'package:flutter/material.dart';
-import '../../data/models/history_trip.dart';
-import '../../data/datasources/history_remote_datasource.dart';
 
-enum HistoryFilter { all, completed, cancelled }
+import '../../../../../core/constants/app_strings.dart';
+import '../../data/datasources/history_remote_datasource.dart';
+import '../../data/models/history_trip.dart';
+import '../../domain/repositories/history_repository.dart';
+
+enum HistoryFilter { all, completed, cancelled, booked }
 
 class HistoryProvider extends ChangeNotifier {
-  final HistoryRemoteDatasource _datasource = HistoryRemoteDatasource();
-  
+  HistoryProvider(this._repository);
+
+  final HistoryRepository _repository;
+
   List<HistoryTrip> _allTrips = [];
   bool _isLoading = false;
+  String? _errorMessage;
   HistoryFilter _currentFilter = HistoryFilter.all;
 
   List<HistoryTrip> get trips {
     switch (_currentFilter) {
       case HistoryFilter.completed:
-        return _allTrips.where((t) => t.status == HistoryTripStatus.completed).toList();
+        return _allTrips
+            .where((trip) => trip.status == HistoryTripStatus.completed)
+            .toList();
       case HistoryFilter.cancelled:
-        return _allTrips.where((t) => t.status == HistoryTripStatus.cancelled).toList();
+        return _allTrips
+            .where((trip) => trip.status == HistoryTripStatus.cancelled)
+            .toList();
+      case HistoryFilter.booked:
+        return _allTrips
+            .where((trip) => trip.status == HistoryTripStatus.booked)
+            .toList();
       case HistoryFilter.all:
-      
         return _allTrips;
     }
   }
 
   bool get isLoading => _isLoading;
+  String? get errorMessage => _errorMessage;
   HistoryFilter get currentFilter => _currentFilter;
 
   void setFilter(HistoryFilter filter) {
@@ -31,66 +45,29 @@ class HistoryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadHistory(String? accessToken) async {
+  Future<void> loadHistory(
+    String? accessToken, {
+    String? role,
+  }) async {
     _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
 
     try {
-      // Logic: If API code is commented/returns empty, we use mock data
-      if (accessToken != null) {
-        _allTrips = await _datasource.getBookingHistory(accessToken);
+      if (accessToken == null || accessToken.isEmpty) {
+        _allTrips = [];
+        _errorMessage = BookingStrings.sessionExpired;
+        return;
       }
 
-      if (_allTrips.isEmpty) {
-        _loadMockData();
-      }
-    } catch (e) {
-      _loadMockData();
+      _allTrips = await _repository.getBookingHistory(accessToken, role: role);
+    } on HistoryApiException catch (exception) {
+      _errorMessage = exception.message;
+    } catch (_) {
+      _errorMessage = AppStrings.genericError;
     } finally {
       _isLoading = false;
       notifyListeners();
     }
-  }
-
-  void _loadMockData() {
-    _allTrips = [
-      HistoryTrip(
-        id: 1,
-        pickup: 'Landmark 81, Quận Bình Thạnh',
-        destination: 'Bitexco Financial Tower, Quận 1',
-        time: DateTime(2026, 5, 24, 15, 30),
-        fare: 95000,
-        distanceKm: 4.2,
-        status: HistoryTripStatus.completed,
-        vehicleName: 'SafeRide Plus',
-        driverName: 'Nguyễn Văn A',
-        driverRating: 4.9,
-        driverAvatar: 'https://i.pravatar.cc/150?u=a',
-      ),
-      HistoryTrip(
-        id: 2,
-        pickup: 'Chung cư Vinhomes Central Park',
-        destination: 'Sân bay Tân Sơn Nhất (Ga đi)',
-        time: DateTime(2026, 5, 23, 8, 45),
-        fare: 62000,
-        distanceKm: 6.8,
-        status: HistoryTripStatus.completed,
-        vehicleName: 'SafeRide Eco',
-        driverName: 'Trần Minh B',
-        driverRating: 4.8,
-        driverAvatar: 'https://i.pravatar.cc/150?u=b',
-      ),
-      HistoryTrip(
-        id: 3,
-        pickup: 'Phố đi bộ Nguyễn Huệ',
-        destination: 'Thảo Điền, Quận 2',
-        time: DateTime(2026, 5, 22, 19, 15),
-        fare: 0,
-        distanceKm: 5.5,
-        status: HistoryTripStatus.cancelled,
-        vehicleName: 'SafeRide Bike',
-        isMotorbike: true,
-      ),
-    ];
   }
 }

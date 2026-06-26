@@ -28,6 +28,9 @@ import '../features/shared/profile/data/datasources/vehicle_remote_datasource.da
 import '../features/shared/profile/data/repositories/vehicle_repository_impl.dart';
 import '../features/shared/profile/domain/repositories/vehicle_repository.dart';
 import '../features/shared/profile/presentation/providers/vehicle_provider.dart';
+import '../features/shared/history/data/datasources/history_remote_datasource.dart';
+import '../features/shared/history/data/repositories/history_repository_impl.dart';
+import '../features/shared/history/domain/repositories/history_repository.dart';
 import '../features/shared/history/presentation/providers/history_provider.dart';
 import '../features/driver/dashboard/presentation/providers/driver_dashboard_provider.dart';
 import '../features/driver/registration/data/datasources/identity_verification_remote_datasource.dart';
@@ -117,7 +120,17 @@ Future<void> setupDependencies() async {
     ),
   );
 
-  getIt.registerFactory<HistoryProvider>(() => HistoryProvider());
+  getIt.registerLazySingleton<HistoryRemoteDatasource>(
+    () => HistoryRemoteDatasource(),
+  );
+
+  getIt.registerLazySingleton<HistoryRepository>(
+    () => HistoryRepositoryImpl(getIt<HistoryRemoteDatasource>()),
+  );
+
+  getIt.registerFactory<HistoryProvider>(
+    () => HistoryProvider(getIt<HistoryRepository>()),
+  );
 
   getIt.registerFactory<DriverDashboardProvider>(
     () => DriverDashboardProvider(),

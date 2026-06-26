@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
+import '../../../../shared/onboarding/presentation/providers/role_provider.dart';
+import '../../data/models/history_trip.dart';
 import '../providers/history_provider.dart';
-import '../widgets/trip_history_card.dart';
 import '../widgets/interactive_button.dart';
+import '../widgets/trip_history_card.dart';
 
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
@@ -15,17 +18,33 @@ class HistoryPage extends StatefulWidget {
 }
 
 class _HistoryPageState extends State<HistoryPage> {
+  static const _loadErrorTitle =
+      'Kh\u00f4ng th\u1ec3 t\u1ea3i l\u1ecbch s\u1eed chuy\u1ebfn \u0111i.';
+  static const _emptyTitle =
+      'Kh\u00f4ng c\u00f3 d\u1eef li\u1ec7u chuy\u1ebfn \u0111i.';
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final auth = context.read<AuthProvider>();
-      context.read<HistoryProvider>().loadHistory(auth.token);
+      _loadHistory();
     });
+  }
+
+  Future<void> _loadHistory() {
+    final auth = context.read<AuthProvider>();
+    final roleProvider = context.read<RoleProvider>();
+    final role = roleProvider.selectedRole ?? auth.lastSelectedRole;
+    if (role != null && roleProvider.selectedRole != role) {
+      roleProvider.setRole(role);
+    }
+    return context.read<HistoryProvider>().loadHistory(auth.token, role: role);
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDriver = context.watch<RoleProvider>().isDriver;
+
     return Scaffold(
       backgroundColor: const Color(0xFFFCF9F9),
       appBar: AppBar(
@@ -52,41 +71,80 @@ class _HistoryPageState extends State<HistoryPage> {
                 }
 
                 return RefreshIndicator(
-                  onRefresh: () async {
-                    final auth = context.read<AuthProvider>();
-                    await provider.loadHistory(auth.token);
-                  },
+                  onRefresh: _loadHistory,
                   color: AppColors.primary,
-                  child: provider.trips.isEmpty
-                      ? ListView(
-                          children: const [
-                            SizedBox(height: 100),
-                            Center(child: Text('Không có dữ liệu chuyến đi.')),
-                          ],
-                        )
-                      : ListView.builder(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 16,
+                  child: provider.errorMessage != null && provider.trips.isEmpty
+                      ? _buildFeedbackList(
+                          child: Column(
+                            children: [
+                              const Text(
+                                _loadErrorTitle,
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                provider.errorMessage!,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: Color(0xFF626A6C),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton(
+                                onPressed: _loadHistory,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: Colors.white,
+                                ),
+                                child: const Text(AppStrings.confirm),
+                              ),
+                            ],
                           ),
-                          itemCount: provider.trips.length,
-                          itemBuilder: (context, index) {
-                            final trip = provider.trips[index];
-                            return TripHistoryCard(
-                              trip: trip,
-                              onRebook: () {
-                                // Handle rebook logic
+                        )
+                      : provider.trips.isEmpty
+                          ? _buildFeedbackList(
+                              child: const Text(_emptyTitle),
+                            )
+                          : ListView.builder(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 16,
+                              ),
+                              itemCount: provider.trips.length,
+                              itemBuilder: (context, index) {
+                                final trip = provider.trips[index];
+                                return TripHistoryCard(
+                                  trip: trip,
+                                  onRebook: isDriver ||
+                                          trip.status ==
+                                              HistoryTripStatus.booked
+                                      ? null
+                                      : () {
+                                          // Handle rebook logic
+                                        },
+                                );
                               },
-                            );
-                          },
-                        ),
+                            ),
                 );
               },
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildFeedbackList({required Widget child}) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        const SizedBox(height: 120),
+        Center(child: child),
+      ],
     );
   }
 
@@ -120,6 +178,12 @@ class _HistoryPageState extends State<HistoryPage> {
                   HistoryStrings.cancelled,
                   HistoryFilter.cancelled,
                   provider.currentFilter == HistoryFilter.cancelled,
+                  provider,
+                ),
+                _buildFilterItem(
+                  HistoryStrings.booked,
+                  HistoryFilter.booked,
+                  provider.currentFilter == HistoryFilter.booked,
                   provider,
                 ),
               ],
