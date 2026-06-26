@@ -302,7 +302,7 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
                 logger.LogWarning(ex, "Failed to get route estimate for driver arrival path. Falling back to direct line.");
                 arrivalPath = new List<(double Lat, double Lng)> { (mockDriver.CurrentLat, mockDriver.CurrentLng), (booking.PickupLocation.Y, booking.PickupLocation.X) };
             }
-
+            // chỉnh tốc độ di chuyển của tài xế 13.8 m/s ~ 50 km/h có thể thay đổi tùy ý
             bool arrived = await MoveDriverAlongPathAsync(mockDriver, arrivalPath, 13.8, booking, trip, realtimeService, redisService, dateTimeProvider, logger, cancellationToken);
             if (!arrived) return;
 
@@ -409,8 +409,13 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
 
             await realtimeService.PublishDriverLocationUpdatedAsync(new DriverLocationUpdatedEvent(mockDriver.DriverId, booking.CustomerId, trip.Id, point.Lat, point.Lng, dateTimeProvider.UtcNow), ct);
 
-            await Task.Delay(intervalMs, ct);
-            currentDistance += speedMs * (intervalMs / 1000.0);
+            var skipDelay = _simulatorOptionsMonitor.CurrentValue.MockDriverSkipMovementDelay;
+            if (!skipDelay)
+            {
+                await Task.Delay(intervalMs, ct);
+            }
+            
+            currentDistance += speedMs * (skipDelay ? 10 : (intervalMs / 1000.0)); // Move 10x faster if skipping delay
             checkCounter++;
         }
 

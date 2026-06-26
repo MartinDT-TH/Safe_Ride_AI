@@ -40,14 +40,6 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
         ValidateCoordinate(latitude, longitude);
 
         var utcNow = _dateTimeProvider.UtcNow;
-        await CacheDriverLocationAsync(
-            driverId,
-            latitude,
-            longitude,
-            utcNow);
-
-        await RefreshDriverHeartbeatAsync(driverId, utcNow, cancellationToken);
-
         var activeTrip = await _dbContext.Trips
             .AsNoTracking()
             .Where(x => x.DriverId == driverId
@@ -61,6 +53,15 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
                 x.Booking.CustomerId
             })
             .FirstOrDefaultAsync(cancellationToken);
+
+        await CacheDriverLocationAsync(
+            driverId,
+            latitude,
+            longitude,
+            utcNow,
+            activeTrip is null ? DriverWorkStatus.Online : DriverWorkStatus.Busy);
+
+        await RefreshDriverHeartbeatAsync(driverId, utcNow, cancellationToken);
 
         await _realtimeNotificationService.PublishDriverLocationUpdatedAsync(
             new DriverLocationUpdatedEvent(
@@ -96,7 +97,10 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
             driverId,
             latitude,
             longitude,
-            utcNow);
+            utcNow,
+            profile?.WorkStatus == DriverWorkStatus.Busy
+                ? DriverWorkStatus.Busy
+                : DriverWorkStatus.Online);
     }
 
     public async Task SetDriverOfflineAsync(
@@ -134,7 +138,8 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
         Guid driverId,
         double latitude,
         double longitude,
-        DateTime utcNow)
+        DateTime utcNow,
+        DriverWorkStatus workStatus)
     {
         var cache = new DriverLocationCache(
             driverId,
@@ -152,7 +157,7 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
             DriverOnlineTtl);
         await _redisService.SetAsync(
             RedisKeys.DriverStatus(driverId),
-            DriverWorkStatus.Online.ToString(),
+            workStatus.ToString(),
             DriverOnlineTtl);
         await _redisService.GeoAddAsync(
             RedisKeys.OnlineDriversGeo,
