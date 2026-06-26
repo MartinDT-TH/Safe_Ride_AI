@@ -10,6 +10,7 @@ using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
 using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
+using System.Text.Json;
 
 namespace SafeRide.Infrastructure.Simulator;
 
@@ -123,6 +124,9 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
 
                 // Add driver location to geo-index
                 await redisService.GeoAddAsync(RedisKeys.OnlineDriversGeo, mockDriver.CurrentLng, mockDriver.CurrentLat, mockDriver.DriverId.ToString());
+
+                var location = new DriverLocationCache(mockDriver.DriverId, mockDriver.CurrentLat, mockDriver.CurrentLng, DateTime.UtcNow);
+                await redisService.SetAsync(RedisKeys.DriverLocation(mockDriver.DriverId), JsonSerializer.Serialize(location), TimeSpan.FromMinutes(30));
 
                 _logger.LogDebug("Mock driver {DriverId} ({Name}) TTL refreshed as {Status} at ({Lat:F6}, {Lng:F6})",
                     mockDriver.DriverId, mockDriver.Name, nextStatus, mockDriver.CurrentLat, mockDriver.CurrentLng);
@@ -399,6 +403,9 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
             await redisService.SetAsync(RedisKeys.DriverOnline(mockDriver.DriverId), "1", TimeSpan.FromMinutes(5));
             await redisService.SetAsync(RedisKeys.DriverStatus(mockDriver.DriverId), "Busy", TimeSpan.FromMinutes(5));
             await redisService.GeoAddAsync(RedisKeys.OnlineDriversGeo, point.Lng, point.Lat, mockDriver.DriverId.ToString());
+            
+            var locationCache = new DriverLocationCache(mockDriver.DriverId, point.Lat, point.Lng, dateTimeProvider.UtcNow);
+            await redisService.SetAsync(RedisKeys.DriverLocation(mockDriver.DriverId), JsonSerializer.Serialize(locationCache), TimeSpan.FromMinutes(5));
 
             await realtimeService.PublishDriverLocationUpdatedAsync(new DriverLocationUpdatedEvent(mockDriver.DriverId, booking.CustomerId, trip.Id, point.Lat, point.Lng, dateTimeProvider.UtcNow), ct);
 
