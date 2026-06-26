@@ -16,33 +16,39 @@ public sealed class CreateBookingCommandHandler
     private readonly IBookingRepository _bookingRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IDateTimeProvider _dateTimeProvider;
-    private readonly IGoogleMapsService _googleMapsService;
+    private readonly IMapRoutingService _mapRoutingService;
     private readonly IFareEstimationService _fareEstimationService;
     private readonly IBookingMatchingService _matchingService;
     private readonly IVehicleLicenseRequirementService _vehicleLicenseRequirementService;
     private readonly IRealtimeNotificationService _realtimeNotificationService;
     private readonly IPromotionRepository _promotionRepository;
+    private readonly IMatchingPolicyProvider _matchingPolicyProvider;
+    private readonly IBookingLifecycleJobScheduler _jobScheduler;
 
     public CreateBookingCommandHandler(
         IBookingRepository bookingRepository,
         IUnitOfWork unitOfWork,
         IDateTimeProvider dateTimeProvider,
-        IGoogleMapsService googleMapsService,
+        IMapRoutingService mapRoutingService,
         IFareEstimationService fareEstimationService,
         IBookingMatchingService matchingService,
         IVehicleLicenseRequirementService vehicleLicenseRequirementService,
         IRealtimeNotificationService realtimeNotificationService,
-        IPromotionRepository promotionRepository)
+        IPromotionRepository promotionRepository,
+        IMatchingPolicyProvider matchingPolicyProvider,
+        IBookingLifecycleJobScheduler jobScheduler)
     {
         _bookingRepository = bookingRepository;
         _unitOfWork = unitOfWork;
         _dateTimeProvider = dateTimeProvider;
-        _googleMapsService = googleMapsService;
+        _mapRoutingService = mapRoutingService;
         _fareEstimationService = fareEstimationService;
         _matchingService = matchingService;
         _vehicleLicenseRequirementService = vehicleLicenseRequirementService;
         _realtimeNotificationService = realtimeNotificationService;
         _promotionRepository = promotionRepository;
+        _matchingPolicyProvider = matchingPolicyProvider;
+        _jobScheduler = jobScheduler;
     }
 
     public async Task<CreateBookingResponse> Handle(
@@ -115,11 +121,18 @@ public sealed class CreateBookingCommandHandler
             RouteEstimateResult route;
             try
             {
-                route = await _googleMapsService.GetRouteEstimateAsync(
-                    new LocationPoint(request.PickupLatitude, request.PickupLongitude),
-                    new LocationPoint(
-                        request.DestinationLatitude,
-                        request.DestinationLongitude),
+                route = await _mapRoutingService.GetRouteEstimateAsync(
+                    new RouteEstimateRequest
+                    {
+                        Origin = new LocationPoint(request.PickupLatitude, request.PickupLongitude),
+                        Destination = new LocationPoint(
+                            request.DestinationLatitude,
+                            request.DestinationLongitude),
+                        Provider = MapProvider.Auto,
+                        TravelMode = MapTravelMode.Car,
+                        IncludePolyline = true,
+                        RequestSource = "CreateBooking"
+                    },
                     cancellationToken);
             }
             catch (MapServiceException exception)
@@ -188,12 +201,37 @@ public sealed class CreateBookingCommandHandler
                 booking.BookingStatus,
                 utcNow),
             cancellationToken);
+        if (request.BookingType == BookingType.Now)
+        {
+            await _realtimeNotificationService.PublishBookingSearchingStartedAsync(
+                new BookingSearchingStartedEvent(
+                    booking.BookingId,
+                    booking.CustomerId,
+                    _matchingPolicyProvider.Current.InitialRadiusKm,
+                    utcNow,
+                    $"SafeRide đang tìm tài xế gần bạn trong bán kính {_matchingPolicyProvider.Current.InitialRadiusKm:0.#}km."),
+                cancellationToken);
+        }
 
-        var driverOffer = request.BookingType == BookingType.Now
-            ? await _matchingService.StartMatchingAsync(
+        if (request.BookingType == BookingType.Now)
+        {
+            await _matchingService.StartMatchingAsync(
                 booking.BookingId,
-                cancellationToken)
-            : null;
+                cancellationToken);
+
+            // Schedule Hangfire delayed jobs for lifecycle management.
+            var options = _matchingPolicyProvider.Current;
+            _jobScheduler.ScheduleExpandRadius(
+                booking.BookingId,
+                TimeSpan.FromMinutes(options.ExpandAfterMinutes));
+            _jobScheduler.ScheduleExpireBooking(
+                booking.BookingId,
+                TimeSpan.FromMinutes(options.BookingExpireAfterMinutes));
+        }
+
+        var matchingSnapshot = _matchingPolicyProvider.GetSnapshot(
+            booking,
+            utcNow);
 
         var message = request.BookingType == BookingType.Now
             ? "Đặt chuyến thành công. Hệ thống đang tìm tài xế."
@@ -215,7 +253,13 @@ public sealed class CreateBookingCommandHandler
             Math.Max(0m, estimatedFare - promotionResult.DiscountAmount),
             routePolyline,
             message,
-            driverOffer);
+            TripId: null,
+            DriverOffer: null,
+            TripStatus: null,
+            CurrentSearchRadiusKm: matchingSnapshot.CurrentSearchRadiusKm,
+            ExpiresAt: matchingSnapshot.ExpiresAt,
+            EstimatedRemainingSeconds: matchingSnapshot.EstimatedRemainingSeconds,
+            MatchingMessage: matchingSnapshot.MatchingMessage);
     }
 
     private static void ValidateSchedule(

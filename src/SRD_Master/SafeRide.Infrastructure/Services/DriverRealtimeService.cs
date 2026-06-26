@@ -12,6 +12,7 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
 {
     private static readonly TimeSpan DriverLocationTtl = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan DriverOnlineTtl = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan DriverHeartbeatDbUpdateInterval = TimeSpan.FromSeconds(60);
 
     private readonly ApplicationDbContext _dbContext;
     private readonly IRedisService _redisService;
@@ -44,6 +45,8 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
             latitude,
             longitude,
             utcNow);
+
+        await RefreshDriverHeartbeatAsync(driverId, utcNow, cancellationToken);
 
         var activeTrip = await _dbContext.Trips
             .AsNoTracking()
@@ -113,6 +116,18 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
 
         await _redisService.RemoveAsync(RedisKeys.DriverOnline(driverId));
         await _redisService.RemoveAsync(RedisKeys.DriverStatus(driverId));
+        await _redisService.RemoveAsync(RedisKeys.DriverLocation(driverId));
+        await RemoveDriverFromOnlineGeoAsync(driverId, cancellationToken);
+    }
+
+    public Task RemoveDriverFromOnlineGeoAsync(
+        Guid driverId,
+        CancellationToken cancellationToken = default)
+    {
+        return _redisService.GeoRemoveAsync(
+            RedisKeys.OnlineDriversGeo,
+            driverId.ToString(),
+            cancellationToken);
     }
 
     private async Task CacheDriverLocationAsync(
@@ -144,6 +159,29 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
             longitude,
             latitude,
             driverId.ToString());
+    }
+
+    private async Task RefreshDriverHeartbeatAsync(
+        Guid driverId,
+        DateTime utcNow,
+        CancellationToken cancellationToken)
+    {
+        var profile = await _dbContext.DriverProfiles
+            .FirstOrDefaultAsync(x => x.DriverId == driverId, cancellationToken);
+        if (profile is null)
+        {
+            return;
+        }
+
+        if (profile.LastActiveAt.HasValue
+            && utcNow - profile.LastActiveAt.Value < DriverHeartbeatDbUpdateInterval)
+        {
+            return;
+        }
+
+        profile.LastActiveAt = utcNow;
+        profile.UpdatedAt = utcNow;
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private static void ValidateCoordinate(double latitude, double longitude)

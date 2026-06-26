@@ -210,6 +210,12 @@ public sealed class FakeRedisService : IRedisService
         string member) =>
         _geoStorage.GeoAddAsync(key, longitude, latitude, member);
 
+    public Task GeoRemoveAsync(
+        string key,
+        string member,
+        CancellationToken cancellationToken = default) =>
+        _geoStorage.GeoRemoveAsync(key, member, cancellationToken);
+
     public Task<IReadOnlyList<string>> GeoRadiusAsync(
         string key,
         double longitude,

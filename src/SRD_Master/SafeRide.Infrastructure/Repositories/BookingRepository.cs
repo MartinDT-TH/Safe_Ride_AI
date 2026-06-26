@@ -14,6 +14,7 @@ public sealed class BookingRepository : IBookingRepository
 {
     private readonly ApplicationDbContext _dbContext;
     private readonly IRedisService _redisService;
+    private readonly IMatchingPolicyProvider _matchingPolicyProvider;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly TimeSpan NowBookingSearchTimeout = TimeSpan.FromMinutes(10);
     private static readonly BookingStatus[] CustomerHistoryStatuses =
@@ -33,10 +34,12 @@ public sealed class BookingRepository : IBookingRepository
 
     public BookingRepository(
         ApplicationDbContext dbContext,
-        IRedisService redisService)
+        IRedisService redisService,
+        IMatchingPolicyProvider matchingPolicyProvider)
     {
         _dbContext = dbContext;
         _redisService = redisService;
+        _matchingPolicyProvider = matchingPolicyProvider;
     }
 
     public async Task AddAsync(
@@ -52,6 +55,7 @@ public sealed class BookingRepository : IBookingRepository
         CancellationToken cancellationToken)
     {
         return _dbContext.Bookings
+            .Include(booking => booking.Trip)
             .FirstOrDefaultAsync(
                 booking => booking.BookingId == bookingId
                     && booking.CustomerId == customerId,
@@ -155,8 +159,8 @@ public sealed class BookingRepository : IBookingRepository
             join user in _dbContext.AspNetUsers.AsNoTracking()
                 on driverOffer.DriverId equals user.Id
             where driverOffer.BookingId == bookingId
-                && (driverOffer.OfferStatus == DriverOfferStatus.Offered
-                    || driverOffer.OfferStatus == DriverOfferStatus.Confirmed)
+                && (driverOffer.OfferStatus == DriverOfferStatus.DriverAccepted
+                    || driverOffer.OfferStatus == DriverOfferStatus.CustomerConfirmed)
             orderby driverOffer.ConfirmedAt ?? driverOffer.OfferedAt descending
             select new
             {
@@ -166,7 +170,8 @@ public sealed class BookingRepository : IBookingRepository
                 user.UserName,
                 user.AvatarUrl,
                 profile.ExperienceYears,
-                driverOffer.ExpiresAt
+                driverOffer.ExpiresAt,
+                driverOffer.OfferStatus
             })
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -205,7 +210,11 @@ public sealed class BookingRepository : IBookingRepository
             ratingStats?.TripCount ?? 0,
             latestOffer.ExperienceYears ?? 0,
             licenseClass ?? LicenseClass.A1,
-            latestOffer.ExpiresAt);
+            latestOffer.ExpiresAt,
+            latestOffer.OfferStatus,
+            latestOffer.OfferStatus == DriverOfferStatus.DriverAccepted
+                ? (int?)Math.Max(0, (int)Math.Ceiling((latestOffer.ExpiresAt - DateTime.UtcNow).TotalSeconds))
+                : null);
     }
 
     public async Task<LocationPoint?> GetDriverLocationAsync(
@@ -264,7 +273,8 @@ public sealed class BookingRepository : IBookingRepository
             _dbContext.BookingPromotions.RemoveRange(booking.BookingPromotions);
 
             foreach (var offer in booking.DriverOffers
-                .Where(offer => offer.OfferStatus == DriverOfferStatus.Offered))
+                .Where(offer => offer.OfferStatus == DriverOfferStatus.Sent
+                    || offer.OfferStatus == DriverOfferStatus.DriverAccepted))
             {
                 offer.OfferStatus = DriverOfferStatus.Expired;
                 offer.ExpiredAt ??= utcNow;
@@ -380,7 +390,7 @@ public sealed class BookingRepository : IBookingRepository
         return booking.UpdatedAt;
     }
 
-    private static bool ShouldExpireNowBooking(Booking booking, DateTime utcNow)
+    private bool ShouldExpireNowBooking(Booking booking, DateTime utcNow)
     {
         if (booking.BookingStatus == BookingStatus.DriverAssigned)
         {
@@ -388,16 +398,10 @@ public sealed class BookingRepository : IBookingRepository
                 || booking.Trip.TripStatus == TripStatus.CANCELLED;
         }
 
-        var latestOffer = booking.DriverOffers
-            .Where(offer => offer.OfferStatus == DriverOfferStatus.Offered)
-            .OrderByDescending(offer => offer.OfferedAt)
-            .FirstOrDefault();
-        if (latestOffer is not null)
-        {
-            return latestOffer.ExpiresAt <= utcNow;
-        }
-
-        return booking.UpdatedAt <= utcNow.Subtract(NowBookingSearchTimeout);
+        var startedAt = _matchingPolicyProvider.GetMatchingStartedAt(booking)
+            ?? booking.CreatedAt;
+        return utcNow >= startedAt.AddMinutes(
+            _matchingPolicyProvider.Current.BookingExpireAfterMinutes);
     }
     
     public Task<Vehicle?> GetCustomerVehicleAsync(
@@ -533,8 +537,8 @@ public sealed class BookingRepository : IBookingRepository
     {
         var offers = await _dbContext.BookingDriverOffers
             .Where(offer => offer.BookingId == bookingId
-                && (offer.OfferStatus == DriverOfferStatus.Offered
-                    || offer.OfferStatus == DriverOfferStatus.Confirmed))
+                && (offer.OfferStatus == DriverOfferStatus.Sent
+                    || offer.OfferStatus == DriverOfferStatus.DriverAccepted))
             .ToListAsync(cancellationToken);
 
         foreach (var offer in offers)
@@ -566,7 +570,7 @@ public sealed class BookingRepository : IBookingRepository
             var confirmedOffer = await _dbContext.BookingDriverOffers
                 .AsNoTracking()
                 .Where(offer => offer.BookingId == bookingId
-                    && offer.OfferStatus == DriverOfferStatus.Confirmed)
+                    && offer.OfferStatus == DriverOfferStatus.CustomerConfirmed)
                 .OrderByDescending(offer => offer.ConfirmedAt ?? offer.OfferedAt)
                 .FirstOrDefaultAsync(cancellationToken);
             if (confirmedOffer is not null)
@@ -580,9 +584,9 @@ public sealed class BookingRepository : IBookingRepository
             return true;
         }
 
-        if (trip.TripStatus is TripStatus.IN_PROGRESS
-            or TripStatus.COMPLETED
-            or TripStatus.CANCELLED)
+        if (trip.TripStatus != TripStatus.ACCEPTED &&
+            trip.TripStatus != TripStatus.DRIVER_ARRIVING &&
+            trip.TripStatus != TripStatus.ARRIVED)
         {
             return false;
         }

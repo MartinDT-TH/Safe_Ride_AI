@@ -72,9 +72,19 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
 
     Timer(const Duration(seconds: 4), () {
       if (mounted) {
-        _navigateToNext(context);
+        _checkSessionAndNavigate();
       }
     });
+  }
+
+  void _checkSessionAndNavigate() {
+    final auth = context.read<AuthProvider>();
+    if (auth.isRestoringSession) {
+      // If still restoring, wait a bit longer and check again
+      Future.delayed(const Duration(milliseconds: 500), _checkSessionAndNavigate);
+      return;
+    }
+    _navigateToNext(context);
   }
 
   void _navigateToNext(BuildContext context) {

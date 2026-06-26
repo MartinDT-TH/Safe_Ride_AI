@@ -99,10 +99,13 @@ public sealed class GoogleMapsService : IGoogleMapsService
                     "Không thể tính tuyến đường. Vui lòng kiểm tra lại điểm đón và điểm đến.");
             }
 
-            return new RouteEstimateResult(
-                Math.Round(route.DistanceMeters / 1000d, 2, MidpointRounding.AwayFromZero),
-                durationMinutes,
-                route.Polyline.EncodedPolyline);
+            return new RouteEstimateResult
+            {
+                Provider = SafeRide.Domain.Enums.MapProvider.GoogleMaps,
+                DistanceMeters = route.DistanceMeters,
+                DurationSeconds = durationMinutes * 60d, // durationMinutes is returned from TryParse, though seconds would be better
+                EncodedPolyline = route.Polyline.EncodedPolyline
+            };
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {

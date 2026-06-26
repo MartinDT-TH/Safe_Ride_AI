@@ -1,3 +1,5 @@
+using Hangfire;
+using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
@@ -10,6 +12,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using SafeRide.Application.Features.Auth.Services;
+using SafeRide.Application.Common.Models;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Domain.Entities;
 using SafeRide.Infrastructure.Authentication;
@@ -17,6 +20,8 @@ using SafeRide.Infrastructure.BackgroundJobs;
 using SafeRide.Infrastructure.ExternalServices;
 using SafeRide.Infrastructure.ExternalServices.GoogleMaps;
 using SafeRide.Infrastructure.ExternalServices.OpenRouteService;
+using SafeRide.Infrastructure.ExternalServices.VietMap;
+using SafeRide.Infrastructure.ExternalServices.NoOp;
 using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
 using SafeRide.Infrastructure.Repositories;
@@ -63,32 +68,76 @@ public static class DependencyInjection
         services
             .AddOptions<GoogleMapsOptions>()
             .Bind(configuration.GetSection(GoogleMapsOptions.SectionName))
-            .ValidateDataAnnotations()
-            .Validate(
-                options => Uri.IsWellFormedUriString(
-                    options.RoutesApiUrl,
-                    UriKind.Absolute),
-                "GoogleMaps:RoutesApiUrl must be an absolute URL.")
-            .Validate(
-                options => Uri.IsWellFormedUriString(
-                    options.GeocodingApiUrl,
-                    UriKind.Absolute),
-                "GoogleMaps:GeocodingApiUrl must be an absolute URL.")
-            .ValidateOnStart();
+            .ValidateDataAnnotations();
+            // NOTE: ValidateOnStart removed — Google Maps is a fallback provider.
+            // URL validation is skipped when VietMap is the primary provider.
         services
             .AddOptions<OpenRouteServiceOptions>()
-            .Bind(configuration.GetSection(OpenRouteServiceOptions.SectionName))
-            .Validate(
-                options => Uri.IsWellFormedUriString(
-                    options.DirectionsApiUrl,
-                    UriKind.Absolute),
-                "OpenRouteService:DirectionsApiUrl must be an absolute URL.")
-            .Validate(
-                options => Uri.IsWellFormedUriString(
-                    options.MatrixApiUrl,
-                    UriKind.Absolute),
-                "OpenRouteService:MatrixApiUrl must be an absolute URL.")
+            .Bind(configuration.GetSection(OpenRouteServiceOptions.SectionName));
+            // NOTE: ValidateOnStart removed — OpenRouteService is a fallback provider.
+
+        services
+            .AddOptions<MatchingOptions>()
+            .Bind(configuration.GetSection(MatchingOptions.SectionName))
+            .Validate(options => options.InitialRadiusKm > 0, "BackgroundJobs:MatchingOptions:InitialRadiusKm must be greater than zero.")
+            .Validate(options => options.ExpandedRadiusKm >= options.InitialRadiusKm, "BackgroundJobs:MatchingOptions:ExpandedRadiusKm must be greater than or equal to InitialRadiusKm.")
+            .Validate(options => options.ExpandAfterMinutes > 0, "BackgroundJobs:MatchingOptions:ExpandAfterMinutes must be greater than zero.")
+            .Validate(options => options.BookingExpireAfterMinutes > options.ExpandAfterMinutes, "BackgroundJobs:MatchingOptions:BookingExpireAfterMinutes must be greater than ExpandAfterMinutes.")
+            .Validate(options => options.OfferExpireSeconds > 0, "BackgroundJobs:MatchingOptions:OfferExpireSeconds must be greater than zero.")
+            .Validate(options => options.CustomerConfirmExpireSeconds > 0, "BackgroundJobs:MatchingOptions:CustomerConfirmExpireSeconds must be greater than zero.")
+            .Validate(options => options.MatchingTickSeconds > 0, "BackgroundJobs:MatchingOptions:MatchingTickSeconds must be greater than zero.")
             .ValidateOnStart();
+
+        services
+            .AddOptions<ScheduledBookingMatchingOptions>()
+            .Bind(configuration.GetSection(ScheduledBookingMatchingOptions.SectionName))
+            .Validate(options => options.StartMatchingBeforeMinutes > 0, "BackgroundJobs:ScheduledBookingMatching:StartMatchingBeforeMinutes must be greater than zero.")
+            .Validate(options => options.PollingIntervalSeconds > 0, "BackgroundJobs:ScheduledBookingMatching:PollingIntervalSeconds must be greater than zero.")
+            .ValidateOnStart();
+
+        services
+            .AddOptions<ExpandSearchingRadiusJobOptions>()
+            .Bind(configuration.GetSection(ExpandSearchingRadiusJobOptions.SectionName))
+            .Validate(options => options.RadiusExpandedNotificationTtlMinutes > 0, "BackgroundJobs:ExpandSearchingRadius:RadiusExpandedNotificationTtlMinutes must be greater than zero.")
+            .ValidateOnStart();
+
+        services
+            .AddOptions<CleanupStaleDriverLocationJobOptions>()
+            .Bind(configuration.GetSection(CleanupStaleDriverLocationJobOptions.SectionName))
+            .Validate(options => options.StaleAfterMinutes > 0, "BackgroundJobs:CleanupStaleDriverLocation:StaleAfterMinutes must be greater than zero.")
+            .ValidateOnStart();
+
+        services
+            .AddOptions<BookingLifecycleJobSchedulerOptions>()
+            .Bind(configuration.GetSection(BookingLifecycleJobSchedulerOptions.SectionName))
+            .Validate(options => options.JobIdTtlHours > 0, "BackgroundJobs:BookingLifecycleJobScheduler:JobIdTtlHours must be greater than zero.")
+            .ValidateOnStart();
+
+        services
+            .AddOptions<SimulatorOptions>()
+            .Bind(configuration.GetSection(SimulatorOptions.SectionName))
+            .Validate(options => options.MockDriverTtlRefreshSeconds > 0, "SimulatorOptions:MockDriverTtlRefreshSeconds must be greater than zero.")
+            .ValidateOnStart();
+
+        // ── Hangfire ───────────────────────────────────────────────────────────────
+        services.AddHangfire(config => config
+            .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+            .UseSimpleAssemblyNameTypeSerializer()
+            .UseRecommendedSerializerSettings()
+            .UseSqlServerStorage(
+                configuration.GetConnectionString("DefaultConnection"),
+                new SqlServerStorageOptions
+                {
+                    CommandBatchMaxTimeout = TimeSpan.FromMinutes(5),
+                    SlidingInvisibilityTimeout = TimeSpan.FromMinutes(5),
+                    QueuePollInterval = TimeSpan.Zero,
+                    UseRecommendedIsolationLevel = true,
+                    DisableGlobalLocks = true
+                }));
+        services.AddHangfireServer();
+        services.AddScoped<IBookingLifecycleJobScheduler, HangfireBookingLifecycleJobScheduler>();
+        // ──────────────────────────────────────────────────────────────────────────
+
         services.AddSingleton<RedisService>();
         services.AddSingleton<InMemoryRedisService>();
         services.AddSingleton<IRedisService>(provider =>
@@ -105,41 +154,84 @@ public static class DependencyInjection
         services.AddScoped<IBookingRepository, BookingRepository>();
         services.AddScoped<IPromotionRepository, PromotionRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddSingleton<IMatchingPolicyProvider, MatchingPolicyProvider>();
         services.AddScoped<IBookingMatchingService, BookingMatchingService>();
         services.AddScoped<IBookingAssignmentService, BookingAssignmentService>();
         services.AddScoped<IDriverRealtimeService, DriverRealtimeService>();
         services.AddScoped<ITripStatusService, TripStatusService>();
         services.AddHttpClient<ISpeedSmsService, InfobipSmsService>();
-        var mapRoutingProvider = configuration["MapRouting:Provider"];
-        if (string.Equals(
-                mapRoutingProvider,
-                "OpenRouteService",
-                StringComparison.OrdinalIgnoreCase))
+
+        // ── Map Services ───────────────────────────────────────────────────────────
+        // VietMap options (always registered regardless of primary provider)
+        services
+            .AddOptions<VietMapOptions>()
+            .Bind(configuration.GetSection(VietMapOptions.SectionName));
+
+        var primaryMapProvider = configuration["MapServices:PrimaryProvider"];
+
+        if (string.Equals(primaryMapProvider, "OpenRouteService", StringComparison.OrdinalIgnoreCase))
         {
-            services.AddHttpClient<IGoogleMapsService, OpenRouteServiceRoutingService>(
-                client =>
+            services.AddHttpClient<IMapRoutingService, OpenRouteServiceRoutingService>(client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(20);
+            });
+            if(!configuration.GetValue<bool>("MapServices:TurnGeocodingOffForOpenRouteServiceFallback")) 
+            {
+                services.AddHttpClient<IMapGeocodingService, OpenRouteServiceGeocodingService>(client =>
                 {
-                    client.Timeout = TimeSpan.FromSeconds(20);
+                    var timeoutSeconds = configuration.GetValue<int>("MapServices:OpenRouteService:TimeoutSeconds", 20);
+                    client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
                 });
+            }
+            else
+            {
+                services.AddSingleton<IMapGeocodingService, NoOpGeocodingService>();
+            }
+            
         }
-        else
+        else if (string.Equals(primaryMapProvider, "GoogleMaps", StringComparison.OrdinalIgnoreCase))
         {
-            services.AddHttpClient<IGoogleMapsService, GoogleMapsService>(client =>
+            services.AddHttpClient<IMapRoutingService, GoogleMapsRoutingService>(client =>
             {
                 client.Timeout = TimeSpan.FromSeconds(15);
             });
+            // Fallback to VietMap for Geocoding until GoogleMapsGeocodingService is implemented
+            services.AddHttpClient<IMapGeocodingService, VietMapGeocodingService>(client =>
+            {
+                var timeoutSeconds = configuration.GetValue<int>("MapServices:VietMap:TimeoutSeconds", 15);
+                client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+            });
         }
-
-        if (environment.IsDevelopment())
+        else
         {
-            services.AddSingleton<DriverLocationSimulator>();
+            // Default: VietMap
+            services.AddHttpClient<IMapRoutingService, VietMapRoutingService>(client =>
+            {
+                var timeoutSeconds = configuration.GetValue<int>("MapServices:VietMap:TimeoutSeconds", 15);
+                client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+            });
+            services.AddHttpClient<IMapGeocodingService, VietMapGeocodingService>(client =>
+            {
+                var timeoutSeconds = configuration.GetValue<int>("MapServices:VietMap:TimeoutSeconds", 15);
+                client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+            });
+        }
+        // ──────────────────────────────────────────────────────────────────────────
+
+        if (environment.IsDevelopment()
+            && configuration.GetValue<bool>("Simulator:EnableMockDrivers"))
+        {
+            // services.AddSingleton<DriverLocationSimulator>();
             // Register V3 simulator with logger support
-            services.AddSingleton<DriverLocationSimulatorV3>();
+            // services.AddSingleton<DriverLocationSimulatorV3>();
+            // Register mock driver offer acceptor service
+            services.AddHostedService<MockDriverOfferAcceptorService>();
         }
 
         if (!environment.IsEnvironment("Testing"))
         {
             services.AddHostedService<ScheduledBookingMatchingJob>();
+            services.AddHostedService<BookingMatchingBackgroundService>();
         }
 
         services

@@ -19,22 +19,22 @@
 // }
 
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/network/dio_client.dart';
 import '../models/home_response.dart';
 
 class HomeRemoteDatasource {
   Future<HomeResponse> getHomeData() async {
-    await Future.delayed(const Duration(seconds: 1));
-
-    return HomeResponse.fromJson({
-      ApiKeys.userName: 'Alex',
-      ApiKeys.recentTrips: [
-        {
-          ApiKeys.pickup: 'AEON Mall',
-          ApiKeys.destination: 'Quận 1',
-          ApiKeys.time: '10:20',
-        },
-      ],
-    });
+    try {
+      final response = await DioClient().dio.get('/api/home');
+      return HomeResponse.fromJson(response.data);
+    } catch (e) {
+      // For development, if /api/home doesn't exist yet, return a mock response
+      // so the UI doesn't continuously show a server connection error widget.
+      return HomeResponse(
+        userName: HomeStrings.defaultUser,
+        recentTrips: [],
+      );
+    }
   }
 }
 

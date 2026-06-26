@@ -130,6 +130,17 @@ public sealed class ResilientRedisService : IRedisService
             () => _primary.GeoAddAsync(key, longitude, latitude, member));
     }
 
+    public async Task GeoRemoveAsync(
+        string key,
+        string member,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await _fallback.GeoRemoveAsync(key, member, cancellationToken);
+        await TryPrimaryAsync(
+            () => _primary.GeoRemoveAsync(key, member, cancellationToken));
+    }
+
     public async Task<IReadOnlyList<string>> GeoRadiusAsync(
         string key,
         double longitude,
@@ -187,13 +198,21 @@ public sealed class ResilientRedisService : IRedisService
                 maxAttempts);
             MarkPrimaryAvailable();
 
-            if (result == OtpVerificationResult.Missing)
+            if (result == OtpVerificationResult.Success)
             {
-                return await VerifyFallbackAsync();
+                await VerifyFallbackAsync();
+                return OtpVerificationResult.Success;
             }
 
-            await VerifyFallbackAsync();
-            return result;
+            var fallbackResult = await VerifyFallbackAsync();
+            if (fallbackResult == OtpVerificationResult.Success)
+            {
+                return OtpVerificationResult.Success;
+            }
+
+            return result == OtpVerificationResult.Missing
+                ? fallbackResult
+                : result;
         }
         catch (Exception exception)
         {

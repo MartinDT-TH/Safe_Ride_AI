@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 
-import '../../../../../core/config/api_keys_config.dart';
 import '../../../../../core/constants/app_colors.dart';
+import '../../../../../core/maps/models/map_models.dart';
+import '../../../../../core/maps/models/map_api_models.dart';
+import '../../../../../core/maps/widgets/map_renderer_widget.dart';
 import '../../data/models/booking_location.dart';
 import '../providers/booking_provider.dart';
 
@@ -26,11 +28,16 @@ class LocationPickerPage extends StatefulWidget {
 }
 
 class _LocationPickerPageState extends State<LocationPickerPage> {
-  static const _defaultPosition = LatLng(10.7769, 106.7009);
+  static const _defaultPosition = AppLatLng(10.7769, 106.7009);
 
   final _searchController = TextEditingController();
-  GoogleMapController? _mapController;
+  AppMapController? _mapController;
   BookingLocation? _selectedLocation;
+
+  List<PlaceAutocompleteResult> _suggestions = [];
+  Timer? _debounceTimer;
+  bool _isSearching = false;
+  bool _ignoreSearchChanges = false;
 
   bool get _isPickup => widget.type == LocationPickerType.pickup;
 
@@ -39,17 +46,88 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
     super.initState();
     _selectedLocation = widget.initialLocation;
     _searchController.text = widget.initialLocation?.address ?? '';
+    _searchController.addListener(_onSearchChanged);
   }
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
+    _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
     _mapController?.dispose();
     super.dispose();
   }
 
+  void _onSearchChanged() {
+    if (_ignoreSearchChanges) return;
+
+    final query = _searchController.text;
+    if (query.isEmpty) {
+      setState(() {
+        _suggestions = [];
+      });
+      return;
+    }
+
+    if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () async {
+      setState(() => _isSearching = true);
+      final focus = _autocompleteFocus;
+      final results = await context.read<BookingProvider>().autocompleteAddress(
+        query,
+        lat: focus.latitude,
+        lng: focus.longitude,
+      );
+      if (mounted && _searchController.text == query) {
+        setState(() {
+          _suggestions = results;
+          _isSearching = false;
+        });
+      }
+    });
+  }
+
+  AppLatLng get _autocompleteFocus {
+    final selected = _selectedLocation;
+    if (selected != null) {
+      return AppLatLng(selected.latitude, selected.longitude);
+    }
+
+    final cameraLocation =
+        widget.initialCameraLocation ?? widget.initialLocation;
+    if (cameraLocation != null) {
+      return AppLatLng(cameraLocation.latitude, cameraLocation.longitude);
+    }
+
+    return _defaultPosition;
+  }
+
+  Future<void> _selectSuggestion(PlaceAutocompleteResult suggestion) async {
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _suggestions = [];
+      _ignoreSearchChanges = true;
+      _searchController.text = suggestion.primaryText;
+      _ignoreSearchChanges = false;
+    });
+
+    final location = await context.read<BookingProvider>().resolvePlaceId(
+      suggestion.providerPlaceId,
+    );
+    if (!mounted || location == null) return;
+
+    setState(() {
+      _selectedLocation = location;
+      _ignoreSearchChanges = true;
+      _searchController.text = location.address;
+      _ignoreSearchChanges = false;
+    });
+    await _moveCamera(location);
+  }
+
   Future<void> _search() async {
     FocusScope.of(context).unfocus();
+    setState(() => _suggestions = []);
     final location = await context.read<BookingProvider>().resolveAddress(
       _searchController.text,
     );
@@ -57,13 +135,16 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
 
     setState(() {
       _selectedLocation = location;
+      _ignoreSearchChanges = true;
       _searchController.text = location.address;
+      _ignoreSearchChanges = false;
     });
     await _moveCamera(location);
   }
 
-  Future<void> _selectMapPosition(LatLng position) async {
+  Future<void> _selectMapPosition(AppLatLng position) async {
     setState(() {
+      _suggestions = [];
       _selectedLocation = BookingLocation(
         address: 'Đang xác định địa chỉ...',
         latitude: position.latitude,
@@ -79,29 +160,34 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
 
     setState(() {
       _selectedLocation = location;
+      _ignoreSearchChanges = true;
       _searchController.text = location.address;
+      _ignoreSearchChanges = false;
     });
   }
 
   Future<void> _useCurrentLocation() async {
-    final location = await context.read<BookingProvider>().getCurrentLocation().timeout(
-          const Duration(seconds: 12),
-          onTimeout: () => null,
-        );
+    setState(() => _suggestions = []);
+    final location = await context
+        .read<BookingProvider>()
+        .getCurrentLocation()
+        .timeout(const Duration(seconds: 12), onTimeout: () => null);
     if (!mounted || location == null) return;
 
     setState(() {
       _selectedLocation = location;
+      _ignoreSearchChanges = true;
       _searchController.text = location.address;
+      _ignoreSearchChanges = false;
     });
     await _moveCamera(location);
   }
 
   Future<void> _moveCamera(BookingLocation location) async {
     await _mapController?.animateCamera(
-      CameraUpdate.newLatLngZoom(
-        LatLng(location.latitude, location.longitude),
-        16,
+      AppCameraPosition(
+        target: AppLatLng(location.latitude, location.longitude),
+        zoom: 16,
       ),
     );
   }
@@ -119,7 +205,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
     final cameraLocation = selected ?? widget.initialCameraLocation;
     final initial = cameraLocation == null
         ? _defaultPosition
-        : LatLng(cameraLocation.latitude, cameraLocation.longitude);
+        : AppLatLng(cameraLocation.latitude, cameraLocation.longitude);
     final color = _isPickup ? AppColors.primary : const Color(0xFFD71920);
 
     return Scaffold(
@@ -129,88 +215,127 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
             child: Stack(
               children: [
                 Positioned.fill(
-                  child: ApiKeysConfig.hasGoogleMapsKey
-                      ? GoogleMap(
-                          initialCameraPosition: CameraPosition(
-                            target: initial,
-                            zoom: cameraLocation == null ? 12 : 16,
-                          ),
-                          markers: selected == null
-                              ? {}
-                              : {
-                                  Marker(
-                                    markerId: const MarkerId(
-                                      'selected-location',
-                                    ),
-                                    position: initial,
-                                    icon: BitmapDescriptor.defaultMarkerWithHue(
-                                      _isPickup
-                                          ? BitmapDescriptor.hueAzure
-                                          : BitmapDescriptor.hueRed,
-                                    ),
-                                  ),
-                                },
-                          onTap: provider.isLoading ? null : _selectMapPosition,
-                          onMapCreated: (controller) {
-                            _mapController = controller;
-                          },
-                          myLocationButtonEnabled: false,
-                          zoomControlsEnabled: false,
-                          mapToolbarEnabled: false,
-                        )
-                      : const ColoredBox(
-                          color: Color(0xFFE9EEEE),
-                          child: Center(
-                            child: Text(
-                              'Thiếu cấu hình Google Maps.',
-                              textAlign: TextAlign.center,
+                  child: MapRendererWidget(
+                    initialCameraPosition: AppCameraPosition(
+                      target: initial,
+                      zoom: cameraLocation == null ? 12 : 16,
+                    ),
+                    markers: selected == null
+                        ? {}
+                        : {
+                            AppMarker(
+                              id: 'selected-location',
+                              position: initial,
+                              hue: _isPickup
+                                  ? 210.0
+                                  : 0.0, // azure = ~210, red = 0
                             ),
-                          ),
-                        ),
+                          },
+                    onTap: provider.isLoading ? null : _selectMapPosition,
+                    onMapCreated: (controller) {
+                      _mapController = controller;
+                    },
+                    myLocationButtonEnabled: false,
+                  ),
                 ),
                 SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                    child: Row(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Material(
-                          color: Colors.white,
-                          shape: const CircleBorder(),
-                          elevation: 3,
-                          child: IconButton(
-                            onPressed: () => Navigator.pop(context),
-                            icon: const Icon(Icons.arrow_back),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Material(
-                            color: Colors.white,
-                            elevation: 3,
-                            borderRadius: BorderRadius.circular(12),
-                            child: TextField(
-                              controller: _searchController,
-                              textInputAction: TextInputAction.search,
-                              onSubmitted: (_) => _search(),
-                              decoration: InputDecoration(
-                                hintText: _isPickup
-                                    ? 'Tìm điểm đón'
-                                    : 'Tìm điểm đến',
-                                prefixIcon: Icon(Icons.search, color: color),
-                                suffixIcon: IconButton(
-                                  onPressed: provider.isLoading
-                                      ? null
-                                      : _search,
-                                  icon: const Icon(Icons.arrow_forward),
-                                ),
-                                border: InputBorder.none,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  vertical: 16,
+                        Row(
+                          children: [
+                            Material(
+                              color: Colors.white,
+                              shape: const CircleBorder(),
+                              elevation: 3,
+                              child: IconButton(
+                                onPressed: () => Navigator.pop(context),
+                                icon: const Icon(Icons.arrow_back),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Material(
+                                color: Colors.white,
+                                elevation: 3,
+                                borderRadius: BorderRadius.circular(12),
+                                child: TextField(
+                                  controller: _searchController,
+                                  textInputAction: TextInputAction.search,
+                                  onSubmitted: (_) => _search(),
+                                  // enableSuggestions: false, // <-- Tắt gợi ý
+                                  // autocorrect: false,        // <-- Tắt tự động sửa lỗi
+                                  // autofillHints: const [],   // <-- Tắt lưu trữ tự động điền của OS
+                                  decoration: InputDecoration(
+                                    hintText: _isPickup
+                                        ? 'Tìm điểm đón'
+                                        : 'Tìm điểm đến',
+                                    prefixIcon: Icon(
+                                      Icons.search,
+                                      color: color,
+                                    ),
+                                    suffixIcon: _isSearching
+                                        ? const Padding(
+                                            padding: EdgeInsets.all(12.0),
+                                            child: SizedBox.square(
+                                              dimension: 20,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            ),
+                                          )
+                                        : IconButton(
+                                            onPressed: provider.isLoading
+                                                ? null
+                                                : _search,
+                                            icon: const Icon(
+                                              Icons.arrow_forward,
+                                            ),
+                                          ),
+                                    border: InputBorder.none,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      vertical: 16,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
+                          ],
                         ),
+                        if (_suggestions.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Material(
+                            elevation: 4,
+                            borderRadius: BorderRadius.circular(12),
+                            color: Colors.white,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxHeight: 280),
+                              child: ListView.separated(
+                                padding: EdgeInsets.zero,
+                                shrinkWrap: true,
+                                itemCount: _suggestions.length,
+                                separatorBuilder: (_, __) =>
+                                    const Divider(height: 1),
+                                itemBuilder: (context, index) {
+                                  final s = _suggestions[index];
+                                  return ListTile(
+                                    leading: const Icon(
+                                      Icons.location_on,
+                                      color: Colors.grey,
+                                    ),
+                                    title: Text(s.primaryText),
+                                    subtitle: s.secondaryText.isNotEmpty
+                                        ? Text(s.secondaryText)
+                                        : null,
+                                    onTap: () => _selectSuggestion(s),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),

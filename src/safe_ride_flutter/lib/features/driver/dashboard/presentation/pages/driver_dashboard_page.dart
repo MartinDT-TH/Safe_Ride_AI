@@ -1,9 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
+
+import '../../../../../core/maps/models/map_models.dart';
+import '../../../../../core/maps/widgets/map_renderer_widget.dart';
+import '../../../../../core/services/location_service.dart';
+import '../../../../../dependency_injection/injection.dart';
+
 import '../providers/driver_dashboard_provider.dart';
 import '../widgets/driver_bottom_nav_bar.dart';
+import '../../../../../core/constants/app_strings.dart';
+import '../../../../customer/booking/presentation/providers/booking_provider.dart';
+import '../../../../customer/home/presentation/pages/customer_home_page.dart';
 import '../../../../shared/history/presentation/pages/history_page.dart';
+import '../../../../shared/onboarding/presentation/providers/role_provider.dart';
+import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../shared/profile/presentation/pages/profile_page.dart';
 
 class DriverDashboardPage extends StatefulWidget {
@@ -14,10 +24,72 @@ class DriverDashboardPage extends StatefulWidget {
 }
 
 class _DriverDashboardPageState extends State<DriverDashboardPage> {
-  GoogleMapController? _mapController;
+  AppMapController? _mapController;
   int _selectedIndex = 0;
+  bool _isLocating = false;
 
-  static const _tealColor = Color(0xFF006B70);
+
+  Future<void> _goToCurrentLocation() async {
+    if (_isLocating) return;
+    setState(() {
+      _isLocating = true;
+    });
+    try {
+      final locationService = getIt<LocationService>();
+      final location = await locationService.getCurrentLocation().timeout(
+        const Duration(seconds: 10),
+      );
+      if (!mounted) return;
+
+      if (_mapController != null) {
+        await _mapController!.animateCamera(
+          AppCameraPosition(
+            target: AppLatLng(location.latitude, location.longitude),
+            zoom: 16,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Không thể lấy vị trí hiện tại: ${e.toString()}'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLocating = false;
+        });
+      }
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final token = context.read<AuthProvider>().token;
+      if (token != null) {
+        context.read<DriverDashboardProvider>().initializeRealtime(token);
+      }
+      _checkActiveCustomerBooking();
+    });
+  }
+
+  void _checkActiveCustomerBooking() {
+    final bookingProvider = context.read<BookingProvider>();
+    final roleProvider = context.read<RoleProvider>();
+    
+    if (bookingProvider.activeBooking != null) {
+      debugPrint('DRIVER_DASHBOARD: Active customer booking detected. Forcing switch to customer mode.');
+      roleProvider.setRole(AppValues.roleCustomer);
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const CustomerHomePage()),
+        (route) => false,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,10 +101,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     ];
 
     return Scaffold(
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: pages,
-      ),
+      body: IndexedStack(index: _selectedIndex, children: pages),
       bottomNavigationBar: DriverBottomNavBar(
         currentIndex: _selectedIndex,
         onTap: (index) => setState(() => _selectedIndex = index),
@@ -44,13 +113,15 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     return Stack(
       children: [
         // 1. Map Background
-        GoogleMap(
-          initialCameraPosition: const CameraPosition(
-            target: LatLng(10.762622, 106.660172), // HCM City
+        MapRendererWidget(
+          initialCameraPosition: const AppCameraPosition(
+            target: AppLatLng(10.762622, 106.660172), // HCM City
             zoom: 14,
           ),
-          onMapCreated: (controller) => _mapController = controller,
-          zoomControlsEnabled: false,
+          onMapCreated: (controller) {
+            _mapController = controller;
+            _goToCurrentLocation();
+          },
           myLocationButtonEnabled: false,
         ),
 
@@ -61,10 +132,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _CircleIconButton(
-                  icon: Icons.menu,
-                  onPressed: () {},
-                ),
+                _CircleIconButton(icon: Icons.menu, onPressed: () {}),
                 _IncomeHeader(),
                 _CircleIconButton(
                   icon: Icons.notifications_none_rounded,
@@ -90,8 +158,19 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                 child: Padding(
                   padding: const EdgeInsets.only(right: 16, bottom: 16),
                   child: _CircleIconButton(
-                    icon: Icons.my_location,
-                    onPressed: () {},
+                    onPressed: _goToCurrentLocation,
+                    child: _isLocating
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Color(0xFF006B70),
+                              ),
+                            ),
+                          )
+                        : const Icon(Icons.my_location, color: Colors.black87),
                   ),
                 ),
               ),
@@ -99,8 +178,37 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
               // Request Card or Online/Offline Toggle
               Consumer<DriverDashboardProvider>(
                 builder: (context, provider, child) {
-                  if (provider.hasNewRequest && provider.currentRequest != null) {
-                    return _NewRequestCard(request: provider.currentRequest!);
+                  if (provider.isLoadingActiveTrip) {
+                    return const Padding(
+                      padding: EdgeInsets.only(bottom: 24),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF006B70),
+                        ),
+                      ),
+                    );
+                  }
+
+                  if (provider.errorMessage != null &&
+                      provider.activeTrip == null) {
+                    return _ErrorLoadingActiveTripCard(
+                      errorMessage: provider.errorMessage!,
+                      onRetry: provider.loadActiveTrip,
+                    );
+                  }
+
+                  if (provider.activeTrip != null) {
+                    return _ActiveTripCard(
+                      trip: provider.activeTrip!,
+                      isUpdating: provider.isUpdatingTrip,
+                    );
+                  }
+                  if (provider.hasNewRequest &&
+                      provider.currentRequest != null) {
+                    return _NewRequestCard(
+                      request: provider.currentRequest!,
+                      isResponding: provider.isResponding,
+                    );
                   }
                   return _StatusToggle();
                 },
@@ -115,13 +223,298 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
   }
 }
 
+class _ErrorLoadingActiveTripCard extends StatelessWidget {
+  final String errorMessage;
+  final VoidCallback onRetry;
+
+  const _ErrorLoadingActiveTripCard({
+    required this.errorMessage,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.16),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cloud_off_rounded, size: 48, color: Colors.grey),
+            const SizedBox(height: 12),
+            const Text(
+              'Lỗi kết nối máy chủ',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1A1A1A),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              errorMessage,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14, color: Colors.black54),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text(
+                  'Thử lại',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF006B70),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 0,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActiveTripCard extends StatelessWidget {
+  const _ActiveTripCard({required this.trip, required this.isUpdating});
+
+  final ActiveDriverTrip trip;
+  final bool isUpdating;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = trip.tripStatus;
+    final canCancel = status == 'DRIVER_ARRIVING';
+    final canComplete = status == 'ARRIVED' || status == 'IN_PROGRESS';
+    final canMarkArrived = status == 'DRIVER_ARRIVING';
+    final canStartArriving = status == 'ACCEPTED';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.16),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFE8F2F2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.route_rounded,
+                    color: Color(0xFF006B70),
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Chuyến đang thực hiện',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _statusLabel(status),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF667085),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            if (canStartArriving)
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: isUpdating
+                      ? null
+                      : () => _runTripAction(
+                          context,
+                          () => context
+                              .read<DriverDashboardProvider>()
+                              .startArriving(),
+                        ),
+                  icon: const Icon(Icons.navigation_rounded),
+                  label: Text(isUpdating ? 'Đang xử lý...' : 'Bắt đầu đến đón'),
+                  style: _primaryButtonStyle(),
+                ),
+              )
+            else if (canCancel || canMarkArrived)
+              Row(
+                children: [
+                  if (canCancel) ...[
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: isUpdating
+                            ? null
+                            : () => _runTripAction(
+                                context,
+                                () => context
+                                    .read<DriverDashboardProvider>()
+                                    .cancelActiveTrip(),
+                              ),
+                        icon: const Icon(Icons.close_rounded),
+                        label: const Text('Hủy chuyến'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFFE53935),
+                          side: const BorderSide(color: Color(0xFFE53935)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  if (canMarkArrived)
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: isUpdating
+                            ? null
+                            : () => _runTripAction(
+                                context,
+                                () => context
+                                    .read<DriverDashboardProvider>()
+                                    .markArrived(),
+                              ),
+                        icon: const Icon(Icons.flag_rounded),
+                        label: const Text('Đã tới đón'),
+                        style: _primaryButtonStyle(),
+                      ),
+                    ),
+                ],
+              )
+            else if (canComplete)
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: isUpdating
+                      ? null
+                      : () => _runTripAction(
+                          context,
+                          () => context
+                              .read<DriverDashboardProvider>()
+                              .completeActiveTrip(),
+                          successMessage:
+                              'Đã kết thúc chuyến. Chờ khách xác nhận nhận lại xe.',
+                        ),
+                  icon: const Icon(Icons.check_circle_rounded),
+                  label: Text(
+                    isUpdating ? 'Đang xử lý...' : 'Kết thúc chuyến đi',
+                  ),
+                  style: _primaryButtonStyle(),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static ButtonStyle _primaryButtonStyle() {
+    return ElevatedButton.styleFrom(
+      backgroundColor: const Color(0xFF006B70),
+      foregroundColor: Colors.white,
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    );
+  }
+
+  static String _statusLabel(String status) {
+    return switch (status) {
+      'ACCEPTED' => 'Đã nhận chuyến',
+      'DRIVER_ARRIVING' => 'Đang đến điểm đón',
+      'ARRIVED' => 'Đã tới điểm đón',
+      'IN_PROGRESS' => 'Đang thực hiện chuyến',
+      _ => status,
+    };
+  }
+
+  static Future<void> _runTripAction(
+    BuildContext context,
+    Future<bool> Function() action, {
+    String? successMessage,
+  }) async {
+    try {
+      final ok = await action();
+      if (!context.mounted || !ok || successMessage == null) {
+        return;
+      }
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(successMessage)));
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Không thể cập nhật trạng thái chuyến.'),
+          ),
+        );
+    }
+  }
+}
+
 class _CircleIconButton extends StatelessWidget {
-  final IconData icon;
+  final IconData? icon;
+  final Widget? child;
   final VoidCallback onPressed;
   final bool hasBadge;
 
   const _CircleIconButton({
-    required this.icon,
+    this.icon,
+    this.child,
     required this.onPressed,
     this.hasBadge = false,
   });
@@ -143,7 +536,7 @@ class _CircleIconButton extends StatelessWidget {
       child: Stack(
         children: [
           IconButton(
-            icon: Icon(icon, color: Colors.black87),
+            icon: child ?? Icon(icon, color: Colors.black87),
             onPressed: onPressed,
           ),
           if (hasBadge)
@@ -207,7 +600,10 @@ class _IncomeHeader extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFE8F2F2),
                       borderRadius: BorderRadius.circular(10),
@@ -275,7 +671,9 @@ class _StatusToggle extends StatelessWidget {
                     child: Container(
                       margin: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
-                        color: isOnline ? const Color(0xFF006B70) : Colors.transparent,
+                        color: isOnline
+                            ? const Color(0xFF006B70)
+                            : Colors.transparent,
                         borderRadius: BorderRadius.circular(30),
                       ),
                       child: Center(
@@ -318,8 +716,9 @@ class _StatusToggle extends StatelessWidget {
 
 class _NewRequestCard extends StatelessWidget {
   final TripRequest request;
+  final bool isResponding;
 
-  const _NewRequestCard({required this.request});
+  const _NewRequestCard({required this.request, required this.isResponding});
 
   @override
   Widget build(BuildContext context) {
@@ -372,7 +771,11 @@ class _NewRequestCard extends StatelessWidget {
                   children: [
                     const Text(
                       'THU NHẬP DỰ KIẾN',
-                      style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     Text(
                       '${request.expectedIncome.toInt().toString().replaceAllMapped(RegExp(r"(\d{3})(?=\d)"), (m) => "${m[1]},")}đ',
@@ -389,7 +792,11 @@ class _NewRequestCard extends StatelessWidget {
                   children: [
                     const Text(
                       'ĐÓN KHÁCH',
-                      style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     Text(
                       '${request.pickupDistance} (${request.pickupTime})',
@@ -414,7 +821,11 @@ class _NewRequestCard extends StatelessWidget {
               padding: EdgeInsets.only(left: 11),
               child: SizedBox(
                 height: 20,
-                child: VerticalDivider(width: 2, thickness: 1, color: Colors.grey),
+                child: VerticalDivider(
+                  width: 2,
+                  thickness: 1,
+                  color: Colors.grey,
+                ),
               ),
             ),
             _AddressItem(
@@ -428,10 +839,16 @@ class _NewRequestCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () => context.read<DriverDashboardProvider>().declineRequest(),
+                    onPressed: isResponding
+                        ? null
+                        : () => context
+                              .read<DriverDashboardProvider>()
+                              .declineRequest(),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                     child: const Text('Từ chối'),
                   ),
@@ -439,14 +856,20 @@ class _NewRequestCard extends StatelessWidget {
                 const SizedBox(width: 16),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () => context.read<DriverDashboardProvider>().acceptRequest(),
+                    onPressed: isResponding
+                        ? null
+                        : () => context
+                              .read<DriverDashboardProvider>()
+                              .acceptRequest(),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF006B70),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
-                    child: const Text('Chấp nhận'),
+                    child: Text(isResponding ? 'Đang xử lý...' : 'Chấp nhận'),
                   ),
                 ),
               ],
@@ -484,7 +907,11 @@ class _AddressItem extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: Colors.grey,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               Text(
                 address,

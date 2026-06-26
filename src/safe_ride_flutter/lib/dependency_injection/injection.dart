@@ -102,7 +102,11 @@ Future<void> setupDependencies() async {
     ),
   );
   getIt.registerFactory<BookingProvider>(
-    () => BookingProvider(getIt<BookingRepository>(), getIt<LocationService>()),
+    () => BookingProvider(
+      getIt<BookingRepository>(),
+      getIt<LocationService>(),
+      getIt<SocketService>(),
+    ),
   );
 
   getIt.registerLazySingleton<VehicleRemoteDatasource>(
@@ -133,7 +137,7 @@ Future<void> setupDependencies() async {
   );
 
   getIt.registerFactory<DriverDashboardProvider>(
-    () => DriverDashboardProvider(),
+    () => DriverDashboardProvider(socketService: getIt<SocketService>()),
   );
 
   getIt.registerLazySingleton<IdentityVerificationRemoteDatasource>(

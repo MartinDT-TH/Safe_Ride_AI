@@ -111,8 +111,10 @@ public enum BookingStatus
 
 public enum DriverOfferStatus
 {
-    Offered,
-    Confirmed,
+    Sent,
+    DriverAccepted,
+    CustomerConfirmed,
+    Rejected,
     Expired,
     Cancelled
 }
@@ -205,4 +207,27 @@ public enum ReportStatus
     Pending,
     Resolved,
     Rejected
+}
+
+
+// ================================================================
+// MAPS
+// ================================================================
+
+
+public enum MapProvider
+{
+    /// <summary>Tự động chọn theo cấu hình PrimaryProvider trong appsettings.</summary>
+    Auto = 0,
+    VietMap = 1,
+    GoogleMaps = 2,
+    OpenRouteService = 3
+}
+
+public enum MapTravelMode
+{
+    Car = 1,
+    Motorcycle = 2,
+    Bike = 3,
+    Foot = 4
 }

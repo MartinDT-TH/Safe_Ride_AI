@@ -8,6 +8,12 @@ public static class RedisKeys
     public static string OtpAttempts(string phoneNumber) =>
         $"auth:otp:attempts:{phoneNumber}";
 
+    public static string OtpLock(string phoneNumber) =>
+        $"auth:otp:lock:{phoneNumber}";
+
+    public static string OtpSendCooldown(string phoneNumber) =>
+        $"auth:otp:send-cooldown:{phoneNumber}";
+
     public static string RefreshToken(string tokenHash) =>
         $"auth:refresh-token:{tokenHash}";
 
@@ -30,6 +36,18 @@ public static class RedisKeys
 
     public static string MatchingDriverLock(Guid driverId) =>
         $"sr:matching:driver-lock:{driverId}";
+
+    public static string BookingRadiusExpandedNotified(long bookingId) =>
+        $"sr:booking:radius-expanded-notified:{bookingId}";
+
+    public static string HangfireExpandRadiusJobId(long bookingId) =>
+        $"sr:booking:hf-expand-job:{bookingId}";
+
+    public static string HangfireExpireBookingJobId(long bookingId) =>
+        $"sr:booking:hf-expire-job:{bookingId}";
+
+    public static string HangfireExpireDriverOfferJobId(long offerId) =>
+        $"sr:booking:hf-expire-offer-job:{offerId}";
 
     public static string TripLive(long tripId) =>
         $"sr:trip:live:{tripId}";

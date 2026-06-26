@@ -1,7 +1,10 @@
+using Hangfire;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.OpenApi.Models;
+using SafeRide.API;
 using SafeRide.Application;
+using SafeRide.API.Filters;
 using SafeRide.API.Middlewares;
 using SafeRide.Infrastructure;
 using SafeRide.Infrastructure.Persistence;
@@ -12,6 +15,10 @@ using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
+
 if (builder.Environment.IsDevelopment())
 {
     builder.Configuration.AddJsonFile(
@@ -20,8 +27,12 @@ if (builder.Environment.IsDevelopment())
         reloadOnChange: true);
 }
 
-const string mapRoutingProvider = "OpenRouteService"; // Use "OpenRouteService" or "Google" to switch provider
-builder.Configuration["MapRouting:Provider"] = mapRoutingProvider;
+// TODO: REMOVE BEFORE FINAL — dev-only provider override.
+// Change the value below to switch map provider without editing appsettings.
+// "VietMap" | "GoogleMaps" | "OpenRouteService"
+// const string devMapProvider = "OpenRouteService";
+// builder.Configuration["MapServices:PrimaryProvider"] = devMapProvider;
+
 
 builder.Services
     .AddControllers()
@@ -48,6 +59,7 @@ builder.Services
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
+builder.Services.AddSafeRideApiJobs(builder.Configuration);
 builder.Services.AddSafeRideRealtime();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -105,10 +117,23 @@ if (app.Environment.IsDevelopment())
     // Console.WriteLine("\n=== Running V2: SignalR Real-time Simulator ===");
     // await DriverLocationSimulatorV2.Main(Array.Empty<string>());
 
-    // V3: DI-based SignalR Simulator (if needed, uncomment and configure)
+    // V3: DI-based SignalR Simulator (if needed,    // V3: DI-based SignalR Simulator (Disabled)
     // Console.WriteLine("\n=== Running V3: DI-based SignalR Simulator ===");
-    // var v3Simulator = app.Services.GetRequiredService<SafeRide.Realtime.Simulator.DriverLocationSimulatorV3>();
-    // await v3Simulator.StartAsync("0987654321", 1);
+    // _ = Task.Run(async () =>
+    // {
+    //     try
+    //     {
+    //         // Wait for server to be fully ready
+    //         await Task.Delay(10000);
+    //         using var scope = app.Services.CreateScope();
+    //         var v3Simulator = scope.ServiceProvider.GetRequiredService<DriverLocationSimulatorV3>();
+    //         await v3Simulator.StartAsync("0901000002", 10);
+    //     }
+    //     catch (Exception ex)
+    //     {
+    //         Console.WriteLine($"Simulator Error: {ex.Message}");
+    //     }
+    // });
 }
 
 app.UseMiddleware<ApiExceptionMiddleware>();
@@ -128,6 +153,18 @@ app.UseAuthorization();
 await app.Services.SeedIdentityAsync();
 app.MapControllers();
 app.MapHub<SafeRideHub>("/hubs/saferide");
+app.UseSafeRideApiJobs();
+
+// ── Hangfire Dashboard (Admin only) ───────────────────────────────────────────
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
+{
+    Authorization =
+    [
+        new HangfireAdminAuthorizationFilter()
+    ]
+});
+// ───────────────────────────────────────────────────────────────
+
 app.Run();
 
 public partial class Program;

@@ -31,6 +31,7 @@ abstract final class AuthStrings {
   static const resendOtpFailed = 'Không thể gửi lại OTP.';
   static const otpRequired = 'Vui lòng nhập đủ 6 số OTP';
   static const invalidOtp = 'OTP không đúng hoặc đã hết hạn';
+  static const otpLockedPrefix = 'Bạn nhập sai OTP quá nhiều lần. Thử lại sau ';
   static const otpAttemptsExceeded =
       'Bạn đã nhập sai OTP quá nhiều lần. Vui lòng yêu cầu mã mới.';
 
@@ -218,7 +219,7 @@ abstract final class LocationStrings {
 abstract final class AppConfig {
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:5026/api/',
+    defaultValue: 'http://192.168.1.36:5026/api/',
   );
   static const fontFamily = 'SFProDisplay';
   static const logoUrl =
@@ -246,6 +247,15 @@ abstract final class ApiEndpoints {
   static const bookingCatalog = '/bookings/catalog';
   static const bookingEstimate = '/bookings/estimate';
   static const nearbyDrivers = '/drivers/nearby';
+  static String acceptDriverOffer(int offerId) =>
+      '/drivers/offers/$offerId/accept';
+  static String rejectDriverOffer(int offerId) =>
+      '/drivers/offers/$offerId/reject';
+  static String confirmDriverOffer(int bookingId, int offerId) =>
+      '/bookings/$bookingId/confirm-driver-offer/$offerId';
+  static String tripStatus(int tripId) => '/trips/$tripId/status';
+  static String completeTrip(int tripId) => '/trips/$tripId/complete';
+  static String submitTripRating(int tripId) => '/trips/$tripId/rating';
   static const identityVerificationDocuments =
       '/identity-verification/documents';
 }
@@ -281,6 +291,7 @@ abstract final class ApiKeys {
   static const nextStep = 'nextStep';
   static const detail = 'detail';
   static const code = 'code';
+  static const retryAfterSeconds = 'retryAfterSeconds';
   static const phoneNumberConfirmed = 'phoneNumberConfirmed';
   static const phoneLinked = 'phoneLinked';
   static const googleLinked = 'googleLinked';
@@ -306,10 +317,15 @@ abstract final class ApiKeys {
   static const driverName = 'driverName';
   static const driverAvatarUrl = 'driverAvatarUrl';
   static const rating = 'rating';
+  static const ratingScore = 'ratingScore';
+  static const comment = 'comment';
   static const tripCount = 'tripCount';
   static const experienceYears = 'experienceYears';
   static const licenseClass = 'licenseClass';
   static const expiresAt = 'expiresAt';
+  static const offerStatus = 'offerStatus';
+  static const customerConfirmRemainingSeconds =
+      'customerConfirmRemainingSeconds';
   static const estimatedHours = 'estimatedHours';
   static const vehicleId = 'vehicleId';
   static const serviceTypeId = 'serviceTypeId';
@@ -324,6 +340,9 @@ abstract final class ApiKeys {
   static const originalFare = 'originalFare';
   static const discountAmount = 'discountAmount';
   static const finalFare = 'finalFare';
+  static const currentSearchRadiusKm = 'currentSearchRadiusKm';
+  static const estimatedRemainingSeconds = 'estimatedRemainingSeconds';
+  static const matchingMessage = 'matchingMessage';
   static const userName = 'userName';
   static const recentTrips = 'recentTrips';
   static const pickup = 'pickup';
@@ -352,6 +371,7 @@ abstract final class AppValues {
 abstract final class StorageKeys {
   static const accessToken = 'auth.access_token';
   static const refreshToken = 'auth.refresh_token';
+  static const userProfile = 'auth.user_profile';
   static const deviceId = 'device.id';
 }
 

@@ -21,7 +21,9 @@ public sealed class AuthService : IAuthService
     private const string PhoneLoginProvider = "InfobipOtp";
     private const string GoogleLoginProvider = "Google";
     private const string CustomerRole = "Customer";
-    private const int MaxOtpAttempts = 5;
+    private static readonly TimeSpan OtpLifetime = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan OtpSendCooldown = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan OtpAttemptStreakLifetime = TimeSpan.FromDays(30);
 
     private readonly UserManager<AspNetUser> _userManager;
     private readonly ApplicationDbContext _dbContext;
@@ -106,42 +108,7 @@ public sealed class AuthService : IAuthService
                 StatusCodes.Status400BadRequest);
         }
 
-        OtpVerificationResult verification;
-        try
-        {
-            verification = await _redisService.VerifyAndConsumeOtpAsync(
-                RedisKeys.Otp(phoneNumber),
-                RedisKeys.OtpAttempts(phoneNumber),
-                ComputeOtpHash(phoneNumber, request.OtpCode),
-                MaxOtpAttempts);
-        }
-        catch (Exception exception)
-        {
-            _logger.LogError(exception, "Redis unavailable while verifying OTP.");
-            throw new AuthException(
-                AuthErrorCodes.OtpUnavailable,
-                "Dịch vụ OTP tạm thời không khả dụng.",
-                StatusCodes.Status503ServiceUnavailable);
-        }
-
-        switch (verification)
-        {
-            case OtpVerificationResult.Missing:
-                throw new AuthException(
-                    AuthErrorCodes.OtpExpired,
-                    "Mã OTP không tồn tại hoặc đã hết hạn.",
-                    StatusCodes.Status401Unauthorized);
-            case OtpVerificationResult.Invalid:
-                throw new AuthException(
-                    AuthErrorCodes.InvalidOtp,
-                    "Mã OTP không chính xác.",
-                    StatusCodes.Status401Unauthorized);
-            case OtpVerificationResult.AttemptsExceeded:
-                throw new AuthException(
-                    AuthErrorCodes.OtpAttemptsExceeded,
-                    "Bạn đã nhập sai OTP quá nhiều lần. Vui lòng yêu cầu mã mới.",
-                    StatusCodes.Status429TooManyRequests);
-        }
+        await VerifyOtpCodeAsync(phoneNumber, request.OtpCode, "login");
 
         var (user, isNewUser) = await FindOrCreatePhoneUserAsync(phoneNumber);
         EnsureUserActive(user);
@@ -177,42 +144,7 @@ public sealed class AuthService : IAuthService
 
         await EnsurePhoneAvailableForUserAsync(user, phoneNumber);
 
-        OtpVerificationResult verification;
-        try
-        {
-            verification = await _redisService.VerifyAndConsumeOtpAsync(
-                RedisKeys.Otp(phoneNumber),
-                RedisKeys.OtpAttempts(phoneNumber),
-                ComputeOtpHash(phoneNumber, request.OtpCode),
-                MaxOtpAttempts);
-        }
-        catch (Exception exception)
-        {
-            _logger.LogError(exception, "Redis unavailable while verifying profile phone OTP.");
-            throw new AuthException(
-                AuthErrorCodes.OtpUnavailable,
-                "Dịch vụ OTP tạm thời không khả dụng.",
-                StatusCodes.Status503ServiceUnavailable);
-        }
-
-        switch (verification)
-        {
-            case OtpVerificationResult.Missing:
-                throw new AuthException(
-                    AuthErrorCodes.OtpExpired,
-                    "Mã OTP không tồn tại hoặc đã hết hạn.",
-                    StatusCodes.Status401Unauthorized);
-            case OtpVerificationResult.Invalid:
-                throw new AuthException(
-                    AuthErrorCodes.InvalidOtp,
-                    "Mã OTP không chính xác.",
-                    StatusCodes.Status401Unauthorized);
-            case OtpVerificationResult.AttemptsExceeded:
-                throw new AuthException(
-                    AuthErrorCodes.OtpAttemptsExceeded,
-                    "Bạn đã nhập sai OTP quá nhiều lần. Vui lòng yêu cầu mã mới.",
-                    StatusCodes.Status429TooManyRequests);
-        }
+        await VerifyOtpCodeAsync(phoneNumber, request.OtpCode, "profile phone");
 
         user.PhoneNumber = phoneNumber;
         user.PhoneNumberConfirmed = true;
@@ -796,27 +728,187 @@ public sealed class AuthService : IAuthService
     {
         var otpCode = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
         var otpKey = RedisKeys.Otp(phoneNumber);
-        var attemptsKey = RedisKeys.OtpAttempts(phoneNumber);
+        var cooldownKey = RedisKeys.OtpSendCooldown(phoneNumber);
 
         try
         {
+            var canSend = await _redisService.SetIfNotExistsAsync(
+                cooldownKey,
+                "1",
+                OtpSendCooldown);
+            if (!canSend)
+            {
+                var retryAfterSeconds = await GetRetryAfterSecondsAsync(
+                    cooldownKey,
+                    OtpSendCooldown);
+                throw new AuthException(
+                    AuthErrorCodes.OtpSendCooldown,
+                    "Vui lòng chờ 1 phút trước khi yêu cầu mã OTP mới.",
+                    StatusCodes.Status429TooManyRequests,
+                    retryAfterSeconds);
+            }
+
+            await _redisService.SetAsync(
+                cooldownKey,
+                CreateExpiresAtCacheValue(OtpSendCooldown),
+                OtpSendCooldown);
             await _redisService.SetAsync(
                 otpKey,
                 ComputeOtpHash(phoneNumber, otpCode),
-                TimeSpan.FromMinutes(5));
-            await _redisService.RemoveAsync(attemptsKey);
+                OtpLifetime);
             await _smsService.SendOtpAsync(phoneNumber, otpCode);
+        }
+        catch (AuthException)
+        {
+            throw;
         }
         catch (Exception exception)
         {
             await TryRemoveCacheAsync(otpKey);
-            await TryRemoveCacheAsync(attemptsKey);
+            await TryRemoveCacheAsync(cooldownKey);
             _logger.LogError(exception, "Could not send OTP to {PhoneNumber}.", phoneNumber);
             throw new AuthException(
                 AuthErrorCodes.OtpUnavailable,
                 "Dịch vụ OTP tạm thời không khả dụng.",
                 StatusCodes.Status503ServiceUnavailable);
         }
+    }
+
+    private async Task VerifyOtpCodeAsync(
+        string phoneNumber,
+        string otpCode,
+        string purpose)
+    {
+        var otpKey = RedisKeys.Otp(phoneNumber);
+        var attemptsKey = RedisKeys.OtpAttempts(phoneNumber);
+        var lockKey = RedisKeys.OtpLock(phoneNumber);
+
+        try
+        {
+            var lockValue = await _redisService.GetAsync(lockKey);
+            if (!string.IsNullOrWhiteSpace(lockValue))
+            {
+                throw CreateOtpLockedException(
+                    GetRemainingSeconds(lockValue, TimeSpan.FromSeconds(30)));
+            }
+
+            var storedHash = await _redisService.GetAsync(otpKey);
+            if (string.IsNullOrWhiteSpace(storedHash))
+            {
+                throw new AuthException(
+                    AuthErrorCodes.OtpExpired,
+                    "Mã OTP không tồn tại hoặc đã hết hạn.",
+                    StatusCodes.Status401Unauthorized);
+            }
+
+            var expectedHash = ComputeOtpHash(phoneNumber, otpCode);
+            if (!string.Equals(storedHash, expectedHash, StringComparison.Ordinal))
+            {
+                await RegisterInvalidOtpAttemptAsync(phoneNumber, attemptsKey, lockKey);
+            }
+
+            await _redisService.RemoveAsync(otpKey);
+            await _redisService.RemoveAsync(attemptsKey);
+            await _redisService.RemoveAsync(lockKey);
+        }
+        catch (AuthException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Redis unavailable while verifying {Purpose} OTP.", purpose);
+            throw new AuthException(
+                AuthErrorCodes.OtpUnavailable,
+                "Dịch vụ OTP tạm thời không khả dụng.",
+                StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+
+    private async Task RegisterInvalidOtpAttemptAsync(
+        string phoneNumber,
+        string attemptsKey,
+        string lockKey)
+    {
+        var attempts = await _redisService.IncrementAsync(
+            attemptsKey,
+            OtpAttemptStreakLifetime);
+        var lockDuration = GetInvalidOtpLockDuration(attempts);
+        if (lockDuration is not null)
+        {
+            await _redisService.SetAsync(
+                lockKey,
+                CreateExpiresAtCacheValue(lockDuration.Value),
+                lockDuration.Value);
+            _logger.LogWarning(
+                "OTP verification locked for {PhoneNumber} after {Attempts} continuous invalid attempts for {LockSeconds} seconds.",
+                phoneNumber,
+                attempts,
+                lockDuration.Value.TotalSeconds);
+            throw CreateOtpLockedException(GetSeconds(lockDuration.Value));
+        }
+
+        throw new AuthException(
+            AuthErrorCodes.InvalidOtp,
+            "Mã OTP không chính xác.",
+            StatusCodes.Status401Unauthorized);
+    }
+
+    private static TimeSpan? GetInvalidOtpLockDuration(long attempts)
+    {
+        return attempts switch
+        {
+            < 5 => null,
+            5 => TimeSpan.FromSeconds(30),
+            6 => TimeSpan.FromMinutes(1),
+            7 => TimeSpan.FromMinutes(2),
+            8 => TimeSpan.FromMinutes(5),
+            9 => TimeSpan.FromMinutes(10),
+            _ => TimeSpan.FromMinutes(30)
+        };
+    }
+
+    private async Task<int> GetRetryAfterSecondsAsync(
+        string key,
+        TimeSpan fallback)
+    {
+        var value = await _redisService.GetAsync(key);
+        return GetRemainingSeconds(value, fallback);
+    }
+
+    private static string CreateExpiresAtCacheValue(TimeSpan duration)
+    {
+        return DateTimeOffset.UtcNow.Add(duration).ToUnixTimeSeconds().ToString();
+    }
+
+    private static int GetRemainingSeconds(string? expiresAtValue, TimeSpan fallback)
+    {
+        if (long.TryParse(expiresAtValue, out var expiresAtUnixSeconds))
+        {
+            var remaining = DateTimeOffset
+                .FromUnixTimeSeconds(expiresAtUnixSeconds)
+                .Subtract(DateTimeOffset.UtcNow);
+            if (remaining > TimeSpan.Zero)
+            {
+                return GetSeconds(remaining);
+            }
+        }
+
+        return GetSeconds(fallback);
+    }
+
+    private static int GetSeconds(TimeSpan duration)
+    {
+        return Math.Max(1, (int)Math.Ceiling(duration.TotalSeconds));
+    }
+
+    private static AuthException CreateOtpLockedException(int retryAfterSeconds)
+    {
+        return new AuthException(
+            AuthErrorCodes.OtpAttemptsExceeded,
+            "Bạn đã nhập sai OTP quá nhiều lần liên tục. Vui lòng chờ rồi thử lại.",
+            StatusCodes.Status429TooManyRequests,
+            retryAfterSeconds);
     }
 
     private string ComputeOtpHash(string phoneNumber, string otpCode)

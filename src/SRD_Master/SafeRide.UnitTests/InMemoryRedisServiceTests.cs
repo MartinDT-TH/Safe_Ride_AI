@@ -28,6 +28,32 @@ public sealed class InMemoryRedisServiceTests
     }
 
     [Fact]
+    public async Task GeoRemoveAsync_RemovesMemberFromRadiusResults()
+    {
+        var redis = new InMemoryRedisService();
+        await redis.GeoAddAsync("geo", 108.0, 16.0, "driver-1");
+        await redis.GeoAddAsync("geo", 108.001, 16.001, "driver-2");
+
+        await redis.GeoRemoveAsync("geo", "driver-1");
+
+        var results = await redis.GeoRadiusAsync("geo", 108.0, 16.0, 5, 10);
+        Assert.DoesNotContain("driver-1", results);
+        Assert.Contains("driver-2", results);
+    }
+
+    [Fact]
+    public async Task GeoRemoveAsync_MissingMemberIsNoOp()
+    {
+        var redis = new InMemoryRedisService();
+        await redis.GeoAddAsync("geo", 108.0, 16.0, "driver-1");
+
+        await redis.GeoRemoveAsync("geo", "missing-driver");
+
+        var results = await redis.GeoRadiusAsync("geo", 108.0, 16.0, 5, 10);
+        Assert.Contains("driver-1", results);
+    }
+
+    [Fact]
     public async Task VerifyAndConsumeOtpAsync_ConsumesValidOtp()
     {
         var redis = new InMemoryRedisService();

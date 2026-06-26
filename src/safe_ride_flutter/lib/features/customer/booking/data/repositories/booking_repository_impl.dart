@@ -90,6 +90,39 @@ class BookingRepositoryImpl implements BookingRepository {
   }
 
   @override
+  Future<BookingResponse> confirmDriverOffer(
+    String accessToken, {
+    required int bookingId,
+    required int offerId,
+  }) {
+    return _remoteDatasource.confirmDriverOffer(
+      accessToken,
+      bookingId: bookingId,
+      offerId: offerId,
+    );
+  }
+
+  @override
+  Future<void> completeTrip(String accessToken, {required int tripId}) {
+    return _remoteDatasource.completeTrip(accessToken, tripId: tripId);
+  }
+
+  @override
+  Future<void> submitTripRating(
+    String accessToken, {
+    required int tripId,
+    required int ratingScore,
+    String? comment,
+  }) {
+    return _remoteDatasource.submitTripRating(
+      accessToken,
+      tripId: tripId,
+      ratingScore: ratingScore,
+      comment: comment,
+    );
+  }
+
+  @override
   Future<BookingResponse> rejectDriver(
     String accessToken, {
     required int bookingId,
