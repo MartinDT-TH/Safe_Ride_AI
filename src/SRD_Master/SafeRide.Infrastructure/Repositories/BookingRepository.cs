@@ -16,6 +16,20 @@ public sealed class BookingRepository : IBookingRepository
     private readonly IRedisService _redisService;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly TimeSpan NowBookingSearchTimeout = TimeSpan.FromMinutes(10);
+    private static readonly BookingStatus[] CustomerHistoryStatuses =
+    [
+        BookingStatus.PendingSchedule,
+        BookingStatus.Searching,
+        BookingStatus.DriverAssigned,
+        BookingStatus.Cancelled,
+        BookingStatus.Completed
+    ];
+    private static readonly BookingStatus[] DriverHistoryStatuses =
+    [
+        BookingStatus.DriverAssigned,
+        BookingStatus.Cancelled,
+        BookingStatus.Completed
+    ];
 
     public BookingRepository(
         ApplicationDbContext dbContext,
@@ -77,6 +91,57 @@ public sealed class BookingRepository : IBookingRepository
                     || booking.BookingStatus == BookingStatus.DriverAssigned))
             .OrderByDescending(booking => booking.UpdatedAt)
             .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<BookingHistoryItemDto>> GetCustomerBookingHistoryAsync(
+        Guid customerId,
+        CancellationToken cancellationToken)
+    {
+        var bookings = await _dbContext.Bookings
+            .AsNoTracking()
+            .Include(booking => booking.Vehicle)
+            .Include(booking => booking.BookingPromotions)
+                .ThenInclude(bookingPromotion => bookingPromotion.Promotion)
+            .Include(booking => booking.Trip!)
+                .ThenInclude(trip => trip.Driver)
+                    .ThenInclude(driverProfile => driverProfile.Driver)
+            .Where(booking => booking.CustomerId == customerId
+                && CustomerHistoryStatuses.Contains(booking.BookingStatus))
+            .OrderByDescending(booking => booking.UpdatedAt)
+            .ToListAsync(cancellationToken);
+
+        var driverRatings = await LoadDriverRatingsAsync(
+            bookings
+                .Where(booking => booking.Trip is not null)
+                .Select(booking => booking.Trip!.DriverId)
+                .Distinct()
+                .ToList(),
+            cancellationToken);
+
+        return bookings
+            .Select(booking => ToCustomerHistoryItem(booking, driverRatings))
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<BookingHistoryItemDto>> GetDriverBookingHistoryAsync(
+        Guid driverId,
+        CancellationToken cancellationToken)
+    {
+        var bookings = await _dbContext.Bookings
+            .AsNoTracking()
+            .Include(booking => booking.Vehicle)
+            .Include(booking => booking.BookingPromotions)
+                .ThenInclude(bookingPromotion => bookingPromotion.Promotion)
+            .Include(booking => booking.Trip)
+            .Where(booking => booking.Trip != null
+                && booking.Trip.DriverId == driverId
+                && DriverHistoryStatuses.Contains(booking.BookingStatus))
+            .OrderByDescending(booking => booking.UpdatedAt)
+            .ToListAsync(cancellationToken);
+
+        return bookings
+            .Select(ToDriverHistoryItem)
+            .ToList();
     }
 
     public async Task<BookingDriverOfferDto?> GetLatestBookingDriverOfferAsync(
@@ -216,6 +281,103 @@ public sealed class BookingRepository : IBookingRepository
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
+    }
+
+    private async Task<Dictionary<Guid, double>> LoadDriverRatingsAsync(
+        IReadOnlyCollection<Guid> driverIds,
+        CancellationToken cancellationToken)
+    {
+        if (driverIds.Count == 0)
+        {
+            return [];
+        }
+
+        return await _dbContext.Ratings
+            .AsNoTracking()
+            .Where(rating => driverIds.Contains(rating.DriverId))
+            .GroupBy(rating => rating.DriverId)
+            .ToDictionaryAsync(
+                group => group.Key,
+                group => Math.Round(
+                    group.Average(rating => (double)rating.RatingScore),
+                    1),
+                cancellationToken);
+    }
+
+    private static BookingHistoryItemDto ToCustomerHistoryItem(
+        Booking booking,
+        IReadOnlyDictionary<Guid, double> driverRatings)
+    {
+        var price = BookingPriceMapper.FromBooking(booking);
+        var driverId = booking.Trip?.DriverId;
+        var driverUser = booking.Trip?.Driver?.Driver;
+
+        double? driverRating = null;
+        if (driverId.HasValue &&
+            driverRatings.TryGetValue(driverId.Value, out var rating))
+        {
+            driverRating = rating;
+        }
+
+        return new BookingHistoryItemDto(
+            booking.BookingId,
+            booking.PickupAddress,
+            booking.DestinationAddress ?? string.Empty,
+            ResolveOccurredAt(booking),
+            (double)(booking.EstimatedDistanceKm ?? 0m),
+            booking.EstimatedFare,
+            price.FinalFare,
+            booking.BookingStatus,
+            booking.Vehicle.BrandModel,
+            booking.Vehicle.VehicleType == VehicleType.Motorbike,
+            driverUser?.FullName ?? driverUser?.UserName,
+            driverRating,
+            driverUser?.AvatarUrl);
+    }
+
+    private static BookingHistoryItemDto ToDriverHistoryItem(Booking booking)
+    {
+        var price = BookingPriceMapper.FromBooking(booking);
+
+        return new BookingHistoryItemDto(
+            booking.BookingId,
+            booking.PickupAddress,
+            booking.DestinationAddress ?? string.Empty,
+            ResolveOccurredAt(booking),
+            (double)(booking.EstimatedDistanceKm ?? 0m),
+            booking.EstimatedFare,
+            price.FinalFare,
+            booking.BookingStatus,
+            booking.Vehicle.BrandModel,
+            booking.Vehicle.VehicleType == VehicleType.Motorbike,
+            null,
+            null,
+            null);
+    }
+
+    private static DateTime ResolveOccurredAt(Booking booking)
+    {
+        if (booking.BookingStatus == BookingStatus.Completed)
+        {
+            return booking.Trip?.CompletedAt
+                ?? booking.ScheduledAt
+                ?? booking.UpdatedAt;
+        }
+
+        if (booking.BookingStatus == BookingStatus.PendingSchedule)
+        {
+            return booking.ScheduledAt
+                ?? booking.UpdatedAt;
+        }
+
+        if (booking.BookingStatus == BookingStatus.DriverAssigned)
+        {
+            return booking.ScheduledAt
+                ?? booking.Trip?.DriverAssignedAt
+                ?? booking.UpdatedAt;
+        }
+
+        return booking.UpdatedAt;
     }
 
     private static bool ShouldExpireNowBooking(Booking booking, DateTime utcNow)

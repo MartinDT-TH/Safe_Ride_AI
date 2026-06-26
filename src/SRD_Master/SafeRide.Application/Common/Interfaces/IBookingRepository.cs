@@ -18,6 +18,14 @@ public interface IBookingRepository
         Guid customerId,
         CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<BookingHistoryItemDto>> GetCustomerBookingHistoryAsync(
+        Guid customerId,
+        CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<BookingHistoryItemDto>> GetDriverBookingHistoryAsync(
+        Guid driverId,
+        CancellationToken cancellationToken);
+
     Task<Booking?> GetActiveNowBookingAsync(
         Guid customerId,
         CancellationToken cancellationToken);
