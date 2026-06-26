@@ -67,10 +67,7 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
     final provider = context.read<BookingProvider>();
     provider.clearFareEstimate();
 
-    final currentLocationFuture = provider.getCurrentLocation().timeout(
-      const Duration(seconds: 15),
-      onTimeout: () => null,
-    );
+    final currentLocationFuture = provider.getCurrentLocation();
     await provider.loadCatalog(token, forceRefresh: true);
 
     if (!mounted) return;
