@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 
@@ -47,6 +48,28 @@ class DriverDashboardProvider extends ChangeNotifier {
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
 
+  // Hack Demo State
+  double? _demoLat;
+  double? get demoLat => _demoLat;
+  double? _demoLng;
+  double? get demoLng => _demoLng;
+  double _demoHeading = 0;
+  double get demoHeading => _demoHeading;
+
+  double _calculateDemoHeading(double startLat, double startLng, double endLat, double endLng) {
+    final sLat = startLat * math.pi / 180;
+    final sLng = startLng * math.pi / 180;
+    final eLat = endLat * math.pi / 180;
+    final eLng = endLng * math.pi / 180;
+
+    final dLng = eLng - sLng;
+    final y = math.sin(dLng) * math.cos(eLat);
+    final x = math.cos(sLat) * math.sin(eLat) -
+        math.sin(sLat) * math.cos(eLat) * math.cos(dLng);
+    final brng = math.atan2(y, x);
+    return (brng * 180 / math.pi + 360) % 360;
+  }
+
   Future<void> initializeRealtime(String accessToken) async {
     if (accessToken.isEmpty) {
       return;
@@ -56,12 +79,22 @@ class DriverDashboardProvider extends ChangeNotifier {
       _socketService.onBookingUpdated((update) {
       if (update.status == 'DriverAssigned' || update.tripId != null) {
         if (update.tripId != null) {
+          final oldTrip = _activeTrip;
           _activeTrip = ActiveDriverTrip(
             bookingId: update.bookingId,
             tripId: update.tripId!,
             tripStatus: update.tripStatus ?? 'ACCEPTED',
+            pickupLat: oldTrip?.pickupLat,
+            pickupLng: oldTrip?.pickupLng,
+            destLat: oldTrip?.destLat,
+            destLng: oldTrip?.destLng,
+            encodedPolyline: oldTrip?.encodedPolyline,
+            arrivalPolyline: oldTrip?.arrivalPolyline,
           );
           notifyListeners();
+          if (oldTrip?.encodedPolyline == null) {
+            _fetchActiveTripDetails(update.bookingId, update.tripId!);
+          }
         }
       } else if (update.status == 'Cancelled' || update.status == 'Expired') {
         if (_activeTrip?.bookingId == update.bookingId) {
@@ -110,22 +143,50 @@ class DriverDashboardProvider extends ChangeNotifier {
         return;
       }
 
+      final oldTrip = _activeTrip;
       _activeTrip = ActiveDriverTrip(
         bookingId: update.bookingId,
         tripId: update.tripId,
         tripStatus: update.tripStatus,
+        pickupLat: oldTrip?.pickupLat,
+        pickupLng: oldTrip?.pickupLng,
+        destLat: oldTrip?.destLat,
+        destLng: oldTrip?.destLng,
+        encodedPolyline: oldTrip?.encodedPolyline,
+        arrivalPolyline: oldTrip?.arrivalPolyline,
       );
       notifyListeners();
+      if (oldTrip?.encodedPolyline == null) {
+        _fetchActiveTripDetails(update.bookingId, update.tripId);
+      }
     }, key: 'driverDashboard');
+    _socketService.onDriverLocationUpdated((update) {
+      if (_demoLat != null && _demoLng != null) {
+        _demoHeading = _calculateDemoHeading(_demoLat!, _demoLng!, update.latitude, update.longitude);
+      }
+      _demoLat = update.latitude;
+      _demoLng = update.longitude;
+      notifyListeners();
+    });
     _socketService.onBookingUpdated((update) {
       if (update.status == 'DriverAssigned' || update.tripId != null) {
         if (update.tripId != null) {
+          final oldTrip = _activeTrip;
           _activeTrip = ActiveDriverTrip(
             bookingId: update.bookingId,
             tripId: update.tripId!,
             tripStatus: update.tripStatus ?? 'ACCEPTED',
+            pickupLat: oldTrip?.pickupLat,
+            pickupLng: oldTrip?.pickupLng,
+            destLat: oldTrip?.destLat,
+            destLng: oldTrip?.destLng,
+            encodedPolyline: oldTrip?.encodedPolyline,
+            arrivalPolyline: oldTrip?.arrivalPolyline,
           );
           notifyListeners();
+          if (oldTrip?.encodedPolyline == null) {
+            _fetchActiveTripDetails(update.bookingId, update.tripId!);
+          }
         }
       } else if (update.status == 'Cancelled' || update.status == 'Expired') {
         if (_activeTrip?.bookingId == update.bookingId) {
@@ -174,12 +235,22 @@ class DriverDashboardProvider extends ChangeNotifier {
     _socketService.onBookingUpdated((update) {
       if (update.status == 'DriverAssigned' || update.tripId != null) {
         if (update.tripId != null) {
+          final oldTrip = _activeTrip;
           _activeTrip = ActiveDriverTrip(
             bookingId: update.bookingId,
             tripId: update.tripId!,
             tripStatus: update.tripStatus ?? 'ACCEPTED',
+            pickupLat: oldTrip?.pickupLat,
+            pickupLng: oldTrip?.pickupLng,
+            destLat: oldTrip?.destLat,
+            destLng: oldTrip?.destLng,
+            encodedPolyline: oldTrip?.encodedPolyline,
+            arrivalPolyline: oldTrip?.arrivalPolyline,
           );
           notifyListeners();
+          if (oldTrip?.encodedPolyline == null) {
+            _fetchActiveTripDetails(update.bookingId, update.tripId!);
+          }
         }
       } else if (update.status == 'Cancelled' || update.status == 'Expired') {
         if (_activeTrip?.bookingId == update.bookingId) {
@@ -217,12 +288,22 @@ class DriverDashboardProvider extends ChangeNotifier {
     _socketService.onBookingUpdated((update) {
       if (update.status == 'DriverAssigned' || update.tripId != null) {
         if (update.tripId != null) {
+          final oldTrip = _activeTrip;
           _activeTrip = ActiveDriverTrip(
             bookingId: update.bookingId,
             tripId: update.tripId!,
             tripStatus: update.tripStatus ?? 'ACCEPTED',
+            pickupLat: oldTrip?.pickupLat,
+            pickupLng: oldTrip?.pickupLng,
+            destLat: oldTrip?.destLat,
+            destLng: oldTrip?.destLng,
+            encodedPolyline: oldTrip?.encodedPolyline,
+            arrivalPolyline: oldTrip?.arrivalPolyline,
           );
           notifyListeners();
+          if (oldTrip?.encodedPolyline == null) {
+            _fetchActiveTripDetails(update.bookingId, update.tripId!);
+          }
         }
       } else if (update.status == 'Cancelled' || update.status == 'Expired') {
         if (_activeTrip?.bookingId == update.bookingId) {
@@ -243,6 +324,20 @@ class DriverDashboardProvider extends ChangeNotifier {
     } finally {
       _isResponding = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> updateLocation(double lat, double lng) async {
+    final token = _accessToken;
+    if (token == null) return;
+    try {
+      await _dio.patch(
+        '/drivers/location',
+        data: {'latitude': lat, 'longitude': lng},
+        options: Options(headers: {ApiKeys.authorization: AuthHeader.bearer(token)}),
+      );
+    } catch (e) {
+      debugPrint('Failed to update driver location: $e');
     }
   }
 
@@ -295,6 +390,8 @@ class DriverDashboardProvider extends ChangeNotifier {
             tripId: tripId.toInt(),
             tripStatus: tripStatus,
           );
+          // Fetch extra details immediately before setting loading to false
+          await _fetchActiveTripDetailsSync(bookingId.toInt(), tripId.toInt());
         }
       }
     } catch (e) {
@@ -318,12 +415,22 @@ class DriverDashboardProvider extends ChangeNotifier {
     _socketService.onBookingUpdated((update) {
       if (update.status == 'DriverAssigned' || update.tripId != null) {
         if (update.tripId != null) {
+          final oldTrip = _activeTrip;
           _activeTrip = ActiveDriverTrip(
             bookingId: update.bookingId,
             tripId: update.tripId!,
             tripStatus: update.tripStatus ?? 'ACCEPTED',
+            pickupLat: oldTrip?.pickupLat,
+            pickupLng: oldTrip?.pickupLng,
+            destLat: oldTrip?.destLat,
+            destLng: oldTrip?.destLng,
+            encodedPolyline: oldTrip?.encodedPolyline,
+            arrivalPolyline: oldTrip?.arrivalPolyline,
           );
           notifyListeners();
+          if (oldTrip?.encodedPolyline == null) {
+            _fetchActiveTripDetails(update.bookingId, update.tripId!);
+          }
         }
       } else if (update.status == 'Cancelled' || update.status == 'Expired') {
         if (_activeTrip?.bookingId == update.bookingId) {
@@ -351,6 +458,69 @@ class DriverDashboardProvider extends ChangeNotifier {
       _isUpdatingTrip = false;
       notifyListeners();
     }
+  }
+
+  Future<void> _fetchActiveTripDetailsSync(int bookingId, int tripId) async {
+    final token = _accessToken;
+    if (token == null || _activeTrip == null || _activeTrip!.tripId != tripId) return;
+
+    try {
+      final response = await _dio.get(
+        '/drivers/trips/active',
+        options: Options(headers: {ApiKeys.authorization: AuthHeader.bearer(token)}),
+      );
+      if (response.data is Map && _activeTrip?.tripId == tripId) {
+        final bData = Map<String, dynamic>.from(response.data as Map);
+        double? pickupLat = (bData['pickupLat'] as num?)?.toDouble();
+        double? pickupLng = (bData['pickupLng'] as num?)?.toDouble();
+        double? destLat = (bData['destLat'] as num?)?.toDouble();
+        double? destLng = (bData['destLng'] as num?)?.toDouble();
+        final encodedPoly = bData['encodedPolyline'] as String?;
+        String? arrivalPoly = bData['arrivalPolyline'] as String?;
+
+        // Hack Demo: Fetch arrival polyline if missing and we have demo coordinates or active trip
+        if (arrivalPoly == null && pickupLat != null && pickupLng != null) {
+          try {
+            // Use demo coordinates if available, otherwise use a fallback (Da Nang) to fetch a route
+            final oLat = _demoLat ?? 16.0544;
+            final oLng = _demoLng ?? 108.2022;
+            
+            final routeResp = await _dio.post(
+              'maps/routes/estimate',
+              data: {
+                'originLat': oLat,
+                'originLng': oLng,
+                'destinationLat': pickupLat,
+                'destinationLng': pickupLng,
+                'travelMode': 1
+              },
+            );
+            if (routeResp.data != null && routeResp.data is Map) {
+              arrivalPoly = routeResp.data['encodedPolyline'] as String?;
+            }
+          } catch (e) {
+            debugPrint('Failed to fetch demo arrival polyline: $e');
+          }
+        }
+
+        _activeTrip = _activeTrip!.copyWith(
+          pickupLat: pickupLat,
+          pickupLng: pickupLng,
+          destLat: destLat,
+          destLng: destLng,
+          encodedPolyline: encodedPoly,
+          arrivalPolyline: arrivalPoly,
+        );
+      }
+    } catch (e) {
+      debugPrint('Failed to load active trip booking details: $e');
+    }
+  }
+
+  void _fetchActiveTripDetails(int bookingId, int tripId) {
+    _fetchActiveTripDetailsSync(bookingId, tripId).then((_) {
+      notifyListeners();
+    });
   }
 
   static String? _normalizeTripStatus(Object? value) {
@@ -388,17 +558,43 @@ class ActiveDriverTrip {
     required this.bookingId,
     required this.tripId,
     required this.tripStatus,
+    this.pickupLat,
+    this.pickupLng,
+    this.destLat,
+    this.destLng,
+    this.encodedPolyline,
+    this.arrivalPolyline,
   });
 
   final int bookingId;
   final int tripId;
   final String tripStatus;
+  final double? pickupLat;
+  final double? pickupLng;
+  final double? destLat;
+  final double? destLng;
+  final String? encodedPolyline;
+  final String? arrivalPolyline;
 
-  ActiveDriverTrip copyWith({String? tripStatus}) {
+  ActiveDriverTrip copyWith({
+    String? tripStatus,
+    double? pickupLat,
+    double? pickupLng,
+    double? destLat,
+    double? destLng,
+    String? encodedPolyline,
+    String? arrivalPolyline,
+  }) {
     return ActiveDriverTrip(
       bookingId: bookingId,
       tripId: tripId,
       tripStatus: tripStatus ?? this.tripStatus,
+      pickupLat: pickupLat ?? this.pickupLat,
+      pickupLng: pickupLng ?? this.pickupLng,
+      destLat: destLat ?? this.destLat,
+      destLng: destLng ?? this.destLng,
+      encodedPolyline: encodedPolyline ?? this.encodedPolyline,
+      arrivalPolyline: arrivalPolyline ?? this.arrivalPolyline,
     );
   }
 }
