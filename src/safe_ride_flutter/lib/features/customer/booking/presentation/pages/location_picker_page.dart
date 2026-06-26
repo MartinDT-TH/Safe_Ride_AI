@@ -6,6 +6,7 @@ import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/maps/models/map_models.dart';
 import '../../../../../core/maps/models/map_api_models.dart';
 import '../../../../../core/maps/widgets/map_renderer_widget.dart';
+import '../../../../../core/widgets/current_location_button.dart';
 import '../../data/models/booking_location.dart';
 import '../providers/booking_provider.dart';
 
@@ -170,9 +171,18 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
     setState(() => _suggestions = []);
     final location = await context
         .read<BookingProvider>()
-        .getCurrentLocation()
-        .timeout(const Duration(seconds: 12), onTimeout: () => null);
-    if (!mounted || location == null) return;
+        .getCurrentLocation();
+    if (!mounted) return;
+    
+    if (location == null) {
+      final error = context.read<BookingProvider>().locationErrorMessage;
+      if (error != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error)),
+        );
+      }
+      return;
+    }
 
     setState(() {
       _selectedLocation = location;
@@ -343,12 +353,9 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                 Positioned(
                   right: 16,
                   bottom: 16,
-                  child: FloatingActionButton.small(
-                    heroTag: 'current-location',
-                    onPressed: provider.isLoading ? null : _useCurrentLocation,
-                    backgroundColor: Colors.white,
-                    foregroundColor: AppColors.primary,
-                    child: const Icon(Icons.my_location),
+                  child: CurrentLocationButton(
+                    onPressed: _useCurrentLocation,
+                    isLoading: provider.isLoading,
                   ),
                 ),
               ],
