@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
 using SafeRide.Application.Features.Bookings.DTOs;
+using SafeRide.Contracts.Requests.Drivers;
 using SafeRide.Contracts.Responses.Bookings;
 using SafeRide.Contracts.Responses.Drivers;
 using SafeRide.Domain.Enums;
@@ -21,15 +22,18 @@ public sealed class DriversController : ControllerBase
 {
     private readonly IRedisService _redisService;
     private readonly IBookingAssignmentService _bookingAssignmentService;
+    private readonly IDriverRealtimeService _driverRealtimeService;
     private readonly ApplicationDbContext _dbContext;
 
     public DriversController(
         IRedisService redisService,
         IBookingAssignmentService bookingAssignmentService,
+        IDriverRealtimeService driverRealtimeService,
         ApplicationDbContext dbContext)
     {
         _redisService = redisService;
         _bookingAssignmentService = bookingAssignmentService;
+        _driverRealtimeService = driverRealtimeService;
         _dbContext = dbContext;
     }
 
@@ -89,14 +93,42 @@ public sealed class DriversController : ControllerBase
             {
                 bookingId = trip.BookingId,
                 tripId = trip.Id,
-                tripStatus = trip.TripStatus
+                tripStatus = trip.TripStatus,
+                pickupLat = trip.Booking.PickupLocation.Y,
+                pickupLng = trip.Booking.PickupLocation.X,
+                destLat = trip.Booking.DestinationLocation != null ? trip.Booking.DestinationLocation.Y : (double?)null,
+                destLng = trip.Booking.DestinationLocation != null ? trip.Booking.DestinationLocation.X : (double?)null,
+                encodedPolyline = trip.Booking.RoutePolyline
             })
             .FirstOrDefaultAsync(cancellationToken);
 
         return activeTrip is null ? NoContent() : Ok(activeTrip);
     }
 
-    [Authorize(Roles = "Driver")]
+    // [Authorize(Roles = "Driver")]
+    [HttpPatch("location")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateLocation(
+        [FromBody] UpdateDriverLocationRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var driverId))
+        {
+            return Unauthorized();
+        }
+
+        await _driverRealtimeService.UpdateDriverLocationAsync(
+            driverId,
+            request.Latitude,
+            request.Longitude,
+            cancellationToken);
+
+        return NoContent();
+    }
+
+    // [Authorize(Roles = "Driver")]
     [HttpPost("offers/{offerId:long}/accept")]
     [HttpPost("/api/driver-offers/{offerId:long}/accept")]
     [ProducesResponseType<BookingResponse>(StatusCodes.Status200OK)]
@@ -194,9 +226,3 @@ public sealed class DriversController : ControllerBase
                 driverOffer.CustomerConfirmRemainingSeconds);
     }
 }
-
-public record DriverLocationCache(
-    Guid DriverId,
-    double Latitude,
-    double Longitude,
-    DateTime UpdatedAt);
