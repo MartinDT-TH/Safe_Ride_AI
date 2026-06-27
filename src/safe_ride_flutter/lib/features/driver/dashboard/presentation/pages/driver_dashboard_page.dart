@@ -1,9 +1,15 @@
+import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../../../../../core/maps/models/map_models.dart';
+import '../../../../../core/maps/polyline_decoder.dart';
 import '../../../../../core/maps/widgets/map_renderer_widget.dart';
+import '../../../../../core/maps/widgets/live_trip_map_widget.dart';
 import '../../../../../core/services/location_service.dart';
+import '../../../../../core/widgets/current_location_button.dart';
 import '../../../../../dependency_injection/injection.dart';
 
 import '../providers/driver_dashboard_provider.dart';
@@ -27,6 +33,9 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
   AppMapController? _mapController;
   int _selectedIndex = 0;
   bool _isLocating = false;
+  StreamSubscription<Position>? _positionStream;
+  AppLatLng? _driverPosition;
+  double _driverHeading = 0;
 
 
   Future<void> _goToCurrentLocation() async {
@@ -36,15 +45,16 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     });
     try {
       final locationService = getIt<LocationService>();
-      final location = await locationService.getCurrentLocation().timeout(
-        const Duration(seconds: 10),
-      );
+      final location = await locationService.getCurrentLocation();
       if (!mounted) return;
 
       if (_mapController != null) {
+        final provider = context.read<DriverDashboardProvider>();
+        final lat = provider.demoLat ?? location.latitude;
+        final lng = provider.demoLng ?? location.longitude;
         await _mapController!.animateCamera(
           AppCameraPosition(
-            target: AppLatLng(location.latitude, location.longitude),
+            target: AppLatLng(lat, lng),
             zoom: 16,
           ),
         );
@@ -74,7 +84,66 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
         context.read<DriverDashboardProvider>().initializeRealtime(token);
       }
       _checkActiveCustomerBooking();
+      context.read<DriverDashboardProvider>().addListener(_onProviderChanged);
     });
+  }
+
+  @override
+  void dispose() {
+    _stopLocationUpdates();
+    super.dispose();
+  }
+
+  void _onProviderChanged() {
+    final provider = context.read<DriverDashboardProvider>();
+    if (provider.status == DriverStatus.online) {
+      _startLocationUpdates();
+    } else {
+      _stopLocationUpdates();
+    }
+  }
+
+  void _startLocationUpdates() {
+    if (_positionStream != null) return;
+    _positionStream = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 10,
+      ),
+    ).listen((Position position) {
+      _onLocationChanged(position);
+    });
+  }
+
+  void _stopLocationUpdates() {
+    _positionStream?.cancel();
+    _positionStream = null;
+  }
+
+  void _onLocationChanged(Position position) {
+    if (!mounted) return;
+    final newPos = AppLatLng(position.latitude, position.longitude);
+    setState(() {
+      if (_driverPosition != null) {
+        _driverHeading = _calculateHeading(_driverPosition!, newPos);
+      }
+      _driverPosition = newPos;
+    });
+    context.read<DriverDashboardProvider>().updateLocation(position.latitude, position.longitude);
+  }
+
+  double _calculateHeading(AppLatLng start, AppLatLng end) {
+    final startLat = start.latitude * math.pi / 180;
+    final startLng = start.longitude * math.pi / 180;
+    final endLat = end.latitude * math.pi / 180;
+    final endLng = end.longitude * math.pi / 180;
+
+    final dLng = endLng - startLng;
+    final y = math.sin(dLng) * math.cos(endLat);
+    final x = math.cos(startLat) * math.sin(endLat) -
+        math.sin(startLat) * math.cos(endLat) * math.cos(dLng);
+    final brng = math.atan2(y, x);
+    return (brng * 180 / math.pi + 360) % 360;
   }
 
   void _checkActiveCustomerBooking() {
@@ -113,16 +182,61 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     return Stack(
       children: [
         // 1. Map Background
-        MapRendererWidget(
-          initialCameraPosition: const AppCameraPosition(
-            target: AppLatLng(10.762622, 106.660172), // HCM City
-            zoom: 14,
-          ),
-          onMapCreated: (controller) {
-            _mapController = controller;
-            _goToCurrentLocation();
+        Consumer<DriverDashboardProvider>(
+          builder: (context, provider, child) {
+            final activeTrip = provider.activeTrip;
+            if (activeTrip != null && activeTrip.pickupLat != null && activeTrip.pickupLng != null) {
+              final pickup = AppLatLng(activeTrip.pickupLat!, activeTrip.pickupLng!);
+              final destination = activeTrip.destLat != null && activeTrip.destLng != null
+                  ? AppLatLng(activeTrip.destLat!, activeTrip.destLng!)
+                  : null;
+              final isArriving = activeTrip.tripStatus == 'ACCEPTED' || activeTrip.tripStatus == 'DRIVER_ARRIVING';
+              
+              return LiveTripMapWidget(
+                trackingState: isArriving ? LiveTripTrackingState.arriving : LiveTripTrackingState.inProgress,
+                pickup: pickup,
+                destination: destination,
+                arrivalRoutePoints: activeTrip.arrivalPolyline != null 
+                    ? decodePolyline(activeTrip.arrivalPolyline!) 
+                    : const [],
+                tripRoutePoints: activeTrip.encodedPolyline != null
+                    ? decodePolyline(activeTrip.encodedPolyline!)
+                    : const [],
+                driverPosition: provider.demoLat != null && provider.demoLng != null
+                    ? AppLatLng(provider.demoLat!, provider.demoLng!)
+                    : _driverPosition,
+                driverHeading: provider.demoLat != null ? provider.demoHeading : _driverHeading,
+                padding: const EdgeInsets.only(top: 80, bottom: 320, left: 16, right: 16),
+                onMapCreated: (controller) {
+                  _mapController = controller;
+                  _goToCurrentLocation();
+                },
+              );
+            }
+
+            final lat = provider.demoLat ?? 16.0544; // Default to Da Nang
+            final lng = provider.demoLng ?? 108.2022;
+
+            return MapRendererWidget(
+              initialCameraPosition: AppCameraPosition(
+                target: AppLatLng(lat, lng),
+                zoom: 15,
+              ),
+              onMapCreated: (controller) {
+                _mapController = controller;
+                _goToCurrentLocation();
+              },
+              myLocationButtonEnabled: false,
+              markers: provider.demoLat != null && provider.demoLng != null ? {
+                AppMarker(
+                  id: 'demo_driver',
+                  position: AppLatLng(provider.demoLat!, provider.demoLng!),
+                  markerType: AppMarkerType.driver,
+                  rotation: provider.demoHeading,
+                )
+              } : {},
+            );
           },
-          myLocationButtonEnabled: false,
         ),
 
         // 2. Top Bar (Income & Drawer/Notification)
@@ -157,20 +271,9 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                 alignment: Alignment.centerRight,
                 child: Padding(
                   padding: const EdgeInsets.only(right: 16, bottom: 16),
-                  child: _CircleIconButton(
+                  child: CurrentLocationButton(
                     onPressed: _goToCurrentLocation,
-                    child: _isLocating
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Color(0xFF006B70),
-                              ),
-                            ),
-                          )
-                        : const Icon(Icons.my_location, color: Colors.black87),
+                    isLoading: _isLocating,
                   ),
                 ),
               ),

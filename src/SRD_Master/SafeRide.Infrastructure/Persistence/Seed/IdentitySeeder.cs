@@ -86,7 +86,7 @@ public static class IdentitySeeder
             7)
     ];
 
-    public static async Task SeedIdentityAsync(this IServiceProvider services)
+    public static async Task SeedIdentityAsync(this IServiceProvider services, CancellationToken cancellationToken = default)
     {
         await using var scope = services.CreateAsyncScope();
         var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<AspNetRole>>();
@@ -97,7 +97,7 @@ public static class IdentitySeeder
 
         if (environment.IsDevelopment())
         {
-            await SeedRealtimeTestDriversAsync(scope.ServiceProvider);
+            await SeedRealtimeTestDriversAsync(scope.ServiceProvider, cancellationToken);
         }
     }
 
@@ -126,7 +126,7 @@ public static class IdentitySeeder
     }
 
     private static async Task SeedRealtimeTestDriversAsync(
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider, CancellationToken cancellationToken)
     {
         var userManager = serviceProvider.GetRequiredService<UserManager<AspNetUser>>();
         var dbContext = serviceProvider.GetRequiredService<ApplicationDbContext>();
@@ -195,7 +195,7 @@ public static class IdentitySeeder
             }
 
             var profile = await dbContext.DriverProfiles
-                .FirstOrDefaultAsync(x => x.DriverId == seed.DriverId);
+                .FirstOrDefaultAsync(x => x.DriverId == seed.DriverId, cancellationToken);
 
             if (profile is null)
             {
@@ -239,7 +239,8 @@ public static class IdentitySeeder
                 null,
                 DateOnly.FromDateTime(now.AddYears(-5)),
                 DateOnly.FromDateTime(now.AddYears(10)),
-                now);
+                now,
+                cancellationToken);
 
             foreach (var licenseClass in seed.LicenseClasses)
             {
@@ -254,7 +255,8 @@ public static class IdentitySeeder
                     null,
                     DateOnly.FromDateTime(now.AddYears(-3)),
                     DateOnly.FromDateTime(now.AddYears(7)),
-                    now);
+                    now,
+                    cancellationToken);
             }
 
             await EnsureDriverKycAsync(
@@ -268,10 +270,11 @@ public static class IdentitySeeder
                 "https://example.test/srd-criminal-record.pdf",
                 DateOnly.FromDateTime(now.AddMonths(-3)),
                 DateOnly.FromDateTime(now.AddMonths(9)),
-                now);
+                now,
+                cancellationToken);
 
             var hasWallet = await dbContext.DriverWallets.AnyAsync(
-                x => x.DriverId == seed.DriverId);
+                x => x.DriverId == seed.DriverId, cancellationToken);
 
             if (!hasWallet)
             {
@@ -285,7 +288,7 @@ public static class IdentitySeeder
             await CacheDriverOnlineAsync(redisService, seed, now);
         }
 
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private static async Task EnsureDriverKycAsync(
@@ -299,7 +302,8 @@ public static class IdentitySeeder
         string? fileUrl,
         DateOnly issueDate,
         DateOnly expiryDate,
-        DateTime now)
+        DateTime now,
+        CancellationToken cancellationToken)
     {
         var existingKycQuery = dbContext.DriverKycs.Where(
             x => x.DriverId == driverId
@@ -309,7 +313,7 @@ public static class IdentitySeeder
             existingKycQuery = existingKycQuery.Where(x => x.LicenseClass == licenseClass);
         }
 
-        var existingKyc = await existingKycQuery.FirstOrDefaultAsync();
+        var existingKyc = await existingKycQuery.FirstOrDefaultAsync(cancellationToken);
 
         if (existingKyc is null)
         {

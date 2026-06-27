@@ -61,6 +61,10 @@ public interface IBookingRepository
         long vehicleId,
         CancellationToken cancellationToken);
 
+    Task<SurgePricingRule?> GetActiveSurgePricingRuleAsync(
+        DateTime currentUtcTime,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyList<Booking>> GetScheduledBookingsReadyForMatchingAsync(
         DateTime matchingCutoffUtc,
         CancellationToken cancellationToken);

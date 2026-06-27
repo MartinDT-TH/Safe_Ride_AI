@@ -93,7 +93,8 @@ public sealed class BookingsController : ControllerBase
             result.EstimatedDistanceKm,
             result.EstimatedDurationMinutes,
             result.EncodedPolyline,
-            result.EstimatedFare));
+            result.EstimatedFare,
+            result.SurgeMultiplier));
     }
 
     [HttpPost]

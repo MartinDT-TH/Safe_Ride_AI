@@ -86,6 +86,10 @@ public sealed class CreateBookingCommandHandler
                 400);
         }
 
+        var activeSurgeRule = await _bookingRepository.GetActiveSurgePricingRuleAsync(
+            utcNow,
+            cancellationToken);
+
         var isHourly = pricingRule.PricePerHour.HasValue;
         decimal estimatedDistanceKm;
         int estimatedDurationMinutes;
@@ -110,7 +114,8 @@ public sealed class CreateBookingCommandHandler
             estimatedFare = _fareEstimationService.CalculateFare(
                 pricingRule,
                 estimatedDistanceKm,
-                estimatedDurationMinutes);
+                estimatedDurationMinutes,
+                activeSurgeRule);
             routePolyline = null;
             destinationAddress = null;
             destinationLocation = null;
@@ -151,7 +156,8 @@ public sealed class CreateBookingCommandHandler
             estimatedFare = _fareEstimationService.CalculateFare(
                 pricingRule,
                 estimatedDistanceKm,
-                estimatedDurationMinutes);
+                estimatedDurationMinutes,
+                activeSurgeRule);
             routePolyline = route.EncodedPolyline;
             destinationAddress = request.DestinationAddress!.Trim();
             destinationLocation = CreatePoint(
@@ -181,6 +187,7 @@ public sealed class CreateBookingCommandHandler
             RoutePolyline = routePolyline,
             SpecialRequest = NormalizeOptionalText(request.SpecialRequest),
             PricingRuleId = pricingRule.Id,
+            SurgePricingRuleId = activeSurgeRule?.Id,
             CreatedAt = utcNow,
             UpdatedAt = utcNow
         };

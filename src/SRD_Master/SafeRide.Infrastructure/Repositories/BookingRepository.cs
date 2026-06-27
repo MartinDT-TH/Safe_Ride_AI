@@ -15,8 +15,9 @@ public sealed class BookingRepository : IBookingRepository
     private readonly ApplicationDbContext _dbContext;
     private readonly IRedisService _redisService;
     private readonly IMatchingPolicyProvider _matchingPolicyProvider;
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private static readonly TimeSpan NowBookingSearchTimeout = TimeSpan.FromMinutes(10);
+
     private static readonly BookingStatus[] CustomerHistoryStatuses =
     [
         BookingStatus.PendingSchedule,
@@ -25,6 +26,7 @@ public sealed class BookingRepository : IBookingRepository
         BookingStatus.Cancelled,
         BookingStatus.Completed
     ];
+
     private static readonly BookingStatus[] DriverHistoryStatuses =
     [
         BookingStatus.DriverAssigned,
@@ -232,6 +234,7 @@ public sealed class BookingRepository : IBookingRepository
             var cache = JsonSerializer.Deserialize<DriverLocationCache>(
                 locationJson,
                 JsonOptions);
+
             return cache is null
                 ? null
                 : new LocationPoint(cache.Latitude, cache.Longitude);
@@ -278,8 +281,10 @@ public sealed class BookingRepository : IBookingRepository
             {
                 offer.OfferStatus = DriverOfferStatus.Expired;
                 offer.ExpiredAt ??= utcNow;
+
                 await _redisService.RemoveAsync(
                     RedisKeys.MatchingOffer(offer.BookingId, offer.DriverId));
+
                 await _redisService.RemoveAsync(
                     RedisKeys.MatchingDriverLock(offer.DriverId));
             }
@@ -400,10 +405,11 @@ public sealed class BookingRepository : IBookingRepository
 
         var startedAt = _matchingPolicyProvider.GetMatchingStartedAt(booking)
             ?? booking.CreatedAt;
+
         return utcNow >= startedAt.AddMinutes(
             _matchingPolicyProvider.Current.BookingExpireAfterMinutes);
     }
-    
+
     public Task<Vehicle?> GetCustomerVehicleAsync(
         long vehicleId,
         Guid customerId,
@@ -448,6 +454,7 @@ public sealed class BookingRepository : IBookingRepository
         }
 
         var activeRules = await GetActivePricingRulesAsync(cancellationToken);
+
         return activeRules
             .Where(rule => customerVehicleClasses.Contains(rule.VehicleClass))
             .ToList();
@@ -463,12 +470,14 @@ public sealed class BookingRepository : IBookingRepository
             .Where(vehicle => vehicle.Id == vehicleId)
             .Select(vehicle => (RequiredLicenseClass?)vehicle.RequiredLicenseClass)
             .FirstOrDefaultAsync(cancellationToken);
+
         if (!vehicleClass.HasValue)
         {
             return null;
         }
 
         var activeRules = await GetActivePricingRulesAsync(cancellationToken);
+
         return activeRules
             .Where(rule => rule.ServiceTypeId == serviceTypeId
                 && rule.VehicleClass == vehicleClass.Value)
@@ -487,6 +496,7 @@ public sealed class BookingRepository : IBookingRepository
                 var cachedItems = JsonSerializer.Deserialize<List<PricingRuleCacheItem>>(
                     cached,
                     JsonOptions);
+
                 if (cachedItems is not null)
                 {
                     return cachedItems
@@ -510,12 +520,99 @@ public sealed class BookingRepository : IBookingRepository
         var cacheItems = rules
             .Select(rule => rule.ToCacheItem())
             .ToList();
+
         await _redisService.SetAsync(
             RedisKeys.ActivePricingRules,
             JsonSerializer.Serialize(cacheItems, JsonOptions),
             TimeSpan.FromMinutes(10));
 
         return rules;
+    }
+
+    public async Task<SurgePricingRule?> GetActiveSurgePricingRuleAsync(
+        DateTime currentUtcTime,
+        CancellationToken cancellationToken)
+    {
+        var activeRules = await GetActiveSurgePricingRulesAsync(cancellationToken);
+
+        var localTime = TimeZoneInfo.ConvertTimeFromUtc(
+            currentUtcTime,
+            TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time"));
+
+        var currentTime = TimeOnly.FromDateTime(localTime);
+        var currentDayString = localTime.DayOfWeek.ToString().Substring(0, 3);
+
+        return activeRules.FirstOrDefault(rule =>
+        {
+            if (!IsTimeInRange(currentTime, rule.StartTime, rule.EndTime))
+            {
+                return false;
+            }
+
+            var days = rule.AppliedDays.Split(
+                ',',
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            return days.Contains(currentDayString, StringComparer.OrdinalIgnoreCase);
+        });
+    }
+
+    private async Task<IReadOnlyList<SurgePricingRule>> GetActiveSurgePricingRulesAsync(
+        CancellationToken cancellationToken)
+    {
+        var cached = await _redisService.GetAsync(RedisKeys.ActiveSurgePricingRules);
+        if (!string.IsNullOrWhiteSpace(cached))
+        {
+            try
+            {
+                var cachedItems = JsonSerializer.Deserialize<List<SurgePricingRuleCacheItem>>(
+                    cached,
+                    JsonOptions);
+
+                if (cachedItems is not null)
+                {
+                    return cachedItems
+                        .Select(item => item.ToEntity())
+                        .ToList();
+                }
+            }
+            catch (JsonException)
+            {
+                await _redisService.RemoveAsync(RedisKeys.ActiveSurgePricingRules);
+            }
+        }
+
+        var rules = await _dbContext.SurgePricingRules
+            .AsNoTracking()
+            .Where(rule => rule.IsActive)
+            .OrderByDescending(rule => rule.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        var cacheItems = rules
+            .Select(rule => rule.ToCacheItem())
+            .ToList();
+
+        await _redisService.SetAsync(
+            RedisKeys.ActiveSurgePricingRules,
+            JsonSerializer.Serialize(cacheItems, JsonOptions),
+            TimeSpan.FromMinutes(10));
+
+        return rules;
+    }
+
+    private static bool IsTimeInRange(
+        TimeOnly currentTime,
+        TimeOnly startTime,
+        TimeOnly endTime)
+    {
+        if (startTime <= endTime)
+        {
+            return currentTime >= startTime
+                && currentTime <= endTime;
+        }
+
+        return currentTime >= startTime
+            || currentTime <= endTime;
     }
 
     public async Task<IReadOnlyList<Booking>> GetScheduledBookingsReadyForMatchingAsync(
@@ -545,8 +642,10 @@ public sealed class BookingRepository : IBookingRepository
         {
             offer.OfferStatus = DriverOfferStatus.Cancelled;
             offer.CancelledAt = cancelledAt;
+
             await _redisService.RemoveAsync(
                 RedisKeys.MatchingOffer(offer.BookingId, offer.DriverId));
+
             await _redisService.RemoveAsync(
                 RedisKeys.MatchingDriverLock(offer.DriverId));
         }
@@ -565,6 +664,7 @@ public sealed class BookingRepository : IBookingRepository
             .FirstOrDefaultAsync(
                 trip => trip.BookingId == bookingId,
                 cancellationToken);
+
         if (trip is null)
         {
             var confirmedOffer = await _dbContext.BookingDriverOffers
@@ -573,6 +673,7 @@ public sealed class BookingRepository : IBookingRepository
                     && offer.OfferStatus == DriverOfferStatus.CustomerConfirmed)
                 .OrderByDescending(offer => offer.ConfirmedAt ?? offer.OfferedAt)
                 .FirstOrDefaultAsync(cancellationToken);
+
             if (confirmedOffer is not null)
             {
                 await ReleaseDriverAsync(
@@ -610,6 +711,7 @@ public sealed class BookingRepository : IBookingRepository
             .FirstOrDefaultAsync(
                 profile => profile.DriverId == driverId,
                 cancellationToken);
+
         if (driverProfile is not null)
         {
             driverProfile.WorkStatus = DriverWorkStatus.Online;
@@ -621,6 +723,7 @@ public sealed class BookingRepository : IBookingRepository
             RedisKeys.DriverOnline(driverId),
             "1",
             TimeSpan.FromMinutes(5));
+
         await _redisService.SetAsync(
             RedisKeys.DriverStatus(driverId),
             DriverWorkStatus.Online.ToString(),

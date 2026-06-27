@@ -218,14 +218,22 @@ public static class DependencyInjection
         }
         // ──────────────────────────────────────────────────────────────────────────
 
-        if (environment.IsDevelopment()
-            && configuration.GetValue<bool>("Simulator:EnableMockDrivers"))
+        if (environment.IsDevelopment())
         {
-            // services.AddSingleton<DriverLocationSimulator>();
-            // Register V3 simulator with logger support
-            // services.AddSingleton<DriverLocationSimulatorV3>();
-            // Register mock driver offer acceptor service
-            services.AddHostedService<MockDriverOfferAcceptorService>();
+            if (configuration.GetValue<bool>("Simulator:EnableMockDrivers"))
+            {
+                services.AddHostedService<MockDriverOfferAcceptorService>();
+            }
+
+            if (configuration.GetValue<bool>("Simulator:EnableMockCustomerService"))
+            {
+                services.AddHostedService<MockCustomerSimulatorService>();
+            }
+
+            if (configuration.GetValue<bool>("Simulator:EnableMockBookingGenerator"))
+            {
+                services.AddHostedService<MockBookingGeneratorService>();
+            }
         }
 
         if (!environment.IsEnvironment("Testing"))

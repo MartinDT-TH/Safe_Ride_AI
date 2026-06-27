@@ -8,7 +8,8 @@ public sealed class FareEstimationService : IFareEstimationService
     public decimal CalculateFare(
         PricingRule pricingRule,
         decimal distanceKm,
-        int durationMinutes)
+        int durationMinutes,
+        SurgePricingRule? surgeRule = null)
     {
         decimal rawFare;
 
@@ -31,8 +32,12 @@ public sealed class FareEstimationService : IFareEstimationService
                 500);
         }
 
+        var multiplier = surgeRule?.SurgeMultiplier ?? 1.00m;
+        var finalFare = rawFare * multiplier;
+        var minFareWithSurge = pricingRule.MinFare * multiplier;
+
         return decimal.Round(
-            Math.Max(pricingRule.MinFare, rawFare),
+            Math.Max(minFareWithSurge, finalFare),
             2,
             MidpointRounding.AwayFromZero);
     }
