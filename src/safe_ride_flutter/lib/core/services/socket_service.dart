@@ -370,13 +370,18 @@ class SocketService {
     }
 
     _accessToken = accessToken;
+    
+    final options = HttpConnectionOptions(
+      accessTokenFactory: () async => accessToken,
+      requestTimeout: 10000,
+      skipNegotiation: AppConfig.forceWebSockets,
+      transport: AppConfig.forceWebSockets ? HttpTransportType.WebSockets : null,
+    );
+
     _connection ??= HubConnectionBuilder()
         .withUrl(
           _hubUrl,
-          options: HttpConnectionOptions(
-            accessTokenFactory: () async => accessToken,
-            requestTimeout: 10000,
-          ),
+          options: options,
         )
         .withAutomaticReconnect()
         .build();
@@ -598,6 +603,14 @@ class SocketService {
     final root = apiBase.endsWith('/api')
         ? apiBase.substring(0, apiBase.length - 4)
         : apiBase;
-    return '$root/hubs/saferide';
+    var url = '$root/hubs/saferide';
+    if (AppConfig.forceWebSockets) {
+      if (url.startsWith('https://')) {
+        url = url.replaceFirst('https://', 'wss://');
+      } else if (url.startsWith('http://')) {
+        url = url.replaceFirst('http://', 'ws://');
+      }
+    }
+    return url;
   }
 }

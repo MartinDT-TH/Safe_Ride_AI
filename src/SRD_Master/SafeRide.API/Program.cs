@@ -154,6 +154,7 @@ app.UseAuthorization();
 // await app.Services.SeedPricingAndSurgeRulesAsync(app.Lifetime.ApplicationStopping);
 // await app.Services.SeedBookingFeaturesAsync(app.Lifetime.ApplicationStopping);
 app.MapControllers();
+app.UseWebSockets();
 app.MapHub<SafeRideHub>("/hubs/saferide");
 app.UseSafeRideApiJobs();
 
