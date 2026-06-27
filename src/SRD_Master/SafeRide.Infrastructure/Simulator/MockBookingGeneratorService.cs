@@ -137,9 +137,33 @@ public sealed class MockBookingGeneratorService : BackgroundService
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 
+        var baseLat = options.MockBookingBaseLat;
+        var baseLng = options.MockBookingBaseLng;
+
+        var onlineDriver = await dbContext.DriverProfiles
+            .Where(d => d.WorkStatus == DriverWorkStatus.Online)
+            .OrderByDescending(d => d.LastActiveAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (onlineDriver != null)
+        {
+            var redisService = scope.ServiceProvider.GetRequiredService<SafeRide.Infrastructure.Redis.IRedisService>();
+            var locationJson = await redisService.GetAsync(SafeRide.Infrastructure.Redis.RedisKeys.DriverLocation(onlineDriver.DriverId));
+            if (!string.IsNullOrEmpty(locationJson))
+            {
+                var cache = System.Text.Json.JsonSerializer.Deserialize<SafeRide.Infrastructure.Redis.DriverLocationCache>(locationJson);
+                if (cache != null)
+                {
+                    baseLat = cache.Latitude;
+                    baseLng = cache.Longitude;
+                    _logger.LogInformation("Using real online driver {DriverId} location as base for mock booking: {Lat}, {Lng}", onlineDriver.DriverId, baseLat, baseLng);
+                }
+            }
+        }
+
         // 6. Generate random Pickup and Destination around base location
-        double pickupLat = options.MockBookingBaseLat + (_random.NextDouble() * 0.04 - 0.02);
-        double pickupLng = options.MockBookingBaseLng + (_random.NextDouble() * 0.04 - 0.02);
+        double pickupLat = baseLat + (_random.NextDouble() * 0.04 - 0.02);
+        double pickupLng = baseLng + (_random.NextDouble() * 0.04 - 0.02);
         double destLat = pickupLat + (_random.NextDouble() * 0.02 - 0.01);
         double destLng = pickupLng + (_random.NextDouble() * 0.02 - 0.01);
 
