@@ -105,6 +105,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
 
   void _startLocationUpdates() {
     if (_positionStream != null) return;
+    _publishInitialLocation();
     _positionStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,
@@ -112,7 +113,37 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
       ),
     ).listen((Position position) {
       _onLocationChanged(position);
+    }, onError: (error) {
+      debugPrint('Geolocator stream error: $error');
     });
+  }
+
+  Future<void> _publishInitialLocation() async {
+    try {
+      final locationService = getIt<LocationService>();
+      final location = await locationService.getCurrentLocation();
+      if (!mounted) return;
+
+      final newPos = AppLatLng(location.latitude, location.longitude);
+      setState(() {
+        if (_driverPosition != null) {
+          _driverHeading = _calculateHeading(_driverPosition!, newPos);
+        }
+        _driverPosition = newPos;
+      });
+
+      final provider = context.read<DriverDashboardProvider>();
+      await provider.publishOnlineLocation(location.latitude, location.longitude);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không thể lấy vị trí hiện tại: ${e.toString()}')),
+      );
+      final provider = context.read<DriverDashboardProvider>();
+      if (provider.status == DriverStatus.online) {
+        provider.toggleStatus();
+      }
+    }
   }
 
   void _stopLocationUpdates() {

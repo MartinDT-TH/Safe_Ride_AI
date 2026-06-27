@@ -206,6 +206,11 @@ class DriverDashboardProvider extends ChangeNotifier {
     _status = _status == DriverStatus.offline
         ? DriverStatus.online
         : DriverStatus.offline;
+    if (_status == DriverStatus.offline) {
+      if (_socketService.isConnected) {
+        _socketService.setDriverOffline();
+      }
+    }
     notifyListeners();
   }
 
@@ -327,13 +332,33 @@ class DriverDashboardProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> updateLocation(double lat, double lng) async {
+  Future<void> publishOnlineLocation(double lat, double lng) async {
+    if (_socketService.isConnected) {
+      await _socketService.setDriverOnline(lat, lng);
+    }
     final token = _accessToken;
     if (token == null) return;
     try {
       await _dio.patch(
-        '/drivers/location',
-        data: {'latitude': lat, 'longitude': lng},
+        ApiEndpoints.driverLocation,
+        data: {ApiKeys.latitude: lat, ApiKeys.longitude: lng},
+        options: Options(headers: {ApiKeys.authorization: AuthHeader.bearer(token)}),
+      );
+    } catch (e) {
+      debugPrint('Failed to publish online location: $e');
+    }
+  }
+
+  Future<void> updateLocation(double lat, double lng) async {
+    if (_socketService.isConnected) {
+      await _socketService.updateDriverLocation(lat, lng);
+    }
+    final token = _accessToken;
+    if (token == null) return;
+    try {
+      await _dio.patch(
+        ApiEndpoints.driverLocation,
+        data: {ApiKeys.latitude: lat, ApiKeys.longitude: lng},
         options: Options(headers: {ApiKeys.authorization: AuthHeader.bearer(token)}),
       );
     } catch (e) {
@@ -369,7 +394,7 @@ class DriverDashboardProvider extends ChangeNotifier {
 
     try {
       final response = await _dio.get(
-        '/drivers/trips/active',
+        ApiEndpoints.driverActiveTrip,
         options: Options(headers: {ApiKeys.authorization: AuthHeader.bearer(token)}),
       );
       if (response.statusCode == 204 || response.data == null) {
@@ -466,7 +491,7 @@ class DriverDashboardProvider extends ChangeNotifier {
 
     try {
       final response = await _dio.get(
-        '/drivers/trips/active',
+        ApiEndpoints.driverActiveTrip,
         options: Options(headers: {ApiKeys.authorization: AuthHeader.bearer(token)}),
       );
       if (response.data is Map && _activeTrip?.tripId == tripId) {

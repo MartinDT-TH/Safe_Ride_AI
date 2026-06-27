@@ -559,6 +559,18 @@ class SocketService {
     await _invokeSafely('LeaveBooking', [bookingId]);
   }
 
+  Future<void> setDriverOnline(double latitude, double longitude) async {
+    await _invokeSafely('SetDriverOnline', [latitude, longitude]);
+  }
+
+  Future<void> updateDriverLocation(double latitude, double longitude) async {
+    await _invokeSafely('UpdateDriverLocation', [latitude, longitude]);
+  }
+
+  Future<void> setDriverOffline() async {
+    await _invokeSafely('SetDriverOffline', []);
+  }
+
   void _rejoinGroups() {
     for (final tripId in List.of(_activeTripGroups)) {
       _invokeSafely('JoinTrip', [tripId]);
