@@ -90,7 +90,11 @@ class _HistoryPageState extends State<HistoryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isDriver = context.watch<RoleProvider>().isDriver;
+    final roleProvider = context.watch<RoleProvider>();
+    final authProvider = context.watch<AuthProvider>();
+    final currentRole =
+        roleProvider.selectedRole ?? authProvider.lastSelectedRole;
+    final isDriver = currentRole == AppValues.roleDriver;
 
     return Scaffold(
       backgroundColor: const Color(0xFFFCF9F9),
