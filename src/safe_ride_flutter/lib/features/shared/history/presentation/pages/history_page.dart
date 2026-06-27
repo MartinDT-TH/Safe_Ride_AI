@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/widgets/app_loading_screen.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
+import '../../../../customer/booking/presentation/pages/rebook_trip_page.dart';
+import '../../../../customer/booking/presentation/providers/booking_provider.dart';
+import '../../../../shared/onboarding/presentation/providers/role_provider.dart';
+import '../../data/models/history_trip.dart';
 import '../providers/history_provider.dart';
-import '../widgets/trip_history_card.dart';
 import '../widgets/interactive_button.dart';
+import '../widgets/trip_history_card.dart';
 
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
@@ -15,17 +21,81 @@ class HistoryPage extends StatefulWidget {
 }
 
 class _HistoryPageState extends State<HistoryPage> {
+  static const _loadErrorTitle = 'Không thể tải lịch sử chuyến đi.';
+  static const _emptyTitle = 'Không có dữ liệu chuyến đi.';
+  static const _invalidRebookDataMessage =
+      'Chuyến đi này chưa có đủ dữ liệu để đặt lại.';
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final auth = context.read<AuthProvider>();
-      context.read<HistoryProvider>().loadHistory(auth.token);
+      _loadHistory();
     });
+  }
+
+  Future<void> _loadHistory() {
+    final auth = context.read<AuthProvider>();
+    final roleProvider = context.read<RoleProvider>();
+    final role = roleProvider.selectedRole ?? auth.lastSelectedRole;
+    if (role != null && roleProvider.selectedRole != role) {
+      roleProvider.setRole(role);
+    }
+    return context.read<HistoryProvider>().loadHistory(auth.token, role: role);
+  }
+
+  Future<void> _handleRebook(HistoryTrip trip) async {
+    final authProvider = context.read<AuthProvider>();
+    final bookingProvider = context.read<BookingProvider>();
+    final token = authProvider.token;
+
+    if (token == null || token.isEmpty) {
+      _showMessage(BookingStrings.sessionExpired);
+      return;
+    }
+
+    AppLoadingScreen.show(context, message: 'Đang tải thông tin chuyến đi...');
+    final details = await bookingProvider.getPastBookingDetails(
+      token,
+      bookingId: trip.id,
+    );
+    AppLoadingScreen.hide();
+
+    if (!mounted) return;
+
+    if (details == null) {
+      _showMessage(bookingProvider.errorMessage ?? AppStrings.genericError);
+      return;
+    }
+
+    if (details.pickup == null ||
+        details.destination == null ||
+        details.vehicle == null) {
+      _showMessage(_invalidRebookDataMessage);
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => RebookTripPage(oldBooking: details)),
+    );
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
+    final roleProvider = context.watch<RoleProvider>();
+    final authProvider = context.watch<AuthProvider>();
+    final currentRole =
+        roleProvider.selectedRole ?? authProvider.lastSelectedRole;
+    final isDriver = currentRole == AppValues.roleDriver;
+
     return Scaffold(
       backgroundColor: const Color(0xFFFCF9F9),
       appBar: AppBar(
@@ -52,18 +122,41 @@ class _HistoryPageState extends State<HistoryPage> {
                 }
 
                 return RefreshIndicator(
-                  onRefresh: () async {
-                    final auth = context.read<AuthProvider>();
-                    await provider.loadHistory(auth.token);
-                  },
+                  onRefresh: _loadHistory,
                   color: AppColors.primary,
-                  child: provider.trips.isEmpty
-                      ? ListView(
-                          children: const [
-                            SizedBox(height: 100),
-                            Center(child: Text('Không có dữ liệu chuyến đi.')),
-                          ],
+                  child: provider.errorMessage != null && provider.trips.isEmpty
+                      ? _buildFeedbackList(
+                          child: Column(
+                            children: [
+                              const Text(
+                                _loadErrorTitle,
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                provider.errorMessage!,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: Color(0xFF626A6C),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton(
+                                onPressed: _loadHistory,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: Colors.white,
+                                ),
+                                child: const Text(AppStrings.confirm),
+                              ),
+                            ],
+                          ),
                         )
+                      : provider.trips.isEmpty
+                      ? _buildFeedbackList(child: const Text(_emptyTitle))
                       : ListView.builder(
                           physics: const AlwaysScrollableScrollPhysics(),
                           padding: const EdgeInsets.symmetric(
@@ -75,9 +168,11 @@ class _HistoryPageState extends State<HistoryPage> {
                             final trip = provider.trips[index];
                             return TripHistoryCard(
                               trip: trip,
-                              onRebook: () {
-                                // Handle rebook logic
-                              },
+                              onRebook:
+                                  (isDriver ||
+                                      trip.status == HistoryTripStatus.booked)
+                                  ? null
+                                  : () => _handleRebook(trip),
                             );
                           },
                         ),
@@ -87,6 +182,16 @@ class _HistoryPageState extends State<HistoryPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildFeedbackList({required Widget child}) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        const SizedBox(height: 120),
+        Center(child: child),
+      ],
     );
   }
 
@@ -120,6 +225,12 @@ class _HistoryPageState extends State<HistoryPage> {
                   HistoryStrings.cancelled,
                   HistoryFilter.cancelled,
                   provider.currentFilter == HistoryFilter.cancelled,
+                  provider,
+                ),
+                _buildFilterItem(
+                  HistoryStrings.booked,
+                  HistoryFilter.booked,
+                  provider.currentFilter == HistoryFilter.booked,
                   provider,
                 ),
               ],

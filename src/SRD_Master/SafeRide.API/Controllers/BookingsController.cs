@@ -7,6 +7,7 @@ using SafeRide.Application.Features.Bookings.Commands.ConfirmDriver;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
 using SafeRide.Application.Features.Bookings.Commands.RejectDriver;
 using SafeRide.Application.Features.Bookings.DTOs;
+using SafeRide.Application.Features.Bookings.Queries.GetBookingHistory;
 using SafeRide.Application.Features.Bookings.Queries.EstimateBookingFare;
 using SafeRide.Application.Features.Bookings.Queries.GetBookingDetails;
 using SafeRide.Application.Features.Bookings.Queries.GetBookingCatalog;
@@ -151,6 +152,57 @@ public sealed class BookingsController : ControllerBase
             result.TripStatus);
 
         return StatusCode(StatusCodes.Status201Created, response);
+    }
+
+    [HttpGet("history")]
+    [ProducesResponseType<List<BookingHistoryResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<List<BookingHistoryResponse>>> GetBookingHistory(
+        [FromQuery] string? role,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Unauthorized(CreateUnauthorizedProblem());
+        }
+
+        if (!TryParseHistoryRole(role, out var historyRole))
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Invalid role",
+                Detail = "Role must be either 'customer' or 'driver'."
+            });
+        }
+
+        if (historyRole == BookingHistoryRole.Driver && !User.IsInRole("Driver"))
+        {
+            return Forbid();
+        }
+
+        var result = await _sender.Send(
+            new GetBookingHistoryQuery(userId, historyRole),
+            cancellationToken);
+
+        return Ok(result
+            .Select(item => new BookingHistoryResponse(
+                item.Id,
+                item.PickupAddress,
+                item.DestinationAddress,
+                item.OccurredAt,
+                item.EstimatedDistanceKm,
+                item.EstimatedFare,
+                item.FinalFare,
+                item.BookingStatus,
+                item.VehicleName,
+                item.IsMotorbike,
+                item.DriverName,
+                item.DriverRating,
+                item.DriverAvatarUrl))
+            .ToList());
     }
 
     [HttpGet("active")]
@@ -534,6 +586,34 @@ public sealed class BookingsController : ControllerBase
         return Guid.TryParse(
             User.FindFirstValue(ClaimTypes.NameIdentifier),
             out customerId);
+    }
+
+    private bool TryGetCurrentUserId(out Guid userId)
+    {
+        return Guid.TryParse(
+            User.FindFirstValue(ClaimTypes.NameIdentifier),
+            out userId);
+    }
+
+    private static bool TryParseHistoryRole(
+        string? role,
+        out BookingHistoryRole historyRole)
+    {
+        if (string.IsNullOrWhiteSpace(role) ||
+            role.Equals("customer", StringComparison.OrdinalIgnoreCase))
+        {
+            historyRole = BookingHistoryRole.Customer;
+            return true;
+        }
+
+        if (role.Equals("driver", StringComparison.OrdinalIgnoreCase))
+        {
+            historyRole = BookingHistoryRole.Driver;
+            return true;
+        }
+
+        historyRole = default;
+        return false;
     }
 
     private static ProblemDetails CreateUnauthorizedProblem()

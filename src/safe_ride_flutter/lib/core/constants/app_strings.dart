@@ -98,6 +98,7 @@ abstract final class HistoryStrings {
   static const rebook = 'Đặt lại';
   static const cancelledByCustomer = 'Đã hủy bởi khách hàng';
   static const driverRating = '★';
+  static const booked = 'Đã đặt';
 }
 
 abstract final class BookingStrings {
