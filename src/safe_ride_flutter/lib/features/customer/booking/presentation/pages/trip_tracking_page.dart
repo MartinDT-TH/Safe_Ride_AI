@@ -17,7 +17,7 @@ import '../../data/models/booking_response.dart';
 import '../providers/booking_provider.dart';
 import '../widgets/booking_cancel_flow.dart';
 
-import 'trip_summary_page.dart';
+import '../../../../shared/feedback/presentation/pages/trip_summary_page.dart';
 
 enum TripTrackingState { arriving, inProgress }
 
