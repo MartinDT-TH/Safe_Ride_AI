@@ -88,10 +88,30 @@ public sealed class MockBookingGeneratorService : BackgroundService
             return;
         }
 
-        // 2. Pick a random Mock Driver ID to act as the Customer
-        var mockDrivers = MockDriverConfiguration.GetMockDrivers();
-        var randomMockDriver = mockDrivers[_random.Next(mockDrivers.Count)];
-        var customerId = randomMockDriver.DriverId;
+        // 2. Pick a random Mock Customer ID or use configured one
+        var customerId = options.MockBookingCustomerId ?? Guid.Parse($"20000000-0000-0000-0000-00000000000{_random.Next(1, 10)}");
+
+        var customerUser = await dbContext.AspNetUsers.FirstOrDefaultAsync(u => u.Id == customerId, cancellationToken);
+        if (customerUser == null)
+        {
+            var userName = $"mockcustomer_{customerId.ToString().Substring(28)}";
+            var email = $"{userName}@saferide.mock";
+            customerUser = new AspNetUser
+            {
+                Id = customerId,
+                UserName = userName,
+                NormalizedUserName = userName.ToUpperInvariant(),
+                Email = email,
+                NormalizedEmail = email.ToUpperInvariant(),
+                FullName = "Mock Customer",
+                PhoneNumber = $"0900{_random.Next(100000, 999999)}",
+                IsActive = true,
+                SecurityStamp = Guid.NewGuid().ToString(),
+                ConcurrencyStamp = Guid.NewGuid().ToString()
+            };
+            dbContext.AspNetUsers.Add(customerUser);
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
 
         // 3. Ensure this customer has a vehicle in the database
         var vehicle = await dbContext.Vehicles.FirstOrDefaultAsync(v => v.OwnerUserId == customerId && !v.IsDeleted, cancellationToken);
@@ -193,7 +213,14 @@ public sealed class MockBookingGeneratorService : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to create mock booking via mediator.");
+            if (ex is SafeRide.Application.Features.Bookings.BookingException bookingEx)
+            {
+                _logger.LogWarning("Mock booking generation skipped: {Reason}", bookingEx.Message);
+            }
+            else
+            {
+                _logger.LogError(ex, "Failed to create mock booking via mediator.");
+            }
         }
     }
 }

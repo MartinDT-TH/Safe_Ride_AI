@@ -46,31 +46,38 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
         await InitializeMockDriversInRedisAsync(stoppingToken);
         var lastTtlRefresh = DateTimeOffset.UtcNow;
 
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            try
+            while (!stoppingToken.IsCancellationRequested)
             {
-                var options = _simulatorOptionsMonitor.CurrentValue;
-                if (DateTimeOffset.UtcNow - lastTtlRefresh >= TimeSpan.FromSeconds(options.MockDriverTtlRefreshSeconds))
+                try
                 {
-                    await InitializeMockDriversInRedisAsync(stoppingToken);
-                    lastTtlRefresh = DateTimeOffset.UtcNow;
+                    var options = _simulatorOptionsMonitor.CurrentValue;
+                    if (DateTimeOffset.UtcNow - lastTtlRefresh >= TimeSpan.FromSeconds(options.MockDriverTtlRefreshSeconds))
+                    {
+                        await InitializeMockDriversInRedisAsync(stoppingToken);
+                        lastTtlRefresh = DateTimeOffset.UtcNow;
+                    }
+
+                    await ProcessOffersAsync(stoppingToken);
+                    await ProcessConfirmedTripsAsync(stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error processing mock driver simulation cycle");
                 }
 
-                await ProcessOffersAsync(stoppingToken);
-                await ProcessConfirmedTripsAsync(stoppingToken);
+                // Check for offers every 2 seconds
+                await Task.Delay(2000, stoppingToken);
             }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error processing mock driver simulation cycle");
-            }
-
-            // Check for offers every 2 seconds
-            await Task.Delay(2000, stoppingToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected on shutdown
         }
 
         _logger.LogInformation("MockDriverOfferAcceptorService stopped");

@@ -17,6 +17,8 @@ namespace SafeRide.Infrastructure.Simulator;
 /// <summary>
 /// Background service that automatically confirms driver offers on behalf of customers.
 /// It also acts as an auto-flow trigger for Real Drivers to help demo UI routing flows.
+/// To test the Real Driver UI location flow manually, set RealDriverAutoProgressTrips = false 
+/// and RealDriverSimulateMovement = false in SimulatorOptions.
 /// </summary>
 public sealed class MockCustomerSimulatorService : BackgroundService
 {
@@ -41,40 +43,47 @@ public sealed class MockCustomerSimulatorService : BackgroundService
     {
         _logger.LogInformation("MockCustomerSimulatorService started");
 
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            try
+            while (!stoppingToken.IsCancellationRequested)
             {
-                var options = _simulatorOptionsMonitor.CurrentValue;
-
-                // 1. Auto confirm customer offers
-                if (options.MockCustomerAutoConfirmDriver)
+                try
                 {
-                    await ProcessCustomerConfirmationsAsync(stoppingToken);
+                    var options = _simulatorOptionsMonitor.CurrentValue;
+
+                    // 1. Auto confirm customer offers
+                    if (options.MockCustomerAutoConfirmDriver)
+                    {
+                        await ProcessCustomerConfirmationsAsync(stoppingToken);
+                    }
+
+                    // 2. Auto accept offers for real drivers
+                    if (options.RealDriverAutoAcceptOffers)
+                    {
+                        await ProcessRealDriverOfferAcceptanceAsync(stoppingToken);
+                    }
+
+                    // 3. Auto progress trips and movement for real drivers
+                    if (options.RealDriverAutoProgressTrips)
+                    {
+                        await ProcessRealDriverTripsAsync(stoppingToken);
+                    }
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error processing mock customer/demo simulation cycle");
                 }
 
-                // 2. Auto accept offers for real drivers
-                if (options.RealDriverAutoAcceptOffers)
-                {
-                    await ProcessRealDriverOfferAcceptanceAsync(stoppingToken);
-                }
-
-                // 3. Auto progress trips and movement for real drivers
-                if (options.RealDriverAutoProgressTrips)
-                {
-                    await ProcessRealDriverTripsAsync(stoppingToken);
-                }
+                await Task.Delay(2000, stoppingToken);
             }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error processing mock customer/demo simulation cycle");
-            }
-
-            await Task.Delay(2000, stoppingToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected on shutdown
         }
 
         _logger.LogInformation("MockCustomerSimulatorService stopped");
