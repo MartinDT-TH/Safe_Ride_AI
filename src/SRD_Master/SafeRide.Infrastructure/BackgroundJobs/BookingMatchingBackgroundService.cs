@@ -25,24 +25,34 @@ public sealed class BookingMatchingBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            try
+            while (!stoppingToken.IsCancellationRequested)
             {
-                await ProcessMatchingAsync(stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception exception)
-            {
-                _logger.LogError(exception, "Booking matching background cycle failed.");
-            }
+                try
+                {
+                    await ProcessMatchingAsync(stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error occurred executing booking matching logic.");
+                }
 
-            var delay = await GetDelayAsync(stoppingToken);
-            await Task.Delay(delay, stoppingToken);
+                // Wait for next cycle based on config
+                var delay = await GetDelayAsync(stoppingToken);
+                await Task.Delay(delay, stoppingToken);
+            }
         }
+        catch (OperationCanceledException)
+        {
+            // Expected on shutdown
+        }
+
+        _logger.LogInformation("BookingMatchingBackgroundService stopped");
     }
 
     private async Task<TimeSpan> GetDelayAsync(CancellationToken cancellationToken)

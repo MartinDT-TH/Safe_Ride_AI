@@ -84,7 +84,6 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
         context.read<DriverDashboardProvider>().initializeRealtime(token);
       }
       _checkActiveCustomerBooking();
-      context.read<DriverDashboardProvider>().addListener(_onProviderChanged);
     });
   }
 
@@ -94,22 +93,12 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     super.dispose();
   }
 
-  void _onProviderChanged() {
-    final provider = context.read<DriverDashboardProvider>();
-    if (provider.status == DriverStatus.online) {
-      _startLocationUpdates();
-    } else {
-      _stopLocationUpdates();
-    }
-  }
-
   void _startLocationUpdates() {
-    if (_positionStream != null) return;
-    _publishInitialLocation();
+    _stopLocationUpdates();
     _positionStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 10,
+        distanceFilter: 50,
       ),
     ).listen((Position position) {
       _onLocationChanged(position);
@@ -133,16 +122,15 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
       });
 
       final provider = context.read<DriverDashboardProvider>();
-      await provider.publishOnlineLocation(location.latitude, location.longitude);
+      await provider.goOnline(location.latitude, location.longitude);
+      
+      _startLocationUpdates();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Không thể lấy vị trí hiện tại: ${e.toString()}')),
+        SnackBar(content: Text('Không thể lấy vị trí hiện tại hoặc không thể online: ${e.toString()}')),
       );
-      final provider = context.read<DriverDashboardProvider>();
-      if (provider.status == DriverStatus.online) {
-        provider.toggleStatus();
-      }
+      throw e;
     }
   }
 
@@ -344,7 +332,13 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                       isResponding: provider.isResponding,
                     );
                   }
-                  return _StatusToggle();
+                  return _StatusToggle(
+                    onGoOnline: _publishInitialLocation,
+                    onGoOffline: () async {
+                      await provider.goOffline();
+                      _stopLocationUpdates();
+                    },
+                  );
                 },
               ),
 
@@ -761,7 +755,38 @@ class _IncomeHeader extends StatelessWidget {
   }
 }
 
-class _StatusToggle extends StatelessWidget {
+class _StatusToggle extends StatefulWidget {
+  final Future<void> Function() onGoOnline;
+  final Future<void> Function() onGoOffline;
+
+  const _StatusToggle({
+    required this.onGoOnline,
+    required this.onGoOffline,
+  });
+
+  @override
+  State<_StatusToggle> createState() => _StatusToggleState();
+}
+
+class _StatusToggleState extends State<_StatusToggle> {
+  bool _isLoading = false;
+
+  Future<void> _handleToggle(bool isOnline) async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+    try {
+      if (isOnline) {
+        await widget.onGoOffline();
+      } else {
+        await widget.onGoOnline();
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<DriverDashboardProvider>(
@@ -782,63 +807,73 @@ class _StatusToggle extends StatelessWidget {
                 ),
               ],
             ),
-            child: Row(
+            child: Stack(
               children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: !isOnline ? null : () => provider.toggleStatus(),
-                    child: Center(
-                      child: Text(
-                        'Offline',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: !isOnline ? Colors.black87 : Colors.grey,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: isOnline ? null : () => provider.toggleStatus(),
-                    child: Container(
-                      margin: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: isOnline
-                            ? const Color(0xFF006B70)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      child: Center(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            if (isOnline) ...[
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: const BoxDecoration(
-                                  color: Colors.cyanAccent,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                            Text(
-                              'Online',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: isOnline ? Colors.white : Colors.grey,
-                              ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: (!isOnline || _isLoading) ? null : () => _handleToggle(isOnline),
+                        child: Center(
+                          child: Text(
+                            'Offline',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: !isOnline ? Colors.black87 : Colors.grey,
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: (isOnline || _isLoading) ? null : () => _handleToggle(isOnline),
+                        child: Container(
+                          margin: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: isOnline
+                                ? const Color(0xFF006B70)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          child: Center(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (isOnline) ...[
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.cyanAccent,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                ],
+                                Text(
+                                  'Online',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: isOnline ? Colors.white : Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
+                if (_isLoading)
+                  const Center(
+                    child: CircularProgressIndicator(
+                      color: Color(0xFF006B70),
+                    ),
+                  ),
               ],
             ),
           ),

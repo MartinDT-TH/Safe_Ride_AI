@@ -10,8 +10,8 @@ namespace SafeRide.Infrastructure.Services;
 
 public sealed class DriverRealtimeService : IDriverRealtimeService
 {
-    private static readonly TimeSpan DriverLocationTtl = TimeSpan.FromMinutes(5);
-    private static readonly TimeSpan DriverOnlineTtl = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan DriverLocationTtl = TimeSpan.FromMinutes(60);
+    private static readonly TimeSpan DriverOnlineTtl = TimeSpan.FromMinutes(60);
     private static readonly TimeSpan DriverHeartbeatDbUpdateInterval = TimeSpan.FromSeconds(60);
 
     private readonly ApplicationDbContext _dbContext;

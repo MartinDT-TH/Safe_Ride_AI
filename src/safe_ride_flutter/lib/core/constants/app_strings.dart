@@ -249,6 +249,8 @@ abstract final class ApiEndpoints {
   static const availablePromotions = '/promotions/available';
   static const bookingCatalog = '/bookings/catalog';
   static const bookingEstimate = '/bookings/estimate';
+  static const driverOnline = '/drivers/online';
+  static const driverOffline = '/drivers/offline';
   static const driverLocation = '/drivers/location';
   static const driverActiveTrip = '/drivers/trips/active';
   static const nearbyDrivers = '/drivers/nearby';
