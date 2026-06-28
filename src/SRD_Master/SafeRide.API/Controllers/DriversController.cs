@@ -105,7 +105,71 @@ public sealed class DriversController : ControllerBase
         return activeTrip is null ? NoContent() : Ok(activeTrip);
     }
 
-    // [Authorize(Roles = "Driver")]
+    [Authorize(Roles = "Driver")]
+    [HttpPost("online")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SetOnline(
+        [FromBody] UpdateDriverLocationRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var driverId))
+        {
+            return Unauthorized();
+        }
+
+        await _driverRealtimeService.SetDriverOnlineAsync(
+            driverId,
+            request.Latitude,
+            request.Longitude,
+            cancellationToken);
+
+        return NoContent();
+    }
+
+    [Authorize(Roles = "Driver")]
+    [HttpPost("offline")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SetOffline(CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var driverId))
+        {
+            return Unauthorized();
+        }
+
+        var isBusy = await _dbContext.DriverProfiles
+            .Where(p => p.DriverId == driverId)
+            .Select(p => p.WorkStatus == DriverWorkStatus.Busy)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (!isBusy)
+        {
+            isBusy = await _dbContext.Trips
+                .AnyAsync(trip => trip.DriverId == driverId
+                    && (trip.TripStatus == TripStatus.ACCEPTED
+                        || trip.TripStatus == TripStatus.DRIVER_ARRIVING
+                        || trip.TripStatus == TripStatus.ARRIVED
+                        || trip.TripStatus == TripStatus.IN_PROGRESS),
+                    cancellationToken);
+        }
+
+        if (isBusy)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Cannot set offline",
+                Detail = "You cannot go offline while busy or having an active trip."
+            });
+        }
+
+        await _driverRealtimeService.SetDriverOfflineAsync(driverId, cancellationToken);
+
+        return NoContent();
+    }
+
+    [Authorize(Roles = "Driver")]
     [HttpPatch("location")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -128,7 +192,7 @@ public sealed class DriversController : ControllerBase
         return NoContent();
     }
 
-    // [Authorize(Roles = "Driver")]
+    [Authorize(Roles = "Driver")]
     [HttpPost("offers/{offerId:long}/accept")]
     [HttpPost("/api/driver-offers/{offerId:long}/accept")]
     [ProducesResponseType<BookingResponse>(StatusCodes.Status200OK)]

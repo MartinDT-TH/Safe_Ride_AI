@@ -198,9 +198,21 @@ public sealed class BookingMatchingService : IBookingMatchingService
                 .Select(group => group.Key)
                 .ToList();
 
-            var eligibleDriverIds = compatibleDriverIds
-                .Where(x => !blockedDriverIds.Contains(x))
-                .ToList();
+            var selfMatchedCount = 0;
+            var eligibleDriverIds = new List<Guid>();
+            foreach (var driverId in compatibleDriverIds)
+            {
+                if (driverId == booking.CustomerId)
+                {
+                    selfMatchedCount++;
+                    continue;
+                }
+
+                if (!blockedDriverIds.Contains(driverId))
+                {
+                    eligibleDriverIds.Add(driverId);
+                }
+            }
 
             Guid eligibleDriverId = Guid.Empty;
             foreach (var driverId in eligibleDriverIds)
@@ -213,7 +225,7 @@ public sealed class BookingMatchingService : IBookingMatchingService
             }
 
             _logger.LogInformation(
-                "Matching requested for booking {BookingId}. RedisCandidates={RedisCandidateCount}, ApprovedLicenseRows={ApprovedLicenseRows}, CompatibleDrivers={CompatibleDriverCount}, ActiveTripDrivers={ActiveTripDriverCount}, ActiveOfferDrivers={ActiveOfferDriverCount}, PreviouslyOfferedDrivers={PreviouslyOfferedDriverCount}, EligibleDrivers={EligibleDriverCount}, DriverCandidateFound={HasCandidate}, RequiredLicense={RequiredLicenseClass}.",
+                "Matching requested for booking {BookingId}. RedisCandidates={RedisCandidateCount}, ApprovedLicenseRows={ApprovedLicenseRows}, CompatibleDrivers={CompatibleDriverCount}, ActiveTripDrivers={ActiveTripDriverCount}, ActiveOfferDrivers={ActiveOfferDriverCount}, PreviouslyOfferedDrivers={PreviouslyOfferedDriverCount}, SelfMatchedCandidates={SelfMatchedCount}, EligibleDrivers={EligibleDriverCount}, DriverCandidateFound={HasCandidate}, RequiredLicense={RequiredLicenseClass}.",
                 bookingId,
                 redisCandidateIds.Count,
                 approvedDriverLicenses.Count,
@@ -221,6 +233,7 @@ public sealed class BookingMatchingService : IBookingMatchingService
                 activeDriverIds.Count,
                 activeOfferDriverIds.Count,
                 previouslyOfferedDriverIds.Count,
+                selfMatchedCount,
                 eligibleDriverIds.Count,
                 eligibleDriverId != Guid.Empty,
                 booking.Vehicle.RequiredLicenseClass);

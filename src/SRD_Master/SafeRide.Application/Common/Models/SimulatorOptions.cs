@@ -32,4 +32,6 @@ public sealed class SimulatorOptions
     // Default to Da Nang center
     public double MockBookingBaseLat { get; set; } = 16.0544;
     public double MockBookingBaseLng { get; set; } = 108.2022;
+
+    public Guid? MockBookingCustomerId { get; set; }
 }

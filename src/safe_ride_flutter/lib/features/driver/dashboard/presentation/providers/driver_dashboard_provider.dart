@@ -202,11 +202,43 @@ class DriverDashboardProvider extends ChangeNotifier {
     }
   }
 
-  void toggleStatus() {
-    _status = _status == DriverStatus.offline
-        ? DriverStatus.online
-        : DriverStatus.offline;
-    notifyListeners();
+  Future<void> goOnline(double lat, double lng) async {
+    final token = _accessToken;
+    if (token == null) return;
+    try {
+      await _dio.post(
+        ApiEndpoints.driverOnline,
+        data: {ApiKeys.latitude: lat, ApiKeys.longitude: lng},
+        options: Options(headers: {ApiKeys.authorization: AuthHeader.bearer(token)}),
+      );
+      _status = DriverStatus.online;
+      _errorMessage = null;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Failed to go online: $e');
+      _errorMessage = 'Không thể online. Vui lòng thử lại.';
+      notifyListeners();
+      throw e;
+    }
+  }
+
+  Future<void> goOffline() async {
+    final token = _accessToken;
+    if (token == null) return;
+    try {
+      await _dio.post(
+        ApiEndpoints.driverOffline,
+        options: Options(headers: {ApiKeys.authorization: AuthHeader.bearer(token)}),
+      );
+    } catch (e) {
+      debugPrint('Failed to go offline: $e');
+    } finally {
+      _status = DriverStatus.offline;
+      if (_socketService.isConnected) {
+        await _socketService.setDriverOffline();
+      }
+      notifyListeners();
+    }
   }
 
   void simulateNewRequest() {
@@ -328,12 +360,16 @@ class DriverDashboardProvider extends ChangeNotifier {
   }
 
   Future<void> updateLocation(double lat, double lng) async {
+    if (_socketService.isConnected) {
+      await _socketService.updateDriverLocation(lat, lng);
+      return;
+    }
     final token = _accessToken;
     if (token == null) return;
     try {
       await _dio.patch(
-        '/drivers/location',
-        data: {'latitude': lat, 'longitude': lng},
+        ApiEndpoints.driverLocation,
+        data: {ApiKeys.latitude: lat, ApiKeys.longitude: lng},
         options: Options(headers: {ApiKeys.authorization: AuthHeader.bearer(token)}),
       );
     } catch (e) {
@@ -369,7 +405,7 @@ class DriverDashboardProvider extends ChangeNotifier {
 
     try {
       final response = await _dio.get(
-        '/drivers/trips/active',
+        ApiEndpoints.driverActiveTrip,
         options: Options(headers: {ApiKeys.authorization: AuthHeader.bearer(token)}),
       );
       if (response.statusCode == 204 || response.data == null) {
@@ -466,7 +502,7 @@ class DriverDashboardProvider extends ChangeNotifier {
 
     try {
       final response = await _dio.get(
-        '/drivers/trips/active',
+        ApiEndpoints.driverActiveTrip,
         options: Options(headers: {ApiKeys.authorization: AuthHeader.bearer(token)}),
       );
       if (response.data is Map && _activeTrip?.tripId == tripId) {
