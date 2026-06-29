@@ -194,6 +194,11 @@ public sealed class BookingsController : ControllerBase
         return Ok(ToResponse(result));
     }
 
+    /// <summary>
+    /// Obsolete shortcut for customer to confirm the closest accepted driver. 
+    /// Prefer /confirm-driver-offer/{offerId} to explicitly confirm a specific offer.
+    /// This step actually creates the Trip.
+    /// </summary>
     [HttpPost("{bookingId:long}/confirm-driver")]
     [ProducesResponseType<BookingResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -221,15 +226,25 @@ public sealed class BookingsController : ControllerBase
             result.EstimatedDistanceKm,
             result.EstimatedDurationMinutes,
             result.EstimatedFare,
-            result.EstimatedFare,
-            null,
-            0m,
-            result.EstimatedFare,
+            result.OriginalFare,
+            result.PromotionCode,
+            result.DiscountAmount,
+            result.FinalFare,
             result.EncodedPolyline,
             result.Message,
-            result.DriverOffer));
+            result.DriverOffer,
+            result.CurrentSearchRadiusKm,
+            result.ExpiresAt,
+            result.EstimatedRemainingSeconds,
+            result.MatchingMessage,
+            result.TripId,
+            result.TripStatus));
     }
 
+    /// <summary>
+    /// Explicit endpoint for customer to confirm a specific driver's accepted offer.
+    /// The Trip is created during this step.
+    /// </summary>
     [HttpPost("{bookingId:long}/confirm-driver-offer/{offerId:long}")]
     [ProducesResponseType<BookingResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -300,13 +315,19 @@ public sealed class BookingsController : ControllerBase
             result.EstimatedDistanceKm,
             result.EstimatedDurationMinutes,
             result.EstimatedFare,
-            result.EstimatedFare,
-            null,
-            0m,
-            result.EstimatedFare,
+            result.OriginalFare,
+            result.PromotionCode,
+            result.DiscountAmount,
+            result.FinalFare,
             result.EncodedPolyline,
             result.Message,
-            result.DriverOffer));
+            result.DriverOffer,
+            result.CurrentSearchRadiusKm,
+            result.ExpiresAt,
+            result.EstimatedRemainingSeconds,
+            result.MatchingMessage,
+            result.TripId,
+            result.TripStatus));
     }
 
     [HttpPost("{bookingId:long}/cancel")]
@@ -346,7 +367,7 @@ public sealed class BookingsController : ControllerBase
             result.EstimatedFare,
             result.EncodedPolyline,
             result.Message,
-            result.DriverOffer));
+            null));
     }
 
     [Authorize(Roles = "Customer")]
@@ -461,6 +482,8 @@ public sealed class BookingsController : ControllerBase
                     driverOffer.LicenseClass,
                     driverOffer.ExpiresAt,
                     driverOffer.OfferStatus,
+                    driverOffer.DriverLatitude,
+                    driverOffer.DriverLongitude,
                     driverOffer.CustomerConfirmRemainingSeconds),
             TripStatus: tripStatus,
             TripId: tripId,

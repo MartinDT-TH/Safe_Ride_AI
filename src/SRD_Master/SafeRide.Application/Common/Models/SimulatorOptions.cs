@@ -16,11 +16,15 @@ public sealed class SimulatorOptions
     public int MockDriverTtlRefreshSeconds { get; set; } = 60;
 
     public bool MockCustomerAutoConfirmDriver { get; set; } = true;
+    public bool AutoConfirmRealCustomerBookings { get; set; } = false;
 
     public bool MockDriverSkipMovementDelay { get; set; } = false;
 
-    // Real Driver Flow Simulation Options
-    public bool RealDriverAutoAcceptOffers { get; set; } = true;
+    public bool EnableSimulatorConsoleOutput { get; set; } = true;
+
+    // Real Driver Flow Simulation Options (Demo-only behavior)
+    // To test Real Driver manually, leave these as false.
+    public bool RealDriverAutoAcceptOffers { get; set; } = false;
     public bool RealDriverAutoProgressTrips { get; set; } = true;
     public bool RealDriverSimulateMovement { get; set; } = true;
 

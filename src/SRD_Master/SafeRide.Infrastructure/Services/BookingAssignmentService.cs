@@ -734,6 +734,19 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
                 ? (int?)Math.Max(0, (int)Math.Ceiling((confirmedOffer.ExpiresAt - utcNow).TotalSeconds))
                 : null;
 
+        double? driverLatitude = null;
+        double? driverLongitude = null;
+        var locationJson = await _redisService.GetAsync(RedisKeys.DriverLocation(confirmedOffer.DriverId));
+        if (!string.IsNullOrEmpty(locationJson))
+        {
+            var cache = JsonSerializer.Deserialize<DriverLocationCache>(locationJson);
+            if (cache is not null)
+            {
+                driverLatitude = cache.Latitude;
+                driverLongitude = cache.Longitude;
+            }
+        }
+
         return new BookingDriverOfferDto(
             confirmedOffer.Id,
             confirmedOffer.DriverId,
@@ -745,6 +758,8 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             confirmedOffer.LicenseClass,
             confirmedOffer.ExpiresAt,
             confirmedOffer.OfferStatus,
+            driverLatitude,
+            driverLongitude,
             customerConfirmRemainingSeconds);
     }
 
