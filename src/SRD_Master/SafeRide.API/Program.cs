@@ -95,6 +95,29 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 
+    if (!app.Configuration.GetValue<bool>("Simulator:EnableMockDrivers"))
+    {
+        using var scope = app.Services.CreateScope();
+        var redis = scope.ServiceProvider.GetRequiredService<SafeRide.Infrastructure.Redis.IRedisService>();
+        var db = scope.ServiceProvider.GetRequiredService<SafeRide.Infrastructure.Persistence.ApplicationDbContext>();
+        
+        foreach (var mockDriver in SafeRide.Infrastructure.Simulator.MockDriverConfiguration.GetMockDrivers())
+        {
+            // Remove from Redis Geo cache
+            redis.GeoRemoveAsync(SafeRide.Infrastructure.Redis.RedisKeys.OnlineDriversGeo, mockDriver.DriverId.ToString()).GetAwaiter().GetResult();
+            redis.RemoveAsync(SafeRide.Infrastructure.Redis.RedisKeys.DriverLocation(mockDriver.DriverId)).GetAwaiter().GetResult();
+            redis.RemoveAsync(SafeRide.Infrastructure.Redis.RedisKeys.DriverStatus(mockDriver.DriverId)).GetAwaiter().GetResult();
+            redis.RemoveAsync(SafeRide.Infrastructure.Redis.RedisKeys.DriverOnline(mockDriver.DriverId)).GetAwaiter().GetResult();
+            
+            // Set offline in DB
+            var profile = db.DriverProfiles.FirstOrDefault(p => p.DriverId == mockDriver.DriverId);
+            if (profile != null)
+            {
+                profile.WorkStatus = SafeRide.Domain.Enums.DriverWorkStatus.Offline;
+            }
+        }
+        db.SaveChanges();
+    }
 
     // var runDriverSimulator = builder.Configuration.GetValue<bool>("Simulator:RunDriverLocationSimulator");
     // if (runDriverSimulator)
