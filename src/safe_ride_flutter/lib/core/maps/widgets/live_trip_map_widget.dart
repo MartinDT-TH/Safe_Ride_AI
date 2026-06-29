@@ -119,6 +119,15 @@ class _LiveTripMapWidgetState extends State<LiveTripMapWidget> {
       if (p.longitude > maxLng) maxLng = p.longitude;
     }
 
+    if (maxLat - minLat < 0.001) {
+      minLat -= 0.001;
+      maxLat += 0.001;
+    }
+    if (maxLng - minLng < 0.001) {
+      minLng -= 0.001;
+      maxLng += 0.001;
+    }
+
     _mapController!.animateCameraToBounds(
       AppLatLng(minLat, minLng),
       AppLatLng(maxLat, maxLng),
@@ -167,7 +176,7 @@ class _LiveTripMapWidgetState extends State<LiveTripMapWidget> {
         widget.trackingState == LiveTripTrackingState.arriving;
 
     // Very faded full-route background (whole route outline) — zIndex: 1
-    if (widget.tripRoutePoints.isNotEmpty) {
+    if (widget.tripRoutePoints.length >= 2) {
       polylines.add(
         AppPolyline(
           id: 'trip-route-static',
@@ -179,7 +188,7 @@ class _LiveTripMapWidgetState extends State<LiveTripMapWidget> {
       );
     }
 
-    if (widget.arrivalRoutePoints.isNotEmpty && isArriving) {
+    if (widget.arrivalRoutePoints.length >= 2 && isArriving) {
       polylines.add(
         AppPolyline(
           id: 'arrival-route-static',
