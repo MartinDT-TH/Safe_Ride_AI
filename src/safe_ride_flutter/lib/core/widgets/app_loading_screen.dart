@@ -6,6 +6,64 @@ class AppLoadingScreen extends StatelessWidget {
 
   const AppLoadingScreen({super.key, this.message});
 
+  static BuildContext? _dialogContext;
+
+  static Future<void> show(BuildContext context, {String? message}) {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        _dialogContext = dialogContext;
+        return Center(
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: 220,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      AppColors.primary,
+                    ),
+                  ),
+                  if (message != null) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      message,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF667174),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  static void hide([BuildContext? context]) {
+    final dialogContext = _dialogContext ?? context;
+    if (dialogContext == null) return;
+
+    final navigator = Navigator.of(dialogContext, rootNavigator: true);
+    if (navigator.canPop()) {
+      navigator.pop();
+    }
+    _dialogContext = null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -16,7 +74,7 @@ class AppLoadingScreen extends StatelessWidget {
           children: [
             // Khoảng trống phía trên (thay thế cho map/content nền)
             const Spacer(flex: 3),
-            
+
             // Panel trắng bo tròn phía dưới
             Expanded(
               flex: 7,
@@ -49,7 +107,9 @@ class AppLoadingScreen extends StatelessWidget {
                     ),
                     const Spacer(flex: 2),
                     const CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        AppColors.primary,
+                      ),
                       strokeWidth: 3,
                     ),
                     if (message != null) ...[
@@ -78,4 +138,3 @@ class AppLoadingScreen extends StatelessWidget {
     );
   }
 }
-

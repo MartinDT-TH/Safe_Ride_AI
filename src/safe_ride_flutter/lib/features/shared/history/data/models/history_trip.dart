@@ -1,4 +1,4 @@
-enum HistoryTripStatus { completed, cancelled }
+enum HistoryTripStatus { completed, cancelled, booked }
 
 class HistoryTrip {
   final int id;
@@ -30,21 +30,35 @@ class HistoryTrip {
   });
 
   factory HistoryTrip.fromJson(Map<String, dynamic> json) {
+    final occurredAt = json['occurredAt']?.toString() ??
+        json['completedAt']?.toString() ??
+        json['updatedAt']?.toString() ??
+        json['scheduledAt']?.toString();
+    final estimatedFare = (json['estimatedFare'] as num?)?.toDouble() ?? 0;
+    final finalFare = (json['finalFare'] as num?)?.toDouble();
+    final bookingStatus =
+        (json['bookingStatus'] ?? json['tripStatus'])?.toString().toLowerCase() ??
+            '';
+    final status = bookingStatus.contains('cancel') ||
+            bookingStatus.contains('expire')
+        ? HistoryTripStatus.cancelled
+        : bookingStatus.contains('complete')
+            ? HistoryTripStatus.completed
+            : HistoryTripStatus.booked;
+
     return HistoryTrip(
-      id: json['id'] as int,
+      id: (json['id'] as num?)?.toInt() ?? 0,
       pickup: json['pickupAddress'] ?? '',
       destination: json['destinationAddress'] ?? '',
-      time: DateTime.parse(json['scheduledAt'] ?? DateTime.now().toIso8601String()),
-      fare: (json['estimatedFare'] as num?)?.toDouble() ?? 0,
+      time: DateTime.tryParse(occurredAt ?? '') ?? DateTime.now(),
+      fare: finalFare != null && finalFare > 0 ? finalFare : estimatedFare,
       distanceKm: (json['estimatedDistanceKm'] as num?)?.toDouble() ?? 0,
-      status: json['bookingStatus'] == 'Cancelled' 
-          ? HistoryTripStatus.cancelled 
-          : HistoryTripStatus.completed,
+      status: status,
       vehicleName: json['vehicleName'] ?? 'SafeRide',
       isMotorbike: json['isMotorbike'] ?? false,
       driverName: json['driverName'],
       driverRating: (json['driverRating'] as num?)?.toDouble(),
-      driverAvatar: json['driverAvatar'],
+      driverAvatar: json['driverAvatarUrl'] ?? json['driverAvatar'],
     );
   }
 }

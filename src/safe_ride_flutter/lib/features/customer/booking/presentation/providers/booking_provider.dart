@@ -258,6 +258,15 @@ class BookingProvider extends ChangeNotifier {
     }
   }
 
+  Future<BookingResponse?> getPastBookingDetails(
+    String accessToken, {
+    required int bookingId,
+  }) {
+    return _run(
+      () => _repository.getBookingDetails(accessToken, bookingId: bookingId),
+    );
+  }
+
   void setActiveBooking({
     BookingResponse? booking,
     BookingLocation? pickup,
