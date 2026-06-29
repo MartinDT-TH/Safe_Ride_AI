@@ -50,6 +50,8 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
   bool _isLocating = false;
   StreamSubscription<Position>? _positionStream;
   AppLatLng? _driverPosition;
+  AppLatLng? _lastReportedPosition;
+  DateTime? _lastReportedTime;
   double _driverHeading = 0;
   final List<AppLatLng> _arrivalRoutePoints = [];
   final List<AppLatLng> _tripRoutePoints = [];
@@ -221,7 +223,6 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     _positionStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 10,
       ),
     ).listen((Position position) {
       _onLocationChanged(position);
@@ -271,7 +272,27 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
       }
       _driverPosition = newPos;
     });
-    context.read<DriverDashboardProvider>().updateLocation(position.latitude, position.longitude);
+
+    bool shouldReport = false;
+    final now = DateTime.now();
+
+    if (_lastReportedPosition == null || _lastReportedTime == null) {
+      shouldReport = true;
+    } else {
+      final dist = _calculateDirectDistance(_lastReportedPosition!, newPos) * 1000;
+      final timeDiff = now.difference(_lastReportedTime!).inSeconds;
+      
+      if (dist >= 10 || timeDiff >= 10) {
+        shouldReport = true;
+      }
+    }
+
+    if (shouldReport) {
+      _lastReportedPosition = newPos;
+      _lastReportedTime = now;
+      context.read<DriverDashboardProvider>().updateLocation(position.latitude, position.longitude);
+    }
+
     _refreshArrivalRouteIfNeeded(newPos);
   }
 
@@ -671,10 +692,11 @@ class _ActiveTripCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = trip.tripStatus;
-    final canCancel = status == 'DRIVER_ARRIVING';
-    final canComplete = status == 'ARRIVED' || status == 'IN_PROGRESS';
-    final canMarkArrived = status == 'DRIVER_ARRIVING';
+    final canCancel = status == 'ACCEPTED' || status == 'DRIVER_ARRIVING' || status == 'ARRIVED';
     final canStartArriving = status == 'ACCEPTED';
+    final canMarkArrived = status == 'DRIVER_ARRIVING';
+    final canStartTrip = status == 'ARRIVED';
+    final canComplete = status == 'IN_PROGRESS';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -798,6 +820,51 @@ class _ActiveTripCard extends StatelessWidget {
                         style: _primaryButtonStyle(),
                       ),
                     ),
+                ],
+              )
+            else if (canStartTrip)
+              Row(
+                children: [
+                  if (canCancel) ...[
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: isUpdating
+                            ? null
+                            : () => _runTripAction(
+                                context,
+                                () => context
+                                    .read<DriverDashboardProvider>()
+                                    .cancelActiveTrip(),
+                              ),
+                        icon: const Icon(Icons.close_rounded),
+                        label: const Text('Hủy chuyến'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFFE53935),
+                          side: const BorderSide(color: Color(0xFFE53935)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: isUpdating
+                          ? null
+                          : () => _runTripAction(
+                              context,
+                              () => context
+                                  .read<DriverDashboardProvider>()
+                                  .startTrip(),
+                            ),
+                      icon: const Icon(Icons.play_arrow_rounded),
+                      label: const Text('Bắt đầu chuyến'),
+                      style: _primaryButtonStyle(),
+                    ),
+                  ),
                 ],
               )
             else if (canComplete)

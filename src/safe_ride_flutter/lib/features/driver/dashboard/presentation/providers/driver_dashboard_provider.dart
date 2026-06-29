@@ -215,6 +215,11 @@ class DriverDashboardProvider extends ChangeNotifier {
       );
       _status = DriverStatus.online;
       _errorMessage = null;
+      
+      if (!_socketService.isConnected) {
+        await initializeRealtime(token);
+      }
+      
       notifyListeners();
     } catch (e) {
       debugPrint('Failed to go online: $e');
@@ -306,9 +311,11 @@ class DriverDashboardProvider extends ChangeNotifier {
       );
       // Removed immediate trip creation logic. 
       // Waiting for SignalR 'BookingDriverAssigned' event.
+    } catch (e) {
+      debugPrint('Failed to accept request: $e');
+    } finally {
       _hasNewRequest = false;
       _currentRequest = null;
-    } finally {
       _isResponding = false;
       notifyListeners();
     }
@@ -323,34 +330,6 @@ class DriverDashboardProvider extends ChangeNotifier {
 
     _isResponding = true;
     notifyListeners();
-    _socketService.onBookingUpdated((update) {
-      if (update.status == 'DriverAssigned' || update.tripId != null) {
-        if (update.tripId != null) {
-          final oldTrip = _activeTrip;
-          _activeTrip = ActiveDriverTrip(
-            bookingId: update.bookingId,
-            tripId: update.tripId!,
-            tripStatus: update.tripStatus ?? 'ACCEPTED',
-            pickupLat: oldTrip?.pickupLat,
-            pickupLng: oldTrip?.pickupLng,
-            destLat: oldTrip?.destLat,
-            destLng: oldTrip?.destLng,
-            encodedPolyline: oldTrip?.encodedPolyline,
-            arrivalPolyline: oldTrip?.arrivalPolyline,
-          );
-          notifyListeners();
-          _socketService.joinTrip(update.tripId!);
-          if (oldTrip?.encodedPolyline == null) {
-            _fetchActiveTripDetails(update.bookingId, update.tripId!);
-          }
-        }
-      } else if (update.status == 'Cancelled' || update.status == 'Expired') {
-        if (_activeTrip?.bookingId == update.bookingId) {
-          _activeTrip = null;
-          notifyListeners();
-        }
-      }
-    }, key: 'driverDashboardBooking');
     try {
       await _dio.post(
         ApiEndpoints.rejectDriverOffer(request.offerId),
@@ -358,9 +337,11 @@ class DriverDashboardProvider extends ChangeNotifier {
           headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
         ),
       );
+    } catch (e) {
+      debugPrint('Failed to decline request: $e');
+    } finally {
       _hasNewRequest = false;
       _currentRequest = null;
-    } finally {
       _isResponding = false;
       notifyListeners();
     }
@@ -392,12 +373,39 @@ class DriverDashboardProvider extends ChangeNotifier {
     return updateTripStatus('ARRIVED');
   }
 
+  Future<bool> startTrip() {
+    return updateTripStatus('IN_PROGRESS');
+  }
+
   Future<bool> cancelActiveTrip() {
     return updateTripStatus('CANCELLED');
   }
 
-  Future<bool> completeActiveTrip() {
-    return updateTripStatus('COMPLETED');
+  Future<bool> completeActiveTrip() async {
+    final trip = _activeTrip;
+    final token = _accessToken;
+    if (trip == null || token == null || _isUpdatingTrip) {
+      return false;
+    }
+
+    _isUpdatingTrip = true;
+    notifyListeners();
+    try {
+      await _dio.post(
+        ApiEndpoints.completeTrip(trip.tripId),
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+        ),
+      );
+      _activeTrip = null;
+      return true;
+    } catch (e) {
+      debugPrint('Failed to complete trip: $e');
+      throw e;
+    } finally {
+      _isUpdatingTrip = false;
+      notifyListeners();
+    }
   }
 
   Future<void> loadActiveTrip() async {

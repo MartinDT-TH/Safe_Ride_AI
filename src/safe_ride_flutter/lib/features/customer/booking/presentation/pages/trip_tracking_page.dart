@@ -201,6 +201,12 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         }
 
         final rawPosition = AppLatLng(update.latitude, update.longitude);
+        
+        if (_driverPosition != null) {
+          final dist = _calculateDirectDistance(_driverPosition!, rawPosition) * 1000;
+          if (dist < 10) return;
+        }
+
         setState(() {
           if (_driverPosition != null) {
             _driverHeading = _calculateHeading(_driverPosition!, rawPosition);
@@ -596,6 +602,15 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       maxLat = math.max(maxLat, point.latitude);
       minLng = math.min(minLng, point.longitude);
       maxLng = math.max(maxLng, point.longitude);
+    }
+
+    if (maxLat - minLat < 0.001) {
+      minLat -= 0.001;
+      maxLat += 0.001;
+    }
+    if (maxLng - minLng < 0.001) {
+      minLng -= 0.001;
+      maxLng += 0.001;
     }
 
     return (AppLatLng(minLat, minLng), AppLatLng(maxLat, maxLng));
@@ -1060,11 +1075,18 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       builder: (context) => const Center(child: ShareTripModal()),
     );
   }
+  bool _isPollingTripStatus = false;
 
   void _startTripStatusPolling() {
     _tripStatusPollingTimer?.cancel();
-    _tripStatusPollingTimer = Timer.periodic(const Duration(seconds: 4), (_) {
-      unawaited(_refreshTripStatus());
+    _tripStatusPollingTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
+      if (_isPollingTripStatus) return;
+      _isPollingTripStatus = true;
+      try {
+        await _refreshTripStatus();
+      } finally {
+        _isPollingTripStatus = false;
+      }
     });
   }
 

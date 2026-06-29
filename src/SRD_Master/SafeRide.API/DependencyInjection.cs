@@ -27,17 +27,17 @@ public static class DependencyInjection
             return app;
         }
 
-        var recurringJobs = app.Services.GetRequiredService<IRecurringJobManager>();
+        // var recurringJobs = app.Services.GetRequiredService<IRecurringJobManager>();
 
-        recurringJobs.AddOrUpdate<CleanupStaleDriverLocationJob>(
-            "cleanup-stale-driver-location",
-            job => job.ExecuteAsync(CancellationToken.None),
-            Cron.Minutely());
+        // recurringJobs.AddOrUpdate<CleanupStaleDriverLocationJob>(
+        //     "cleanup-stale-driver-location",
+        //     job => job.ExecuteAsync(CancellationToken.None),
+        //     Cron.Minutely());
 
-        recurringJobs.AddOrUpdate<CleanupExpiredRefreshTokensJob>(
-            "cleanup-expired-refresh-tokens",
-            job => job.ExecuteAsync(CancellationToken.None),
-            Cron.Daily());
+        // recurringJobs.AddOrUpdate<CleanupExpiredRefreshTokensJob>(
+        //     "cleanup-expired-refresh-tokens",
+        //     job => job.ExecuteAsync(CancellationToken.None),
+        //     Cron.Daily());
 
         return app;
     }
