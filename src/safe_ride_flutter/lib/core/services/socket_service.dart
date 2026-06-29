@@ -373,7 +373,7 @@ class SocketService {
     
     final options = HttpConnectionOptions(
       accessTokenFactory: () async => accessToken,
-      requestTimeout: 10000,
+      requestTimeout: 30000,
       skipNegotiation: AppConfig.forceWebSockets,
       transport: AppConfig.forceWebSockets ? HttpTransportType.WebSockets : null,
     );
@@ -385,6 +385,9 @@ class SocketService {
         )
         .withAutomaticReconnect()
         .build();
+
+    _connection!.serverTimeoutInMilliseconds = 60000;
+    _connection!.keepAliveIntervalInMilliseconds = 30000;
 
     _connection!.onreconnected(({connectionId}) {
       debugPrint('SOCKET: Reconnected ($connectionId). Re-joining groups: Trips=$_activeTripGroups, Bookings=$_activeBookingGroups');

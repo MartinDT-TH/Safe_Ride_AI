@@ -351,27 +351,32 @@ class BookingRemoteDatasource {
     try {
       await _dio.post(
         ApiEndpoints.submitTripRating(tripId),
-        data: {ApiKeys.ratingScore: ratingScore, ApiKeys.comment: comment},
+        data: {
+          ApiKeys.ratingScore: ratingScore,
+          if (comment != null && comment.trim().isNotEmpty)
+            ApiKeys.comment: comment.trim(),
+        },
         options: Options(
           headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
         ),
       );
     } on DioException catch (exception) {
       final statusCode = exception.response?.statusCode;
-      if (statusCode != null && statusCode >= 500) {
-        throw BookingApiException(
-          'Máy chủ đang gặp sự cố. Bạn có thể thử lại hoặc đánh giá sau.',
-          statusCode: statusCode,
-        );
-      }
-
       final data = exception.response?.data;
+
       if (data is Map) {
         final detail = data[ApiKeys.detail]?.toString();
         final code = data[ApiKeys.code]?.toString();
         if (detail != null) {
           throw BookingApiException(detail, code: code, statusCode: statusCode);
         }
+      }
+
+      if (statusCode != null && statusCode >= 500) {
+        throw BookingApiException(
+          'Máy chủ đang gặp sự cố. Bạn có thể thử lại hoặc đánh giá sau.',
+          statusCode: statusCode,
+        );
       }
 
       throw BookingApiException(

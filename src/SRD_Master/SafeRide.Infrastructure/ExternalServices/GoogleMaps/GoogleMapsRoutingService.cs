@@ -105,7 +105,7 @@ public sealed class GoogleMapsRoutingService : IMapRoutingService
                 Provider = MapProvider.GoogleMaps,
                 DistanceMeters = route.DistanceMeters,
                 DurationSeconds = durationSeconds,
-                EncodedPolyline = route.Polyline.EncodedPolyline,
+                EncodedPolyline = route.Polyline.EncodedPolyline ?? "",
                 PolylineFormat = "polyline5"
             };
         }

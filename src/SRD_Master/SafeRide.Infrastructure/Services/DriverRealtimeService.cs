@@ -58,10 +58,10 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
 
         // If the simulator is enabled for real drivers, it will publish mock coordinates.
         // We must ignore the real device GPS updates during an active trip to avoid fighting the simulator.
-        if (activeTrip != null && true)
-        {
-            return;
-        }
+        // if (activeTrip != null && true)
+        // {
+        //     return;
+        // }
 
         await CacheDriverLocationAsync(
             driverId,

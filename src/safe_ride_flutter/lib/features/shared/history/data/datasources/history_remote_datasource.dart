@@ -1,4 +1,6 @@
 import 'package:dio/dio.dart';
+import 'package:safe_ride/core/constants/app_strings.dart';
+import 'package:safe_ride/core/network/auth_header.dart';
 import '../../../../../core/network/dio_client.dart';
 import '../models/history_trip.dart';
 

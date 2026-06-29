@@ -250,6 +250,20 @@ public sealed class BookingTests
             return Task.FromResult<Booking?>(AddedBooking);
         }
 
+        public Task<IEnumerable<Booking>> GetCustomerBookingHistoryAsync(
+            Guid customerId,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IEnumerable<Booking>>([]);
+        }
+
+        public Task<IEnumerable<Booking>> GetDriverBookingHistoryAsync(
+            Guid driverId,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IEnumerable<Booking>>([]);
+        }
+
         public Task<Booking?> GetCustomerBookingWithDetailsAsync(
             long bookingId,
             Guid customerId,
