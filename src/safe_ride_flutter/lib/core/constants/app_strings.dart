@@ -321,6 +321,8 @@ abstract final class ApiKeys {
   static const longitude = 'longitude';
   static const offerId = 'offerId';
   static const driverId = 'driverId';
+  static const driverLatitude = 'driverLatitude';
+  static const driverLongitude = 'driverLongitude';
   static const driverName = 'driverName';
   static const driverAvatarUrl = 'driverAvatarUrl';
   static const rating = 'rating';

@@ -1,4 +1,4 @@
-import 'dart:math' as math;
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 
@@ -39,8 +39,34 @@ class DriverDashboardProvider extends ChangeNotifier {
   bool _isUpdatingTrip = false;
   bool get isUpdatingTrip => _isUpdatingTrip;
 
+  bool _isDemoMode = false;
+  bool get isDemoMode => _isDemoMode;
+
   ActiveDriverTrip? _activeTrip;
   ActiveDriverTrip? get activeTrip => _activeTrip;
+
+  void toggleDemoMode() {
+    _isDemoMode = !_isDemoMode;
+    if (_isDemoMode) {
+      _socketService.onDriverLocationUpdated((update) {
+        if (_activeTrip != null && update.tripId == _activeTrip!.tripId) {
+          _demoLat = update.latitude;
+          _demoLng = update.longitude;
+          notifyListeners();
+        }
+      }, key: 'driverDashboardDemo');
+    } else {
+      _demoLat = null;
+      _demoLng = null;
+      _socketService.removeDriverLocationUpdatedHandler('driverDashboardDemo');
+    }
+    notifyListeners();
+  }
+  
+  double? _demoLat;
+  double? _demoLng;
+  double? get demoLat => _demoLat;
+  double? get demoLng => _demoLng;
 
   bool _isLoadingActiveTrip = false;
   bool get isLoadingActiveTrip => _isLoadingActiveTrip;
@@ -48,27 +74,7 @@ class DriverDashboardProvider extends ChangeNotifier {
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
 
-  // Hack Demo State
-  double? _demoLat;
-  double? get demoLat => _demoLat;
-  double? _demoLng;
-  double? get demoLng => _demoLng;
-  double _demoHeading = 0;
-  double get demoHeading => _demoHeading;
 
-  double _calculateDemoHeading(double startLat, double startLng, double endLat, double endLng) {
-    final sLat = startLat * math.pi / 180;
-    final sLng = startLng * math.pi / 180;
-    final eLat = endLat * math.pi / 180;
-    final eLng = endLng * math.pi / 180;
-
-    final dLng = eLng - sLng;
-    final y = math.sin(dLng) * math.cos(eLat);
-    final x = math.cos(sLat) * math.sin(eLat) -
-        math.sin(sLat) * math.cos(eLat) * math.cos(dLng);
-    final brng = math.atan2(y, x);
-    return (brng * 180 / math.pi + 360) % 360;
-  }
 
   Future<void> initializeRealtime(String accessToken) async {
     if (accessToken.isEmpty) {
@@ -92,6 +98,7 @@ class DriverDashboardProvider extends ChangeNotifier {
             arrivalPolyline: oldTrip?.arrivalPolyline,
           );
           notifyListeners();
+          _socketService.joinTrip(update.tripId!);
           if (oldTrip?.encodedPolyline == null) {
             _fetchActiveTripDetails(update.bookingId, update.tripId!);
           }
@@ -156,18 +163,12 @@ class DriverDashboardProvider extends ChangeNotifier {
         arrivalPolyline: oldTrip?.arrivalPolyline,
       );
       notifyListeners();
+      _socketService.joinTrip(update.tripId);
       if (oldTrip?.encodedPolyline == null) {
         _fetchActiveTripDetails(update.bookingId, update.tripId);
       }
     }, key: 'driverDashboard');
-    _socketService.onDriverLocationUpdated((update) {
-      if (_demoLat != null && _demoLng != null) {
-        _demoHeading = _calculateDemoHeading(_demoLat!, _demoLng!, update.latitude, update.longitude);
-      }
-      _demoLat = update.latitude;
-      _demoLng = update.longitude;
-      notifyListeners();
-    });
+
     _socketService.onBookingUpdated((update) {
       if (update.status == 'DriverAssigned' || update.tripId != null) {
         if (update.tripId != null) {
@@ -184,6 +185,7 @@ class DriverDashboardProvider extends ChangeNotifier {
             arrivalPolyline: oldTrip?.arrivalPolyline,
           );
           notifyListeners();
+          _socketService.joinTrip(update.tripId!);
           if (oldTrip?.encodedPolyline == null) {
             _fetchActiveTripDetails(update.bookingId, update.tripId!);
           }
@@ -233,10 +235,13 @@ class DriverDashboardProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('Failed to go offline: $e');
     } finally {
-      _status = DriverStatus.offline;
+      _socketService.removeTripStatusChangedHandler('driverDashboard');
+      _socketService.removeDriverLocationUpdatedHandler('driverDashboardDemo');
+      await _socketService.disconnect();
       if (_socketService.isConnected) {
         await _socketService.setDriverOffline();
       }
+      _status = DriverStatus.offline;
       notifyListeners();
     }
   }
@@ -280,6 +285,7 @@ class DriverDashboardProvider extends ChangeNotifier {
             arrivalPolyline: oldTrip?.arrivalPolyline,
           );
           notifyListeners();
+          _socketService.joinTrip(update.tripId!);
           if (oldTrip?.encodedPolyline == null) {
             _fetchActiveTripDetails(update.bookingId, update.tripId!);
           }
@@ -333,6 +339,7 @@ class DriverDashboardProvider extends ChangeNotifier {
             arrivalPolyline: oldTrip?.arrivalPolyline,
           );
           notifyListeners();
+          _socketService.joinTrip(update.tripId!);
           if (oldTrip?.encodedPolyline == null) {
             _fetchActiveTripDetails(update.bookingId, update.tripId!);
           }
@@ -426,6 +433,7 @@ class DriverDashboardProvider extends ChangeNotifier {
             tripId: tripId.toInt(),
             tripStatus: tripStatus,
           );
+          _socketService.joinTrip(tripId.toInt());
           // Fetch extra details immediately before setting loading to false
           await _fetchActiveTripDetailsSync(bookingId.toInt(), tripId.toInt());
         }
@@ -464,6 +472,7 @@ class DriverDashboardProvider extends ChangeNotifier {
             arrivalPolyline: oldTrip?.arrivalPolyline,
           );
           notifyListeners();
+          _socketService.joinTrip(update.tripId!);
           if (oldTrip?.encodedPolyline == null) {
             _fetchActiveTripDetails(update.bookingId, update.tripId!);
           }
@@ -496,7 +505,7 @@ class DriverDashboardProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _fetchActiveTripDetailsSync(int bookingId, int tripId) async {
+  Future<void> _fetchActiveTripDetailsSync(int bookingId, int tripId, [int retries = 3]) async {
     final token = _accessToken;
     if (token == null || _activeTrip == null || _activeTrip!.tripId != tripId) return;
 
@@ -505,7 +514,12 @@ class DriverDashboardProvider extends ChangeNotifier {
         ApiEndpoints.driverActiveTrip,
         options: Options(headers: {ApiKeys.authorization: AuthHeader.bearer(token)}),
       );
-      if (response.data is Map && _activeTrip?.tripId == tripId) {
+      if (response.statusCode == 204 && retries > 0) {
+        await Future.delayed(const Duration(seconds: 1));
+        return _fetchActiveTripDetailsSync(bookingId, tripId, retries - 1);
+      }
+      
+      if (response.data != null && response.data is Map && _activeTrip?.tripId == tripId) {
         final bData = Map<String, dynamic>.from(response.data as Map);
         double? pickupLat = (bData['pickupLat'] as num?)?.toDouble();
         double? pickupLng = (bData['pickupLng'] as num?)?.toDouble();
@@ -513,31 +527,6 @@ class DriverDashboardProvider extends ChangeNotifier {
         double? destLng = (bData['destLng'] as num?)?.toDouble();
         final encodedPoly = bData['encodedPolyline'] as String?;
         String? arrivalPoly = bData['arrivalPolyline'] as String?;
-
-        // Hack Demo: Fetch arrival polyline if missing and we have demo coordinates or active trip
-        if (arrivalPoly == null && pickupLat != null && pickupLng != null) {
-          try {
-            // Use demo coordinates if available, otherwise use a fallback (Da Nang) to fetch a route
-            final oLat = _demoLat ?? 16.0544;
-            final oLng = _demoLng ?? 108.2022;
-            
-            final routeResp = await _dio.post(
-              'maps/routes/estimate',
-              data: {
-                'originLat': oLat,
-                'originLng': oLng,
-                'destinationLat': pickupLat,
-                'destinationLng': pickupLng,
-                'travelMode': 1
-              },
-            );
-            if (routeResp.data != null && routeResp.data is Map) {
-              arrivalPoly = routeResp.data['encodedPolyline'] as String?;
-            }
-          } catch (e) {
-            debugPrint('Failed to fetch demo arrival polyline: $e');
-          }
-        }
 
         _activeTrip = _activeTrip!.copyWith(
           pickupLat: pickupLat,

@@ -7,6 +7,16 @@ import 'map_renderer_widget.dart';
 enum LiveTripTrackingState { arriving, inProgress }
 
 class LiveTripMapWidget extends StatefulWidget {
+  final LiveTripTrackingState trackingState;
+  final AppLatLng pickup;
+  final AppLatLng? destination;
+  final List<AppLatLng> arrivalRoutePoints;
+  final List<AppLatLng> tripRoutePoints;
+  final AppLatLng? driverPosition;
+  final double driverHeading;
+  final EdgeInsets padding;
+  final void Function(AppMapController)? onMapCreated;
+
   const LiveTripMapWidget({
     super.key,
     required this.trackingState,
@@ -19,16 +29,6 @@ class LiveTripMapWidget extends StatefulWidget {
     this.padding = const EdgeInsets.all(24),
     this.onMapCreated,
   });
-
-  final LiveTripTrackingState trackingState;
-  final AppLatLng pickup;
-  final AppLatLng? destination;
-  final List<AppLatLng> arrivalRoutePoints;
-  final List<AppLatLng> tripRoutePoints;
-  final AppLatLng? driverPosition;
-  final double driverHeading;
-  final EdgeInsets padding;
-  final void Function(AppMapController)? onMapCreated;
 
   @override
   State<LiveTripMapWidget> createState() => _LiveTripMapWidgetState();

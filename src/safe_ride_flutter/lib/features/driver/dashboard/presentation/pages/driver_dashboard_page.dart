@@ -9,6 +9,7 @@ import '../../../../../core/maps/polyline_decoder.dart';
 import '../../../../../core/maps/widgets/map_renderer_widget.dart';
 import '../../../../../core/maps/widgets/live_trip_map_widget.dart';
 import '../../../../../core/services/location_service.dart';
+import '../../../../../core/services/map_api_service.dart';
 import '../../../../../core/widgets/current_location_button.dart';
 import '../../../../../dependency_injection/injection.dart';
 
@@ -29,6 +30,20 @@ class DriverDashboardPage extends StatefulWidget {
   State<DriverDashboardPage> createState() => _DriverDashboardPageState();
 }
 
+class _RouteProgress {
+  const _RouteProgress({
+    required this.point,
+    required this.segmentIndex,
+    required this.progress,
+    this.distanceMeters = 0,
+  });
+
+  final AppLatLng point;
+  final int segmentIndex;
+  final double progress;
+  final double distanceMeters;
+}
+
 class _DriverDashboardPageState extends State<DriverDashboardPage> {
   AppMapController? _mapController;
   int _selectedIndex = 0;
@@ -36,6 +51,15 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
   StreamSubscription<Position>? _positionStream;
   AppLatLng? _driverPosition;
   double _driverHeading = 0;
+  final List<AppLatLng> _arrivalRoutePoints = [];
+  final List<AppLatLng> _tripRoutePoints = [];
+  final MapApiService _mapApiService = MapApiService();
+  DateTime? _lastArrivalRouteRefreshAt;
+  AppLatLng? _lastArrivalRouteRefreshOrigin;
+  bool _arrivalRouteRefreshInProgress = false;
+  static const double _arrivalRerouteThresholdMeters = 35;
+  static const double _arrivalRerouteMinMoveMeters = 80;
+  static const Duration _arrivalRouteRefreshInterval = Duration(seconds: 12);
 
 
   Future<void> _goToCurrentLocation() async {
@@ -49,9 +73,8 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
       if (!mounted) return;
 
       if (_mapController != null) {
-        final provider = context.read<DriverDashboardProvider>();
-        final lat = provider.demoLat ?? location.latitude;
-        final lng = provider.demoLng ?? location.longitude;
+        final lat = _driverPosition?.latitude ?? location.latitude;
+        final lng = _driverPosition?.longitude ?? location.longitude;
         await _mapController!.animateCamera(
           AppCameraPosition(
             target: AppLatLng(lat, lng),
@@ -75,30 +98,130 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     }
   }
 
+  late DriverDashboardProvider _provider;
+  DateTime? _lastCameraFitAt;
+  static const _cameraFitInterval = Duration(seconds: 3);
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final token = context.read<AuthProvider>().token;
+      _provider = context.read<DriverDashboardProvider>();
       if (token != null) {
-        context.read<DriverDashboardProvider>().initializeRealtime(token);
+        _provider.initializeRealtime(token);
       }
       _checkActiveCustomerBooking();
+      _provider.addListener(_onProviderUpdated);
     });
+  }
+
+  void _onProviderUpdated() {
+    if (!mounted) return;
+    
+    final activeTrip = _provider.activeTrip;
+    
+    if (activeTrip != null && _positionStream == null) {
+      _startLocationUpdates();
+    }
+    
+    if (activeTrip == null) {
+      _arrivalRoutePoints.clear();
+      _tripRoutePoints.clear();
+      return;
+    }
+
+    if (_provider.isDemoMode && _provider.demoLat != null && _provider.demoLng != null) {
+      final newPos = AppLatLng(_provider.demoLat!, _provider.demoLng!);
+      if (_driverPosition != null) {
+        _driverHeading = _calculateHeading(_driverPosition!, newPos);
+      }
+      _driverPosition = newPos;
+      _refreshArrivalRouteIfNeeded(newPos);
+    }
+
+    if (_arrivalRoutePoints.isEmpty && activeTrip.arrivalPolyline != null) {
+      try {
+        final pts = decodePolyline(activeTrip.arrivalPolyline!);
+        if (pts.isNotEmpty) {
+          _arrivalRoutePoints.clear();
+          _arrivalRoutePoints.addAll(pts);
+        }
+      } catch (_) {}
+    }
+
+    if (_tripRoutePoints.isEmpty && activeTrip.encodedPolyline != null) {
+      try {
+        final pts = decodePolyline(activeTrip.encodedPolyline!);
+        if (pts.isNotEmpty) {
+          _tripRoutePoints.clear();
+          _tripRoutePoints.addAll(pts);
+        }
+      } catch (_) {}
+    }
+
+    if (_mapController == null) return;
+
+    final now = DateTime.now();
+    if (_lastCameraFitAt != null && now.difference(_lastCameraFitAt!) < _cameraFitInterval) {
+      return;
+    }
+    _lastCameraFitAt = now;
+
+    final driverPos = _driverPosition;
+    
+    if (driverPos == null) return;
+
+    List<AppLatLng> focusPoints = [driverPos];
+    
+    if (activeTrip.tripStatus == 'ACCEPTED' || activeTrip.tripStatus == 'DRIVER_ARRIVING') {
+      if (activeTrip.pickupLat != null && activeTrip.pickupLng != null) {
+        focusPoints.add(AppLatLng(activeTrip.pickupLat!, activeTrip.pickupLng!));
+      }
+    } else if (activeTrip.tripStatus == 'IN_PROGRESS' || activeTrip.tripStatus == 'ARRIVED') {
+      if (activeTrip.destLat != null && activeTrip.destLng != null) {
+        focusPoints.add(AppLatLng(activeTrip.destLat!, activeTrip.destLng!));
+      }
+    }
+
+    if (focusPoints.length == 1) {
+      _mapController!.animateCamera(AppCameraPosition(target: focusPoints.first, zoom: 16));
+      return;
+    }
+
+    double minLat = focusPoints.first.latitude;
+    double maxLat = focusPoints.first.latitude;
+    double minLng = focusPoints.first.longitude;
+    double maxLng = focusPoints.first.longitude;
+
+    for (final pt in focusPoints) {
+      if (pt.latitude < minLat) minLat = pt.latitude;
+      if (pt.latitude > maxLat) maxLat = pt.latitude;
+      if (pt.longitude < minLng) minLng = pt.longitude;
+      if (pt.longitude > maxLng) maxLng = pt.longitude;
+    }
+    
+    _mapController!.animateCameraToBounds(
+      AppLatLng(minLat, minLng),
+      AppLatLng(maxLat, maxLng),
+      60.0,
+    );
   }
 
   @override
   void dispose() {
+    _provider.removeListener(_onProviderUpdated);
     _stopLocationUpdates();
     super.dispose();
   }
 
   void _startLocationUpdates() {
     _stopLocationUpdates();
+    if (_provider.isDemoMode) return;
     _positionStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 50,
+        distanceFilter: 10,
       ),
     ).listen((Position position) {
       _onLocationChanged(position);
@@ -149,6 +272,102 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
       _driverPosition = newPos;
     });
     context.read<DriverDashboardProvider>().updateLocation(position.latitude, position.longitude);
+    _refreshArrivalRouteIfNeeded(newPos);
+  }
+
+  Future<void> _refreshArrivalRouteIfNeeded(AppLatLng rawPosition) async {
+    final activeTrip = _provider.activeTrip;
+    if (activeTrip == null || (activeTrip.tripStatus != 'ACCEPTED' && activeTrip.tripStatus != 'DRIVER_ARRIVING')) {
+      return;
+    }
+    if (_arrivalRouteRefreshInProgress) return;
+
+    final now = DateTime.now();
+    if (_lastArrivalRouteRefreshAt != null && now.difference(_lastArrivalRouteRefreshAt!) < _arrivalRouteRefreshInterval) {
+      return;
+    }
+
+    if (_lastArrivalRouteRefreshOrigin != null && 
+        _calculateDirectDistance(_lastArrivalRouteRefreshOrigin!, rawPosition) * 1000 < _arrivalRerouteMinMoveMeters) {
+      return;
+    }
+
+    final snap = _findClosestRouteSnap(rawPosition, _arrivalRoutePoints);
+    final shouldRefresh = _arrivalRoutePoints.length < 2 || snap == null || snap.distanceMeters > _arrivalRerouteThresholdMeters;
+    if (!shouldRefresh) return;
+
+    _arrivalRouteRefreshInProgress = true;
+    _lastArrivalRouteRefreshAt = now;
+    _lastArrivalRouteRefreshOrigin = rawPosition;
+
+    try {
+      if (activeTrip.pickupLat == null || activeTrip.pickupLng == null) return;
+      final route = await _mapApiService.estimateRoute(
+        rawPosition.latitude,
+        rawPosition.longitude,
+        activeTrip.pickupLat!,
+        activeTrip.pickupLng!,
+      );
+      final points = decodePolyline(route.encodedPolyline);
+      if (!mounted || points.length < 2) return;
+
+      setState(() {
+        _arrivalRoutePoints.clear();
+        _arrivalRoutePoints.addAll(points);
+      });
+    } catch (e) {
+      debugPrint('DriverDashboard: Failed to refresh arrival route: $e');
+    } finally {
+      _arrivalRouteRefreshInProgress = false;
+    }
+  }
+
+  double _calculateDirectDistance(AppLatLng start, AppLatLng end) {
+    const double earthRadiusKm = 6371.0;
+    final lat1 = start.latitude * (math.pi / 180);
+    final lon1 = start.longitude * (math.pi / 180);
+    final lat2 = end.latitude * (math.pi / 180);
+    final lon2 = end.longitude * (math.pi / 180);
+
+    final dLat = lat2 - lat1;
+    final dLon = lon2 - lon1;
+
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1) * math.cos(lat2) * math.sin(dLon / 2) * math.sin(dLon / 2);
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+
+    return earthRadiusKm * c;
+  }
+
+  _RouteProgress? _findClosestRouteSnap(AppLatLng target, List<AppLatLng> route) {
+    if (route.length < 2) return null;
+    _RouteProgress? closest;
+    for (int i = 0; i < route.length - 1; i++) {
+      final snap = _projectPointOnSegment(target, route[i], route[i + 1], i);
+      if (closest == null || snap.distanceMeters < closest.distanceMeters) {
+        closest = snap;
+      }
+    }
+    return closest;
+  }
+
+  _RouteProgress _projectPointOnSegment(AppLatLng target, AppLatLng start, AppLatLng end, int segmentIndex) {
+    final metersPerLat = 111320.0;
+    final metersPerLng = 111320.0 * math.cos(target.latitude * math.pi / 180);
+    final ax = (start.longitude - target.longitude) * metersPerLng;
+    final ay = (start.latitude - target.latitude) * metersPerLat;
+    final bx = (end.longitude - target.longitude) * metersPerLng;
+    final by = (end.latitude - target.latitude) * metersPerLat;
+    final abx = bx - ax;
+    final aby = by - ay;
+    final abLengthSquared = abx * abx + aby * aby;
+    final fraction = abLengthSquared == 0 ? 0.0 : ((-ax * abx - ay * aby) / abLengthSquared).clamp(0, 1).toDouble();
+    final point = AppLatLng(
+      start.latitude + (end.latitude - start.latitude) * fraction,
+      start.longitude + (end.longitude - start.longitude) * fraction,
+    );
+    final distanceMeters = _calculateDirectDistance(target, point) * 1000;
+    return _RouteProgress(point: point, segmentIndex: segmentIndex, progress: segmentIndex + fraction, distanceMeters: distanceMeters);
   }
 
   double _calculateHeading(AppLatLng start, AppLatLng end) {
@@ -215,16 +434,10 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                 trackingState: isArriving ? LiveTripTrackingState.arriving : LiveTripTrackingState.inProgress,
                 pickup: pickup,
                 destination: destination,
-                arrivalRoutePoints: activeTrip.arrivalPolyline != null 
-                    ? decodePolyline(activeTrip.arrivalPolyline!) 
-                    : const [],
-                tripRoutePoints: activeTrip.encodedPolyline != null
-                    ? decodePolyline(activeTrip.encodedPolyline!)
-                    : const [],
-                driverPosition: provider.demoLat != null && provider.demoLng != null
-                    ? AppLatLng(provider.demoLat!, provider.demoLng!)
-                    : _driverPosition,
-                driverHeading: provider.demoLat != null ? provider.demoHeading : _driverHeading,
+                arrivalRoutePoints: _arrivalRoutePoints,
+                tripRoutePoints: _tripRoutePoints,
+                driverPosition: _driverPosition,
+                driverHeading: _driverHeading,
                 padding: const EdgeInsets.only(top: 80, bottom: 320, left: 16, right: 16),
                 onMapCreated: (controller) {
                   _mapController = controller;
@@ -233,8 +446,8 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
               );
             }
 
-            final lat = provider.demoLat ?? 16.0544; // Default to Da Nang
-            final lng = provider.demoLng ?? 108.2022;
+            final lat = _driverPosition?.latitude ?? 16.0544; // Default to Da Nang
+            final lng = _driverPosition?.longitude ?? 108.2022;
 
             return MapRendererWidget(
               initialCameraPosition: AppCameraPosition(
@@ -246,12 +459,12 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                 _goToCurrentLocation();
               },
               myLocationButtonEnabled: false,
-              markers: provider.demoLat != null && provider.demoLng != null ? {
+              markers: _driverPosition != null ? {
                 AppMarker(
                   id: 'demo_driver',
-                  position: AppLatLng(provider.demoLat!, provider.demoLng!),
+                  position: _driverPosition!,
                   markerType: AppMarkerType.driver,
-                  rotation: provider.demoHeading,
+                  rotation: _driverHeading,
                 )
               } : {},
             );
@@ -267,10 +480,35 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
               children: [
                 _CircleIconButton(icon: Icons.menu, onPressed: () {}),
                 _IncomeHeader(),
-                _CircleIconButton(
-                  icon: Icons.notifications_none_rounded,
-                  hasBadge: true,
-                  onPressed: () {},
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (const bool.fromEnvironment('dart.vm.product') == false)
+                      Consumer<DriverDashboardProvider>(
+                        builder: (context, provider, _) => IconButton(
+                          icon: Icon(
+                            provider.isDemoMode ? Icons.bug_report : Icons.bug_report_outlined,
+                            color: provider.isDemoMode ? Colors.red : Colors.grey,
+                          ),
+                          onPressed: () {
+                            provider.toggleDemoMode();
+                            if (provider.isDemoMode) {
+                              _stopLocationUpdates();
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã bật mô phỏng GPS (Backend)')));
+                            } else {
+                              _startLocationUpdates();
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã tắt mô phỏng GPS, dùng GPS thật')));
+                            }
+                          },
+                          tooltip: 'Demo GPS Mode',
+                        ),
+                      ),
+                    _CircleIconButton(
+                      icon: Icons.notifications_none_rounded,
+                      hasBadge: true,
+                      onPressed: () {},
+                    ),
+                  ],
                 ),
               ],
             ),

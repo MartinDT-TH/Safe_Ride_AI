@@ -22,6 +22,10 @@ List<AppLatLng> decodePolyline(String encoded) {
     points.add(AppLatLng(latitude / 1e5, longitude / 1e5));
   }
 
+  if (points.isNotEmpty && points.first.latitude.abs() > 90) {
+    return points.map((p) => AppLatLng(p.longitude, p.latitude)).toList();
+  }
+
   return points;
 }
 
