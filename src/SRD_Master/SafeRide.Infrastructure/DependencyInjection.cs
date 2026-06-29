@@ -117,6 +117,10 @@ public static class DependencyInjection
             .AddOptions<SimulatorOptions>()
             .Bind(configuration.GetSection(SimulatorOptions.SectionName))
             .Validate(options => options.MockDriverTtlRefreshSeconds > 0, "SimulatorOptions:MockDriverTtlRefreshSeconds must be greater than zero.")
+            .Validate(options => options.MockBookingIntervalSeconds > 0, "SimulatorOptions:MockBookingIntervalSeconds must be greater than zero.")
+            .Validate(options => options.MaxConcurrentMockBookings >= 0, "SimulatorOptions:MaxConcurrentMockBookings must be >= 0.")
+            .Validate(options => options.MockBookingBaseLat >= -90 && options.MockBookingBaseLat <= 90, "SimulatorOptions:MockBookingBaseLat must be between -90 and 90.")
+            .Validate(options => options.MockBookingBaseLng >= -180 && options.MockBookingBaseLng <= 180, "SimulatorOptions:MockBookingBaseLng must be between -180 and 180.")
             .ValidateOnStart();
 
         // ── Hangfire ───────────────────────────────────────────────────────────────
