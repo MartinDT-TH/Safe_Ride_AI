@@ -15,7 +15,7 @@ class RouteEstimateResult {
     return RouteEstimateResult(
       distanceKm: (json['distanceKm'] as num).toDouble(),
       durationMinutes: json['durationMinutes'] as int,
-      encodedPolyline: json['encodedPolyline'] as String,
+      encodedPolyline: json['encodedPolyline'] as String? ?? '',
     );
   }
 }
