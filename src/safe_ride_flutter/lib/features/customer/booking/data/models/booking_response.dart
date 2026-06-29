@@ -371,6 +371,8 @@ class BookingDriverOffer {
     required this.expiresAt,
     this.driverAvatarUrl,
     this.offerStatus,
+    this.driverLatitude,
+    this.driverLongitude,
     this.customerConfirmRemainingSeconds,
   });
 
@@ -384,6 +386,8 @@ class BookingDriverOffer {
   final String licenseClass;
   final DateTime? expiresAt;
   final String? offerStatus;
+  final double? driverLatitude;
+  final double? driverLongitude;
   final int? customerConfirmRemainingSeconds;
 
   factory BookingDriverOffer.fromJson(Map<String, dynamic> json) {
@@ -401,6 +405,8 @@ class BookingDriverOffer {
           ? null
           : DateTime.tryParse(_value(json, ApiKeys.expiresAt).toString()),
       offerStatus: _normalizeOfferStatus(_value(json, ApiKeys.offerStatus)),
+      driverLatitude: (_value(json, ApiKeys.driverLatitude) as num?)?.toDouble(),
+      driverLongitude: (_value(json, ApiKeys.driverLongitude) as num?)?.toDouble(),
       customerConfirmRemainingSeconds:
           (_value(json, ApiKeys.customerConfirmRemainingSeconds) as num?)
               ?.toInt(),

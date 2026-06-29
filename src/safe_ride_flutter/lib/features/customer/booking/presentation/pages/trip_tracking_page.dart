@@ -170,10 +170,16 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       }
     }
 
-    if (_arrivalRoutePoints.isNotEmpty && _driverPosition == null) {
-      _driverPosition = _arrivalRoutePoints.first;
-    } else if (_tripRoutePoints.isNotEmpty && _driverPosition == null) {
-      _driverPosition = _tripRoutePoints.first;
+    if (_driverPosition == null) {
+      final driverLat = widget.booking.driverOffer?.driverLatitude;
+      final driverLng = widget.booking.driverOffer?.driverLongitude;
+      if (driverLat != null && driverLng != null) {
+        _driverPosition = AppLatLng(driverLat, driverLng);
+      } else if (_arrivalRoutePoints.isNotEmpty) {
+        _driverPosition = _arrivalRoutePoints.first;
+      } else if (_tripRoutePoints.isNotEmpty) {
+        _driverPosition = _tripRoutePoints.first;
+      }
     }
   }
 

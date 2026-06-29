@@ -1,9 +1,11 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Realtime;
 using SafeRide.Domain.Enums;
 using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
+using SafeRide.Infrastructure.Simulator;
 using System.Text.Json;
 
 namespace SafeRide.Infrastructure.Services;
@@ -53,6 +55,13 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
                 x.Booking.CustomerId
             })
             .FirstOrDefaultAsync(cancellationToken);
+
+        // If the simulator is enabled for real drivers, it will publish mock coordinates.
+        // We must ignore the real device GPS updates during an active trip to avoid fighting the simulator.
+        if (activeTrip != null && true)
+        {
+            return;
+        }
 
         await CacheDriverLocationAsync(
             driverId,

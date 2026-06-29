@@ -17,7 +17,6 @@ import '../../../home/presentation/providers/home_provider.dart';
 import '../providers/booking_provider.dart';
 import '../widgets/booking_cancel_flow.dart';
 import 'driver_profile_page.dart';
-import 'trip_tracking_page.dart';
 
 class SearchingDriverPage extends StatefulWidget {
   const SearchingDriverPage({

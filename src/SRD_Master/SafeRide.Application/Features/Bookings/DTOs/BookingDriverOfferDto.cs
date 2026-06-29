@@ -13,4 +13,6 @@ public sealed record BookingDriverOfferDto(
     LicenseClass LicenseClass,
     DateTime ExpiresAt,
     DriverOfferStatus OfferStatus,
+    double? DriverLatitude = null,
+    double? DriverLongitude = null,
     int? CustomerConfirmRemainingSeconds = null);

@@ -7,7 +7,6 @@ import '../../data/models/booking_fare_estimate.dart';
 import '../../data/models/booking_location.dart';
 import '../../data/models/booking_response.dart';
 import '../providers/booking_provider.dart';
-import '../widgets/booking_cancel_flow.dart';
 import 'confirm_booking_page.dart';
 import 'driver_reviews_page.dart';
 

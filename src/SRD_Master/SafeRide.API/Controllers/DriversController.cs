@@ -192,6 +192,10 @@ public sealed class DriversController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Driver accepts the offer. This sets the offer status to DriverAccepted but does NOT create a Trip yet.
+    /// The Trip is created only when the customer confirms the accepted driver.
+    /// </summary>
     [Authorize(Roles = "Driver")]
     [HttpPost("offers/{offerId:long}/accept")]
     [HttpPost("/api/driver-offers/{offerId:long}/accept")]
@@ -287,6 +291,8 @@ public sealed class DriversController : ControllerBase
                 driverOffer.LicenseClass,
                 driverOffer.ExpiresAt,
                 driverOffer.OfferStatus,
+                driverOffer.DriverLatitude,
+                driverOffer.DriverLongitude,
                 driverOffer.CustomerConfirmRemainingSeconds);
     }
 }
