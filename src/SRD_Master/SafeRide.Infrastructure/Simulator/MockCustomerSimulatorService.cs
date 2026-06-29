@@ -9,6 +9,7 @@ using SafeRide.Application.Common.Models;
 using SafeRide.Application.Common.Realtime;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
+using SafeRide.Infrastructure.ExternalServices.VietMap;
 using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
 
@@ -25,6 +26,8 @@ public sealed class MockCustomerSimulatorService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<MockCustomerSimulatorService> _logger;
     private readonly IOptionsMonitor<SimulatorOptions> _simulatorOptionsMonitor;
+    private readonly SafeRide.Infrastructure.Redis.IRedisService _redisService;
+ 
 
     // Use a hash set to track trips we are currently simulating so we don't simulate multiple times
     private readonly HashSet<long> _simulatingTrips = new();
@@ -32,11 +35,13 @@ public sealed class MockCustomerSimulatorService : BackgroundService
     public MockCustomerSimulatorService(
         IServiceScopeFactory scopeFactory,
         ILogger<MockCustomerSimulatorService> logger,
-        IOptionsMonitor<SimulatorOptions> simulatorOptionsMonitor)
+        IOptionsMonitor<SimulatorOptions> simulatorOptionsMonitor,
+        SafeRide.Infrastructure.Redis.IRedisService redisService)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _simulatorOptionsMonitor = simulatorOptionsMonitor;
+        _redisService = redisService;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -237,6 +242,8 @@ public sealed class MockCustomerSimulatorService : BackgroundService
 
                         if (!string.IsNullOrEmpty(routeEstimate?.EncodedPolyline))
                         {
+                            await redisPolyline(routeEstimate.EncodedPolyline);
+
                             var decodedPath = PolylineUtils.Decode(routeEstimate.EncodedPolyline);
                             if (decodedPath.Count > 0 && Math.Abs(decodedPath[0].Lat) > 90) decodedPath = decodedPath.Select(p => (p.Lng, p.Lat)).ToList();
                             arrivalPath = decodedPath;
@@ -295,6 +302,10 @@ public sealed class MockCustomerSimulatorService : BackgroundService
 
                     var completed = await MoveAlongPathAsync(tripPath, 11.1, currentLoc, driverId, booking, trip, realtimeService, redisService, dateTimeProvider, cancellationToken);
                     if (!completed) return;
+                } 
+                else
+                {
+                    await redisPolyline(booking.RoutePolyline);
                 }
 
                 trip = await dbContext.Trips.AsNoTracking().FirstOrDefaultAsync(t => t.Id == tripId, cancellationToken);
@@ -368,6 +379,7 @@ public sealed class MockCustomerSimulatorService : BackgroundService
             var locationCache = new DriverLocationCache(driverId, point.Lat, point.Lng, dateTimeProvider.UtcNow);
             await redisService.SetAsync(RedisKeys.DriverLocation(driverId), JsonSerializer.Serialize(locationCache), TimeSpan.FromMinutes(5));
 
+
             await realtimeService.PublishDriverLocationUpdatedAsync(new DriverLocationUpdatedEvent(driverId, booking.CustomerId, trip.Id, point.Lat, point.Lng, dateTimeProvider.UtcNow), ct);
 
             var skipDelay = _simulatorOptionsMonitor.CurrentValue.MockDriverSkipMovementDelay;
@@ -381,5 +393,19 @@ public sealed class MockCustomerSimulatorService : BackgroundService
         }
 
         return true;
+    }
+
+    public async Task redisPolyline(string? encodedPolyline)
+    {
+        try
+            {
+                var debugKey = $"debug:polyline:{Guid.NewGuid()}";
+                await _redisService.SetAsync(debugKey, encodedPolyline ?? "", TimeSpan.FromMinutes(15));
+                _logger.LogInformation("Saved polyline to Redis with key {Key}", debugKey);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to cache debug polyline to Redis");
+            }
     }
 }
