@@ -79,12 +79,13 @@ public sealed class MockBookingGeneratorService : BackgroundService
 
         // 1. Check concurrent mock bookings
         var activeMockBookings = await dbContext.Bookings
-            .Where(b => b.BookingStatus == BookingStatus.Searching || b.BookingStatus == BookingStatus.PendingSchedule)
+            .Where(b => (b.BookingStatus == BookingStatus.Searching || b.BookingStatus == BookingStatus.PendingSchedule)
+                        && (b.SpecialRequest != null && b.SpecialRequest.Contains("[SIMULATOR_BOOKING]")))
             .CountAsync(cancellationToken);
 
         if (activeMockBookings >= options.MaxConcurrentMockBookings)
         {
-            _logger.LogDebug("Mock booking generation skipped. Max concurrent bookings ({Max}) reached.", options.MaxConcurrentMockBookings);
+            SimulatorConsoleOutput.Print("[SIM]", "[BOOKING_GEN][SKIP_MAX_CONCURRENT]", new { max = options.MaxConcurrentMockBookings }, options.EnableSimulatorConsoleOutput);
             return;
         }
 
@@ -199,7 +200,7 @@ public sealed class MockBookingGeneratorService : BackgroundService
             DestinationAddress: $"Điểm đến giả lập {Guid.NewGuid().ToString().Substring(0, 4)}",
             DestinationLatitude: destLat,
             DestinationLongitude: destLng,
-            SpecialRequest: "Đây là cuốc xe tự động từ Simulator",
+            SpecialRequest: "[SIMULATOR_BOOKING] Đây là cuốc xe tự động từ Simulator",
             EstimatedHours: null,
             PromotionCode: null
         );
