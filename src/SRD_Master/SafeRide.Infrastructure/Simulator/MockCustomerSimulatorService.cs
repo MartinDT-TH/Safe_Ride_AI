@@ -18,7 +18,7 @@ namespace SafeRide.Infrastructure.Simulator;
 /// <summary>
 /// Background service that automatically confirms driver offers on behalf of customers.
 /// It also acts as an auto-flow trigger for Real Drivers to help demo UI routing flows.
-/// To test the Real Driver UI location flow manually, set RealDriverAutoProgressTrips = false 
+/// To test the Real Driver UI location flow manually, set RealDriverAutoProgressTrips = false
 /// and RealDriverSimulateMovement = false in SimulatorOptions.
 /// </summary>
 public sealed class MockCustomerSimulatorService : BackgroundService
@@ -68,8 +68,10 @@ public sealed class MockCustomerSimulatorService : BackgroundService
                         await ProcessRealDriverOfferAcceptanceAsync(stoppingToken);
                     }
 
-                    // 3. Auto progress trips and movement for real drivers
-                    if (options.RealDriverAutoProgressTrips)
+                    // 3. Auto progress trips and/or movement for real drivers.
+                    // Movement also needs this processor; otherwise RealDriverSimulateMovement=true
+                    // is ignored when RealDriverAutoProgressTrips=false.
+                    if (options.RealDriverAutoProgressTrips || options.RealDriverSimulateMovement)
                     {
                         await ProcessRealDriverTripsAsync(stoppingToken);
                     }
@@ -162,7 +164,10 @@ public sealed class MockCustomerSimulatorService : BackgroundService
 
         var activeTrips = await dbContext.Trips
             .Include(t => t.Booking)
-            .Where(t => t.TripStatus == TripStatus.ACCEPTED || t.TripStatus == TripStatus.ARRIVED || t.TripStatus == TripStatus.IN_PROGRESS)
+            .Where(t => t.TripStatus == TripStatus.ACCEPTED
+                || t.TripStatus == TripStatus.DRIVER_ARRIVING
+                || t.TripStatus == TripStatus.ARRIVED
+                || t.TripStatus == TripStatus.IN_PROGRESS)
             .ToListAsync(cancellationToken);
 
         foreach (var trip in activeTrips)
@@ -219,10 +224,13 @@ public sealed class MockCustomerSimulatorService : BackgroundService
 
             var options = _simulatorOptionsMonitor.CurrentValue;
 
-            // If ACCEPTED -> Move to Pickup -> ARRIVED
-            if (trip.TripStatus == TripStatus.ACCEPTED)
+            // If ACCEPTED/DRIVER_ARRIVING -> Move to Pickup -> ARRIVED
+            if (trip.TripStatus is TripStatus.ACCEPTED or TripStatus.DRIVER_ARRIVING)
             {
-                await tripStatusService.UpdateDriverTripStatusAsync(driverId, trip.Id, TripStatus.DRIVER_ARRIVING, cancellationToken);
+                if (trip.TripStatus == TripStatus.ACCEPTED)
+                {
+                    await tripStatusService.UpdateDriverTripStatusAsync(driverId, trip.Id, TripStatus.DRIVER_ARRIVING, cancellationToken);
+                }
                 
                 if (options.RealDriverSimulateMovement)
                 {
@@ -391,6 +399,17 @@ public sealed class MockCustomerSimulatorService : BackgroundService
             currentDistance += speedMs * (skipDelay ? 10 : (intervalMs / 1000.0));
             checkCounter++;
         }
+
+        var finalPoint = path[^1];
+        await redisService.SetAsync(RedisKeys.DriverOnline(driverId), "1", TimeSpan.FromMinutes(5));
+        await redisService.SetAsync(RedisKeys.DriverStatus(driverId), "Busy", TimeSpan.FromMinutes(5));
+        await redisService.GeoAddAsync(RedisKeys.OnlineDriversGeo, finalPoint.Lng, finalPoint.Lat, driverId.ToString());
+
+        var finalLocationCache = new DriverLocationCache(driverId, finalPoint.Lat, finalPoint.Lng, dateTimeProvider.UtcNow);
+        await redisService.SetAsync(RedisKeys.DriverLocation(driverId), JsonSerializer.Serialize(finalLocationCache), TimeSpan.FromMinutes(5));
+        await realtimeService.PublishDriverLocationUpdatedAsync(
+            new DriverLocationUpdatedEvent(driverId, booking.CustomerId, trip.Id, finalPoint.Lat, finalPoint.Lng, dateTimeProvider.UtcNow),
+            ct);
 
         return true;
     }
