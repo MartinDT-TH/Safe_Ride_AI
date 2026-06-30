@@ -43,6 +43,7 @@ public sealed class TripStatusServiceTests
         Assert.Equal(DriverWorkStatus.Online, driver.WorkStatus);
         Assert.Equal(DriverWorkStatus.Online.ToString(), fixture.Redis.DriverStatusValue);
         Assert.Contains(fixture.TripLiveKey, fixture.Redis.RemovedKeys);
+        Assert.Contains(fixture.DriverActiveTripKey, fixture.Redis.RemovedKeys);
         Assert.Single(fixture.Realtime.TripStatusNotifications);
         Assert.Single(fixture.Realtime.BookingStatusNotifications);
     }
@@ -73,6 +74,7 @@ public sealed class TripStatusServiceTests
         Assert.Equal(DriverWorkStatus.Online, driver.WorkStatus);
         Assert.Equal(DriverWorkStatus.Online.ToString(), fixture.Redis.DriverStatusValue);
         Assert.Contains(fixture.TripLiveKey, fixture.Redis.RemovedKeys);
+        Assert.Contains(fixture.DriverActiveTripKey, fixture.Redis.RemovedKeys);
     }
 
     [Fact]
@@ -131,6 +133,7 @@ public sealed class TripStatusServiceTests
         public long TripId { get; }
         public Promotion Promotion { get; }
         public string TripLiveKey => RedisKeys.TripLive(TripId);
+        public string DriverActiveTripKey => RedisKeys.DriverActiveTrip(DriverId);
 
         public static async Task<TripStatusFixture> CreateAsync(
             TripStatus initialTripStatus)
@@ -313,8 +316,21 @@ public sealed class TripStatusServiceTests
             TimeSpan expiration) =>
             Task.FromResult(true);
 
+        public Task<bool> TryAcquireDistributedLockAsync(
+            string key,
+            string value,
+            TimeSpan expiration) =>
+            Task.FromResult(true);
+
         public Task<string?> GetAsync(string key) =>
             Task.FromResult<string?>(null);
+
+        public Task<IReadOnlyDictionary<string, string?>> GetManyAsync(
+            IReadOnlyCollection<string> keys) =>
+            Task.FromResult<IReadOnlyDictionary<string, string?>>(
+                keys
+                    .Distinct(StringComparer.Ordinal)
+                    .ToDictionary(key => key, _ => (string?)null));
 
         public Task RemoveAsync(string key)
         {

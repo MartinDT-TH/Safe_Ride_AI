@@ -53,10 +53,21 @@ public sealed class AuthRateLimitMiddlewareTests
             return Task.FromResult(_counters[key]);
         }
         public Task<string?> GetAsync(string key) => Task.FromResult<string?>(null);
+        public Task<IReadOnlyDictionary<string, string?>> GetManyAsync(
+            IReadOnlyCollection<string> keys) =>
+            Task.FromResult<IReadOnlyDictionary<string, string?>>(
+                keys
+                    .Distinct(StringComparer.Ordinal)
+                    .ToDictionary(key => key, _ => (string?)null));
         public Task RemoveAsync(string key) => Task.CompletedTask;
         public Task SetAsync(string key, string value, TimeSpan expiration) => Task.CompletedTask;
         public Task<bool> SetIfNotExistsAsync(string key, string value, TimeSpan expiration) =>
             Task.FromResult(true);
+        public Task<bool> TryAcquireDistributedLockAsync(
+            string key,
+            string value,
+            TimeSpan expiration) =>
+            Task.FromResult(false);
         public Task GeoAddAsync(
             string key,
             double longitude,

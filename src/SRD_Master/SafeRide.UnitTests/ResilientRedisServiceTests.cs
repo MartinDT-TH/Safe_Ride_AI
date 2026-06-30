@@ -83,6 +83,34 @@ public sealed class ResilientRedisServiceTests
         Assert.DoesNotContain("driver-1", primaryResults);
     }
 
+    [Fact]
+    public async Task GeoRadiusAsync_PrimaryReturnsEmpty_DoesNotUseStaleFallback()
+    {
+        var primary = new RedisServiceStub();
+        var service = CreateService(primary);
+        await service.GeoAddAsync("geo", 108.0, 16.0, "driver-1");
+        await primary.GeoRemoveAsync("geo", "driver-1");
+
+        var results = await service.GeoRadiusAsync("geo", 108.0, 16.0, 5, 10);
+
+        Assert.Empty(results);
+    }
+
+    [Fact]
+    public async Task TryAcquireDistributedLockAsync_PrimaryUnavailable_FailsClosed()
+    {
+        var primary = new RedisServiceStub { ShouldFail = true };
+        var service = CreateService(primary);
+
+        var acquired = await service.TryAcquireDistributedLockAsync(
+            "lock",
+            "owner",
+            TimeSpan.FromSeconds(30));
+
+        Assert.False(acquired);
+        Assert.Null(await service.GetAsync("lock"));
+    }
+
     private static ResilientRedisService CreateService(
         RedisServiceStub primary)
     {
@@ -118,10 +146,26 @@ public sealed class ResilientRedisServiceTests
             return _storage.SetIfNotExistsAsync(key, value, expiration);
         }
 
+        public Task<bool> TryAcquireDistributedLockAsync(
+            string key,
+            string value,
+            TimeSpan expiration)
+        {
+            BeforeCall();
+            return _storage.TryAcquireDistributedLockAsync(key, value, expiration);
+        }
+
         public Task<string?> GetAsync(string key)
         {
             BeforeCall();
             return _storage.GetAsync(key);
+        }
+
+        public Task<IReadOnlyDictionary<string, string?>> GetManyAsync(
+            IReadOnlyCollection<string> keys)
+        {
+            BeforeCall();
+            return _storage.GetManyAsync(keys);
         }
 
         public Task RemoveAsync(string key)
