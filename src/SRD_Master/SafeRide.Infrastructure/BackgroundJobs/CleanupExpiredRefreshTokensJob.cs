@@ -34,37 +34,45 @@ public sealed class CleanupExpiredRefreshTokensJob
     {
         var retentionDays = Math.Max(0, _options.Value.CleanupRetentionDays);
         var cutoff = _clock.UtcNow.AddDays(-retentionDays);
+        var batchSize = Math.Max(1, _options.Value.CleanupBatchSize);
+        var totalDeleted = 0;
 
-        var expiredTokens = await _dbContext.RefreshTokens
-            .Where(token => token.ExpiresAt <= cutoff)
-            .Select(token => new
+        while (true)
+        {
+            var expiredTokens = await _dbContext.RefreshTokens
+                .Where(token => token.ExpiresAt <= cutoff)
+                .OrderBy(token => token.Id)
+                .Take(batchSize)
+                .ToListAsync(cancellationToken);
+
+            if (expiredTokens.Count == 0)
             {
-                token.Id,
-                token.TokenHash
-            })
-            .ToListAsync(cancellationToken);
+                break;
+            }
 
-        if (expiredTokens.Count == 0)
+            foreach (var token in expiredTokens)
+            {
+                await TryRemoveCacheAsync(token.TokenHash);
+            }
+
+            _dbContext.RefreshTokens.RemoveRange(expiredTokens);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            totalDeleted += expiredTokens.Count;
+
+            if (expiredTokens.Count < batchSize)
+            {
+                break;
+            }
+        }
+
+        if (totalDeleted == 0)
         {
             return;
         }
 
-        foreach (var token in expiredTokens)
-        {
-            await TryRemoveCacheAsync(token.TokenHash);
-        }
-
-        var tokenIds = expiredTokens.Select(token => token.Id).ToList();
-        var tokensToDelete = await _dbContext.RefreshTokens
-            .Where(token => tokenIds.Contains(token.Id))
-            .ToListAsync(cancellationToken);
-
-        _dbContext.RefreshTokens.RemoveRange(tokensToDelete);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
         _logger.LogInformation(
             "Deleted {TokenCount} refresh tokens expired before {CutoffUtc}.",
-            tokensToDelete.Count,
+            totalDeleted,
             cutoff);
     }
 

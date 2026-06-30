@@ -41,19 +41,9 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
         ValidateCoordinate(latitude, longitude);
 
         var utcNow = _dateTimeProvider.UtcNow;
-        var activeTrip = await _dbContext.Trips
-            .AsNoTracking()
-            .Where(x => x.DriverId == driverId
-                && (x.TripStatus == TripStatus.ACCEPTED
-                    || x.TripStatus == TripStatus.DRIVER_ARRIVING
-                    || x.TripStatus == TripStatus.ARRIVED
-                    || x.TripStatus == TripStatus.IN_PROGRESS))
-            .Select(x => new
-            {
-                x.Id,
-                x.Booking.CustomerId
-            })
-            .FirstOrDefaultAsync(cancellationToken);
+        var activeTrip = await GetActiveTripForLocationAsync(
+            driverId,
+            cancellationToken);
 
         // If the simulator is enabled for real drivers, it will publish mock coordinates.
         // We must ignore the real device GPS updates during an active trip to avoid fighting the simulator.
@@ -75,7 +65,7 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
             new DriverLocationUpdatedEvent(
                 driverId,
                 activeTrip?.CustomerId,
-                activeTrip?.Id,
+                activeTrip?.TripId,
                 latitude,
                 longitude,
                 utcNow),
@@ -129,6 +119,11 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
         await _redisService.RemoveAsync(RedisKeys.DriverOnline(driverId));
         await _redisService.RemoveAsync(RedisKeys.DriverStatus(driverId));
         await _redisService.RemoveAsync(RedisKeys.DriverLocation(driverId));
+        if (profile?.WorkStatus != DriverWorkStatus.Busy)
+        {
+            await _redisService.RemoveAsync(RedisKeys.DriverActiveTrip(driverId));
+        }
+        await _redisService.RemoveAsync(RedisKeys.DriverHeartbeatThrottle(driverId));
         await RemoveDriverFromOnlineGeoAsync(driverId, cancellationToken);
     }
 
@@ -182,6 +177,17 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
         DateTime utcNow,
         CancellationToken cancellationToken)
     {
+        var interval = TimeSpan.FromSeconds(
+            _options.CurrentValue.DriverHeartbeatDbUpdateIntervalSeconds);
+        var shouldUpdateHeartbeat = await _redisService.SetIfNotExistsAsync(
+            RedisKeys.DriverHeartbeatThrottle(driverId),
+            utcNow.Ticks.ToString(),
+            interval);
+        if (!shouldUpdateHeartbeat)
+        {
+            return;
+        }
+
         var profile = await _dbContext.DriverProfiles
             .FirstOrDefaultAsync(x => x.DriverId == driverId, cancellationToken);
         if (profile is null)
@@ -189,16 +195,76 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
             return;
         }
 
-        if (profile.LastActiveAt.HasValue
-            && utcNow - profile.LastActiveAt.Value < TimeSpan.FromSeconds(
-                _options.CurrentValue.DriverHeartbeatDbUpdateIntervalSeconds))
-        {
-            return;
-        }
-
         profile.LastActiveAt = utcNow;
         profile.UpdatedAt = utcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<ActiveDriverTripSnapshot?> GetActiveTripForLocationAsync(
+        Guid driverId,
+        CancellationToken cancellationToken)
+    {
+        var cached = await _redisService.GetAsync(RedisKeys.DriverActiveTrip(driverId));
+        if (!string.IsNullOrWhiteSpace(cached))
+        {
+            try
+            {
+                var cache = JsonSerializer.Deserialize<DriverActiveTripCache>(cached);
+                if (cache is not null && IsActiveTripStatus(cache.TripStatus))
+                {
+                    return new ActiveDriverTripSnapshot(
+                        cache.TripId,
+                        cache.BookingId,
+                        cache.CustomerId,
+                        cache.TripStatus,
+                        cache.DriverAssignedAt);
+                }
+            }
+            catch (JsonException)
+            {
+                await _redisService.RemoveAsync(RedisKeys.DriverActiveTrip(driverId));
+            }
+        }
+
+        var activeTrip = await _dbContext.Trips
+            .AsNoTracking()
+            .Where(x => x.DriverId == driverId
+                && (x.TripStatus == TripStatus.ACCEPTED
+                    || x.TripStatus == TripStatus.DRIVER_ARRIVING
+                    || x.TripStatus == TripStatus.ARRIVED
+                    || x.TripStatus == TripStatus.IN_PROGRESS))
+            .Select(x => new ActiveDriverTripSnapshot(
+                x.Id,
+                x.BookingId,
+                x.Booking.CustomerId,
+                x.TripStatus,
+                x.DriverAssignedAt ?? x.CreatedAt))
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (activeTrip is not null)
+        {
+            var cache = new DriverActiveTripCache(
+                activeTrip.TripId,
+                activeTrip.BookingId,
+                driverId,
+                activeTrip.CustomerId,
+                activeTrip.TripStatus,
+                activeTrip.DriverAssignedAt);
+            await _redisService.SetAsync(
+                RedisKeys.DriverActiveTrip(driverId),
+                JsonSerializer.Serialize(cache),
+                TimeSpan.FromMinutes(_options.CurrentValue.DriverOnlineTtlMinutes));
+        }
+
+        return activeTrip;
+    }
+
+    private static bool IsActiveTripStatus(TripStatus status)
+    {
+        return status is TripStatus.ACCEPTED
+            or TripStatus.DRIVER_ARRIVING
+            or TripStatus.ARRIVED
+            or TripStatus.IN_PROGRESS;
     }
 
     private static void ValidateCoordinate(double latitude, double longitude)
@@ -213,4 +279,11 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
                 "Driver location coordinates are invalid.");
         }
     }
+
+    private sealed record ActiveDriverTripSnapshot(
+        long TripId,
+        long BookingId,
+        Guid CustomerId,
+        TripStatus TripStatus,
+        DateTime DriverAssignedAt);
 }

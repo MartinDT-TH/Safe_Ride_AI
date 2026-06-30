@@ -207,6 +207,9 @@ public sealed class BookingRepository : IBookingRepository
                 TripCount = group.Count()
             })
             .FirstOrDefaultAsync(cancellationToken);
+        var driverLocation = await GetDriverLocationAsync(
+            latestOffer.DriverId,
+            cancellationToken);
 
         return new BookingDriverOfferDto(
             latestOffer.Id,
@@ -219,6 +222,8 @@ public sealed class BookingRepository : IBookingRepository
             licenseClass ?? LicenseClass.A1,
             latestOffer.ExpiresAt,
             latestOffer.OfferStatus,
+            driverLocation?.Latitude,
+            driverLocation?.Longitude,
             latestOffer.OfferStatus == DriverOfferStatus.DriverAccepted
                 ? (int?)Math.Max(0, (int)Math.Ceiling((latestOffer.ExpiresAt - DateTime.UtcNow).TotalSeconds))
                 : null);
@@ -685,6 +690,8 @@ public sealed class BookingRepository : IBookingRepository
                     confirmedOffer.DriverId,
                     cancelledAt,
                     cancellationToken);
+                await _redisService.RemoveAsync(
+                    RedisKeys.DriverActiveTrip(confirmedOffer.DriverId));
             }
 
             return true;
@@ -703,6 +710,7 @@ public sealed class BookingRepository : IBookingRepository
 
         await ReleaseDriverAsync(trip.DriverId, cancelledAt, cancellationToken);
         await _redisService.RemoveAsync(RedisKeys.TripLive(trip.Id));
+        await _redisService.RemoveAsync(RedisKeys.DriverActiveTrip(trip.DriverId));
 
         return true;
     }
@@ -733,5 +741,6 @@ public sealed class BookingRepository : IBookingRepository
             RedisKeys.DriverStatus(driverId),
             DriverWorkStatus.Online.ToString(),
             TimeSpan.FromMinutes(_tripTrackingOptions.CurrentValue.DriverStatusTtlMinutes));
+        await _redisService.RemoveAsync(RedisKeys.DriverActiveTrip(driverId));
     }
 }

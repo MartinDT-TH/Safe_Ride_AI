@@ -648,17 +648,29 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         Trip trip,
         Guid customerId)
     {
+        var assignedAt = trip.DriverAssignedAt ?? _dateTimeProvider.UtcNow;
         var cache = new TripLiveCache(
             trip.Id,
             trip.BookingId,
             trip.DriverId,
             customerId,
             trip.TripStatus,
-            trip.DriverAssignedAt ?? _dateTimeProvider.UtcNow);
+            assignedAt);
+        var driverActiveTrip = new DriverActiveTripCache(
+            trip.Id,
+            trip.BookingId,
+            trip.DriverId,
+            customerId,
+            trip.TripStatus,
+            assignedAt);
 
         await _redisService.SetAsync(
             RedisKeys.TripLive(trip.Id),
             JsonSerializer.Serialize(cache),
+            TimeSpan.FromHours(_tripTrackingOptions.CurrentValue.TripLiveTtlHours));
+        await _redisService.SetAsync(
+            RedisKeys.DriverActiveTrip(trip.DriverId),
+            JsonSerializer.Serialize(driverActiveTrip),
             TimeSpan.FromHours(_tripTrackingOptions.CurrentValue.TripLiveTtlHours));
     }
 

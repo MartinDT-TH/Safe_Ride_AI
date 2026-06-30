@@ -50,9 +50,23 @@ public sealed class BookingMatchingService : IBookingMatchingService
         long bookingId,
         CancellationToken cancellationToken)
     {
+        var bookingLockKey = RedisKeys.MatchingBookingLock(bookingId);
+        var bookingLockAcquired = false;
         try
         {
             var utcNow = _dateTimeProvider.UtcNow;
+            bookingLockAcquired = await TryAcquireBookingLockAsync(bookingId);
+            if (!bookingLockAcquired)
+            {
+                _logger.LogInformation(
+                    "Matching skipped for booking {BookingId} because another matching attempt holds the booking lock.",
+                    bookingId);
+                return await GetActiveOfferDtoAsync(
+                    bookingId,
+                    utcNow,
+                    cancellationToken);
+            }
+
             // Flow: load booking and validate it is still searchable before candidate lookup.
             var booking = await _dbContext.Bookings
                 .Include(x => x.Vehicle)
@@ -167,6 +181,7 @@ public sealed class BookingMatchingService : IBookingMatchingService
                     || x.TripStatus == TripStatus.DRIVER_ARRIVING
                     || x.TripStatus == TripStatus.ARRIVED
                     || x.TripStatus == TripStatus.IN_PROGRESS)
+                .Where(x => redisCandidateIds.Contains(x.DriverId))
                 .Select(x => x.DriverId)
                 .Distinct()
                 .ToListAsync(cancellationToken);
@@ -176,6 +191,7 @@ public sealed class BookingMatchingService : IBookingMatchingService
                 .AsNoTracking()
                 .Where(x => x.OfferStatus == DriverOfferStatus.Sent
                     || x.OfferStatus == DriverOfferStatus.DriverAccepted)
+                .Where(x => redisCandidateIds.Contains(x.DriverId))
                 .Select(x => x.DriverId)
                 .Distinct()
                 .ToListAsync(cancellationToken);
@@ -187,6 +203,7 @@ public sealed class BookingMatchingService : IBookingMatchingService
             var previouslyOfferedDriverIds = await _dbContext.BookingDriverOffers
                 .AsNoTracking()
                 .Where(x => x.BookingId == bookingId)
+                .Where(x => redisCandidateIds.Contains(x.DriverId))
                 .Select(x => x.DriverId)
                 .Distinct()
                 .ToListAsync(cancellationToken);
@@ -257,6 +274,15 @@ public sealed class BookingMatchingService : IBookingMatchingService
                 return null;
             }
 
+            var offerBeforeInsert = await GetActiveOfferDtoAsync(
+                bookingId,
+                utcNow,
+                cancellationToken);
+            if (offerBeforeInsert is not null)
+            {
+                return offerBeforeInsert;
+            }
+
             // Flow: create one offer, schedule expiry, cache it, and notify only the matched driver/customer.
             var offer = new BookingDriverOffer
             {
@@ -304,6 +330,13 @@ public sealed class BookingMatchingService : IBookingMatchingService
                 bookingId);
             return null;
         }
+        finally
+        {
+            if (bookingLockAcquired)
+            {
+                await _redisService.RemoveAsync(bookingLockKey);
+            }
+        }
     }
 
     private async Task CacheMatchingBookingAsync(
@@ -345,7 +378,7 @@ public sealed class BookingMatchingService : IBookingMatchingService
             return [];
         }
 
-        var driverIds = new List<Guid>();
+        var candidateDriverIds = new List<Guid>();
         foreach (var member in members)
         {
             if (!Guid.TryParse(member, out var driverId))
@@ -353,12 +386,29 @@ public sealed class BookingMatchingService : IBookingMatchingService
                 continue;
             }
 
-            var online = await _redisService.GetAsync(
-                RedisKeys.DriverOnline(driverId));
-            var status = await _redisService.GetAsync(
-                RedisKeys.DriverStatus(driverId));
-            var location = await _redisService.GetAsync(
-                RedisKeys.DriverLocation(driverId));
+            candidateDriverIds.Add(driverId);
+        }
+
+        if (candidateDriverIds.Count == 0)
+        {
+            return [];
+        }
+
+        var redisKeys = new List<string>(candidateDriverIds.Count * 3);
+        foreach (var driverId in candidateDriverIds)
+        {
+            redisKeys.Add(RedisKeys.DriverOnline(driverId));
+            redisKeys.Add(RedisKeys.DriverStatus(driverId));
+            redisKeys.Add(RedisKeys.DriverLocation(driverId));
+        }
+
+        var values = await _redisService.GetManyAsync(redisKeys);
+        var driverIds = new List<Guid>();
+        foreach (var driverId in candidateDriverIds)
+        {
+            values.TryGetValue(RedisKeys.DriverOnline(driverId), out var online);
+            values.TryGetValue(RedisKeys.DriverStatus(driverId), out var status);
+            values.TryGetValue(RedisKeys.DriverLocation(driverId), out var location);
             if (online is not null
                 && location is not null
                 && string.Equals(
@@ -377,10 +427,24 @@ public sealed class BookingMatchingService : IBookingMatchingService
         Guid driverId,
         long bookingId)
     {
-        return _redisService.SetIfNotExistsAsync(
+        return _redisService.TryAcquireDistributedLockAsync(
             RedisKeys.MatchingDriverLock(driverId),
             bookingId.ToString(),
             TimeSpan.FromSeconds(_matchingPolicyProvider.Current.OfferExpireSeconds));
+    }
+
+    private Task<bool> TryAcquireBookingLockAsync(long bookingId)
+    {
+        var options = _matchingPolicyProvider.Current;
+        var ttlSeconds = Math.Max(
+            options.OfferExpireSeconds,
+            options.MatchingTickSeconds * 2);
+        ttlSeconds = Math.Max(ttlSeconds, 30);
+
+        return _redisService.TryAcquireDistributedLockAsync(
+            RedisKeys.MatchingBookingLock(bookingId),
+            bookingId.ToString(),
+            TimeSpan.FromSeconds(ttlSeconds));
     }
 
     private Task CacheMatchingOfferAsync(BookingDriverOffer offer)

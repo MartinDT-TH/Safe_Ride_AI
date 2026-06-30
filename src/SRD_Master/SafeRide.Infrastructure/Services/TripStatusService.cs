@@ -154,6 +154,7 @@ public sealed class TripStatusService : ITripStatusService
         if (tripStatus is TripStatus.COMPLETED or TripStatus.CANCELLED)
         {
             await _redisService.RemoveAsync(RedisKeys.TripLive(trip.Id));
+            await _redisService.RemoveAsync(RedisKeys.DriverActiveTrip(trip.DriverId));
         }
         else
         {
@@ -187,17 +188,29 @@ public sealed class TripStatusService : ITripStatusService
         Domain.Entities.Trip trip,
         DateTime utcNow)
     {
+        var assignedAt = trip.DriverAssignedAt ?? utcNow;
         var cache = new TripLiveCache(
             trip.Id,
             trip.BookingId,
             trip.DriverId,
             trip.Booking.CustomerId,
             trip.TripStatus,
-            trip.DriverAssignedAt ?? utcNow);
+            assignedAt);
+        var driverActiveTrip = new DriverActiveTripCache(
+            trip.Id,
+            trip.BookingId,
+            trip.DriverId,
+            trip.Booking.CustomerId,
+            trip.TripStatus,
+            assignedAt);
 
         await _redisService.SetAsync(
             RedisKeys.TripLive(trip.Id),
             JsonSerializer.Serialize(cache),
+            TimeSpan.FromHours(_options.CurrentValue.TripLiveTtlHours));
+        await _redisService.SetAsync(
+            RedisKeys.DriverActiveTrip(trip.DriverId),
+            JsonSerializer.Serialize(driverActiveTrip),
             TimeSpan.FromHours(_options.CurrentValue.TripLiveTtlHours));
     }
 
@@ -223,6 +236,7 @@ public sealed class TripStatusService : ITripStatusService
             RedisKeys.DriverStatus(driverId),
             DriverWorkStatus.Online.ToString(),
             TimeSpan.FromMinutes(_options.CurrentValue.DriverStatusTtlMinutes));
+        await _redisService.RemoveAsync(RedisKeys.DriverActiveTrip(driverId));
     }
 
     private static void IncrementPromotionUsage(Domain.Entities.Booking booking)

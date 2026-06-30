@@ -26,6 +26,12 @@ public static class RedisKeys
     public static string DriverStatus(Guid driverId) =>
         $"sr:driver:status:{driverId}";
 
+    public static string DriverActiveTrip(Guid driverId) =>
+        $"sr:driver:active-trip:{driverId}";
+
+    public static string DriverHeartbeatThrottle(Guid driverId) =>
+        $"sr:driver:heartbeat-throttle:{driverId}";
+
     public const string OnlineDriversGeo = "sr:geo:drivers:online";
 
     public static string MatchingBooking(long bookingId) =>
@@ -36,6 +42,9 @@ public static class RedisKeys
 
     public static string MatchingDriverLock(Guid driverId) =>
         $"sr:matching:driver-lock:{driverId}";
+
+    public static string MatchingBookingLock(long bookingId) =>
+        $"sr:matching:booking-lock:{bookingId}";
 
     public static string BookingRadiusExpandedNotified(long bookingId) =>
         $"sr:booking:radius-expanded-notified:{bookingId}";
