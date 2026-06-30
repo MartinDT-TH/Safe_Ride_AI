@@ -114,7 +114,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseMiddleware<ApiExceptionMiddleware>();
-app.UseHttpsRedirection();
+if (!app.Environment.IsProduction())
+{
+    app.UseHttpsRedirection();
+}
 var uploadsPath = Path.Combine(app.Environment.ContentRootPath, "uploads");
 Directory.CreateDirectory(uploadsPath);
 app.UseStaticFiles(new StaticFileOptions
