@@ -1,4 +1,5 @@
 using Hangfire;
+using Microsoft.Extensions.Options;
 using SafeRide.Infrastructure.Authentication;
 using SafeRide.Infrastructure.BackgroundJobs;
 
@@ -15,6 +16,8 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(RefreshTokenCleanupOptions.SectionName))
             .Validate(options => options.CleanupRetentionDays >= 0,
                 "RefreshTokens:CleanupRetentionDays must be zero or greater.")
+            .Validate(options => !string.IsNullOrWhiteSpace(options.CronExpression),
+                "RefreshTokens:CronExpression must be configured.")
             .ValidateOnStart();
 
         return services;
@@ -27,17 +30,23 @@ public static class DependencyInjection
             return app;
         }
 
-        // var recurringJobs = app.Services.GetRequiredService<IRecurringJobManager>();
+        var recurringJobs = app.Services.GetRequiredService<IRecurringJobManager>();
+        var staleDriverLocationOptions = app.Services
+            .GetRequiredService<IOptions<CleanupStaleDriverLocationJobOptions>>()
+            .Value;
+        var refreshTokenCleanupOptions = app.Services
+            .GetRequiredService<IOptions<RefreshTokenCleanupOptions>>()
+            .Value;
 
-        // recurringJobs.AddOrUpdate<CleanupStaleDriverLocationJob>(
-        //     "cleanup-stale-driver-location",
-        //     job => job.ExecuteAsync(CancellationToken.None),
-        //     Cron.Minutely());
+        recurringJobs.AddOrUpdate<CleanupStaleDriverLocationJob>(
+            "cleanup-stale-driver-location",
+            job => job.ExecuteAsync(CancellationToken.None),
+            staleDriverLocationOptions.CronExpression);
 
-        // recurringJobs.AddOrUpdate<CleanupExpiredRefreshTokensJob>(
-        //     "cleanup-expired-refresh-tokens",
-        //     job => job.ExecuteAsync(CancellationToken.None),
-        //     Cron.Daily());
+        recurringJobs.AddOrUpdate<CleanupExpiredRefreshTokensJob>(
+            "cleanup-expired-refresh-tokens",
+            job => job.ExecuteAsync(CancellationToken.None),
+            refreshTokenCleanupOptions.CronExpression);
 
         return app;
     }

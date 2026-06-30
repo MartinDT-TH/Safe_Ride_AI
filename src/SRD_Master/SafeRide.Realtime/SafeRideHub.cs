@@ -22,9 +22,12 @@ public sealed class SafeRideHub : Hub
             await Groups.AddToGroupAsync(
                 Context.ConnectionId,
                 RealtimeGroups.User(userId));
-            await Groups.AddToGroupAsync(
-                Context.ConnectionId,
-                RealtimeGroups.Driver(userId));
+            if (Context.User?.IsInRole("Driver") == true)
+            {
+                await Groups.AddToGroupAsync(
+                    Context.ConnectionId,
+                    RealtimeGroups.Driver(userId));
+            }
         }
 
         await base.OnConnectedAsync();
@@ -58,7 +61,7 @@ public sealed class SafeRideHub : Hub
             RealtimeGroups.Trip(tripId));
     }
 
-    // [Authorize(Roles = "Driver")]
+    [Authorize(Roles = "Driver")]
     public async Task UpdateDriverLocation(double latitude, double longitude)
     {
         ValidateCoordinate(latitude, longitude);
@@ -75,7 +78,7 @@ public sealed class SafeRideHub : Hub
             Context.ConnectionAborted);
     }
 
-    // [Authorize(Roles = "Driver")]
+    [Authorize(Roles = "Driver")]
     public async Task SetDriverOnline(double latitude, double longitude)
     {
         ValidateCoordinate(latitude, longitude);
@@ -92,7 +95,7 @@ public sealed class SafeRideHub : Hub
             Context.ConnectionAborted);
     }
 
-    // [Authorize(Roles = "Driver")]
+    [Authorize(Roles = "Driver")]
     public async Task SetDriverOffline()
     {
         if (!TryGetUserId(out var driverId))
