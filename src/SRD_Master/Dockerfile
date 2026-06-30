@@ -5,13 +5,13 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 USER $APP_UID
 WORKDIR /app
 EXPOSE 8080
-EXPOSE 8081
-
+ENV ASPNETCORE_URLS=http://+:8080
 
 # This stage is used to build the service project
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
+
 COPY ["SafeRide.API/SafeRide.API.csproj", "SafeRide.API/"]
 COPY ["SafeRide.Application/SafeRide.Application.csproj", "SafeRide.Application/"]
 COPY ["SafeRide.Contracts/SafeRide.Contracts.csproj", "SafeRide.Contracts/"]
@@ -19,7 +19,9 @@ COPY ["SafeRide.Domain/SafeRide.Domain.csproj", "SafeRide.Domain/"]
 COPY ["SafeRide.Shared/SafeRide.Shared.csproj", "SafeRide.Shared/"]
 COPY ["SafeRide.Infrastructure/SafeRide.Infrastructure.csproj", "SafeRide.Infrastructure/"]
 COPY ["SafeRide.Realtime/SafeRide.Realtime.csproj", "SafeRide.Realtime/"]
+
 RUN dotnet restore "./SafeRide.API/SafeRide.API.csproj"
+
 COPY . .
 WORKDIR "/src/SafeRide.API"
 RUN dotnet build "./SafeRide.API.csproj" -c $BUILD_CONFIGURATION -o /app/build
