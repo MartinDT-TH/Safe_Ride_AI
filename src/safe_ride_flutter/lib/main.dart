@@ -7,6 +7,7 @@ import 'app.dart';
 
 import 'dependency_injection/injection.dart';
 
+import 'core/services/mobile_config_service.dart';
 import 'features/auth/presentation/providers/auth_provider.dart';
 import 'features/shared/onboarding/presentation/providers/role_provider.dart';
 import 'features/customer/home/presentation/providers/home_provider.dart';
@@ -22,6 +23,7 @@ void main() async {
 
   await initializeDateFormatting('vi_VN', null);
   await setupDependencies();
+  await getIt<MobileConfigService>().load();
 
   runApp(
     MultiProvider(
@@ -38,4 +40,3 @@ void main() async {
     ),
   );
 }
-

@@ -8,6 +8,7 @@ import '../../../../../core/maps/polyline_decoder.dart';
 import '../../../../../core/maps/models/map_models.dart';
 import '../../../../../core/maps/widgets/live_trip_map_widget.dart';
 import '../../../../../core/services/map_api_service.dart';
+import '../../../../../core/services/mobile_config_service.dart';
 import '../../../../../core/services/socket_service.dart';
 import '../../../../../dependency_injection/injection.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
@@ -201,9 +202,10 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         }
 
         final rawPosition = AppLatLng(update.latitude, update.longitude);
-        
+
         if (_driverPosition != null) {
-          final dist = _calculateDirectDistance(_driverPosition!, rawPosition) * 1000;
+          final dist =
+              _calculateDirectDistance(_driverPosition!, rawPosition) * 1000;
           if (dist < 10) return;
         }
 
@@ -245,7 +247,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     } catch (e) {
       debugPrint('Tracking Error: $e');
       if (mounted) {
-        _showMessage('Không thể kết nối theo dõi vị trí tài xế. Đang thử lại...');
+        _showMessage(
+          'Không thể kết nối theo dõi vị trí tài xế. Đang thử lại...',
+        );
         Future.delayed(const Duration(seconds: 3), () {
           if (mounted) _connectTripSocket();
         });
@@ -390,7 +394,10 @@ class _TripTrackingPageState extends State<TripTrackingPage>
           : LiveTripTrackingState.inProgress,
       pickup: AppLatLng(widget.pickup.latitude, widget.pickup.longitude),
       destination: widget.destination != null
-          ? AppLatLng(widget.destination!.latitude, widget.destination!.longitude)
+          ? AppLatLng(
+              widget.destination!.latitude,
+              widget.destination!.longitude,
+            )
           : null,
       arrivalRoutePoints: _arrivalRoutePoints,
       tripRoutePoints: _tripRoutePoints,
@@ -1075,19 +1082,27 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       builder: (context) => const Center(child: ShareTripModal()),
     );
   }
+
   bool _isPollingTripStatus = false;
 
   void _startTripStatusPolling() {
     _tripStatusPollingTimer?.cancel();
-    _tripStatusPollingTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
-      if (_isPollingTripStatus) return;
-      _isPollingTripStatus = true;
-      try {
-        await _refreshTripStatus();
-      } finally {
-        _isPollingTripStatus = false;
-      }
-    });
+    final intervalSeconds = getIt<MobileConfigService>()
+        .config
+        .matching
+        .tripStatusPollIntervalSeconds;
+    _tripStatusPollingTimer = Timer.periodic(
+      Duration(seconds: intervalSeconds),
+      (_) async {
+        if (_isPollingTripStatus) return;
+        _isPollingTripStatus = true;
+        try {
+          await _refreshTripStatus();
+        } finally {
+          _isPollingTripStatus = false;
+        }
+      },
+    );
   }
 
   Future<void> _refreshTripStatus() async {

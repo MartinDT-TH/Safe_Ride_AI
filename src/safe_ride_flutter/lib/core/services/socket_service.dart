@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:signalr_netcore/signalr_client.dart';
 
 import '../constants/app_strings.dart';
+import 'mobile_config_service.dart';
 
 class DriverLocationUpdate {
   const DriverLocationUpdate({
@@ -239,7 +240,8 @@ class BookingUpdate {
       estimatedRemainingSeconds:
           (_value(data, ApiKeys.estimatedRemainingSeconds) as num?)?.toInt(),
       matchingMessage:
-          (_value(data, ApiKeys.matchingMessage) ?? _value(data, ApiKeys.message))
+          (_value(data, ApiKeys.matchingMessage) ??
+                  _value(data, ApiKeys.message))
               ?.toString(),
       driverOffer: driverOfferRaw is Map
           ? Map<String, dynamic>.from(driverOfferRaw)
@@ -250,8 +252,9 @@ class BookingUpdate {
   }
 
   static Object? _value(Map<String, dynamic> data, String key) {
-    final pascalKey =
-        key.isEmpty ? key : '${key[0].toUpperCase()}${key.substring(1)}';
+    final pascalKey = key.isEmpty
+        ? key
+        : '${key[0].toUpperCase()}${key.substring(1)}';
     return data[key] ?? data[pascalKey];
   }
 
@@ -327,6 +330,10 @@ class BookingUpdate {
 }
 
 class SocketService {
+  SocketService({MobileConfigService? mobileConfigService})
+    : _mobileConfigService = mobileConfigService ?? MobileConfigService();
+
+  final MobileConfigService _mobileConfigService;
   HubConnection? _connection;
   String? _accessToken;
   bool _driverLocationListenerAttached = false;
@@ -344,6 +351,8 @@ class SocketService {
 
   bool get isConnected => _connection?.state == HubConnectionState.Connected;
 
+  MobileConfigService get _configService => _mobileConfigService;
+
   Future<void> connect(String accessToken) async {
     if (accessToken.isEmpty) {
       return;
@@ -353,11 +362,11 @@ class SocketService {
 
     if (_connection != null && _accessToken == accessToken) {
       if (currentState == HubConnectionState.Connected) return;
-      if (currentState == HubConnectionState.Connecting || 
+      if (currentState == HubConnectionState.Connecting ||
           currentState == HubConnectionState.Reconnecting) {
         debugPrint('SOCKET: Already connecting/reconnecting, waiting...');
         while (_connection?.state == HubConnectionState.Connecting ||
-               _connection?.state == HubConnectionState.Reconnecting) {
+            _connection?.state == HubConnectionState.Reconnecting) {
           await Future.delayed(const Duration(milliseconds: 100));
         }
         return;
@@ -370,19 +379,18 @@ class SocketService {
     }
 
     _accessToken = accessToken;
-    
+
     final options = HttpConnectionOptions(
       accessTokenFactory: () async => accessToken,
       requestTimeout: 30000,
       skipNegotiation: AppConfig.forceWebSockets,
-      transport: AppConfig.forceWebSockets ? HttpTransportType.WebSockets : null,
+      transport: AppConfig.forceWebSockets
+          ? HttpTransportType.WebSockets
+          : null,
     );
 
     _connection ??= HubConnectionBuilder()
-        .withUrl(
-          _hubUrl,
-          options: options,
-        )
+        .withUrl(_hubUrl, options: options)
         .withAutomaticReconnect()
         .build();
 
@@ -390,7 +398,9 @@ class SocketService {
     _connection!.keepAliveIntervalInMilliseconds = 30000;
 
     _connection!.onreconnected(({connectionId}) {
-      debugPrint('SOCKET: Reconnected ($connectionId). Re-joining groups: Trips=$_activeTripGroups, Bookings=$_activeBookingGroups');
+      debugPrint(
+        'SOCKET: Reconnected ($connectionId). Re-joining groups: Trips=$_activeTripGroups, Bookings=$_activeBookingGroups',
+      );
       _rejoinGroups();
     });
 
@@ -401,7 +411,7 @@ class SocketService {
         debugPrint('SOCKET: Connected successfully');
       } catch (e) {
         debugPrint('SOCKET: Connection failed: $e');
-        _connection = null; 
+        _connection = null;
         rethrow;
       }
     }
@@ -421,14 +431,17 @@ class SocketService {
     }
 
     _driverLocationListenerAttached = true;
-    _connection?.on('DriverLocationUpdated', (arguments) {
-      final update = DriverLocationUpdate.fromSignalRArguments(arguments);
-      if (update != null) {
-        for (final handler in List.of(_driverLocationHandlers.values)) {
-          handler(update);
+    _connection?.on(
+      _configService.config.realtime.events.driverLocationUpdated,
+      (arguments) {
+        final update = DriverLocationUpdate.fromSignalRArguments(arguments);
+        if (update != null) {
+          for (final handler in List.of(_driverLocationHandlers.values)) {
+            handler(update);
+          }
         }
-      }
-    });
+      },
+    );
   }
 
   void removeDriverLocationUpdatedHandler(String key) {
@@ -436,8 +449,9 @@ class SocketService {
   }
 
   void onDriverOfferReceived(void Function(DriverOfferUpdate update) handler) {
-    _connection?.off('ReceiveDriverOffer');
-    _connection?.on('ReceiveDriverOffer', (arguments) {
+    final event = _configService.config.realtime.events.driverOfferReceived;
+    _connection?.off(event);
+    _connection?.on(event, (arguments) {
       final update = DriverOfferUpdate.fromSignalRArguments(arguments);
       if (update != null) {
         handler(update);
@@ -458,10 +472,11 @@ class SocketService {
       }
     }
 
-    _connection?.off('DriverOfferExpired');
-    _connection?.off('DriverOfferCancelled');
-    _connection?.on('DriverOfferExpired', handle);
-    _connection?.on('DriverOfferCancelled', handle);
+    final events = _configService.config.realtime.events;
+    _connection?.off(events.driverOfferExpired);
+    _connection?.off(events.driverOfferCancelled);
+    _connection?.on(events.driverOfferExpired, handle);
+    _connection?.on(events.driverOfferCancelled, handle);
   }
 
   void onTripStatusChanged(
@@ -474,7 +489,9 @@ class SocketService {
     }
 
     _tripStatusListenerAttached = true;
-    _connection?.on('TripStatusChanged', (arguments) {
+    _connection?.on(_configService.config.realtime.events.tripStatusChanged, (
+      arguments,
+    ) {
       final update = TripStatusUpdate.fromSignalRArguments(arguments);
       if (update != null) {
         for (final handler in List.of(_tripStatusHandlers.values)) {
@@ -506,22 +523,7 @@ class SocketService {
     }
 
     _bookingListenerAttached = true;
-    final events = [
-      'BookingSearchingStarted',
-      'BookingSearchRadiusExpanded',
-      'DriverOfferAccepted',
-      'DriverOfferRejected',
-      'DriverOfferExpired',
-      'DriverOfferCancelled',
-      'DriverMatched',
-      'BookingDriverAssigned',
-      'BookingStatusChanged',
-      'TripCreated',
-      'TripStatusChanged',
-      'CustomerConfirmedDriverOffer',
-      'BookingExpired',
-      'BookingCancelled',
-    ];
+    final events = _configService.config.realtime.events.bookingUpdateEvents;
 
     for (final event in events) {
       _connection?.on(event, (arguments) {
@@ -585,7 +587,9 @@ class SocketService {
 
   Future<void> _invokeSafely(String methodName, List<Object> args) async {
     if (_connection?.state != HubConnectionState.Connected) {
-      debugPrint('SOCKET: Cannot invoke $methodName - Not connected (${_connection?.state})');
+      debugPrint(
+        'SOCKET: Cannot invoke $methodName - Not connected (${_connection?.state})',
+      );
       return;
     }
     try {
@@ -611,14 +615,17 @@ class SocketService {
     _activeBookingGroups.clear();
   }
 
-  static String get _hubUrl {
+  String get _hubUrl {
     final apiBase = AppConfig.apiBaseUrl.endsWith('/')
         ? AppConfig.apiBaseUrl.substring(0, AppConfig.apiBaseUrl.length - 1)
         : AppConfig.apiBaseUrl;
     final root = apiBase.endsWith('/api')
         ? apiBase.substring(0, apiBase.length - 4)
         : apiBase;
-    var url = '$root/hubs/saferide';
+    final hubPath = _configService.config.realtime.hubPath.startsWith('/')
+        ? _configService.config.realtime.hubPath
+        : '/${_configService.config.realtime.hubPath}';
+    var url = '$root$hubPath';
     if (AppConfig.forceWebSockets) {
       if (url.startsWith('https://')) {
         url = url.replaceFirst('https://', 'wss://');
