@@ -49,6 +49,7 @@ public sealed class CleanupStaleDriverLocationJob
                         || trip.TripStatus == TripStatus.ARRIVED
                         || trip.TripStatus == TripStatus.IN_PROGRESS)))
             .Select(profile => profile.DriverId)
+            .Take(_options.CurrentValue.BatchSize)
             .ToListAsync(cancellationToken);
 
         int skippedFreshCount = 0;

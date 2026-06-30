@@ -12,25 +12,24 @@ namespace SafeRide.Infrastructure.Services;
 
 public sealed class DriverRealtimeService : IDriverRealtimeService
 {
-    private static readonly TimeSpan DriverLocationTtl = TimeSpan.FromMinutes(60);
-    private static readonly TimeSpan DriverOnlineTtl = TimeSpan.FromMinutes(60);
-    private static readonly TimeSpan DriverHeartbeatDbUpdateInterval = TimeSpan.FromSeconds(60);
-
     private readonly ApplicationDbContext _dbContext;
     private readonly IRedisService _redisService;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IRealtimeNotificationService _realtimeNotificationService;
+    private readonly IOptionsMonitor<DriverRealtimeOptions> _options;
 
     public DriverRealtimeService(
         ApplicationDbContext dbContext,
         IRedisService redisService,
         IDateTimeProvider dateTimeProvider,
-        IRealtimeNotificationService realtimeNotificationService)
+        IRealtimeNotificationService realtimeNotificationService,
+        IOptionsMonitor<DriverRealtimeOptions> options)
     {
         _dbContext = dbContext;
         _redisService = redisService;
         _dateTimeProvider = dateTimeProvider;
         _realtimeNotificationService = realtimeNotificationService;
+        _options = options;
     }
 
     public async Task UpdateDriverLocationAsync(
@@ -150,6 +149,9 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
         DateTime utcNow,
         DriverWorkStatus workStatus)
     {
+        var options = _options.CurrentValue;
+        var driverLocationTtl = TimeSpan.FromMinutes(options.DriverLocationTtlMinutes);
+        var driverOnlineTtl = TimeSpan.FromMinutes(options.DriverOnlineTtlMinutes);
         var cache = new DriverLocationCache(
             driverId,
             latitude,
@@ -159,15 +161,15 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
         await _redisService.SetAsync(
             RedisKeys.DriverLocation(driverId),
             JsonSerializer.Serialize(cache),
-            DriverLocationTtl);
+            driverLocationTtl);
         await _redisService.SetAsync(
             RedisKeys.DriverOnline(driverId),
             "1",
-            DriverOnlineTtl);
+            driverOnlineTtl);
         await _redisService.SetAsync(
             RedisKeys.DriverStatus(driverId),
             workStatus.ToString(),
-            DriverOnlineTtl);
+            driverOnlineTtl);
         await _redisService.GeoAddAsync(
             RedisKeys.OnlineDriversGeo,
             longitude,
@@ -188,7 +190,8 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
         }
 
         if (profile.LastActiveAt.HasValue
-            && utcNow - profile.LastActiveAt.Value < DriverHeartbeatDbUpdateInterval)
+            && utcNow - profile.LastActiveAt.Value < TimeSpan.FromSeconds(
+                _options.CurrentValue.DriverHeartbeatDbUpdateIntervalSeconds))
         {
             return;
         }

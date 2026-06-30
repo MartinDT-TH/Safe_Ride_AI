@@ -16,4 +16,6 @@ public sealed class GoogleMapsOptions
     [Required]
     public string GeocodingApiUrl { get; init; }
         = "https://maps.googleapis.com/maps/api/geocode/json";
+
+    public int TimeoutSeconds { get; init; } = 15;
 }

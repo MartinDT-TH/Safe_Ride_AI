@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
 using SafeRide.Application.Features.Bookings.DTOs;
@@ -6,6 +7,7 @@ using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
 using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
+using SafeRide.Infrastructure.Services;
 using System.Text.Json;
 
 namespace SafeRide.Infrastructure.Repositories;
@@ -15,6 +17,7 @@ public sealed class BookingRepository : IBookingRepository
     private readonly ApplicationDbContext _dbContext;
     private readonly IRedisService _redisService;
     private readonly IMatchingPolicyProvider _matchingPolicyProvider;
+    private readonly IOptionsMonitor<TripTrackingOptions> _tripTrackingOptions;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -37,11 +40,13 @@ public sealed class BookingRepository : IBookingRepository
     public BookingRepository(
         ApplicationDbContext dbContext,
         IRedisService redisService,
-        IMatchingPolicyProvider matchingPolicyProvider)
+        IMatchingPolicyProvider matchingPolicyProvider,
+        IOptionsMonitor<TripTrackingOptions> tripTrackingOptions)
     {
         _dbContext = dbContext;
         _redisService = redisService;
         _matchingPolicyProvider = matchingPolicyProvider;
+        _tripTrackingOptions = tripTrackingOptions;
     }
 
     public async Task AddAsync(
@@ -722,11 +727,11 @@ public sealed class BookingRepository : IBookingRepository
         await _redisService.SetAsync(
             RedisKeys.DriverOnline(driverId),
             "1",
-            TimeSpan.FromMinutes(5));
+            TimeSpan.FromMinutes(_tripTrackingOptions.CurrentValue.DriverStatusTtlMinutes));
 
         await _redisService.SetAsync(
             RedisKeys.DriverStatus(driverId),
             DriverWorkStatus.Online.ToString(),
-            TimeSpan.FromMinutes(5));
+            TimeSpan.FromMinutes(_tripTrackingOptions.CurrentValue.DriverStatusTtlMinutes));
     }
 }

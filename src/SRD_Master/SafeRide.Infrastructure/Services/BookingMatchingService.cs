@@ -53,6 +53,7 @@ public sealed class BookingMatchingService : IBookingMatchingService
         try
         {
             var utcNow = _dateTimeProvider.UtcNow;
+            // Flow: load booking and validate it is still searchable before candidate lookup.
             var booking = await _dbContext.Bookings
                 .Include(x => x.Vehicle)
                 .FirstOrDefaultAsync(
@@ -100,6 +101,7 @@ public sealed class BookingMatchingService : IBookingMatchingService
                 return null;
             }
 
+            // Flow: enforce the matching window and cache matching state for client polling/retry jobs.
             var matchingSnapshot = _matchingPolicyProvider.GetSnapshot(booking, utcNow);
             if (matchingSnapshot.ExpiresAt.HasValue
                 && utcNow >= matchingSnapshot.ExpiresAt.Value)
@@ -112,12 +114,14 @@ public sealed class BookingMatchingService : IBookingMatchingService
 
             await CacheMatchingBookingAsync(booking, cancellationToken);
 
+            // Flow: reuse an active offer instead of creating a duplicate for the same booking.
             var existingOffer = await GetActiveOfferDtoAsync(bookingId, utcNow, cancellationToken);
             if (existingOffer is not null)
             {
                 return existingOffer;
             }
 
+            // Flow: seed candidates from Redis GEO, then validate live Redis status and DB license eligibility.
             var redisCandidateIds = await GetRedisCandidateDriverIdsAsync(
                 booking.PickupLocation.X,
                 booking.PickupLocation.Y,
@@ -156,6 +160,7 @@ public sealed class BookingMatchingService : IBookingMatchingService
             var approvedDriverLicenses = await approvedDriverLicensesQuery
                 .ToListAsync(cancellationToken);
 
+            // Flow: build the blocked driver set from active trips, active offers, and drivers already tried.
             var activeDriverIds = await _dbContext.Trips
                 .AsNoTracking()
                 .Where(x => x.TripStatus == TripStatus.ACCEPTED
@@ -214,6 +219,7 @@ public sealed class BookingMatchingService : IBookingMatchingService
                 }
             }
 
+            // Flow: acquire a per-driver Redis lock before creating an offer to avoid concurrent assignment attempts.
             Guid eligibleDriverId = Guid.Empty;
             foreach (var driverId in eligibleDriverIds)
             {
@@ -251,6 +257,7 @@ public sealed class BookingMatchingService : IBookingMatchingService
                 return null;
             }
 
+            // Flow: create one offer, schedule expiry, cache it, and notify only the matched driver/customer.
             var offer = new BookingDriverOffer
             {
                 BookingId = bookingId,
@@ -331,7 +338,7 @@ public sealed class BookingMatchingService : IBookingMatchingService
             pickupLongitude,
             pickupLatitude,
             radiusKm,
-            count: 20);
+            count: _matchingPolicyProvider.Current.CandidateLimit);
 
         if (members.Count == 0)
         {
@@ -389,48 +396,6 @@ public sealed class BookingMatchingService : IBookingMatchingService
             RedisKeys.MatchingOffer(offer.BookingId, offer.DriverId),
             JsonSerializer.Serialize(cache),
             offer.ExpiresAt - offer.OfferedAt);
-    }
-
-    private async Task ExpireStaleOffersAsync(
-        DateTime utcNow,
-        CancellationToken cancellationToken)
-    {
-        var staleOffers = await _dbContext.BookingDriverOffers
-            .Include(x => x.Booking)
-            .Where(x => (x.OfferStatus == DriverOfferStatus.Sent
-                    || x.OfferStatus == DriverOfferStatus.DriverAccepted)
-                && x.ExpiresAt <= utcNow)
-            .ToListAsync(cancellationToken);
-
-        var events = new List<DriverOfferExpiredEvent>();
-        foreach (var offer in staleOffers)
-        {
-            offer.OfferStatus = DriverOfferStatus.Expired;
-            offer.ExpiredAt = utcNow;
-            await _redisService.RemoveAsync(
-                RedisKeys.MatchingOffer(offer.BookingId, offer.DriverId));
-            await _redisService.RemoveAsync(
-                RedisKeys.MatchingDriverLock(offer.DriverId));
-            events.Add(new DriverOfferExpiredEvent(
-                    offer.BookingId,
-                    offer.Booking.CustomerId,
-                    offer.DriverId,
-                    offer.Id,
-                    utcNow,
-                    "Yêu cầu nhận chuyến đã hết hạn."));
-        }
-
-        if (staleOffers.Count > 0)
-        {
-            await _dbContext.SaveChangesAsync(cancellationToken);
-        }
-
-        foreach (var notification in events)
-        {
-            await _realtimeNotificationService.PublishDriverOfferExpiredAsync(
-                notification,
-                cancellationToken);
-        }
     }
 
     private async Task<BookingDriverOfferDto?> GetActiveOfferDtoAsync(
@@ -501,11 +466,4 @@ public sealed class BookingMatchingService : IBookingMatchingService
                 : null);
     }
 
-    private static bool IsActiveTripStatus(TripStatus status)
-    {
-        return status is TripStatus.ACCEPTED
-            or TripStatus.DRIVER_ARRIVING
-            or TripStatus.ARRIVED
-            or TripStatus.IN_PROGRESS;
-    }
 }

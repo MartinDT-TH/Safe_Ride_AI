@@ -18,4 +18,6 @@ public sealed class MatchingOptions
 
     public int MatchingTickSeconds { get; set; } = 10;
 
+    public int CandidateLimit { get; set; } = 20;
+
 }

@@ -12,6 +12,10 @@ public sealed class CleanupStaleDriverLocationJobOptions
     public const string SectionName = "BackgroundJobs:CleanupStaleDriverLocation";
 
     public int StaleAfterMinutes { get; set; } = 5;
+
+    public int BatchSize { get; set; } = 500;
+
+    public string CronExpression { get; set; } = Hangfire.Cron.Minutely();
 }
 
 public sealed class BookingLifecycleJobSchedulerOptions

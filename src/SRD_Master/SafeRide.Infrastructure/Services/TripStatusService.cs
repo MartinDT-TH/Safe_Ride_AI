@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Realtime;
 using SafeRide.Application.Features.Bookings;
@@ -15,17 +16,20 @@ public sealed class TripStatusService : ITripStatusService
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IRedisService _redisService;
     private readonly IRealtimeNotificationService _realtimeNotificationService;
+    private readonly IOptionsMonitor<TripTrackingOptions> _options;
 
     public TripStatusService(
         ApplicationDbContext dbContext,
         IDateTimeProvider dateTimeProvider,
         IRedisService redisService,
-        IRealtimeNotificationService realtimeNotificationService)
+        IRealtimeNotificationService realtimeNotificationService,
+        IOptionsMonitor<TripTrackingOptions> options)
     {
         _dbContext = dbContext;
         _dateTimeProvider = dateTimeProvider;
         _redisService = redisService;
         _realtimeNotificationService = realtimeNotificationService;
+        _options = options;
     }
 
     public async Task UpdateDriverTripStatusAsync(
@@ -34,6 +38,7 @@ public sealed class TripStatusService : ITripStatusService
         TripStatus tripStatus,
         CancellationToken cancellationToken)
     {
+        // Flow: load the driver's trip with promotion state so terminal transitions can settle usage.
         var trip = await _dbContext.Trips
             .Include(x => x.Booking)
                 .ThenInclude(x => x.BookingPromotions)
@@ -110,6 +115,7 @@ public sealed class TripStatusService : ITripStatusService
         var previousTripStatus = trip.TripStatus;
         var previousBookingStatus = trip.Booking.BookingStatus;
         trip.TripStatus = tripStatus;
+        // Flow: state machine stamps milestone times; terminal states settle promotion/driver/cache state.
         switch (tripStatus)
         {
             case TripStatus.ARRIVED:
@@ -144,6 +150,7 @@ public sealed class TripStatusService : ITripStatusService
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        // Flow: keep live trip cache only for active trips; terminal trips publish final booking status too.
         if (tripStatus is TripStatus.COMPLETED or TripStatus.CANCELLED)
         {
             await _redisService.RemoveAsync(RedisKeys.TripLive(trip.Id));
@@ -191,7 +198,7 @@ public sealed class TripStatusService : ITripStatusService
         await _redisService.SetAsync(
             RedisKeys.TripLive(trip.Id),
             JsonSerializer.Serialize(cache),
-            TimeSpan.FromHours(12));
+            TimeSpan.FromHours(_options.CurrentValue.TripLiveTtlHours));
     }
 
     private async Task ReleaseDriverAsync(
@@ -211,11 +218,11 @@ public sealed class TripStatusService : ITripStatusService
         await _redisService.SetAsync(
             RedisKeys.DriverOnline(driverId),
             "1",
-            TimeSpan.FromMinutes(5));
+            TimeSpan.FromMinutes(_options.CurrentValue.DriverStatusTtlMinutes));
         await _redisService.SetAsync(
             RedisKeys.DriverStatus(driverId),
             DriverWorkStatus.Online.ToString(),
-            TimeSpan.FromMinutes(5));
+            TimeSpan.FromMinutes(_options.CurrentValue.DriverStatusTtlMinutes));
     }
 
     private static void IncrementPromotionUsage(Domain.Entities.Booking booking)
