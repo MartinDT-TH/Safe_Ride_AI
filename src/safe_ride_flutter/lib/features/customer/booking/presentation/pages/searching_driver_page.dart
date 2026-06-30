@@ -42,10 +42,13 @@ class SearchingDriverPage extends StatefulWidget {
 class _SearchingDriverPageState extends State<SearchingDriverPage> {
   AppMapController? _controller;
   static const _tealColor = Color(0xFF006B70);
+  static const _markerOffsetUpdateMinInterval = Duration(milliseconds: 150);
   Offset? _markerScreenOffset;
   StreamSubscription? _nearbyDriversSubscription;
   StreamSubscription? _bookingStatusSubscription;
   bool _didLeaveSearch = false;
+  bool _markerOffsetUpdateInProgress = false;
+  DateTime? _lastMarkerOffsetUpdateAt;
   final SocketService _socketService = getIt<SocketService>();
   int? _joinedBookingId;
 
@@ -98,7 +101,10 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
     _controller = controller;
     _fitRoute();
     // Delay slightly to ensure map is fully rendered before getting coordinates
-    Future.delayed(const Duration(milliseconds: 300), _updateMarkerOffset);
+    Future.delayed(
+      const Duration(milliseconds: 300),
+      () => _updateMarkerOffset(force: true),
+    );
     _fetchNearbyDrivers();
   }
 
@@ -202,12 +208,24 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
 
     final bookingProvider = context.read<BookingProvider>();
     final homeProvider = context.read<HomeProvider>();
+    final token = context.read<AuthProvider>().token;
+    final detailedBooking = token == null || token.isEmpty
+        ? null
+        : await bookingProvider.refreshSearchingBooking(
+            token,
+            bookingId: booking.bookingId,
+          );
+    if (!mounted) {
+      return;
+    }
+
+    final trackingBooking = detailedBooking ?? booking;
 
     bookingProvider.setActiveBooking(
-      booking: booking,
-      pickup: booking.pickup ?? widget.pickup,
-      destination: booking.destination ?? widget.destination,
-      vehicle: booking.vehicle ?? widget.vehicle,
+      booking: trackingBooking,
+      pickup: trackingBooking.pickup ?? widget.pickup,
+      destination: trackingBooking.destination ?? widget.destination,
+      vehicle: trackingBooking.vehicle ?? widget.vehicle,
     );
 
     // Switch to tracking tab and pop to main screen
@@ -256,8 +274,21 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
     }
   }
 
-  Future<void> _updateMarkerOffset() async {
-    if (_controller == null) return;
+  Future<void> _updateMarkerOffset({bool force = false}) async {
+    if (_controller == null || !mounted || _markerOffsetUpdateInProgress) {
+      return;
+    }
+
+    final now = DateTime.now();
+    final lastUpdateAt = _lastMarkerOffsetUpdateAt;
+    if (!force &&
+        lastUpdateAt != null &&
+        now.difference(lastUpdateAt) < _markerOffsetUpdateMinInterval) {
+      return;
+    }
+
+    _markerOffsetUpdateInProgress = true;
+    _lastMarkerOffsetUpdateAt = now;
     try {
       final pos = AppLatLng(widget.pickup.latitude, widget.pickup.longitude);
       final screenPos = await _controller!.getScreenCoordinate(pos);
@@ -271,6 +302,8 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
       }
     } catch (e) {
       debugPrint('Error updating marker offset: $e');
+    } finally {
+      _markerOffsetUpdateInProgress = false;
     }
   }
 
@@ -353,7 +386,7 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
               onMapCreated: _onMapCreated,
               // Update on every camera move to keep radar attached
               onCameraMove: _updateMarkerOffset,
-              onCameraIdle: _updateMarkerOffset,
+              onCameraIdle: () => _updateMarkerOffset(force: true),
               markers: {
                 AppMarker(
                   id: 'pickup',

@@ -58,11 +58,12 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
   final MapApiService _mapApiService = MapApiService();
   DateTime? _lastArrivalRouteRefreshAt;
   AppLatLng? _lastArrivalRouteRefreshOrigin;
+  int? _renderedRouteTripId;
   bool _arrivalRouteRefreshInProgress = false;
   static const double _arrivalRerouteThresholdMeters = 35;
   static const double _arrivalRerouteMinMoveMeters = 80;
+  static const double _locationUiJitterThresholdMeters = 5;
   static const Duration _arrivalRouteRefreshInterval = Duration(seconds: 12);
-
 
   Future<void> _goToCurrentLocation() async {
     if (_isLocating) return;
@@ -78,10 +79,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
         final lat = _driverPosition?.latitude ?? location.latitude;
         final lng = _driverPosition?.longitude ?? location.longitude;
         await _mapController!.animateCamera(
-          AppCameraPosition(
-            target: AppLatLng(lat, lng),
-            zoom: 16,
-          ),
+          AppCameraPosition(target: AppLatLng(lat, lng), zoom: 16),
         );
       }
     } catch (e) {
@@ -115,30 +113,49 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
       }
       _checkActiveCustomerBooking();
       _provider.addListener(_onProviderUpdated);
+      _onProviderUpdated();
     });
   }
 
   void _onProviderUpdated() {
     if (!mounted) return;
-    
+
     final activeTrip = _provider.activeTrip;
-    
+
     if (activeTrip != null && _positionStream == null) {
       _startLocationUpdates();
     }
-    
+
     if (activeTrip == null) {
-      _arrivalRoutePoints.clear();
-      _tripRoutePoints.clear();
+      if (_arrivalRoutePoints.isNotEmpty ||
+          _tripRoutePoints.isNotEmpty ||
+          _renderedRouteTripId != null) {
+        setState(() {
+          _arrivalRoutePoints.clear();
+          _tripRoutePoints.clear();
+          _renderedRouteTripId = null;
+        });
+      }
       return;
     }
 
-    if (_provider.isDemoMode && _provider.demoLat != null && _provider.demoLng != null) {
+    var shouldRebuildMap = false;
+    if (_renderedRouteTripId != activeTrip.tripId) {
+      _arrivalRoutePoints.clear();
+      _tripRoutePoints.clear();
+      _renderedRouteTripId = activeTrip.tripId;
+      shouldRebuildMap = true;
+    }
+
+    if (_provider.isDemoMode &&
+        _provider.demoLat != null &&
+        _provider.demoLng != null) {
       final newPos = AppLatLng(_provider.demoLat!, _provider.demoLng!);
       if (_driverPosition != null) {
         _driverHeading = _calculateHeading(_driverPosition!, newPos);
       }
       _driverPosition = newPos;
+      shouldRebuildMap = true;
       _refreshArrivalRouteIfNeeded(newPos);
     }
 
@@ -148,6 +165,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
         if (pts.isNotEmpty) {
           _arrivalRoutePoints.clear();
           _arrivalRoutePoints.addAll(pts);
+          shouldRebuildMap = true;
         }
       } catch (_) {}
     }
@@ -158,36 +176,48 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
         if (pts.isNotEmpty) {
           _tripRoutePoints.clear();
           _tripRoutePoints.addAll(pts);
+          shouldRebuildMap = true;
         }
       } catch (_) {}
+    }
+
+    if (shouldRebuildMap) {
+      setState(() {});
     }
 
     if (_mapController == null) return;
 
     final now = DateTime.now();
-    if (_lastCameraFitAt != null && now.difference(_lastCameraFitAt!) < _cameraFitInterval) {
+    if (_lastCameraFitAt != null &&
+        now.difference(_lastCameraFitAt!) < _cameraFitInterval) {
       return;
     }
     _lastCameraFitAt = now;
 
     final driverPos = _driverPosition;
-    
+
     if (driverPos == null) return;
 
     List<AppLatLng> focusPoints = [driverPos];
-    
-    if (activeTrip.tripStatus == 'ACCEPTED' || activeTrip.tripStatus == 'DRIVER_ARRIVING') {
+
+    if (activeTrip.tripStatus == 'ACCEPTED' ||
+        activeTrip.tripStatus == 'DRIVER_ARRIVING') {
       if (activeTrip.pickupLat != null && activeTrip.pickupLng != null) {
-        focusPoints.add(AppLatLng(activeTrip.pickupLat!, activeTrip.pickupLng!));
+        focusPoints.add(
+          AppLatLng(activeTrip.pickupLat!, activeTrip.pickupLng!),
+        );
       }
-    } else if (activeTrip.tripStatus == 'IN_PROGRESS' || activeTrip.tripStatus == 'ARRIVED') {
+    } else if (activeTrip.tripStatus == 'IN_PROGRESS' ||
+        activeTrip.tripStatus == 'ARRIVED') {
       if (activeTrip.destLat != null && activeTrip.destLng != null) {
         focusPoints.add(AppLatLng(activeTrip.destLat!, activeTrip.destLng!));
       }
     }
 
     if (focusPoints.length == 1) {
-      _mapController!.animateCamera(AppCameraPosition(target: focusPoints.first, zoom: 16));
+      _mapController!.animateCamera(
+        AppCameraPosition(target: focusPoints.first, zoom: 16),
+      );
       return;
     }
 
@@ -202,7 +232,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
       if (pt.longitude < minLng) minLng = pt.longitude;
       if (pt.longitude > maxLng) maxLng = pt.longitude;
     }
-    
+
     _mapController!.animateCameraToBounds(
       AppLatLng(minLat, minLng),
       AppLatLng(maxLat, maxLng),
@@ -220,15 +250,20 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
   void _startLocationUpdates() {
     _stopLocationUpdates();
     if (_provider.isDemoMode) return;
-    _positionStream = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-      ),
-    ).listen((Position position) {
-      _onLocationChanged(position);
-    }, onError: (error) {
-      debugPrint('Geolocator stream error: $error');
-    });
+    _positionStream =
+        Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 5,
+          ),
+        ).listen(
+          (Position position) {
+            _onLocationChanged(position);
+          },
+          onError: (error) {
+            debugPrint('Geolocator stream error: $error');
+          },
+        );
   }
 
   Future<void> _publishInitialLocation() async {
@@ -247,12 +282,16 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
 
       final provider = context.read<DriverDashboardProvider>();
       await provider.goOnline(location.latitude, location.longitude);
-      
+
       _startLocationUpdates();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Không thể lấy vị trí hiện tại hoặc không thể online: ${e.toString()}')),
+        SnackBar(
+          content: Text(
+            'Không thể lấy vị trí hiện tại hoặc không thể online: ${e.toString()}',
+          ),
+        ),
       );
       throw e;
     }
@@ -266,12 +305,20 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
   void _onLocationChanged(Position position) {
     if (!mounted) return;
     final newPos = AppLatLng(position.latitude, position.longitude);
-    setState(() {
-      if (_driverPosition != null) {
-        _driverHeading = _calculateHeading(_driverPosition!, newPos);
-      }
-      _driverPosition = newPos;
-    });
+    final currentUiPosition = _driverPosition;
+    final shouldUpdateUi =
+        currentUiPosition == null ||
+        _calculateDirectDistance(currentUiPosition, newPos) * 1000 >=
+            _locationUiJitterThresholdMeters;
+
+    if (shouldUpdateUi) {
+      setState(() {
+        if (currentUiPosition != null) {
+          _driverHeading = _calculateHeading(currentUiPosition, newPos);
+        }
+        _driverPosition = newPos;
+      });
+    }
 
     bool shouldReport = false;
     final now = DateTime.now();
@@ -279,9 +326,10 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     if (_lastReportedPosition == null || _lastReportedTime == null) {
       shouldReport = true;
     } else {
-      final dist = _calculateDirectDistance(_lastReportedPosition!, newPos) * 1000;
+      final dist =
+          _calculateDirectDistance(_lastReportedPosition!, newPos) * 1000;
       final timeDiff = now.difference(_lastReportedTime!).inSeconds;
-      
+
       if (dist >= 10 || timeDiff >= 10) {
         shouldReport = true;
       }
@@ -290,31 +338,45 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     if (shouldReport) {
       _lastReportedPosition = newPos;
       _lastReportedTime = now;
-      context.read<DriverDashboardProvider>().updateLocation(position.latitude, position.longitude);
+      context.read<DriverDashboardProvider>().updateLocation(
+        position.latitude,
+        position.longitude,
+      );
     }
 
-    _refreshArrivalRouteIfNeeded(newPos);
+    if (shouldUpdateUi) {
+      _refreshArrivalRouteIfNeeded(newPos);
+    }
   }
 
   Future<void> _refreshArrivalRouteIfNeeded(AppLatLng rawPosition) async {
     final activeTrip = _provider.activeTrip;
-    if (activeTrip == null || (activeTrip.tripStatus != 'ACCEPTED' && activeTrip.tripStatus != 'DRIVER_ARRIVING')) {
+    if (activeTrip == null ||
+        (activeTrip.tripStatus != 'ACCEPTED' &&
+            activeTrip.tripStatus != 'DRIVER_ARRIVING')) {
       return;
     }
     if (_arrivalRouteRefreshInProgress) return;
 
     final now = DateTime.now();
-    if (_lastArrivalRouteRefreshAt != null && now.difference(_lastArrivalRouteRefreshAt!) < _arrivalRouteRefreshInterval) {
+    if (_lastArrivalRouteRefreshAt != null &&
+        now.difference(_lastArrivalRouteRefreshAt!) <
+            _arrivalRouteRefreshInterval) {
       return;
     }
 
-    if (_lastArrivalRouteRefreshOrigin != null && 
-        _calculateDirectDistance(_lastArrivalRouteRefreshOrigin!, rawPosition) * 1000 < _arrivalRerouteMinMoveMeters) {
+    if (_lastArrivalRouteRefreshOrigin != null &&
+        _calculateDirectDistance(_lastArrivalRouteRefreshOrigin!, rawPosition) *
+                1000 <
+            _arrivalRerouteMinMoveMeters) {
       return;
     }
 
     final snap = _findClosestRouteSnap(rawPosition, _arrivalRoutePoints);
-    final shouldRefresh = _arrivalRoutePoints.length < 2 || snap == null || snap.distanceMeters > _arrivalRerouteThresholdMeters;
+    final shouldRefresh =
+        _arrivalRoutePoints.length < 2 ||
+        snap == null ||
+        snap.distanceMeters > _arrivalRerouteThresholdMeters;
     if (!shouldRefresh) return;
 
     _arrivalRouteRefreshInProgress = true;
@@ -353,14 +415,21 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     final dLat = lat2 - lat1;
     final dLon = lon2 - lon1;
 
-    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(lat1) * math.cos(lat2) * math.sin(dLon / 2) * math.sin(dLon / 2);
+    final a =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1) *
+            math.cos(lat2) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
     final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
 
     return earthRadiusKm * c;
   }
 
-  _RouteProgress? _findClosestRouteSnap(AppLatLng target, List<AppLatLng> route) {
+  _RouteProgress? _findClosestRouteSnap(
+    AppLatLng target,
+    List<AppLatLng> route,
+  ) {
     if (route.length < 2) return null;
     _RouteProgress? closest;
     for (int i = 0; i < route.length - 1; i++) {
@@ -372,7 +441,12 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     return closest;
   }
 
-  _RouteProgress _projectPointOnSegment(AppLatLng target, AppLatLng start, AppLatLng end, int segmentIndex) {
+  _RouteProgress _projectPointOnSegment(
+    AppLatLng target,
+    AppLatLng start,
+    AppLatLng end,
+    int segmentIndex,
+  ) {
     final metersPerLat = 111320.0;
     final metersPerLng = 111320.0 * math.cos(target.latitude * math.pi / 180);
     final ax = (start.longitude - target.longitude) * metersPerLng;
@@ -382,13 +456,20 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     final abx = bx - ax;
     final aby = by - ay;
     final abLengthSquared = abx * abx + aby * aby;
-    final fraction = abLengthSquared == 0 ? 0.0 : ((-ax * abx - ay * aby) / abLengthSquared).clamp(0, 1).toDouble();
+    final fraction = abLengthSquared == 0
+        ? 0.0
+        : ((-ax * abx - ay * aby) / abLengthSquared).clamp(0, 1).toDouble();
     final point = AppLatLng(
       start.latitude + (end.latitude - start.latitude) * fraction,
       start.longitude + (end.longitude - start.longitude) * fraction,
     );
     final distanceMeters = _calculateDirectDistance(target, point) * 1000;
-    return _RouteProgress(point: point, segmentIndex: segmentIndex, progress: segmentIndex + fraction, distanceMeters: distanceMeters);
+    return _RouteProgress(
+      point: point,
+      segmentIndex: segmentIndex,
+      progress: segmentIndex + fraction,
+      distanceMeters: distanceMeters,
+    );
   }
 
   double _calculateHeading(AppLatLng start, AppLatLng end) {
@@ -399,7 +480,8 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
 
     final dLng = endLng - startLng;
     final y = math.sin(dLng) * math.cos(endLat);
-    final x = math.cos(startLat) * math.sin(endLat) -
+    final x =
+        math.cos(startLat) * math.sin(endLat) -
         math.sin(startLat) * math.cos(endLat) * math.cos(dLng);
     final brng = math.atan2(y, x);
     return (brng * 180 / math.pi + 360) % 360;
@@ -408,9 +490,11 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
   void _checkActiveCustomerBooking() {
     final bookingProvider = context.read<BookingProvider>();
     final roleProvider = context.read<RoleProvider>();
-    
+
     if (bookingProvider.activeBooking != null) {
-      debugPrint('DRIVER_DASHBOARD: Active customer booking detected. Forcing switch to customer mode.');
+      debugPrint(
+        'DRIVER_DASHBOARD: Active customer booking detected. Forcing switch to customer mode.',
+      );
       roleProvider.setRole(AppValues.roleCustomer);
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const CustomerHomePage()),
@@ -441,25 +525,40 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     return Stack(
       children: [
         // 1. Map Background
-        Consumer<DriverDashboardProvider>(
-          builder: (context, provider, child) {
-            final activeTrip = provider.activeTrip;
-            if (activeTrip != null && activeTrip.pickupLat != null && activeTrip.pickupLng != null) {
-              final pickup = AppLatLng(activeTrip.pickupLat!, activeTrip.pickupLng!);
-              final destination = activeTrip.destLat != null && activeTrip.destLng != null
+        Selector<DriverDashboardProvider, ActiveDriverTrip?>(
+          selector: (_, provider) => provider.activeTrip,
+          builder: (context, activeTrip, child) {
+            if (activeTrip != null &&
+                activeTrip.pickupLat != null &&
+                activeTrip.pickupLng != null) {
+              final pickup = AppLatLng(
+                activeTrip.pickupLat!,
+                activeTrip.pickupLng!,
+              );
+              final destination =
+                  activeTrip.destLat != null && activeTrip.destLng != null
                   ? AppLatLng(activeTrip.destLat!, activeTrip.destLng!)
                   : null;
-              final isArriving = activeTrip.tripStatus == 'ACCEPTED' || activeTrip.tripStatus == 'DRIVER_ARRIVING';
-              
+              final isArriving =
+                  activeTrip.tripStatus == 'ACCEPTED' ||
+                  activeTrip.tripStatus == 'DRIVER_ARRIVING';
+
               return LiveTripMapWidget(
-                trackingState: isArriving ? LiveTripTrackingState.arriving : LiveTripTrackingState.inProgress,
+                trackingState: isArriving
+                    ? LiveTripTrackingState.arriving
+                    : LiveTripTrackingState.inProgress,
                 pickup: pickup,
                 destination: destination,
                 arrivalRoutePoints: _arrivalRoutePoints,
                 tripRoutePoints: _tripRoutePoints,
                 driverPosition: _driverPosition,
                 driverHeading: _driverHeading,
-                padding: const EdgeInsets.only(top: 80, bottom: 320, left: 16, right: 16),
+                padding: const EdgeInsets.only(
+                  top: 80,
+                  bottom: 320,
+                  left: 16,
+                  right: 16,
+                ),
                 onMapCreated: (controller) {
                   _mapController = controller;
                   _goToCurrentLocation();
@@ -467,7 +566,8 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
               );
             }
 
-            final lat = _driverPosition?.latitude ?? 16.0544; // Default to Da Nang
+            final lat =
+                _driverPosition?.latitude ?? 16.0544; // Default to Da Nang
             final lng = _driverPosition?.longitude ?? 108.2022;
 
             return MapRendererWidget(
@@ -480,14 +580,16 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                 _goToCurrentLocation();
               },
               myLocationButtonEnabled: false,
-              markers: _driverPosition != null ? {
-                AppMarker(
-                  id: 'demo_driver',
-                  position: _driverPosition!,
-                  markerType: AppMarkerType.driver,
-                  rotation: _driverHeading,
-                )
-              } : {},
+              markers: _driverPosition != null
+                  ? {
+                      AppMarker(
+                        id: 'demo_driver',
+                        position: _driverPosition!,
+                        markerType: AppMarkerType.driver,
+                        rotation: _driverHeading,
+                      ),
+                    }
+                  : {},
             );
           },
         ),
@@ -505,20 +607,38 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (const bool.fromEnvironment('dart.vm.product') == false)
-                      Consumer<DriverDashboardProvider>(
-                        builder: (context, provider, _) => IconButton(
+                      Selector<DriverDashboardProvider, bool>(
+                        selector: (_, provider) => provider.isDemoMode,
+                        builder: (context, isDemoMode, _) => IconButton(
                           icon: Icon(
-                            provider.isDemoMode ? Icons.bug_report : Icons.bug_report_outlined,
-                            color: provider.isDemoMode ? Colors.red : Colors.grey,
+                            isDemoMode
+                                ? Icons.bug_report
+                                : Icons.bug_report_outlined,
+                            color: isDemoMode ? Colors.red : Colors.grey,
                           ),
                           onPressed: () {
+                            final nextDemoMode = !isDemoMode;
+                            final provider = context
+                                .read<DriverDashboardProvider>();
                             provider.toggleDemoMode();
-                            if (provider.isDemoMode) {
+                            if (nextDemoMode) {
                               _stopLocationUpdates();
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã bật mô phỏng GPS (Backend)')));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Đã bật mô phỏng GPS (Backend)',
+                                  ),
+                                ),
+                              );
                             } else {
                               _startLocationUpdates();
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã tắt mô phỏng GPS, dùng GPS thật')));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Đã tắt mô phỏng GPS, dùng GPS thật',
+                                  ),
+                                ),
+                              );
                             }
                           },
                           tooltip: 'Demo GPS Mode',
@@ -557,9 +677,29 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
               ),
 
               // Request Card or Online/Offline Toggle
-              Consumer<DriverDashboardProvider>(
-                builder: (context, provider, child) {
-                  if (provider.isLoadingActiveTrip) {
+              Selector<
+                DriverDashboardProvider,
+                ({
+                  ActiveDriverTrip? activeTrip,
+                  TripRequest? currentRequest,
+                  String? errorMessage,
+                  bool hasNewRequest,
+                  bool isLoadingActiveTrip,
+                  bool isResponding,
+                  bool isUpdatingTrip,
+                })
+              >(
+                selector: (_, provider) => (
+                  activeTrip: provider.activeTrip,
+                  currentRequest: provider.currentRequest,
+                  errorMessage: provider.errorMessage,
+                  hasNewRequest: provider.hasNewRequest,
+                  isLoadingActiveTrip: provider.isLoadingActiveTrip,
+                  isResponding: provider.isResponding,
+                  isUpdatingTrip: provider.isUpdatingTrip,
+                ),
+                builder: (context, state, child) {
+                  if (state.isLoadingActiveTrip) {
                     return const Padding(
                       padding: EdgeInsets.only(bottom: 24),
                       child: Center(
@@ -570,30 +710,31 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                     );
                   }
 
-                  if (provider.errorMessage != null &&
-                      provider.activeTrip == null) {
+                  if (state.errorMessage != null && state.activeTrip == null) {
                     return _ErrorLoadingActiveTripCard(
-                      errorMessage: provider.errorMessage!,
-                      onRetry: provider.loadActiveTrip,
+                      errorMessage: state.errorMessage!,
+                      onRetry: context
+                          .read<DriverDashboardProvider>()
+                          .loadActiveTrip,
                     );
                   }
 
-                  if (provider.activeTrip != null) {
+                  if (state.activeTrip != null) {
                     return _ActiveTripCard(
-                      trip: provider.activeTrip!,
-                      isUpdating: provider.isUpdatingTrip,
+                      trip: state.activeTrip!,
+                      isUpdating: state.isUpdatingTrip,
                     );
                   }
-                  if (provider.hasNewRequest &&
-                      provider.currentRequest != null) {
+                  if (state.hasNewRequest && state.currentRequest != null) {
                     return _NewRequestCard(
-                      request: provider.currentRequest!,
-                      isResponding: provider.isResponding,
+                      request: state.currentRequest!,
+                      isResponding: state.isResponding,
                     );
                   }
                   return _StatusToggle(
                     onGoOnline: _publishInitialLocation,
                     onGoOffline: () async {
+                      final provider = context.read<DriverDashboardProvider>();
                       await provider.goOffline();
                       _stopLocationUpdates();
                     },
@@ -692,7 +833,10 @@ class _ActiveTripCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = trip.tripStatus;
-    final canCancel = status == 'ACCEPTED' || status == 'DRIVER_ARRIVING' || status == 'ARRIVED';
+    final canCancel =
+        status == 'ACCEPTED' ||
+        status == 'DRIVER_ARRIVING' ||
+        status == 'ARRIVED';
     final canStartArriving = status == 'ACCEPTED';
     final canMarkArrived = status == 'DRIVER_ARRIVING';
     final canStartTrip = status == 'ARRIVED';
@@ -994,8 +1138,13 @@ class _CircleIconButton extends StatelessWidget {
 class _IncomeHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Consumer<DriverDashboardProvider>(
-      builder: (context, provider, child) {
+    return Selector<
+      DriverDashboardProvider,
+      ({double todayIncome, int todayTrips})
+    >(
+      selector: (_, provider) =>
+          (todayIncome: provider.todayIncome, todayTrips: provider.todayTrips),
+      builder: (context, summary, child) {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           decoration: BoxDecoration(
@@ -1024,7 +1173,7 @@ class _IncomeHeader extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '${provider.todayIncome.toInt().toString().replaceAllMapped(RegExp(r"(\d{3})(?=\d)"), (m) => "${m[1]},")}đ',
+                    '${summary.todayIncome.toInt().toString().replaceAllMapped(RegExp(r"(\d{3})(?=\d)"), (m) => "${m[1]},")}đ',
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -1042,7 +1191,7 @@ class _IncomeHeader extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      '${provider.todayTrips} chuyến',
+                      '${summary.todayTrips} chuyến',
                       style: const TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
@@ -1064,10 +1213,7 @@ class _StatusToggle extends StatefulWidget {
   final Future<void> Function() onGoOnline;
   final Future<void> Function() onGoOffline;
 
-  const _StatusToggle({
-    required this.onGoOnline,
-    required this.onGoOffline,
-  });
+  const _StatusToggle({required this.onGoOnline, required this.onGoOffline});
 
   @override
   State<_StatusToggle> createState() => _StatusToggleState();
@@ -1094,9 +1240,9 @@ class _StatusToggleState extends State<_StatusToggle> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<DriverDashboardProvider>(
-      builder: (context, provider, child) {
-        final isOnline = provider.status == DriverStatus.online;
+    return Selector<DriverDashboardProvider, bool>(
+      selector: (_, provider) => provider.status == DriverStatus.online,
+      builder: (context, isOnline, child) {
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Container(
@@ -1118,7 +1264,9 @@ class _StatusToggleState extends State<_StatusToggle> {
                   children: [
                     Expanded(
                       child: GestureDetector(
-                        onTap: (!isOnline || _isLoading) ? null : () => _handleToggle(isOnline),
+                        onTap: (!isOnline || _isLoading)
+                            ? null
+                            : () => _handleToggle(isOnline),
                         child: Center(
                           child: Text(
                             'Offline',
@@ -1133,7 +1281,9 @@ class _StatusToggleState extends State<_StatusToggle> {
                     ),
                     Expanded(
                       child: GestureDetector(
-                        onTap: (isOnline || _isLoading) ? null : () => _handleToggle(isOnline),
+                        onTap: (isOnline || _isLoading)
+                            ? null
+                            : () => _handleToggle(isOnline),
                         child: Container(
                           margin: const EdgeInsets.all(4),
                           decoration: BoxDecoration(
@@ -1162,7 +1312,9 @@ class _StatusToggleState extends State<_StatusToggle> {
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
-                                    color: isOnline ? Colors.white : Colors.grey,
+                                    color: isOnline
+                                        ? Colors.white
+                                        : Colors.grey,
                                   ),
                                 ),
                               ],
@@ -1175,9 +1327,7 @@ class _StatusToggleState extends State<_StatusToggle> {
                 ),
                 if (_isLoading)
                   const Center(
-                    child: CircularProgressIndicator(
-                      color: Color(0xFF006B70),
-                    ),
+                    child: CircularProgressIndicator(color: Color(0xFF006B70)),
                   ),
               ],
             ),

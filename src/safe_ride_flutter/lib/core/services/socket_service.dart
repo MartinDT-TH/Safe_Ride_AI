@@ -338,16 +338,23 @@ class SocketService {
   String? _accessToken;
   bool _driverLocationListenerAttached = false;
   bool _tripStatusListenerAttached = false;
+  bool _driverOfferReceivedListenerAttached = false;
+  bool _driverOfferClosedListenerAttached = false;
   bool _bookingListenerAttached = false;
   final Map<String, void Function(DriverLocationUpdate update)>
   _driverLocationHandlers = {};
   final Map<String, void Function(TripStatusUpdate update)>
   _tripStatusHandlers = {};
+  final Map<String, void Function(DriverOfferUpdate update)>
+  _driverOfferReceivedHandlers = {};
+  final Map<String, void Function(int offerId)> _driverOfferClosedHandlers = {};
 
   final Map<String, void Function(BookingUpdate update)> _bookingHandlers = {};
 
-  final Set<int> _activeTripGroups = {};
-  final Set<int> _activeBookingGroups = {};
+  final Set<int> _desiredTripGroups = {};
+  final Set<int> _joinedTripGroups = {};
+  final Set<int> _desiredBookingGroups = {};
+  final Set<int> _joinedBookingGroups = {};
 
   bool get isConnected => _connection?.state == HubConnectionState.Connected;
 
@@ -399,7 +406,7 @@ class SocketService {
 
     _connection!.onreconnected(({connectionId}) {
       debugPrint(
-        'SOCKET: Reconnected ($connectionId). Re-joining groups: Trips=$_activeTripGroups, Bookings=$_activeBookingGroups',
+        'SOCKET: Reconnected ($connectionId). Re-joining groups: Trips=$_desiredTripGroups, Bookings=$_desiredBookingGroups',
       );
       _rejoinGroups();
     });
@@ -416,8 +423,26 @@ class SocketService {
       }
     }
 
+    if (_driverLocationHandlers.isNotEmpty &&
+        !_driverLocationListenerAttached) {
+      _attachDriverLocationListener();
+    }
+    if (_tripStatusHandlers.isNotEmpty && !_tripStatusListenerAttached) {
+      _attachTripStatusListener();
+    }
+    if (_driverOfferReceivedHandlers.isNotEmpty &&
+        !_driverOfferReceivedListenerAttached) {
+      _attachDriverOfferReceivedListener();
+    }
+    if (_driverOfferClosedHandlers.isNotEmpty &&
+        !_driverOfferClosedListenerAttached) {
+      _attachDriverOfferClosedListeners();
+    }
     if (_bookingHandlers.isNotEmpty && !_bookingListenerAttached) {
       _attachBookingListeners();
+    }
+    if (_desiredTripGroups.isNotEmpty || _desiredBookingGroups.isNotEmpty) {
+      _rejoinGroups();
     }
   }
 
@@ -426,12 +451,16 @@ class SocketService {
     String key = 'default',
   }) {
     _driverLocationHandlers[key] = handler;
-    if (_driverLocationListenerAttached) {
+    _attachDriverLocationListener();
+  }
+
+  void _attachDriverLocationListener() {
+    if (_connection == null || _driverLocationListenerAttached) {
       return;
     }
 
     _driverLocationListenerAttached = true;
-    _connection?.on(
+    _connection!.on(
       _configService.config.realtime.events.driverLocationUpdated,
       (arguments) {
         final update = DriverLocationUpdate.fromSignalRArguments(arguments);
@@ -448,18 +477,49 @@ class SocketService {
     _driverLocationHandlers.remove(key);
   }
 
-  void onDriverOfferReceived(void Function(DriverOfferUpdate update) handler) {
+  void onDriverOfferReceived(
+    void Function(DriverOfferUpdate update) handler, {
+    String key = 'default',
+  }) {
+    _driverOfferReceivedHandlers[key] = handler;
+    _attachDriverOfferReceivedListener();
+  }
+
+  void _attachDriverOfferReceivedListener() {
+    if (_connection == null || _driverOfferReceivedListenerAttached) {
+      return;
+    }
+
+    _driverOfferReceivedListenerAttached = true;
     final event = _configService.config.realtime.events.driverOfferReceived;
-    _connection?.off(event);
-    _connection?.on(event, (arguments) {
+    _connection!.on(event, (arguments) {
       final update = DriverOfferUpdate.fromSignalRArguments(arguments);
       if (update != null) {
-        handler(update);
+        for (final handler in List.of(_driverOfferReceivedHandlers.values)) {
+          handler(update);
+        }
       }
     });
   }
 
-  void onDriverOfferClosed(void Function(int offerId) handler) {
+  void removeDriverOfferReceivedHandler(String key) {
+    _driverOfferReceivedHandlers.remove(key);
+  }
+
+  void onDriverOfferClosed(
+    void Function(int offerId) handler, {
+    String key = 'default',
+  }) {
+    _driverOfferClosedHandlers[key] = handler;
+    _attachDriverOfferClosedListeners();
+  }
+
+  void _attachDriverOfferClosedListeners() {
+    if (_connection == null || _driverOfferClosedListenerAttached) {
+      return;
+    }
+
+    _driverOfferClosedListenerAttached = true;
     void handle(List<Object?>? arguments) {
       if (arguments == null || arguments.isEmpty || arguments.first is! Map) {
         return;
@@ -468,15 +528,19 @@ class SocketService {
       final data = Map<String, dynamic>.from(arguments.first as Map);
       final offerId = (data[ApiKeys.offerId] ?? data['OfferId']) as num?;
       if (offerId != null) {
-        handler(offerId.toInt());
+        for (final handler in List.of(_driverOfferClosedHandlers.values)) {
+          handler(offerId.toInt());
+        }
       }
     }
 
     final events = _configService.config.realtime.events;
-    _connection?.off(events.driverOfferExpired);
-    _connection?.off(events.driverOfferCancelled);
     _connection?.on(events.driverOfferExpired, handle);
     _connection?.on(events.driverOfferCancelled, handle);
+  }
+
+  void removeDriverOfferClosedHandler(String key) {
+    _driverOfferClosedHandlers.remove(key);
   }
 
   void onTripStatusChanged(
@@ -484,12 +548,16 @@ class SocketService {
     String key = 'default',
   }) {
     _tripStatusHandlers[key] = handler;
-    if (_tripStatusListenerAttached) {
+    _attachTripStatusListener();
+  }
+
+  void _attachTripStatusListener() {
+    if (_connection == null || _tripStatusListenerAttached) {
       return;
     }
 
     _tripStatusListenerAttached = true;
-    _connection?.on(_configService.config.realtime.events.tripStatusChanged, (
+    _connection!.on(_configService.config.realtime.events.tripStatusChanged, (
       arguments,
     ) {
       final update = TripStatusUpdate.fromSignalRArguments(arguments);
@@ -545,22 +613,32 @@ class SocketService {
   }
 
   Future<void> joinTrip(int tripId) async {
-    _activeTripGroups.add(tripId);
-    await _invokeSafely('JoinTrip', [tripId]);
+    final firstRequest = _desiredTripGroups.add(tripId);
+    if (!firstRequest && _joinedTripGroups.contains(tripId)) {
+      return;
+    }
+
+    await _joinTripGroup(tripId);
   }
 
   Future<void> leaveTrip(int tripId) async {
-    _activeTripGroups.remove(tripId);
+    _desiredTripGroups.remove(tripId);
+    _joinedTripGroups.remove(tripId);
     await _invokeSafely('LeaveTrip', [tripId]);
   }
 
   Future<void> joinBooking(int bookingId) async {
-    _activeBookingGroups.add(bookingId);
-    await _invokeSafely('JoinBooking', [bookingId]);
+    final firstRequest = _desiredBookingGroups.add(bookingId);
+    if (!firstRequest && _joinedBookingGroups.contains(bookingId)) {
+      return;
+    }
+
+    await _joinBookingGroup(bookingId);
   }
 
   Future<void> leaveBooking(int bookingId) async {
-    _activeBookingGroups.remove(bookingId);
+    _desiredBookingGroups.remove(bookingId);
+    _joinedBookingGroups.remove(bookingId);
     await _invokeSafely('LeaveBooking', [bookingId]);
   }
 
@@ -577,25 +655,51 @@ class SocketService {
   }
 
   void _rejoinGroups() {
-    for (final tripId in List.of(_activeTripGroups)) {
-      _invokeSafely('JoinTrip', [tripId]);
+    _joinedTripGroups.clear();
+    _joinedBookingGroups.clear();
+    for (final tripId in List.of(_desiredTripGroups)) {
+      _joinTripGroup(tripId, force: true);
     }
-    for (final bookingId in List.of(_activeBookingGroups)) {
-      _invokeSafely('JoinBooking', [bookingId]);
+    for (final bookingId in List.of(_desiredBookingGroups)) {
+      _joinBookingGroup(bookingId, force: true);
     }
   }
 
-  Future<void> _invokeSafely(String methodName, List<Object> args) async {
+  Future<void> _joinTripGroup(int tripId, {bool force = false}) async {
+    if (!force && _joinedTripGroups.contains(tripId)) {
+      return;
+    }
+
+    final joined = await _invokeSafely('JoinTrip', [tripId]);
+    if (joined && _desiredTripGroups.contains(tripId)) {
+      _joinedTripGroups.add(tripId);
+    }
+  }
+
+  Future<void> _joinBookingGroup(int bookingId, {bool force = false}) async {
+    if (!force && _joinedBookingGroups.contains(bookingId)) {
+      return;
+    }
+
+    final joined = await _invokeSafely('JoinBooking', [bookingId]);
+    if (joined && _desiredBookingGroups.contains(bookingId)) {
+      _joinedBookingGroups.add(bookingId);
+    }
+  }
+
+  Future<bool> _invokeSafely(String methodName, List<Object> args) async {
     if (_connection?.state != HubConnectionState.Connected) {
       debugPrint(
         'SOCKET: Cannot invoke $methodName - Not connected (${_connection?.state})',
       );
-      return;
+      return false;
     }
     try {
       await _connection?.invoke(methodName, args: args);
+      return true;
     } catch (e) {
       debugPrint('SOCKET: Invoke $methodName failed: $e');
+      return false;
     }
   }
 
@@ -607,12 +711,18 @@ class SocketService {
     _accessToken = null;
     _driverLocationListenerAttached = false;
     _tripStatusListenerAttached = false;
+    _driverOfferReceivedListenerAttached = false;
+    _driverOfferClosedListenerAttached = false;
     _bookingListenerAttached = false;
     _driverLocationHandlers.clear();
     _tripStatusHandlers.clear();
+    _driverOfferReceivedHandlers.clear();
+    _driverOfferClosedHandlers.clear();
     _bookingHandlers.clear();
-    _activeTripGroups.clear();
-    _activeBookingGroups.clear();
+    _desiredTripGroups.clear();
+    _joinedTripGroups.clear();
+    _desiredBookingGroups.clear();
+    _joinedBookingGroups.clear();
   }
 
   String get _hubUrl {

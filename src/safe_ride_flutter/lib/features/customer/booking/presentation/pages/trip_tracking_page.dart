@@ -58,7 +58,10 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   DateTime? _lastArrivalRouteRefreshAt;
   AppLatLng? _lastArrivalRouteRefreshOrigin;
   int? _joinedTripId;
+  bool _tripSocketConnecting = false;
+  Timer? _tripSocketRetryTimer;
   Timer? _tripStatusPollingTimer;
+  bool _trackingSnapshotRefreshInProgress = false;
   bool _summaryOpened = false;
   bool _isCompletingTrip = false;
   bool _arrivalRouteRefreshInProgress = false;
@@ -93,6 +96,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       if (!mounted) return;
       _openSummaryIfCompleted(widget.booking.tripStatus);
       unawaited(_connectTripSocket());
+      unawaited(_refreshTrackingSnapshot());
       _startTripStatusPolling();
     });
   }
@@ -110,6 +114,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
 
     if (oldWidget.booking.tripId == null && widget.booking.tripId != null) {
       unawaited(_connectTripSocket());
+      unawaited(_refreshTrackingSnapshot());
     }
 
     if ((_arrivalRoutePoints.isEmpty &&
@@ -122,6 +127,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
 
   @override
   void dispose() {
+    _tripSocketRetryTimer?.cancel();
     _tripStatusPollingTimer?.cancel();
     _pulseController.dispose();
     final joinedTripId = _joinedTripId;
@@ -145,8 +151,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     }
   }
 
-  void _initializeRoutes() {
-    final arrivalPolyline = widget.booking.arrivalPolyline;
+  void _initializeRoutes([BookingResponse? source]) {
+    final booking = source ?? widget.booking;
+    final arrivalPolyline = booking.arrivalPolyline;
     if (arrivalPolyline != null && arrivalPolyline.isNotEmpty) {
       try {
         final points = decodePolyline(arrivalPolyline);
@@ -159,9 +166,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       }
     }
 
-    if (widget.booking.encodedPolyline.isNotEmpty) {
+    if (booking.encodedPolyline.isNotEmpty) {
       try {
-        final points = decodePolyline(widget.booking.encodedPolyline);
+        final points = decodePolyline(booking.encodedPolyline);
         if (points.isNotEmpty) {
           _tripRoutePoints.clear();
           _tripRoutePoints.addAll(points);
@@ -172,8 +179,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     }
 
     if (_driverPosition == null) {
-      final driverLat = widget.booking.driverOffer?.driverLatitude;
-      final driverLng = widget.booking.driverOffer?.driverLongitude;
+      final driverLat = booking.driverOffer?.driverLatitude;
+      final driverLng = booking.driverOffer?.driverLongitude;
       if (driverLat != null && driverLng != null) {
         _driverPosition = AppLatLng(driverLat, driverLng);
       } else if (_arrivalRoutePoints.isNotEmpty) {
@@ -184,13 +191,50 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     }
   }
 
+  Future<void> _refreshTrackingSnapshot() async {
+    if (!mounted || _trackingSnapshotRefreshInProgress) {
+      return;
+    }
+
+    final accessToken = context.read<AuthProvider>().token;
+    if (accessToken == null || accessToken.isEmpty) {
+      return;
+    }
+
+    _trackingSnapshotRefreshInProgress = true;
+    try {
+      final booking = await context
+          .read<BookingProvider>()
+          .refreshActiveBookingDetails(
+            accessToken,
+            bookingId: widget.booking.bookingId,
+          );
+      if (!mounted || booking == null) {
+        return;
+      }
+
+      setState(() {
+        _currentTripStatus = booking.tripStatus ?? _currentTripStatus;
+        _initializeRoutes(booking);
+      });
+      _openSummaryIfCompleted(booking.tripStatus);
+      _fitMapToVisibleRoute();
+    } finally {
+      _trackingSnapshotRefreshInProgress = false;
+    }
+  }
+
   Future<void> _connectTripSocket() async {
     final tripId = widget.booking.tripId;
     final accessToken = context.read<AuthProvider>().token;
     if (tripId == null || accessToken == null || accessToken.isEmpty) {
       return;
     }
+    if (_joinedTripId == tripId || _tripSocketConnecting) {
+      return;
+    }
 
+    _tripSocketConnecting = true;
     try {
       await _socketService.connect(accessToken);
       if (!mounted) return;
@@ -244,16 +288,23 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       await _socketService.joinTrip(tripId);
       debugPrint('Tracking: Joined Trip Group $tripId');
       _joinedTripId = tripId;
+      _tripSocketRetryTimer?.cancel();
+      _tripSocketRetryTimer = null;
     } catch (e) {
       debugPrint('Tracking Error: $e');
       if (mounted) {
         _showMessage(
           'Không thể kết nối theo dõi vị trí tài xế. Đang thử lại...',
         );
-        Future.delayed(const Duration(seconds: 3), () {
-          if (mounted) _connectTripSocket();
+        _tripSocketRetryTimer?.cancel();
+        _tripSocketRetryTimer = Timer(const Duration(seconds: 3), () {
+          if (mounted) {
+            unawaited(_connectTripSocket());
+          }
         });
       }
+    } finally {
+      _tripSocketConnecting = false;
     }
   }
 

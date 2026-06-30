@@ -46,6 +46,8 @@ class DriverDashboardProvider extends ChangeNotifier {
 
   ActiveDriverTrip? _activeTrip;
   ActiveDriverTrip? get activeTrip => _activeTrip;
+  final Map<int, Future<bool>> _activeTripDetailsFetches = {};
+  final Set<int> _activeTripDetailsLoaded = {};
 
   void toggleDemoMode() {
     _isDemoMode = !_isDemoMode;
@@ -64,7 +66,7 @@ class DriverDashboardProvider extends ChangeNotifier {
     }
     notifyListeners();
   }
-  
+
   double? _demoLat;
   double? _demoLng;
   double? get demoLat => _demoLat;
@@ -76,28 +78,22 @@ class DriverDashboardProvider extends ChangeNotifier {
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
 
-
-
   Future<void> initializeRealtime(String accessToken) async {
     if (accessToken.isEmpty) {
       return;
     }
 
-    if (_accessToken == accessToken) {
-      _socketService.onBookingUpdated(
-        _handleBookingUpdate,
-        key: 'driverDashboardBooking',
-      );
-      try {
-        await loadActiveTrip();
-      } catch (error) {
-        debugPrint('DRIVER_DASHBOARD: reload active trip failed: $error');
-      }
-      return;
-    }
-
     _accessToken = accessToken;
     await _socketService.connect(accessToken);
+    _registerRealtimeHandlers();
+    try {
+      await loadActiveTrip();
+    } catch (error) {
+      debugPrint('DRIVER_DASHBOARD: load active trip failed: $error');
+    }
+  }
+
+  void _registerRealtimeHandlers() {
     _socketService.onDriverOfferReceived((offer) {
       _currentRequest = TripRequest(
         offerId: offer.offerId,
@@ -110,39 +106,40 @@ class DriverDashboardProvider extends ChangeNotifier {
       );
       _hasNewRequest = true;
       notifyListeners();
-    });
+    }, key: 'driverDashboardOfferReceived');
     _socketService.onDriverOfferClosed((offerId) {
       if (_currentRequest?.offerId == offerId) {
         _hasNewRequest = false;
         _currentRequest = null;
         notifyListeners();
       }
-    });
+    }, key: 'driverDashboardOfferClosed');
     _socketService.onTripStatusChanged((update) {
       if (update.tripStatus == 'COMPLETED' ||
           update.tripStatus == 'CANCELLED') {
         if (_activeTrip?.tripId == update.tripId) {
-          _activeTrip = null;
+          _clearActiveTrip();
           notifyListeners();
         }
         return;
       }
 
       final oldTrip = _activeTrip;
+      final sameTrip = oldTrip?.tripId == update.tripId;
       _activeTrip = ActiveDriverTrip(
         bookingId: update.bookingId,
         tripId: update.tripId,
         tripStatus: update.tripStatus,
-        pickupLat: oldTrip?.pickupLat,
-        pickupLng: oldTrip?.pickupLng,
-        destLat: oldTrip?.destLat,
-        destLng: oldTrip?.destLng,
-        encodedPolyline: oldTrip?.encodedPolyline,
-        arrivalPolyline: oldTrip?.arrivalPolyline,
+        pickupLat: sameTrip ? oldTrip?.pickupLat : null,
+        pickupLng: sameTrip ? oldTrip?.pickupLng : null,
+        destLat: sameTrip ? oldTrip?.destLat : null,
+        destLng: sameTrip ? oldTrip?.destLng : null,
+        encodedPolyline: sameTrip ? oldTrip?.encodedPolyline : null,
+        arrivalPolyline: sameTrip ? oldTrip?.arrivalPolyline : null,
       );
       notifyListeners();
       _socketService.joinTrip(update.tripId);
-      if (oldTrip?.encodedPolyline == null) {
+      if (!_hasActiveTripDetails(update.tripId)) {
         _fetchActiveTripDetails(update.bookingId, update.tripId);
       }
     }, key: 'driverDashboard');
@@ -151,11 +148,6 @@ class DriverDashboardProvider extends ChangeNotifier {
       _handleBookingUpdate,
       key: 'driverDashboardBooking',
     );
-    try {
-      await loadActiveTrip();
-    } catch (error) {
-      debugPrint('DRIVER_DASHBOARD: load active trip failed: $error');
-    }
   }
 
   Future<void> goOnline(double lat, double lng) async {
@@ -165,15 +157,15 @@ class DriverDashboardProvider extends ChangeNotifier {
       await _dio.post(
         ApiEndpoints.driverOnline,
         data: {ApiKeys.latitude: lat, ApiKeys.longitude: lng},
-        options: Options(headers: {ApiKeys.authorization: AuthHeader.bearer(token)}),
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+        ),
       );
       _status = DriverStatus.online;
       _errorMessage = null;
-      
-      if (!_socketService.isConnected) {
-        await initializeRealtime(token);
-      }
-      
+
+      await initializeRealtime(token);
+
       notifyListeners();
     } catch (e) {
       debugPrint('Failed to go online: $e');
@@ -189,7 +181,9 @@ class DriverDashboardProvider extends ChangeNotifier {
     try {
       await _dio.post(
         ApiEndpoints.driverOffline,
-        options: Options(headers: {ApiKeys.authorization: AuthHeader.bearer(token)}),
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+        ),
       );
     } catch (e) {
       debugPrint('Failed to go offline: $e');
@@ -200,10 +194,16 @@ class DriverDashboardProvider extends ChangeNotifier {
       _socketService.removeTripStatusChangedHandler('driverDashboard');
       _socketService.removeDriverLocationUpdatedHandler('driverDashboardDemo');
       _socketService.removeBookingUpdatedHandler('driverDashboardBooking');
+      _socketService.removeDriverOfferReceivedHandler(
+        'driverDashboardOfferReceived',
+      );
+      _socketService.removeDriverOfferClosedHandler(
+        'driverDashboardOfferClosed',
+      );
       await _socketService.disconnect();
       _hasNewRequest = false;
       _currentRequest = null;
-      _activeTrip = null;
+      _clearActiveTrip();
       _status = DriverStatus.offline;
       notifyListeners();
     }
@@ -243,7 +243,7 @@ class DriverDashboardProvider extends ChangeNotifier {
           headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
         ),
       );
-      // Removed immediate trip creation logic. 
+      // Removed immediate trip creation logic.
       // Waiting for SignalR 'BookingDriverAssigned' event.
       _errorMessage = null;
     } catch (e) {
@@ -296,7 +296,9 @@ class DriverDashboardProvider extends ChangeNotifier {
       await _dio.patch(
         ApiEndpoints.driverLocation,
         data: {ApiKeys.latitude: lat, ApiKeys.longitude: lng},
-        options: Options(headers: {ApiKeys.authorization: AuthHeader.bearer(token)}),
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+        ),
       );
     } catch (e) {
       debugPrint('Failed to update driver location: $e');
@@ -335,7 +337,7 @@ class DriverDashboardProvider extends ChangeNotifier {
           headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
         ),
       );
-      _activeTrip = null;
+      _clearActiveTrip();
       return true;
     } catch (e) {
       debugPrint('Failed to complete trip: $e');
@@ -359,34 +361,48 @@ class DriverDashboardProvider extends ChangeNotifier {
     try {
       final response = await _dio.get(
         ApiEndpoints.driverActiveTrip,
-        options: Options(headers: {ApiKeys.authorization: AuthHeader.bearer(token)}),
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+        ),
       );
       if (response.statusCode == 204 || response.data == null) {
-        _activeTrip = null;
+        _clearActiveTrip();
         return;
       }
 
       if (response.data is Map) {
         final data = Map<String, dynamic>.from(response.data as Map);
-        final bookingId = (data[ApiKeys.bookingId] ?? data['BookingId']) as num?;
+        final bookingId =
+            (data[ApiKeys.bookingId] ?? data['BookingId']) as num?;
         final tripId = (data[ApiKeys.tripId] ?? data['TripId']) as num?;
         final tripStatus = _normalizeTripStatus(
           data[ApiKeys.tripStatus] ?? data['TripStatus'],
         );
         if (bookingId != null && tripId != null && tripStatus != null) {
+          final oldTrip = _activeTrip;
+          final tripIdValue = tripId.toInt();
+          final sameTrip = oldTrip?.tripId == tripIdValue;
           _activeTrip = ActiveDriverTrip(
             bookingId: bookingId.toInt(),
-            tripId: tripId.toInt(),
+            tripId: tripIdValue,
             tripStatus: tripStatus,
+            pickupLat: sameTrip ? oldTrip?.pickupLat : null,
+            pickupLng: sameTrip ? oldTrip?.pickupLng : null,
+            destLat: sameTrip ? oldTrip?.destLat : null,
+            destLng: sameTrip ? oldTrip?.destLng : null,
+            encodedPolyline: sameTrip ? oldTrip?.encodedPolyline : null,
+            arrivalPolyline: sameTrip ? oldTrip?.arrivalPolyline : null,
           );
-          _socketService.joinTrip(tripId.toInt());
-          // Fetch extra details immediately before setting loading to false
-          await _fetchActiveTripDetailsSync(bookingId.toInt(), tripId.toInt());
+          _socketService.joinTrip(tripIdValue);
+          if (!_hasActiveTripDetails(tripIdValue)) {
+            await _fetchActiveTripDetailsSync(bookingId.toInt(), tripIdValue);
+          }
         }
       }
     } catch (e) {
       debugPrint('Error loading active trip: $e');
-      _errorMessage = 'Không thể tải dữ liệu chuyến đi hiện tại. Vui lòng thử lại.';
+      _errorMessage =
+          'Không thể tải dữ liệu chuyến đi hiện tại. Vui lòng thử lại.';
     } finally {
       _isLoadingActiveTrip = false;
       notifyListeners();
@@ -416,7 +432,7 @@ class DriverDashboardProvider extends ChangeNotifier {
       );
 
       if (tripStatus == 'COMPLETED' || tripStatus == 'CANCELLED') {
-        _activeTrip = null;
+        _clearActiveTrip();
       } else {
         _activeTrip = trip.copyWith(tripStatus: tripStatus);
       }
@@ -431,72 +447,159 @@ class DriverDashboardProvider extends ChangeNotifier {
     if (update.status == 'DriverAssigned' || update.tripId != null) {
       if (update.tripId != null) {
         final oldTrip = _activeTrip;
+        final sameTrip = oldTrip?.tripId == update.tripId!;
         _activeTrip = ActiveDriverTrip(
           bookingId: update.bookingId,
           tripId: update.tripId!,
           tripStatus: update.tripStatus ?? 'ACCEPTED',
-          pickupLat: oldTrip?.pickupLat,
-          pickupLng: oldTrip?.pickupLng,
-          destLat: oldTrip?.destLat,
-          destLng: oldTrip?.destLng,
-          encodedPolyline: oldTrip?.encodedPolyline,
-          arrivalPolyline: oldTrip?.arrivalPolyline,
+          pickupLat: sameTrip ? oldTrip?.pickupLat : null,
+          pickupLng: sameTrip ? oldTrip?.pickupLng : null,
+          destLat: sameTrip ? oldTrip?.destLat : null,
+          destLng: sameTrip ? oldTrip?.destLng : null,
+          encodedPolyline: sameTrip ? oldTrip?.encodedPolyline : null,
+          arrivalPolyline: sameTrip ? oldTrip?.arrivalPolyline : null,
         );
         notifyListeners();
         _socketService.joinTrip(update.tripId!);
-        if (oldTrip?.encodedPolyline == null) {
+        if (!_hasActiveTripDetails(update.tripId!)) {
           _fetchActiveTripDetails(update.bookingId, update.tripId!);
         }
       }
     } else if (update.status == 'Cancelled' || update.status == 'Expired') {
       if (_activeTrip?.bookingId == update.bookingId) {
-        _activeTrip = null;
+        _clearActiveTrip();
         notifyListeners();
       }
     }
   }
 
-  Future<void> _fetchActiveTripDetailsSync(int bookingId, int tripId, [int retries = 3]) async {
+  Future<bool> _fetchActiveTripDetailsSync(
+    int bookingId,
+    int tripId, [
+    int retries = 3,
+  ]) async {
     final token = _accessToken;
-    if (token == null || _activeTrip == null || _activeTrip!.tripId != tripId) return;
+    final trip = _activeTrip;
+    if (token == null ||
+        trip == null ||
+        trip.tripId != tripId ||
+        trip.bookingId != bookingId ||
+        _hasActiveTripDetails(tripId)) {
+      return false;
+    }
 
+    final existingFetch = _activeTripDetailsFetches[tripId];
+    if (existingFetch != null) {
+      return existingFetch;
+    }
+
+    final fetch = _loadActiveTripDetails(token, bookingId, tripId, retries);
+    _activeTripDetailsFetches[tripId] = fetch;
     try {
-      final response = await _dio.get(
-        ApiEndpoints.driverActiveTrip,
-        options: Options(headers: {ApiKeys.authorization: AuthHeader.bearer(token)}),
-      );
-      if (response.statusCode == 204 && retries > 0) {
-        await Future.delayed(const Duration(seconds: 1));
-        return _fetchActiveTripDetailsSync(bookingId, tripId, retries - 1);
+      return await fetch;
+    } finally {
+      if (identical(_activeTripDetailsFetches[tripId], fetch)) {
+        _activeTripDetailsFetches.remove(tripId);
       }
-      
-      if (response.data != null && response.data is Map && _activeTrip?.tripId == tripId) {
-        final bData = Map<String, dynamic>.from(response.data as Map);
-        double? pickupLat = (bData['pickupLat'] as num?)?.toDouble();
-        double? pickupLng = (bData['pickupLng'] as num?)?.toDouble();
-        double? destLat = (bData['destLat'] as num?)?.toDouble();
-        double? destLng = (bData['destLng'] as num?)?.toDouble();
-        final encodedPoly = bData['encodedPolyline'] as String?;
-        String? arrivalPoly = bData['arrivalPolyline'] as String?;
-
-        _activeTrip = _activeTrip!.copyWith(
-          pickupLat: pickupLat,
-          pickupLng: pickupLng,
-          destLat: destLat,
-          destLng: destLng,
-          encodedPolyline: encodedPoly,
-          arrivalPolyline: arrivalPoly,
-        );
-      }
-    } catch (e) {
-      debugPrint('Failed to load active trip booking details: $e');
     }
   }
 
   void _fetchActiveTripDetails(int bookingId, int tripId) {
-    _fetchActiveTripDetailsSync(bookingId, tripId).then((_) {
-      notifyListeners();
+    _fetchActiveTripDetailsSync(bookingId, tripId).then((changed) {
+      if (changed) {
+        notifyListeners();
+      }
     });
+  }
+
+  Future<bool> _loadActiveTripDetails(
+    String token,
+    int bookingId,
+    int tripId,
+    int retries,
+  ) async {
+    try {
+      for (
+        var remainingRetries = retries;
+        remainingRetries >= 0;
+        remainingRetries--
+      ) {
+        final activeTrip = _activeTrip;
+        if (activeTrip == null ||
+            activeTrip.tripId != tripId ||
+            activeTrip.bookingId != bookingId) {
+          return false;
+        }
+
+        final response = await _dio.get(
+          ApiEndpoints.driverActiveTrip,
+          options: Options(
+            headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+          ),
+        );
+
+        if (response.statusCode == 204 && remainingRetries > 0) {
+          await Future.delayed(const Duration(seconds: 1));
+          continue;
+        }
+
+        if (response.data != null && response.data is Map) {
+          final bData = Map<String, dynamic>.from(response.data as Map);
+          final pickupLat = (bData['pickupLat'] as num?)?.toDouble();
+          final pickupLng = (bData['pickupLng'] as num?)?.toDouble();
+          final destLat = (bData['destLat'] as num?)?.toDouble();
+          final destLng = (bData['destLng'] as num?)?.toDouble();
+          final encodedPoly = bData['encodedPolyline'] as String?;
+          final arrivalPoly = bData['arrivalPolyline'] as String?;
+
+          if (_activeTrip?.tripId != tripId ||
+              _activeTrip?.bookingId != bookingId) {
+            return false;
+          }
+
+          _activeTrip = _activeTrip!.copyWith(
+            pickupLat: pickupLat,
+            pickupLng: pickupLng,
+            destLat: destLat,
+            destLng: destLng,
+            encodedPolyline: encodedPoly,
+            arrivalPolyline: arrivalPoly,
+          );
+          _activeTripDetailsLoaded.add(tripId);
+          return true;
+        }
+
+        return false;
+      }
+    } catch (e) {
+      debugPrint('Failed to load active trip booking details: $e');
+    }
+
+    return false;
+  }
+
+  bool _hasActiveTripDetails(int tripId) {
+    if (_activeTripDetailsLoaded.contains(tripId)) {
+      return true;
+    }
+
+    final trip = _activeTrip;
+    if (trip == null || trip.tripId != tripId) {
+      return false;
+    }
+
+    return trip.pickupLat != null ||
+        trip.pickupLng != null ||
+        trip.destLat != null ||
+        trip.destLng != null ||
+        trip.encodedPolyline != null ||
+        trip.arrivalPolyline != null;
+  }
+
+  void _clearActiveTrip() {
+    _activeTrip = null;
+    _activeTripDetailsLoaded.clear();
+    _activeTripDetailsFetches.clear();
   }
 
   static String? _normalizeTripStatus(Object? value) {
