@@ -68,12 +68,14 @@ public static class DependencyInjection
         services
             .AddOptions<GoogleMapsOptions>()
             .Bind(configuration.GetSection(GoogleMapsOptions.SectionName))
-            .ValidateDataAnnotations();
+            .ValidateDataAnnotations()
+            .Validate(options => options.TimeoutSeconds > 0, "MapServices:GoogleMaps:TimeoutSeconds must be greater than zero.");
             // NOTE: ValidateOnStart removed — Google Maps is a fallback provider.
             // URL validation is skipped when VietMap is the primary provider.
         services
             .AddOptions<OpenRouteServiceOptions>()
-            .Bind(configuration.GetSection(OpenRouteServiceOptions.SectionName));
+            .Bind(configuration.GetSection(OpenRouteServiceOptions.SectionName))
+            .Validate(options => options.TimeoutSeconds > 0, "MapServices:OpenRouteService:TimeoutSeconds must be greater than zero.");
             // NOTE: ValidateOnStart removed — OpenRouteService is a fallback provider.
 
         services
@@ -86,6 +88,7 @@ public static class DependencyInjection
             .Validate(options => options.OfferExpireSeconds > 0, "BackgroundJobs:MatchingOptions:OfferExpireSeconds must be greater than zero.")
             .Validate(options => options.CustomerConfirmExpireSeconds > 0, "BackgroundJobs:MatchingOptions:CustomerConfirmExpireSeconds must be greater than zero.")
             .Validate(options => options.MatchingTickSeconds > 0, "BackgroundJobs:MatchingOptions:MatchingTickSeconds must be greater than zero.")
+            .Validate(options => options.CandidateLimit > 0, "BackgroundJobs:MatchingOptions:CandidateLimit must be greater than zero.")
             .ValidateOnStart();
 
         services
@@ -105,6 +108,8 @@ public static class DependencyInjection
             .AddOptions<CleanupStaleDriverLocationJobOptions>()
             .Bind(configuration.GetSection(CleanupStaleDriverLocationJobOptions.SectionName))
             .Validate(options => options.StaleAfterMinutes > 0, "BackgroundJobs:CleanupStaleDriverLocation:StaleAfterMinutes must be greater than zero.")
+            .Validate(options => options.BatchSize > 0, "BackgroundJobs:CleanupStaleDriverLocation:BatchSize must be greater than zero.")
+            .Validate(options => !string.IsNullOrWhiteSpace(options.CronExpression), "BackgroundJobs:CleanupStaleDriverLocation:CronExpression must be configured.")
             .ValidateOnStart();
 
         services
@@ -121,6 +126,21 @@ public static class DependencyInjection
             .Validate(options => options.MaxConcurrentMockBookings >= 0, "SimulatorOptions:MaxConcurrentMockBookings must be >= 0.")
             .Validate(options => options.MockBookingBaseLat >= -90 && options.MockBookingBaseLat <= 90, "SimulatorOptions:MockBookingBaseLat must be between -90 and 90.")
             .Validate(options => options.MockBookingBaseLng >= -180 && options.MockBookingBaseLng <= 180, "SimulatorOptions:MockBookingBaseLng must be between -180 and 180.")
+            .ValidateOnStart();
+
+        services
+            .AddOptions<DriverRealtimeOptions>()
+            .Bind(configuration.GetSection(DriverRealtimeOptions.SectionName))
+            .Validate(options => options.DriverLocationTtlMinutes > 0, "DriverRealtime:DriverLocationTtlMinutes must be greater than zero.")
+            .Validate(options => options.DriverOnlineTtlMinutes > 0, "DriverRealtime:DriverOnlineTtlMinutes must be greater than zero.")
+            .Validate(options => options.DriverHeartbeatDbUpdateIntervalSeconds > 0, "DriverRealtime:DriverHeartbeatDbUpdateIntervalSeconds must be greater than zero.")
+            .ValidateOnStart();
+
+        services
+            .AddOptions<TripTrackingOptions>()
+            .Bind(configuration.GetSection(TripTrackingOptions.SectionName))
+            .Validate(options => options.TripLiveTtlHours > 0, "TripTracking:TripLiveTtlHours must be greater than zero.")
+            .Validate(options => options.DriverStatusTtlMinutes > 0, "TripTracking:DriverStatusTtlMinutes must be greater than zero.")
             .ValidateOnStart();
 
         // ── Hangfire ───────────────────────────────────────────────────────────────
@@ -162,6 +182,7 @@ public static class DependencyInjection
         services.AddSingleton<IMatchingPolicyProvider, MatchingPolicyProvider>();
         services.AddScoped<IBookingMatchingService, BookingMatchingService>();
         services.AddScoped<IBookingAssignmentService, BookingAssignmentService>();
+        services.AddScoped<IDriverQueryService, DriverQueryService>();
         services.AddScoped<IDriverRealtimeService, DriverRealtimeService>();
         services.AddScoped<ITripStatusService, TripStatusService>();
         services.AddHttpClient<ISpeedSmsService, InfobipSmsService>();
@@ -170,7 +191,8 @@ public static class DependencyInjection
         // VietMap options (always registered regardless of primary provider)
         services
             .AddOptions<VietMapOptions>()
-            .Bind(configuration.GetSection(VietMapOptions.SectionName));
+            .Bind(configuration.GetSection(VietMapOptions.SectionName))
+            .Validate(options => options.TimeoutSeconds > 0, "MapServices:VietMap:TimeoutSeconds must be greater than zero.");
 
         var primaryMapProvider = configuration["MapServices:PrimaryProvider"];
 
@@ -178,7 +200,8 @@ public static class DependencyInjection
         {
             services.AddHttpClient<IMapRoutingService, OpenRouteServiceRoutingService>(client =>
             {
-                client.Timeout = TimeSpan.FromSeconds(20);
+                var timeoutSeconds = configuration.GetValue<int>("MapServices:OpenRouteService:TimeoutSeconds", 20);
+                client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
             });
             if(!configuration.GetValue<bool>("MapServices:TurnGeocodingOffForOpenRouteServiceFallback")) 
             {
@@ -198,7 +221,8 @@ public static class DependencyInjection
         {
             services.AddHttpClient<IMapRoutingService, GoogleMapsRoutingService>(client =>
             {
-                client.Timeout = TimeSpan.FromSeconds(15);
+                var timeoutSeconds = configuration.GetValue<int>("MapServices:GoogleMaps:TimeoutSeconds", 15);
+                client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
             });
             // Fallback to VietMap for Geocoding until GoogleMapsGeocodingService is implemented
             services.AddHttpClient<IMapGeocodingService, VietMapGeocodingService>(client =>

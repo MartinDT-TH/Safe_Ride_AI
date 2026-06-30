@@ -1,17 +1,17 @@
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
+using MediatR;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
 using SafeRide.Application.Features.Bookings.DTOs;
+using SafeRide.Application.Features.Drivers.Commands.SetDriverOffline;
+using SafeRide.Application.Features.Drivers.Queries.GetActiveDriverTrip;
+using SafeRide.Application.Features.Drivers.Queries.GetNearbyDrivers;
 using SafeRide.Contracts.Requests.Drivers;
 using SafeRide.Contracts.Responses.Bookings;
 using SafeRide.Contracts.Responses.Drivers;
 using SafeRide.Domain.Enums;
-using SafeRide.Infrastructure.Persistence;
-using SafeRide.Infrastructure.Redis;
 using System.Security.Claims;
-using System.Text.Json;
 
 namespace SafeRide.API.Controllers;
 
@@ -20,21 +20,18 @@ namespace SafeRide.API.Controllers;
 [Route("api/drivers")]
 public sealed class DriversController : ControllerBase
 {
-    private readonly IRedisService _redisService;
+    private readonly ISender _sender;
     private readonly IBookingAssignmentService _bookingAssignmentService;
     private readonly IDriverRealtimeService _driverRealtimeService;
-    private readonly ApplicationDbContext _dbContext;
 
     public DriversController(
-        IRedisService redisService,
+        ISender sender,
         IBookingAssignmentService bookingAssignmentService,
-        IDriverRealtimeService driverRealtimeService,
-        ApplicationDbContext dbContext)
+        IDriverRealtimeService driverRealtimeService)
     {
-        _redisService = redisService;
+        _sender = sender;
         _bookingAssignmentService = bookingAssignmentService;
         _driverRealtimeService = driverRealtimeService;
-        _dbContext = dbContext;
     }
 
     [HttpGet("nearby")]
@@ -43,30 +40,14 @@ public sealed class DriversController : ControllerBase
         [FromQuery] double latitude,
         [FromQuery] double longitude,
         [FromQuery] double radiusKm = 5.0,
-        [FromQuery] int limit = 10)
+        [FromQuery] int limit = 10,
+        CancellationToken cancellationToken = default)
     {
-        var driverIds = await _redisService.GeoRadiusAsync(
-            RedisKeys.OnlineDriversGeo,
-            longitude,
-            latitude,
-            radiusKm,
-            limit);
+        var results = await _sender.Send(
+            new GetNearbyDriversQuery(latitude, longitude, radiusKm, limit),
+            cancellationToken);
 
-        var tasks = driverIds.Select(async id =>
-        {
-            var guid = Guid.Parse(id);
-            var locationJson = await _redisService.GetAsync(RedisKeys.DriverLocation(guid));
-            if (string.IsNullOrEmpty(locationJson)) return null;
-
-            var cache = JsonSerializer.Deserialize<DriverLocationCache>(locationJson);
-            return cache is null ? null : new NearbyDriverResponse(
-                guid,
-                cache.Latitude,
-                cache.Longitude);
-        });
-
-        var results = await Task.WhenAll(tasks);
-        return Ok(results.Where(x => x is not null).ToList());
+        return Ok(results);
     }
 
     [Authorize(Roles = "Driver")]
@@ -81,26 +62,9 @@ public sealed class DriversController : ControllerBase
             return Unauthorized();
         }
 
-        var activeTrip = await _dbContext.Trips
-            .AsNoTracking()
-            .Where(trip => trip.DriverId == driverId
-                && (trip.TripStatus == TripStatus.ACCEPTED
-                    || trip.TripStatus == TripStatus.DRIVER_ARRIVING
-                    || trip.TripStatus == TripStatus.ARRIVED
-                    || trip.TripStatus == TripStatus.IN_PROGRESS))
-            .OrderByDescending(trip => trip.DriverAssignedAt ?? trip.CreatedAt)
-            .Select(trip => new
-            {
-                bookingId = trip.BookingId,
-                tripId = trip.Id,
-                tripStatus = trip.TripStatus,
-                pickupLat = trip.Booking.PickupLocation.Y,
-                pickupLng = trip.Booking.PickupLocation.X,
-                destLat = trip.Booking.DestinationLocation != null ? trip.Booking.DestinationLocation.Y : (double?)null,
-                destLng = trip.Booking.DestinationLocation != null ? trip.Booking.DestinationLocation.X : (double?)null,
-                encodedPolyline = trip.Booking.RoutePolyline
-            })
-            .FirstOrDefaultAsync(cancellationToken);
+        var activeTrip = await _sender.Send(
+            new GetActiveDriverTripQuery(driverId),
+            cancellationToken);
 
         return activeTrip is null ? NoContent() : Ok(activeTrip);
     }
@@ -139,23 +103,11 @@ public sealed class DriversController : ControllerBase
             return Unauthorized();
         }
 
-        var isBusy = await _dbContext.DriverProfiles
-            .Where(p => p.DriverId == driverId)
-            .Select(p => p.WorkStatus == DriverWorkStatus.Busy)
-            .FirstOrDefaultAsync(cancellationToken);
+        var result = await _sender.Send(
+            new SetDriverOfflineCommand(driverId),
+            cancellationToken);
 
-        if (!isBusy)
-        {
-            isBusy = await _dbContext.Trips
-                .AnyAsync(trip => trip.DriverId == driverId
-                    && (trip.TripStatus == TripStatus.ACCEPTED
-                        || trip.TripStatus == TripStatus.DRIVER_ARRIVING
-                        || trip.TripStatus == TripStatus.ARRIVED
-                        || trip.TripStatus == TripStatus.IN_PROGRESS),
-                    cancellationToken);
-        }
-
-        if (isBusy)
+        if (!result.CanSetOffline)
         {
             return BadRequest(new ProblemDetails
             {
@@ -163,8 +115,6 @@ public sealed class DriversController : ControllerBase
                 Detail = "You cannot go offline while busy or having an active trip."
             });
         }
-
-        await _driverRealtimeService.SetDriverOfflineAsync(driverId, cancellationToken);
 
         return NoContent();
     }
@@ -207,6 +157,7 @@ public sealed class DriversController : ControllerBase
         long offerId,
         CancellationToken cancellationToken)
     {
+        // Flow: driver acceptance only moves the offer to DriverAccepted; customer confirmation creates the Trip.
         if (!TryGetUserId(out var driverId))
         {
             return Unauthorized();
@@ -230,6 +181,7 @@ public sealed class DriversController : ControllerBase
         long offerId,
         CancellationToken cancellationToken)
     {
+        // Flow: driver rejection closes this offer and lets matching search for another candidate.
         if (!TryGetUserId(out var driverId))
         {
             return Unauthorized();

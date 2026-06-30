@@ -1,12 +1,12 @@
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
+using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using SafeRide.API.Controllers;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
 using SafeRide.Contracts.Requests.Drivers;
-using SafeRide.Infrastructure.Redis;
 
 namespace SafeRide.UnitTests;
 
@@ -65,10 +65,9 @@ public sealed class DriversControllerTests
         IDriverRealtimeService driverRealtimeService)
     {
         return new DriversController(
-            new RedisServiceFake(),
+            new SenderFake(),
             new BookingAssignmentServiceFake(),
-            driverRealtimeService,
-            dbContext: null!);
+            driverRealtimeService);
     }
 
     private static ControllerContext CreateControllerContext(string userId)
@@ -122,52 +121,32 @@ public sealed class DriversControllerTests
             throw new NotImplementedException();
     }
 
-    private sealed class RedisServiceFake : IRedisService
+    private sealed class SenderFake : ISender
     {
-        public Task SetAsync(string key, string value, TimeSpan expiration) =>
-            throw new NotImplementedException();
-
-        public Task<bool> SetIfNotExistsAsync(
-            string key,
-            string value,
-            TimeSpan expiration) =>
-            throw new NotImplementedException();
-
-        public Task<string?> GetAsync(string key) =>
-            throw new NotImplementedException();
-
-        public Task RemoveAsync(string key) =>
-            throw new NotImplementedException();
-
-        public Task<long> IncrementAsync(string key, TimeSpan expiration) =>
-            throw new NotImplementedException();
-
-        public Task GeoAddAsync(
-            string key,
-            double longitude,
-            double latitude,
-            string member) =>
-            throw new NotImplementedException();
-
-        public Task GeoRemoveAsync(
-            string key,
-            string member,
+        public Task<TResponse> Send<TResponse>(
+            IRequest<TResponse> request,
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
-        public Task<IReadOnlyList<string>> GeoRadiusAsync(
-            string key,
-            double longitude,
-            double latitude,
-            double radiusKm,
-            int count) =>
+        public Task Send<TRequest>(
+            TRequest request,
+            CancellationToken cancellationToken = default)
+            where TRequest : IRequest =>
             throw new NotImplementedException();
 
-        public Task<OtpVerificationResult> VerifyAndConsumeOtpAsync(
-            string otpKey,
-            string attemptsKey,
-            string expectedHash,
-            int maxAttempts) =>
+        public Task<object?> Send(
+            object request,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public IAsyncEnumerable<TResponse> CreateStream<TResponse>(
+            IStreamRequest<TResponse> request,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public IAsyncEnumerable<object?> CreateStream(
+            object request,
+            CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
     }
 
