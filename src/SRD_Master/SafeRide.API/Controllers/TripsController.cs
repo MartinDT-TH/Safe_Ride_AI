@@ -35,6 +35,7 @@ public sealed class TripsController : ControllerBase
         [FromBody] UpdateTripStatusRequest request,
         CancellationToken cancellationToken)
     {
+        // Flow: driver status updates go through the trip state machine in TripStatusService.
         if (!TryGetDriverId(out var driverId))
         {
             return Unauthorized(new ProblemDetails
@@ -63,6 +64,7 @@ public sealed class TripsController : ControllerBase
         long tripId,
         CancellationToken cancellationToken)
     {
+        // Flow: completing a trip is terminal and settles booking status, promotion usage, and driver availability.
         if (!TryGetDriverId(out var userId))
         {
             return Unauthorized(new ProblemDetails

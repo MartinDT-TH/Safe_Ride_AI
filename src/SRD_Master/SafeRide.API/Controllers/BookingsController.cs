@@ -106,6 +106,7 @@ public sealed class BookingsController : ControllerBase
         [FromBody] CreateBookingRequest request,
         CancellationToken cancellationToken)
     {
+        // Flow: resolve the authenticated customer, send the create command, and map lifecycle metadata to the API DTO.
         if (!TryGetCustomerId(out var customerId))
         {
             return Unauthorized(CreateUnauthorizedProblem());
@@ -308,6 +309,7 @@ public sealed class BookingsController : ControllerBase
         long offerId,
         CancellationToken cancellationToken)
     {
+        // Flow: explicit customer confirmation is the API step that creates the Trip from an accepted offer.
         if (!TryGetCustomerId(out var customerId))
         {
             return Unauthorized(CreateUnauthorizedProblem());
@@ -350,6 +352,7 @@ public sealed class BookingsController : ControllerBase
         long bookingId,
         CancellationToken cancellationToken)
     {
+        // Flow: customer rejection keeps the booking searchable and delegates rematching to the application flow.
         if (!TryGetCustomerId(out var customerId))
         {
             return Unauthorized(CreateUnauthorizedProblem());
@@ -393,6 +396,7 @@ public sealed class BookingsController : ControllerBase
         [FromBody] CancelBookingRequest? request,
         CancellationToken cancellationToken)
     {
+        // Flow: cancellation delegates lifecycle cleanup to the command handler and returns the final booking state.
         if (!TryGetCustomerId(out var customerId))
         {
             return Unauthorized(CreateUnauthorizedProblem());
