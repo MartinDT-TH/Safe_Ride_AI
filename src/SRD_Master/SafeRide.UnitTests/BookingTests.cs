@@ -2,7 +2,9 @@ using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
 using SafeRide.Application.Common.Realtime;
 using SafeRide.Application.Features.Bookings;
+using SafeRide.Application.Features.Bookings.Commands.CancelBooking;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
+using SafeRide.Application.Features.Bookings.DTOs;
 using SafeRide.Application.Features.Bookings.Queries.EstimateBookingFare;
 using SafeRide.Application.Features.Bookings.Services;
 using SafeRide.Application.Features.Promotions;
@@ -151,6 +153,61 @@ public sealed class BookingTests
         Assert.Equal("booking.invalid_schedule", exception.Code);
     }
 
+    [Fact]
+    public async Task CancelBooking_SearchingBooking_CancelsJobsOnceRemovesPromotionAndCancelsOffers()
+    {
+        var fixture = new CancelBookingFixture();
+        var promotion = new Promotion
+        {
+            Id = 9,
+            PromotionCode = "SAFE10",
+            CurrentUsageCount = 4
+        };
+        var booking = new Booking
+        {
+            BookingId = 55,
+            CustomerId = HandlerFixture.CustomerId,
+            BookingType = BookingType.Now,
+            BookingStatus = BookingStatus.Searching,
+            EstimatedDistanceKm = 5.2m,
+            EstimatedDurationMinutes = 30,
+            EstimatedFare = 72_000m,
+            RoutePolyline = "polyline",
+            BookingPromotions =
+            {
+                new BookingPromotion
+                {
+                    BookingId = 55,
+                    PromotionId = promotion.Id,
+                    Promotion = promotion,
+                    DiscountAmount = 10_000m,
+                    CreatedAt = UtcNow
+                }
+            }
+        };
+        fixture.Repository.CustomerBooking = booking;
+
+        var result = await fixture.Handler.Handle(
+            new CancelBookingCommand(
+                HandlerFixture.CustomerId,
+                booking.BookingId,
+                "Äá»•i káº¿ hoáº¡ch"),
+            CancellationToken.None);
+
+        Assert.Equal(BookingStatus.Cancelled, result.BookingStatus);
+        Assert.Equal(BookingStatus.Cancelled, booking.BookingStatus);
+        Assert.Equal(HandlerFixture.CustomerId, booking.CancelledBy);
+        Assert.Equal("Äá»•i káº¿ hoáº¡ch", booking.CancellationReason);
+        Assert.Equal(1, fixture.UnitOfWork.SaveCount);
+        Assert.Equal(1, fixture.Scheduler.CancelJobsForBookingCallCount);
+        Assert.Equal([booking.BookingId], fixture.Scheduler.CancelledBookingIds);
+        Assert.Equal(1, fixture.Repository.RemoveBookingPromotionsCallCount);
+        Assert.Equal(1, fixture.Repository.CancelActiveDriverOffersCallCount);
+        Assert.Equal(booking.BookingId, fixture.Repository.CancelledOffersBookingId);
+        Assert.Empty(booking.BookingPromotions);
+        Assert.Equal(4, promotion.CurrentUsageCount);
+    }
+
     private static PricingRule CreatePricingRule(
         decimal? pricePerKm = null,
         decimal? pricePerHour = null)
@@ -227,13 +284,39 @@ public sealed class BookingTests
         }
     }
 
+    private sealed class CancelBookingFixture
+    {
+        public CancelBookingFixture()
+        {
+            Repository = new BookingRepositoryFake();
+            UnitOfWork = new UnitOfWorkFake();
+            Scheduler = new BookingLifecycleJobSchedulerFake();
+            Handler = new CancelBookingCommandHandler(
+                Repository,
+                UnitOfWork,
+                new DateTimeProviderFake(UtcNow),
+                new RealtimeNotificationServiceFake(),
+                Repository,
+                Scheduler);
+        }
+
+        public BookingRepositoryFake Repository { get; }
+        public UnitOfWorkFake UnitOfWork { get; }
+        public BookingLifecycleJobSchedulerFake Scheduler { get; }
+        public CancelBookingCommandHandler Handler { get; }
+    }
+
     private sealed class BookingRepositoryFake : IBookingRepository, IPromotionRepository
     {
         public Vehicle? Vehicle { get; init; }
         public PricingRule? PricingRule { get; init; }
         public Promotion? Promotion { get; init; }
         public Booking? ActiveNowBooking { get; set; }
+        public Booking? CustomerBooking { get; set; }
         public Booking? AddedBooking { get; private set; }
+        public int CancelActiveDriverOffersCallCount { get; private set; }
+        public int RemoveBookingPromotionsCallCount { get; private set; }
+        public long? CancelledOffersBookingId { get; private set; }
 
         public Task AddAsync(Booking booking, CancellationToken cancellationToken)
         {
@@ -247,21 +330,21 @@ public sealed class BookingTests
             Guid customerId,
             CancellationToken cancellationToken)
         {
-            return Task.FromResult<Booking?>(AddedBooking);
+            return Task.FromResult(CustomerBooking ?? AddedBooking);
         }
 
-        public Task<IEnumerable<Booking>> GetCustomerBookingHistoryAsync(
+        public Task<IReadOnlyList<BookingHistoryItemDto>> GetCustomerBookingHistoryAsync(
             Guid customerId,
             CancellationToken cancellationToken)
         {
-            return Task.FromResult<IEnumerable<Booking>>([]);
+            return Task.FromResult<IReadOnlyList<BookingHistoryItemDto>>([]);
         }
 
-        public Task<IEnumerable<Booking>> GetDriverBookingHistoryAsync(
+        public Task<IReadOnlyList<BookingHistoryItemDto>> GetDriverBookingHistoryAsync(
             Guid driverId,
             CancellationToken cancellationToken)
         {
-            return Task.FromResult<IEnumerable<Booking>>([]);
+            return Task.FromResult<IReadOnlyList<BookingHistoryItemDto>>([]);
         }
 
         public Task<Booking?> GetCustomerBookingWithDetailsAsync(
@@ -358,6 +441,8 @@ public sealed class BookingTests
             DateTime cancelledAt,
             CancellationToken cancellationToken)
         {
+            CancelActiveDriverOffersCallCount++;
+            CancelledOffersBookingId = bookingId;
             return Task.CompletedTask;
         }
 
@@ -416,7 +501,8 @@ public sealed class BookingTests
             long bookingId,
             CancellationToken cancellationToken)
         {
-            AddedBooking?.BookingPromotions.Clear();
+            RemoveBookingPromotionsCallCount++;
+            (CustomerBooking ?? AddedBooking)?.BookingPromotions.Clear();
             return Task.CompletedTask;
         }
     }
@@ -581,12 +667,21 @@ public sealed class BookingTests
 
     private sealed class BookingLifecycleJobSchedulerFake : IBookingLifecycleJobScheduler
     {
+        public int CancelJobsForBookingCallCount { get; private set; }
+        public List<long> CancelledBookingIds { get; } = [];
+
         public void ScheduleExpandRadius(long bookingId, TimeSpan delay) { }
         public void ScheduleExpireBooking(long bookingId, TimeSpan delay) { }
         public void ScheduleExpireDriverOffer(long offerId, TimeSpan delay) { }
         public Task CancelExpireDriverOfferAsync(long offerId, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
-        public Task CancelJobsForBookingAsync(long bookingId, CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
+        public Task CancelJobsForBookingAsync(
+            long bookingId,
+            CancellationToken cancellationToken = default)
+        {
+            CancelJobsForBookingCallCount++;
+            CancelledBookingIds.Add(bookingId);
+            return Task.CompletedTask;
+        }
     }
 }
