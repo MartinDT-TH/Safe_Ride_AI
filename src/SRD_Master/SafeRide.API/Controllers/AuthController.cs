@@ -211,12 +211,30 @@ public class AuthController : ControllerBase
             !string.IsNullOrWhiteSpace(_configuration["Jwt:Key"]),
             _env.EnvironmentName
         );
-        var response = await _authService.GoogleLoginAsync(
-            request,
-            HttpContext.Connection.RemoteIpAddress?.ToString(),
-            Request.Headers.UserAgent.ToString());
+        _logger.LogInformation(
+        "Google login hit. HasIdToken={HasIdToken}, IdTokenLength={IdTokenLength}, DeviceId={DeviceId}, DeviceName={DeviceName}",
+        !string.IsNullOrWhiteSpace(request.GoogleIdToken),
+        request.GoogleIdToken?.Length ?? 0,
+        request.DeviceId,
+        request.DeviceName
+    );
+        
+        try
+            {
+                var response = await _authService.GoogleLoginAsync(
+                request,
+                HttpContext.Connection.RemoteIpAddress?.ToString(),
+                Request.Headers.UserAgent.ToString());
 
-        return Ok(response);
+                _logger.LogInformation("Google login completed successfully.");
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Google login failed on Render.");
+                throw;
+            }
     }
 
     [HttpPost("verify-otp")]
