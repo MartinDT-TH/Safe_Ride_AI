@@ -23,6 +23,8 @@ public sealed class BookingMatchingBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        _logger.LogInformation("BookingMatchingBackgroundService started");
+
         try
         {
             while (!stoppingToken.IsCancellationRequested)
@@ -45,9 +47,9 @@ public sealed class BookingMatchingBackgroundService : BackgroundService
                 await Task.Delay(delay, stoppingToken);
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            // Expected on shutdown
+            // Expected on shutdown, ignore.
         }
 
         _logger.LogInformation("BookingMatchingBackgroundService stopped");
