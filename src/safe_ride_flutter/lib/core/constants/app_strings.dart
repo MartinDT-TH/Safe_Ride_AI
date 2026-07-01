@@ -246,6 +246,7 @@ abstract final class ApiEndpoints {
   static const profileAvatar = '/auth/profile/avatar';
   static const logout = '/auth/logout';
   static const bookings = '/bookings';
+  static const bookingHistory = '/bookings/history';
   static const activeBooking = '/bookings/active';
   static const availablePromotions = '/promotions/available';
   static const bookingCatalog = '/bookings/catalog';
@@ -263,6 +264,12 @@ abstract final class ApiEndpoints {
       '/bookings/$bookingId/confirm-driver-offer/$offerId';
   static String tripStatus(int tripId) => '/trips/$tripId/status';
   static String completeTrip(int tripId) => '/trips/$tripId/complete';
+  static String createDriverTripQrPayment(int tripId) =>
+      '/payments/driver/trips/$tripId/qr';
+  static String driverTripPaymentStatus(int tripId) =>
+      '/payments/driver/trips/$tripId/status';
+  static String confirmDriverTripCashPayment(int tripId) =>
+      '/payments/driver/trips/$tripId/cash';
   static String submitTripRating(int tripId) => '/feedbacks/trips/$tripId/rating';
   static const identityVerificationDocuments =
       '/identity-verification/documents';

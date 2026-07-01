@@ -22,6 +22,7 @@ using SafeRide.Infrastructure.ExternalServices.GoogleMaps;
 using SafeRide.Infrastructure.ExternalServices.OpenRouteService;
 using SafeRide.Infrastructure.ExternalServices.VietMap;
 using SafeRide.Infrastructure.ExternalServices.NoOp;
+using SafeRide.Infrastructure.ExternalServices.PayOS;
 using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
 using SafeRide.Infrastructure.Repositories;
@@ -67,6 +68,9 @@ public static class DependencyInjection
         services
             .AddOptions<CloudinaryOptions>()
             .Bind(configuration.GetSection(CloudinaryOptions.SectionName));
+        services
+            .AddOptions<PayOsOptions>()
+            .Bind(configuration.GetSection(PayOsOptions.SectionName));
         services
             .AddOptions<GoogleMapsOptions>()
             .Bind(configuration.GetSection(GoogleMapsOptions.SectionName))
@@ -195,6 +199,24 @@ public static class DependencyInjection
         services.AddScoped<IDriverRealtimeService, DriverRealtimeService>();
         services.AddScoped<ITripStatusService, TripStatusService>();
         services.AddHttpClient<ISpeedSmsService, InfobipSmsService>();
+        services.AddHttpClient<IPaymentService, PayOsPaymentService>((provider, client) =>
+        {
+            var options = provider.GetRequiredService<IOptions<PayOsOptions>>().Value;
+            var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl)
+                ? "https://api-merchant.payos.vn"
+                : options.BaseUrl;
+
+            client.BaseAddress = new Uri(baseUrl);
+            if (!string.IsNullOrWhiteSpace(options.ClientId))
+            {
+                client.DefaultRequestHeaders.Add("x-client-id", options.ClientId);
+            }
+
+            if (!string.IsNullOrWhiteSpace(options.ApiKey))
+            {
+                client.DefaultRequestHeaders.Add("x-api-key", options.ApiKey);
+            }
+        });
 
         // ── Map Services ───────────────────────────────────────────────────────────
         // VietMap options (always registered regardless of primary provider)

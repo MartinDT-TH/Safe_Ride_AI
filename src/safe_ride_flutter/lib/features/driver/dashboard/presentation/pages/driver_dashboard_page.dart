@@ -22,6 +22,7 @@ import '../../../../shared/history/presentation/pages/history_page.dart';
 import '../../../../shared/onboarding/presentation/providers/role_provider.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../shared/profile/presentation/pages/profile_page.dart';
+import 'driver_trip_payment_page.dart';
 
 class DriverDashboardPage extends StatefulWidget {
   const DriverDashboardPage({super.key});
@@ -1022,8 +1023,15 @@ class _ActiveTripCard extends StatelessWidget {
                           () => context
                               .read<DriverDashboardProvider>()
                               .completeActiveTrip(),
-                          successMessage:
-                              'Đã kết thúc chuyến. Chờ khách xác nhận nhận lại xe.',
+                          onSuccess: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => DriverTripPaymentPage(
+                                  tripId: trip.tripId,
+                                ),
+                              ),
+                            );
+                          },
                         ),
                   icon: const Icon(Icons.check_circle_rounded),
                   label: Text(
@@ -1061,10 +1069,15 @@ class _ActiveTripCard extends StatelessWidget {
     BuildContext context,
     Future<bool> Function() action, {
     String? successMessage,
+    VoidCallback? onSuccess,
   }) async {
     try {
       final ok = await action();
-      if (!context.mounted || !ok || successMessage == null) {
+      if (!context.mounted || !ok) {
+        return;
+      }
+      onSuccess?.call();
+      if (successMessage == null) {
         return;
       }
       ScaffoldMessenger.of(context)
