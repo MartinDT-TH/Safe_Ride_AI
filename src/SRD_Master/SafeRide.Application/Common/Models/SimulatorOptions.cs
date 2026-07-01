@@ -4,29 +4,28 @@ public sealed class SimulatorOptions
 {
     public const string SectionName = "Simulator";
 
-    public bool EnableMockDrivers { get; set; } = true;
-    public bool EnableMockCustomerService { get; set; } = true;
+    public bool EnableMockDrivers { get; set; } = false;
 
     public bool MockDriverAutoAcceptOffers { get; set; } = true;
-
     public bool MockDriverAutoProgressAfterConfirm { get; set; } = true;
-
     public bool MockDriverAutoCompleteTrips { get; set; } = true;
-
     public int MockDriverTtlRefreshSeconds { get; set; } = 60;
+
+    public bool MockDriverSkipMovementDelay { get; set; } = false;
+
+    public bool EnableMockCustomerService { get; set; } = false;
 
     public bool MockCustomerAutoConfirmDriver { get; set; } = true;
     public bool AutoConfirmRealCustomerBookings { get; set; } = false;
 
-    public bool MockDriverSkipMovementDelay { get; set; } = false;
 
-    public bool EnableSimulatorConsoleOutput { get; set; } = true;
+    public bool EnableSimulatorConsoleOutput { get; set; } = false;
 
     // Real Driver Flow Simulation Options (Demo-only behavior)
     // To test Real Driver manually, leave these as false.
     public bool RealDriverAutoAcceptOffers { get; set; } = false;
-    public bool RealDriverAutoProgressTrips { get; set; } = true;
-    public bool RealDriverSimulateMovement { get; set; } = true;
+    public bool RealDriverAutoProgressTrips { get; set; } = false;
+    public bool RealDriverSimulateMovement { get; set; } = false;
 
     // Mock Booking Generator Options
     public bool EnableMockBookingGenerator { get; set; } = false;
