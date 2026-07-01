@@ -23,19 +23,29 @@ public class AuthController : ControllerBase
     private readonly IJwtTokenService _jwtTokenService;
     private readonly ICloudinaryImageService _cloudinaryImageService;
     private readonly IHostEnvironment _environment;
+    private readonly IConfiguration _configuration;
+    private readonly IWebHostEnvironment _env;
+
+    private readonly ILogger<AuthController> _logger;
 
     public AuthController(
         IAuthService authService,
         UserManager<AspNetUser> userManager,
         IJwtTokenService jwtTokenService,
         ICloudinaryImageService cloudinaryImageService,
-        IHostEnvironment environment)
+        IHostEnvironment environment,
+        IConfiguration configuration,
+        IWebHostEnvironment env,
+        ILogger<AuthController> logger)
     {
         _authService = authService;
         _userManager = userManager;
         _jwtTokenService = jwtTokenService;
         _cloudinaryImageService = cloudinaryImageService;
+        _configuration = configuration;
         _environment = environment;
+        _env = env;
+        _logger = logger;
     }
 
 
@@ -193,6 +203,14 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> GoogleLogin(
         [FromBody] GoogleLoginRequest request)
     {
+        _logger.LogInformation(
+            "GoogleLogin Debug: HasIdToken={HasIdToken}, IdTokenLength={IdTokenLength}, HasGoogleClientId={HasGoogleClientId}, HasJwtKey={HasJwtKey}, Environment={Environment}",
+            !string.IsNullOrWhiteSpace(request.GoogleIdToken),
+            request.GoogleIdToken?.Length ?? 0,
+            !string.IsNullOrWhiteSpace(_configuration["Authentication:Google:ClientId"]),
+            !string.IsNullOrWhiteSpace(_configuration["Jwt:Key"]),
+            _env.EnvironmentName
+        );
         var response = await _authService.GoogleLoginAsync(
             request,
             HttpContext.Connection.RemoteIpAddress?.ToString(),
