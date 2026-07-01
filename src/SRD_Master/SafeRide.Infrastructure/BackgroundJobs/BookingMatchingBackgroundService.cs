@@ -67,9 +67,13 @@ public sealed class BookingMatchingBackgroundService : BackgroundService
         await using var scope = _scopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var matchingService = scope.ServiceProvider.GetRequiredService<IBookingMatchingService>();
+        var policyProvider = scope.ServiceProvider.GetRequiredService<IMatchingPolicyProvider>();
+        var dateTimeProvider = scope.ServiceProvider.GetRequiredService<IDateTimeProvider>();
 
         var bookingIdsToRetry = await GetSearchingBookingIdsAsync(
             dbContext,
+            policyProvider,
+            dateTimeProvider,
             cancellationToken);
 
         // Flow: retry matching only for bookings still in Searching; expiry/expansion run in Hangfire jobs.
@@ -81,14 +85,22 @@ public sealed class BookingMatchingBackgroundService : BackgroundService
 
     private static Task<List<long>> GetSearchingBookingIdsAsync(
         ApplicationDbContext dbContext,
+        IMatchingPolicyProvider policyProvider,
+        IDateTimeProvider dateTimeProvider,
         CancellationToken cancellationToken)
     {
         // Return just the IDs of bookings still actively searching so the
         // matching loop can keep firing offers. Expire / expand logic has been
         // moved to dedicated Hangfire delayed jobs.
+        var cutoff = dateTimeProvider.UtcNow.AddMinutes(-policyProvider.Current.BookingExpireAfterMinutes);
+
         return dbContext.Bookings
             .Where(x => x.BookingStatus == BookingStatus.Searching)
+            .Where(x =>
+                (x.BookingType == BookingType.Now && x.CreatedAt >= cutoff)
+                || (x.BookingType == BookingType.Scheduled && x.UpdatedAt >= cutoff))
             .OrderBy(x => x.CreatedAt)
+            .Take(20)
             .Select(x => x.BookingId)
             .ToListAsync(cancellationToken);
     }

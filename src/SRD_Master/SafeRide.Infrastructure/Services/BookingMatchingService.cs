@@ -120,8 +120,13 @@ public sealed class BookingMatchingService : IBookingMatchingService
             if (matchingSnapshot.ExpiresAt.HasValue
                 && utcNow >= matchingSnapshot.ExpiresAt.Value)
             {
+                await ExpireBookingBecauseMatchingWindowExpiredAsync(
+                    booking,
+                    utcNow,
+                    cancellationToken);
+
                 _logger.LogInformation(
-                    "Matching skipped for booking {BookingId} because the matching window expired.",
+                    "Booking {BookingId} expired because matching window expired.",
                     bookingId);
                 return null;
             }
@@ -359,6 +364,39 @@ public sealed class BookingMatchingService : IBookingMatchingService
             RedisKeys.MatchingBooking(booking.BookingId),
             JsonSerializer.Serialize(cache),
             ttl);
+    }
+
+    private async Task ExpireBookingBecauseMatchingWindowExpiredAsync(
+        Booking booking,
+        DateTime utcNow,
+        CancellationToken cancellationToken)
+    {
+        if (booking.BookingStatus != BookingStatus.Searching)
+        {
+            return;
+        }
+
+        booking.BookingStatus = BookingStatus.Expired;
+        booking.UpdatedAt = utcNow;
+
+        var openOffers = await _dbContext.BookingDriverOffers
+            .Where(x => x.BookingId == booking.BookingId)
+            .Where(x => x.OfferStatus == DriverOfferStatus.Sent
+                || x.OfferStatus == DriverOfferStatus.DriverAccepted)
+            .ToListAsync(cancellationToken);
+
+        foreach (var offer in openOffers)
+        {
+            offer.OfferStatus = DriverOfferStatus.Expired;
+            offer.ExpiredAt = utcNow;
+            await _redisService.RemoveAsync(RedisKeys.MatchingOffer(offer.BookingId, offer.DriverId));
+            await _redisService.RemoveAsync(RedisKeys.MatchingDriverLock(offer.DriverId));
+            await _jobScheduler.CancelExpireDriverOfferAsync(offer.Id, cancellationToken);
+        }
+
+        await _redisService.RemoveAsync(RedisKeys.MatchingBooking(booking.BookingId));
+        await _jobScheduler.CancelJobsForBookingAsync(booking.BookingId, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private async Task<IReadOnlyList<Guid>> GetRedisCandidateDriverIdsAsync(
