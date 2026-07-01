@@ -203,11 +203,15 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> GoogleLogin(
         [FromBody] GoogleLoginRequest request)
     {
+        var googleClientIds = _configuration
+            .GetSection("Authentication:Google:ClientIds")
+            .Get<string[]>() ?? [];
         _logger.LogInformation(
-            "GoogleLogin Debug: HasIdToken={HasIdToken}, IdTokenLength={IdTokenLength}, HasGoogleClientId={HasGoogleClientId}, HasJwtKey={HasJwtKey}, Environment={Environment}",
+            "GoogleLogin Debug: HasIdToken={HasIdToken}, IdTokenLength={IdTokenLength}, GoogleClientIdCount={GoogleClientIdCount}, HasJwtKey={HasJwtKey}, Environment={Environment}",
             !string.IsNullOrWhiteSpace(request.GoogleIdToken),
             request.GoogleIdToken?.Length ?? 0,
-            !string.IsNullOrWhiteSpace(_configuration["Authentication:Google:ClientId"]),
+
+            googleClientIds.Length,
             !string.IsNullOrWhiteSpace(_configuration["Jwt:Key"]),
             _env.EnvironmentName
         );
