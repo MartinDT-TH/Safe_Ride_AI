@@ -160,6 +160,13 @@ app.MapGet("/health", () => Results.Ok(new
     environment = app.Environment.EnvironmentName,
     timeUtc = DateTime.UtcNow
 }));
+app.MapGet("/", () => Results.Ok(new
+{
+    service = "SafeRide.API",
+    status = "Running",
+    health = "/health",
+    swagger = "/swagger/index.html"
+}));
 
 app.Run();
 

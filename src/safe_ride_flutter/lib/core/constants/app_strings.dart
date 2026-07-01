@@ -218,8 +218,8 @@ abstract final class LocationStrings {
 
 abstract final class AppConfig {
   static const apiBaseUrl = String.fromEnvironment(
-    'http://192.168.100.116:5026/api/',
-    defaultValue: 'API_BASE_URL',
+    'API_BASE_URL',
+    defaultValue: 'https://safe-ride-ai.onrender.com/api/',
   );
   static const forceWebSockets = bool.fromEnvironment(
     'FORCE_WEBSOCKETS',
