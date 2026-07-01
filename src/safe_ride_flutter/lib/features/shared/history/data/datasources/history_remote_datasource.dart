@@ -22,7 +22,7 @@ class HistoryRemoteDatasource {
 
     try {
       final response = await _dio.get(
-        '${ApiEndpoints.bookings}/history',
+        ApiEndpoints.bookingHistory,
         queryParameters: {'role': normalizedRole},
         options: Options(
           headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
