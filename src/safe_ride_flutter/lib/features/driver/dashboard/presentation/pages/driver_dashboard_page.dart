@@ -60,6 +60,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
   DateTime? _lastArrivalRouteRefreshAt;
   AppLatLng? _lastArrivalRouteRefreshOrigin;
   int? _renderedRouteTripId;
+  int? _openingPaymentTripId;
   bool _arrivalRouteRefreshInProgress = false;
   static const double _arrivalRerouteThresholdMeters = 35;
   static const double _arrivalRerouteMinMoveMeters = 80;
@@ -120,6 +121,11 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
 
   void _onProviderUpdated() {
     if (!mounted) return;
+
+    final completedTripId = _provider.takeCompletedTripAwaitingPayment();
+    if (completedTripId != null) {
+      _openTripPayment(completedTripId);
+    }
 
     final activeTrip = _provider.activeTrip;
 
@@ -502,6 +508,28 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
         (route) => false,
       );
     }
+  }
+
+  void _openTripPayment(int tripId) {
+    if (_openingPaymentTripId == tripId) return;
+    _openingPaymentTripId = tripId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.of(context)
+          .push(
+            MaterialPageRoute(
+              builder: (_) => DriverTripPaymentPage(tripId: tripId),
+            ),
+          )
+          .whenComplete(() {
+            if (mounted && _openingPaymentTripId == tripId) {
+              _openingPaymentTripId = null;
+            }
+          });
+    });
   }
 
   @override
@@ -1023,15 +1051,6 @@ class _ActiveTripCard extends StatelessWidget {
                           () => context
                               .read<DriverDashboardProvider>()
                               .completeActiveTrip(),
-                          onSuccess: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => DriverTripPaymentPage(
-                                  tripId: trip.tripId,
-                                ),
-                              ),
-                            );
-                          },
                         ),
                   icon: const Icon(Icons.check_circle_rounded),
                   label: Text(
