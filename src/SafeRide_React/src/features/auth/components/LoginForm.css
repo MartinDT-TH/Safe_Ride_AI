@@ -1,0 +1,110 @@
+/* ===== Login Avatar ===== */
+.login-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background-color: var(--sr-teal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+  flex-shrink: 0;
+}
+
+/* ===== Title & Subtitle ===== */
+.login-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--sr-gray-900);
+  margin: 0 0 8px;
+  text-align: center;
+  line-height: 1.3;
+  letter-spacing: -0.2px;
+}
+
+.login-subtitle {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--sr-gray-500);
+  margin: 0 0 28px;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* ===== Login Form (full width within the card) ===== */
+.login-form {
+  width: 100%;
+}
+
+.login-error {
+  padding: 10px 12px;
+  margin: 14px 0;
+  border: 1px solid rgba(220, 53, 69, 0.28);
+  border-radius: var(--sr-radius-md);
+  background: rgba(220, 53, 69, 0.06);
+  color: #b42318;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ===== Password Toggle ===== */
+.password-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--sr-gray-400);
+  border-radius: var(--sr-radius-sm);
+  transition: color var(--sr-transition);
+}
+
+.password-toggle-btn:hover {
+  color: var(--sr-gray-600);
+}
+
+.password-toggle-btn:hover svg path,
+.password-toggle-btn:hover svg circle,
+.password-toggle-btn:hover svg line {
+  stroke: var(--sr-gray-600);
+}
+
+/* ===== Divider ===== */
+.login-divider {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 24px 0;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--sr-border);
+}
+
+.login-divider span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sr-gray-400);
+  letter-spacing: 1.2px;
+  white-space: nowrap;
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 480px) {
+  .login-title {
+    font-size: 20px;
+  }
+
+  .login-subtitle {
+    font-size: 13px;
+  }
+}

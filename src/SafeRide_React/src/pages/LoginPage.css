@@ -1,0 +1,10 @@
+/* LoginPage CSS is now split into:
+ * - src/shared/layouts/AuthLayout/AuthLayout.css  (layout)
+ * - src/features/auth/components/LoginForm.css     (login-specific)
+ * - src/shared/components/FormInput/FormInput.css   (input)
+ * - src/shared/components/FormCheckbox/FormCheckbox.css (checkbox)
+ * - src/shared/components/Button/Button.css         (button)
+ *
+ * This file is kept empty intentionally.
+ * Page-level overrides can go here if needed in the future.
+ */

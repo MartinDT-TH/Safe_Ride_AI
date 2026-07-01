@@ -1,0 +1,63 @@
+/* ===== Checkbox Group ===== */
+.form-checkbox-group {
+  margin-bottom: 24px;
+  margin-top: 4px;
+}
+
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.checkbox-custom {
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--sr-gray-300);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--sr-white);
+  transition: all var(--sr-transition);
+}
+
+.checkbox-custom .svg-inline--fa {
+  font-size: 10px;
+  color: #fff;
+  opacity: 0;
+  transform: scale(0.5);
+  transition: all var(--sr-transition);
+}
+
+.checkbox-input:checked + .checkbox-custom {
+  background: var(--sr-teal);
+  border-color: var(--sr-teal);
+}
+
+.checkbox-input:checked + .checkbox-custom .svg-inline--fa {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.checkbox-input:focus-visible + .checkbox-custom {
+  box-shadow: 0 0 0 3px rgba(26, 138, 125, 0.15);
+}
+
+.checkbox-text {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--sr-gray-600);
+  line-height: 1.4;
+}
