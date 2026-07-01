@@ -87,6 +87,35 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
+app.Use(async (context, next) =>
+{
+    var logger = context.RequestServices
+        .GetRequiredService<ILoggerFactory>()
+        .CreateLogger("RequestLogger");
+
+    logger.LogInformation("Incoming request: {Method} {Path}",
+        context.Request.Method,
+        context.Request.Path);
+
+    try
+    {
+        await next();
+
+        logger.LogInformation("Completed request: {Method} {Path} => {StatusCode}",
+            context.Request.Method,
+            context.Request.Path,
+            context.Response.StatusCode);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Unhandled exception: {Method} {Path}",
+            context.Request.Method,
+            context.Request.Path);
+
+        throw;
+    }
+});
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
