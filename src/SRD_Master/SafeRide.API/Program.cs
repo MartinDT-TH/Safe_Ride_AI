@@ -26,7 +26,14 @@ if (builder.Environment.IsDevelopment())
         optional: true,
         reloadOnChange: true);
 }
-
+builder.Services.AddHangfire(configuration =>
+{
+    configuration.UseSqlServerStorage(builder.Configuration.GetConnectionString("DefaultConnection"), new Hangfire.SqlServer.SqlServerStorageOptions
+    {
+        PrepareSchemaIfNecessary = true,
+        TryAutoDetectSchemaDependentOptions = false
+    });
+});
 builder.Services
     .AddControllers()
     .AddJsonOptions(options =>
@@ -136,7 +143,12 @@ app.UseAuthorization();
 app.MapControllers();
 app.UseWebSockets();
 app.MapHub<SafeRideHub>("/hubs/saferide");
-app.UseSafeRideApiJobs();
+var backgroundJobsEnabled = app.Configuration.GetValue<bool>("BackgroundJobs:Enabled");
+
+if (backgroundJobsEnabled)
+{
+    app.UseSafeRideApiJobs();
+}
 
 // ── Hangfire Dashboard (Admin only) ───────────────────────────────────────────
 app.UseHangfireDashboard("/hangfire", new DashboardOptions
