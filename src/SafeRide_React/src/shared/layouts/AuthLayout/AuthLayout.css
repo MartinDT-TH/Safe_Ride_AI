@@ -1,0 +1,34 @@
+/* ===== Auth Layout ===== */
+.auth-layout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+  background-color: var(--sr-bg);
+}
+
+/* ===== Auth Card ===== */
+.auth-card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--sr-white);
+  border-radius: var(--sr-radius-xl);
+  padding: 40px 36px 36px;
+  box-shadow: var(--sr-shadow-card);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 480px) {
+  .auth-layout {
+    padding: 16px;
+  }
+
+  .auth-card {
+    padding: 32px 24px 28px;
+    border-radius: var(--sr-radius-lg);
+  }
+}

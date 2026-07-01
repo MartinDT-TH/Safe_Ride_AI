@@ -1,0 +1,22 @@
+/* ===== Mobile Layout ===== */
+.mobile-layout {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--sr-bg);
+  padding: 24px;
+}
+
+.mobile-frame {
+  width: 100%;
+  max-width: 420px;
+  min-height: 780px;
+  background: var(--sr-white);
+  border-radius: 32px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.08), 0 2px 12px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
