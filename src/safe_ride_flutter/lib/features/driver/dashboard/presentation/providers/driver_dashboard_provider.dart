@@ -46,8 +46,15 @@ class DriverDashboardProvider extends ChangeNotifier {
 
   ActiveDriverTrip? _activeTrip;
   ActiveDriverTrip? get activeTrip => _activeTrip;
+  int? _completedTripAwaitingPaymentId;
   final Map<int, Future<bool>> _activeTripDetailsFetches = {};
   final Set<int> _activeTripDetailsLoaded = {};
+
+  int? takeCompletedTripAwaitingPayment() {
+    final tripId = _completedTripAwaitingPaymentId;
+    _completedTripAwaitingPaymentId = null;
+    return tripId;
+  }
 
   void toggleDemoMode() {
     _isDemoMode = !_isDemoMode;
@@ -118,6 +125,9 @@ class DriverDashboardProvider extends ChangeNotifier {
       if (update.tripStatus == 'COMPLETED' ||
           update.tripStatus == 'CANCELLED') {
         if (_activeTrip?.tripId == update.tripId) {
+          if (update.tripStatus == 'COMPLETED') {
+            _completedTripAwaitingPaymentId = update.tripId;
+          }
           _clearActiveTrip();
           notifyListeners();
         }
@@ -337,6 +347,7 @@ class DriverDashboardProvider extends ChangeNotifier {
           headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
         ),
       );
+      _completedTripAwaitingPaymentId = trip.tripId;
       _clearActiveTrip();
       return true;
     } catch (e) {
@@ -432,6 +443,9 @@ class DriverDashboardProvider extends ChangeNotifier {
       );
 
       if (tripStatus == 'COMPLETED' || tripStatus == 'CANCELLED') {
+        if (tripStatus == 'COMPLETED') {
+          _completedTripAwaitingPaymentId = trip.tripId;
+        }
         _clearActiveTrip();
       } else {
         _activeTrip = trip.copyWith(tripStatus: tripStatus);
