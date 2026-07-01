@@ -153,6 +153,14 @@ if (backgroundJobsEnabled)
     });
 }
 
+app.MapGet("/health", () => Results.Ok(new
+{
+    status = "Healthy",
+    service = "SafeRide.API",
+    environment = app.Environment.EnvironmentName,
+    timeUtc = DateTime.UtcNow
+}));
+
 app.Run();
 
 public partial class Program;
