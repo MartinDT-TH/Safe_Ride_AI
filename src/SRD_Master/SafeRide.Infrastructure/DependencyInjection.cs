@@ -39,6 +39,8 @@ public static class DependencyInjection
         IConfiguration configuration,
         IHostEnvironment environment)
     {
+        var backgroundJobsEnabled = configuration.GetValue<bool>("BackgroundJobs:Enabled");
+
         services.AddDbContext<ApplicationDbContext>(
             options => options.UseSqlServer(
                 configuration.GetConnectionString("DefaultConnection"),
@@ -144,22 +146,29 @@ public static class DependencyInjection
             .ValidateOnStart();
 
         // ── Hangfire ───────────────────────────────────────────────────────────────
-        services.AddHangfire(config => config
-            .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
-            .UseSimpleAssemblyNameTypeSerializer()
-            .UseRecommendedSerializerSettings()
-            .UseSqlServerStorage(
-                configuration.GetConnectionString("DefaultConnection"),
-                new SqlServerStorageOptions
-                {
-                    CommandBatchMaxTimeout = TimeSpan.FromMinutes(5),
-                    SlidingInvisibilityTimeout = TimeSpan.FromMinutes(5),
-                    QueuePollInterval = TimeSpan.Zero,
-                    UseRecommendedIsolationLevel = true,
-                    DisableGlobalLocks = true
-                }));
-        services.AddHangfireServer();
-        services.AddScoped<IBookingLifecycleJobScheduler, HangfireBookingLifecycleJobScheduler>();
+        if (backgroundJobsEnabled)
+        {
+            services.AddHangfire(config => config
+                .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+                .UseSimpleAssemblyNameTypeSerializer()
+                .UseRecommendedSerializerSettings()
+                .UseSqlServerStorage(
+                    configuration.GetConnectionString("DefaultConnection"),
+                    new SqlServerStorageOptions
+                    {
+                        CommandBatchMaxTimeout = TimeSpan.FromMinutes(5),
+                        SlidingInvisibilityTimeout = TimeSpan.FromMinutes(5),
+                        QueuePollInterval = TimeSpan.Zero,
+                        UseRecommendedIsolationLevel = true,
+                        DisableGlobalLocks = true
+                    }));
+            services.AddHangfireServer();
+            services.AddScoped<IBookingLifecycleJobScheduler, HangfireBookingLifecycleJobScheduler>();
+        }
+        else
+        {
+            services.AddScoped<IBookingLifecycleJobScheduler, NoOpBookingLifecycleJobScheduler>();
+        }
         // ──────────────────────────────────────────────────────────────────────────
 
         services.AddSingleton<RedisService>();
@@ -247,7 +256,7 @@ public static class DependencyInjection
         }
         // ──────────────────────────────────────────────────────────────────────────
 
-        if (environment.IsDevelopment())
+        if (backgroundJobsEnabled && environment.IsDevelopment())
         {
             if (configuration.GetValue<bool>("Simulator:EnableMockDrivers"))
             {
@@ -265,7 +274,7 @@ public static class DependencyInjection
             }
         }
 
-        if (!environment.IsEnvironment("Testing"))
+        if (backgroundJobsEnabled && !environment.IsEnvironment("Testing"))
         {
             services.AddHostedService<ScheduledBookingMatchingJob>();
             services.AddHostedService<BookingMatchingBackgroundService>();

@@ -26,14 +26,8 @@ if (builder.Environment.IsDevelopment())
         optional: true,
         reloadOnChange: true);
 }
-builder.Services.AddHangfire(configuration =>
-{
-    configuration.UseSqlServerStorage(builder.Configuration.GetConnectionString("DefaultConnection"), new Hangfire.SqlServer.SqlServerStorageOptions
-    {
-        PrepareSchemaIfNecessary = true,
-        TryAutoDetectSchemaDependentOptions = false
-    });
-});
+
+var backgroundJobsEnabled = builder.Configuration.GetValue<bool>("BackgroundJobs:Enabled");
 builder.Services
     .AddControllers()
     .AddJsonOptions(options =>
@@ -59,7 +53,10 @@ builder.Services
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
-builder.Services.AddSafeRideApiJobs(builder.Configuration);
+if (backgroundJobsEnabled)
+{
+    builder.Services.AddSafeRideApiJobs(builder.Configuration);
+}
 builder.Services.AddSafeRideRealtime();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -143,22 +140,18 @@ app.UseAuthorization();
 app.MapControllers();
 app.UseWebSockets();
 app.MapHub<SafeRideHub>("/hubs/saferide");
-var backgroundJobsEnabled = app.Configuration.GetValue<bool>("BackgroundJobs:Enabled");
 
 if (backgroundJobsEnabled)
 {
     app.UseSafeRideApiJobs();
+    app.UseHangfireDashboard("/hangfire", new DashboardOptions
+    {
+        Authorization =
+        [
+            new HangfireAdminAuthorizationFilter()
+        ]
+    });
 }
-
-// ── Hangfire Dashboard (Admin only) ───────────────────────────────────────────
-app.UseHangfireDashboard("/hangfire", new DashboardOptions
-{
-    Authorization =
-    [
-        new HangfireAdminAuthorizationFilter()
-    ]
-});
-// ───────────────────────────────────────────────────────────────
 
 app.Run();
 
