@@ -10,6 +10,7 @@ using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
 using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
+using System.Text.Json;
 
 namespace SafeRide.Infrastructure.Simulator;
 
@@ -45,31 +46,38 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
         await InitializeMockDriversInRedisAsync(stoppingToken);
         var lastTtlRefresh = DateTimeOffset.UtcNow;
 
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            try
+            while (!stoppingToken.IsCancellationRequested)
             {
-                var options = _simulatorOptionsMonitor.CurrentValue;
-                if (DateTimeOffset.UtcNow - lastTtlRefresh >= TimeSpan.FromSeconds(options.MockDriverTtlRefreshSeconds))
+                try
                 {
-                    await InitializeMockDriversInRedisAsync(stoppingToken);
-                    lastTtlRefresh = DateTimeOffset.UtcNow;
+                    var options = _simulatorOptionsMonitor.CurrentValue;
+                    if (DateTimeOffset.UtcNow - lastTtlRefresh >= TimeSpan.FromSeconds(options.MockDriverTtlRefreshSeconds))
+                    {
+                        await InitializeMockDriversInRedisAsync(stoppingToken);
+                        lastTtlRefresh = DateTimeOffset.UtcNow;
+                    }
+
+                    await ProcessOffersAsync(stoppingToken);
+                    await ProcessConfirmedTripsAsync(stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error processing mock driver simulation cycle");
                 }
 
-                await ProcessOffersAsync(stoppingToken);
-                await ProcessConfirmedTripsAsync(stoppingToken);
+                // Check for offers every 2 seconds
+                await Task.Delay(2000, stoppingToken);
             }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error processing mock driver simulation cycle");
-            }
-
-            // Check for offers every 2 seconds
-            await Task.Delay(2000, stoppingToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected on shutdown
         }
 
         _logger.LogInformation("MockDriverOfferAcceptorService stopped");
@@ -113,9 +121,9 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
                     if (driverProfile.WorkStatus != nextWorkStatus)
                     {
                         driverProfile.WorkStatus = nextWorkStatus;
-                        driverProfile.LastActiveAt = DateTime.UtcNow;
-                        driverProfile.UpdatedAt = DateTime.UtcNow;
                     }
+                    driverProfile.LastActiveAt = DateTime.UtcNow;
+                    driverProfile.UpdatedAt = DateTime.UtcNow;
                 }
 
                 await redisService.SetAsync(RedisKeys.DriverOnline(mockDriver.DriverId), "1", TimeSpan.FromMinutes(30));
@@ -123,6 +131,9 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
 
                 // Add driver location to geo-index
                 await redisService.GeoAddAsync(RedisKeys.OnlineDriversGeo, mockDriver.CurrentLng, mockDriver.CurrentLat, mockDriver.DriverId.ToString());
+
+                var location = new DriverLocationCache(mockDriver.DriverId, mockDriver.CurrentLat, mockDriver.CurrentLng, DateTime.UtcNow);
+                await redisService.SetAsync(RedisKeys.DriverLocation(mockDriver.DriverId), JsonSerializer.Serialize(location), TimeSpan.FromMinutes(30));
 
                 _logger.LogDebug("Mock driver {DriverId} ({Name}) TTL refreshed as {Status} at ({Lat:F6}, {Lng:F6})",
                     mockDriver.DriverId, mockDriver.Name, nextStatus, mockDriver.CurrentLat, mockDriver.CurrentLng);
@@ -142,14 +153,17 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
         var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var bookingAssignmentService = scope.ServiceProvider.GetRequiredService<IBookingAssignmentService>();
         var dateTimeProvider = scope.ServiceProvider.GetRequiredService<IDateTimeProvider>();
+        var redisService = scope.ServiceProvider.GetRequiredService<IRedisService>();
 
         foreach (var mockDriver in _mockDrivers.Where(d => d.IsActive))
         {
             // Get pending offers for this mock driver (Status: Sent)
             var pendingOffers = await dbContext.BookingDriverOffers
+                .Include(o => o.Booking)
                 .Where(o => o.DriverId == mockDriver.DriverId
                     && o.OfferStatus == DriverOfferStatus.Sent
                     && o.ExpiresAt > dateTimeProvider.UtcNow
+                    && o.Booking.BookingStatus == BookingStatus.Searching
                     && !mockDriver.ProcessedOffers.Contains(o.Id))
                 .ToListAsync(cancellationToken);
 
@@ -164,11 +178,49 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
                     foreach (var id in toRemove) mockDriver.ProcessedOffers.Remove(id);
                 }
 
+                // Check if driver is already busy
+                var driverProfile = await dbContext.DriverProfiles.AsNoTracking().FirstOrDefaultAsync(p => p.DriverId == mockDriver.DriverId, cancellationToken);
+                var activeTrips = await dbContext.Trips.AsNoTracking()
+                    .Where(t => t.DriverId == mockDriver.DriverId &&
+                                (t.TripStatus == TripStatus.ACCEPTED || t.TripStatus == TripStatus.DRIVER_ARRIVING || t.TripStatus == TripStatus.ARRIVED || t.TripStatus == TripStatus.IN_PROGRESS))
+                    .ToListAsync(cancellationToken);
+                
+                bool isBusy = (driverProfile?.WorkStatus == DriverWorkStatus.Busy) || activeTrips.Any();
+
+                if (isBusy)
+                {
+                    SimulatorConsoleOutput.Print("[SIM]", "[DRIVER_ACCEPT][SKIP_BUSY]", new {
+                        driverId = mockDriver.DriverId,
+                        offerId = offer.Id,
+                        bookingId = offer.BookingId,
+                        workStatus = driverProfile?.WorkStatus.ToString(),
+                        activeTripIds = activeTrips.Select(t => t.Id).ToList()
+                    }, _simulatorOptionsMonitor.CurrentValue.EnableSimulatorConsoleOutput);
+
+                    try
+                    {
+                        await bookingAssignmentService.RejectDriverOfferAsync(mockDriver.DriverId, offer.Id, cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to auto-reject offer {OfferId} for busy mock driver", offer.Id);
+                    }
+                    continue;
+                }
+
                 // Decide whether to accept based on acceptance rate
                 bool shouldAccept = _random.Next(0, 100) < mockDriver.AcceptanceRatePercent;
                 if (!shouldAccept)
                 {
                     _logger.LogInformation("Mock driver {DriverId} ({Name}) rejected offer {OfferId}", mockDriver.DriverId, mockDriver.Name, offer.Id);
+                    try
+                    {
+                        await bookingAssignmentService.RejectDriverOfferAsync(mockDriver.DriverId, offer.Id, cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to auto-reject offer {OfferId} for mock driver due to acceptance rate", offer.Id);
+                    }
                     continue;
                 }
 
@@ -179,19 +231,61 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
                 {
                     try
                     {
+                        // Print state before accept
+                        await PrintDriverStateAsync("BEFORE_ACCEPT", mockDriver.DriverId, redisService, dbContext, _simulatorOptionsMonitor.CurrentValue.EnableSimulatorConsoleOutput, cancellationToken);
+
+                        // Re-check conditions before accepting to avoid business rule errors
+                        var freshOffer = await dbContext.BookingDriverOffers.Include(o => o.Booking).AsNoTracking().FirstOrDefaultAsync(o => o.Id == offer.Id, cancellationToken);
+                        if (freshOffer == null || freshOffer.OfferStatus != DriverOfferStatus.Sent || freshOffer.ExpiresAt <= dateTimeProvider.UtcNow || freshOffer.Booking.BookingStatus != BookingStatus.Searching)
+                        {
+                            _logger.LogInformation("Skipping accept because offer {OfferId} is no longer valid for accept.", offer.Id);
+                            continue;
+                        }
+
                         // Call AcceptDriverOfferAsync (This sets status to DriverAccepted, doesn't start trip yet)
                         await bookingAssignmentService.AcceptDriverOfferAsync(mockDriver.DriverId, offer.Id, cancellationToken);
-                        _logger.LogInformation("Mock driver {DriverId} ({Name}) accepted offer {OfferId}. Waiting for customer confirmation.",
-                            mockDriver.DriverId, mockDriver.Name, offer.Id);
+                        
+                        SimulatorConsoleOutput.Print("[SIM]", "[DRIVER_ACCEPT][SUCCESS]", new {
+                            driverId = mockDriver.DriverId,
+                            driverName = mockDriver.Name,
+                            offerId = offer.Id,
+                            bookingId = offer.BookingId
+                        }, _simulatorOptionsMonitor.CurrentValue.EnableSimulatorConsoleOutput);
+
+                        // Print state after accept
+                        await PrintDriverStateAsync("AFTER_ACCEPT", mockDriver.DriverId, redisService, dbContext, _simulatorOptionsMonitor.CurrentValue.EnableSimulatorConsoleOutput, cancellationToken);
                     }
                     catch (Exception ex)
                     {
-                        mockDriver.ProcessedOffers.Remove(offer.Id);
                         _logger.LogError(ex, "Mock driver {DriverId} ({Name}) failed to accept offer {OfferId}", mockDriver.DriverId, mockDriver.Name, offer.Id);
                     }
                 }
             }
         }
+    }
+
+    private async Task PrintDriverStateAsync(string actionContext, Guid driverId, IRedisService redisService, ApplicationDbContext dbContext, bool enabled, CancellationToken ct)
+    {
+        if (!enabled) return;
+
+        var profile = await dbContext.DriverProfiles.AsNoTracking().FirstOrDefaultAsync(p => p.DriverId == driverId, ct);
+        var activeTrip = await dbContext.Trips.AsNoTracking().FirstOrDefaultAsync(t => t.DriverId == driverId && (t.TripStatus == TripStatus.ACCEPTED || t.TripStatus == TripStatus.DRIVER_ARRIVING || t.TripStatus == TripStatus.ARRIVED || t.TripStatus == TripStatus.IN_PROGRESS), ct);
+        
+        var onlineStr = await redisService.GetAsync(RedisKeys.DriverOnline(driverId));
+        var statusStr = await redisService.GetAsync(RedisKeys.DriverStatus(driverId));
+        var locStr = await redisService.GetAsync(RedisKeys.DriverLocation(driverId));
+
+        SimulatorConsoleOutput.Print("[SIM]", $"[STATE][{actionContext}]", new {
+            driverId = driverId,
+            workStatus = profile?.WorkStatus.ToString(),
+            lastActiveAt = profile?.LastActiveAt,
+            activeTripId = activeTrip?.Id,
+            activeTripBookingId = activeTrip?.BookingId,
+            activeTripStatus = activeTrip?.TripStatus.ToString(),
+            redisOnline = onlineStr,
+            redisStatus = statusStr,
+            redisLocation = locStr
+        }, enabled);
     }
 
     private async Task ProcessConfirmedTripsAsync(CancellationToken cancellationToken)
@@ -242,6 +336,8 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
 
         try
         {
+            await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+
             var autoCompleteTrips = _simulatorOptionsMonitor.CurrentValue.MockDriverAutoCompleteTrips;
             var trip = await dbContext.Trips
                 .AsNoTracking()
@@ -298,7 +394,7 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
                 logger.LogWarning(ex, "Failed to get route estimate for driver arrival path. Falling back to direct line.");
                 arrivalPath = new List<(double Lat, double Lng)> { (mockDriver.CurrentLat, mockDriver.CurrentLng), (booking.PickupLocation.Y, booking.PickupLocation.X) };
             }
-
+            // chỉnh tốc độ di chuyển của tài xế 13.8 m/s ~ 50 km/h có thể thay đổi tùy ý
             bool arrived = await MoveDriverAlongPathAsync(mockDriver, arrivalPath, 13.8, booking, trip, realtimeService, redisService, dateTimeProvider, logger, cancellationToken);
             if (!arrived) return;
 
@@ -369,6 +465,8 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
 
     private async Task<bool> MoveDriverAlongPathAsync(MockDriver mockDriver, List<(double Lat, double Lng)> path, double speedMs, Booking booking, Trip trip, IRealtimeNotificationService realtimeService, IRedisService redisService, IDateTimeProvider dateTimeProvider, ILogger logger, CancellationToken ct)
     {
+        if (path == null || path.Count < 2) return false;
+
         double totalDistance = PolylineUtils.CalculateTotalDistance(path);
         double currentDistance = 0;
         const int intervalMs = 1000;
@@ -399,16 +497,48 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
             await redisService.SetAsync(RedisKeys.DriverOnline(mockDriver.DriverId), "1", TimeSpan.FromMinutes(5));
             await redisService.SetAsync(RedisKeys.DriverStatus(mockDriver.DriverId), "Busy", TimeSpan.FromMinutes(5));
             await redisService.GeoAddAsync(RedisKeys.OnlineDriversGeo, point.Lng, point.Lat, mockDriver.DriverId.ToString());
+            
+            var locationCache = new DriverLocationCache(mockDriver.DriverId, point.Lat, point.Lng, dateTimeProvider.UtcNow);
+            await redisService.SetAsync(RedisKeys.DriverLocation(mockDriver.DriverId), JsonSerializer.Serialize(locationCache), TimeSpan.FromMinutes(5));
 
             await realtimeService.PublishDriverLocationUpdatedAsync(new DriverLocationUpdatedEvent(mockDriver.DriverId, booking.CustomerId, trip.Id, point.Lat, point.Lng, dateTimeProvider.UtcNow), ct);
 
-            await Task.Delay(intervalMs, ct);
-            currentDistance += speedMs * (intervalMs / 1000.0);
+            if (checkCounter % 5 == 0)
+            {
+                SimulatorConsoleOutput.Print("[SIM]", "[LOCATION]", new {
+                    driverId = mockDriver.DriverId,
+                    tripId = trip.Id,
+                    lat = point.Lat,
+                    lng = point.Lng
+                }, _simulatorOptionsMonitor.CurrentValue.EnableSimulatorConsoleOutput);
+            }
+
+            var skipDelay = _simulatorOptionsMonitor.CurrentValue.MockDriverSkipMovementDelay;
+            if (!skipDelay)
+            {
+                await Task.Delay(intervalMs, ct);
+            }
+            
+            currentDistance += speedMs * (skipDelay ? 10 : (intervalMs / 1000.0)); // Move 10x faster if skipping delay
             checkCounter++;
         }
 
         mockDriver.CurrentLat = path[^1].Lat;
         mockDriver.CurrentLng = path[^1].Lng;
+        
+        // Publish final point
+        await redisService.GeoAddAsync(RedisKeys.OnlineDriversGeo, mockDriver.CurrentLng, mockDriver.CurrentLat, mockDriver.DriverId.ToString());
+        var finalLocationCache = new DriverLocationCache(mockDriver.DriverId, mockDriver.CurrentLat, mockDriver.CurrentLng, dateTimeProvider.UtcNow);
+        await redisService.SetAsync(RedisKeys.DriverLocation(mockDriver.DriverId), JsonSerializer.Serialize(finalLocationCache), TimeSpan.FromMinutes(5));
+        await realtimeService.PublishDriverLocationUpdatedAsync(new DriverLocationUpdatedEvent(mockDriver.DriverId, booking.CustomerId, trip.Id, mockDriver.CurrentLat, mockDriver.CurrentLng, dateTimeProvider.UtcNow), ct);
+
+        SimulatorConsoleOutput.Print("[SIM]", "[LOCATION][FINAL]", new {
+            driverId = mockDriver.DriverId,
+            tripId = trip.Id,
+            lat = mockDriver.CurrentLat,
+            lng = mockDriver.CurrentLng
+        }, _simulatorOptionsMonitor.CurrentValue.EnableSimulatorConsoleOutput);
+
         return true;
     }
 }

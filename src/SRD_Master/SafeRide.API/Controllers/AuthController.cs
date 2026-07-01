@@ -35,7 +35,7 @@ public class AuthController : ControllerBase
         _userManager = userManager;
         _jwtTokenService = jwtTokenService;
         _cloudinaryImageService = cloudinaryImageService;
-        _environment = environment;
+        _environment = environment;;
     }
 
 
@@ -194,9 +194,10 @@ public class AuthController : ControllerBase
         [FromBody] GoogleLoginRequest request)
     {
         var response = await _authService.GoogleLoginAsync(
-            request,
-            HttpContext.Connection.RemoteIpAddress?.ToString(),
-            Request.Headers.UserAgent.ToString());
+        request,
+        HttpContext.Connection.RemoteIpAddress?.ToString(),
+        Request.Headers.UserAgent.ToString());
+
 
         return Ok(response);
     }

@@ -13,6 +13,8 @@ public sealed record BookingDriverOfferResponse(
     LicenseClass LicenseClass,
     DateTime ExpiresAt,
     DriverOfferStatus OfferStatus,
+    double? DriverLatitude = null,
+    double? DriverLongitude = null,
     int? CustomerConfirmRemainingSeconds = null);
 
 public sealed record BookingLocationResponse(

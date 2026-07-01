@@ -98,6 +98,7 @@ abstract final class HistoryStrings {
   static const rebook = 'Đặt lại';
   static const cancelledByCustomer = 'Đã hủy bởi khách hàng';
   static const driverRating = '★';
+  static const booked = 'Đã đặt';
 }
 
 abstract final class BookingStrings {
@@ -218,7 +219,11 @@ abstract final class LocationStrings {
 abstract final class AppConfig {
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://192.168.1.36:5026/api/',
+    defaultValue: 'https://safe-ride-ai.onrender.com/api/',
+  );
+  static const forceWebSockets = bool.fromEnvironment(
+    'FORCE_WEBSOCKETS',
+    defaultValue: true, // Dev only or config-based
   );
   static const fontFamily = 'SFProDisplay';
   static const logoUrl =
@@ -241,10 +246,15 @@ abstract final class ApiEndpoints {
   static const profileAvatar = '/auth/profile/avatar';
   static const logout = '/auth/logout';
   static const bookings = '/bookings';
+  static const bookingHistory = '/bookings/history';
   static const activeBooking = '/bookings/active';
   static const availablePromotions = '/promotions/available';
   static const bookingCatalog = '/bookings/catalog';
   static const bookingEstimate = '/bookings/estimate';
+  static const driverOnline = '/drivers/online';
+  static const driverOffline = '/drivers/offline';
+  static const driverLocation = '/drivers/location';
+  static const driverActiveTrip = '/drivers/trips/active';
   static const nearbyDrivers = '/drivers/nearby';
   static String acceptDriverOffer(int offerId) =>
       '/drivers/offers/$offerId/accept';
@@ -254,7 +264,13 @@ abstract final class ApiEndpoints {
       '/bookings/$bookingId/confirm-driver-offer/$offerId';
   static String tripStatus(int tripId) => '/trips/$tripId/status';
   static String completeTrip(int tripId) => '/trips/$tripId/complete';
-  static String submitTripRating(int tripId) => '/trips/$tripId/rating';
+  static String createDriverTripQrPayment(int tripId) =>
+      '/payments/driver/trips/$tripId/qr';
+  static String driverTripPaymentStatus(int tripId) =>
+      '/payments/driver/trips/$tripId/status';
+  static String confirmDriverTripCashPayment(int tripId) =>
+      '/payments/driver/trips/$tripId/cash';
+  static String submitTripRating(int tripId) => '/feedbacks/trips/$tripId/rating';
   static const identityVerificationDocuments =
       '/identity-verification/documents';
 }
@@ -313,6 +329,8 @@ abstract final class ApiKeys {
   static const longitude = 'longitude';
   static const offerId = 'offerId';
   static const driverId = 'driverId';
+  static const driverLatitude = 'driverLatitude';
+  static const driverLongitude = 'driverLongitude';
   static const driverName = 'driverName';
   static const driverAvatarUrl = 'driverAvatarUrl';
   static const rating = 'rating';

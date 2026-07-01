@@ -18,7 +18,15 @@ namespace SafeRide.Infrastructure.Redis
             string value,
             TimeSpan expiration);
 
+        Task<bool> TryAcquireDistributedLockAsync(
+            string key,
+            string value,
+            TimeSpan expiration);
+
         Task<string?> GetAsync(string key);
+
+        Task<IReadOnlyDictionary<string, string?>> GetManyAsync(
+            IReadOnlyCollection<string> keys);
 
         Task RemoveAsync(string key);
 

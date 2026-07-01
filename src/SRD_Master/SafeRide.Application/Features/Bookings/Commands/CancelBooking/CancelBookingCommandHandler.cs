@@ -108,9 +108,6 @@ public sealed class CancelBookingCommandHandler
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // Cancel scheduled Hangfire lifecycle jobs — booking is no longer Searching.
-        await _jobScheduler.CancelJobsForBookingAsync(booking.BookingId, cancellationToken);
-
         await _realtimeNotificationService.PublishBookingStatusChangedAsync(
             new BookingStatusChangedEvent(
                 booking.BookingId,

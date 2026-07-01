@@ -3,10 +3,10 @@ import 'package:provider/provider.dart';
 
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
-import '../../../home/presentation/pages/customer_home_page.dart';
-import '../../../home/presentation/providers/home_provider.dart';
-import '../../data/models/booking_response.dart';
-import '../providers/booking_provider.dart';
+import '../../../../customer/home/presentation/pages/customer_home_page.dart';
+import '../../../../customer/home/presentation/providers/home_provider.dart';
+import '../../../../customer/booking/data/models/booking_response.dart';
+import '../../../../customer/booking/presentation/providers/booking_provider.dart';
 
 class TripSummaryPage extends StatefulWidget {
   const TripSummaryPage({

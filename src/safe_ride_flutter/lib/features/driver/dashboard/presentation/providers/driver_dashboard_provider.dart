@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 
@@ -20,9 +21,11 @@ class DriverDashboardProvider extends ChangeNotifier {
   DriverStatus _status = DriverStatus.offline;
   DriverStatus get status => _status;
 
+  // debug: Mock value until driver income summary API is available.
   double _todayIncome = 500000;
   double get todayIncome => _todayIncome;
 
+  // debug: Mock value until driver trip summary API is available.
   int _todayTrips = 3;
   int get todayTrips => _todayTrips;
 
@@ -38,8 +41,43 @@ class DriverDashboardProvider extends ChangeNotifier {
   bool _isUpdatingTrip = false;
   bool get isUpdatingTrip => _isUpdatingTrip;
 
+  bool _isDemoMode = false;
+  bool get isDemoMode => _isDemoMode;
+
   ActiveDriverTrip? _activeTrip;
   ActiveDriverTrip? get activeTrip => _activeTrip;
+  int? _completedTripAwaitingPaymentId;
+  final Map<int, Future<bool>> _activeTripDetailsFetches = {};
+  final Set<int> _activeTripDetailsLoaded = {};
+
+  int? takeCompletedTripAwaitingPayment() {
+    final tripId = _completedTripAwaitingPaymentId;
+    _completedTripAwaitingPaymentId = null;
+    return tripId;
+  }
+
+  void toggleDemoMode() {
+    _isDemoMode = !_isDemoMode;
+    if (_isDemoMode) {
+      _socketService.onDriverLocationUpdated((update) {
+        if (_activeTrip != null && update.tripId == _activeTrip!.tripId) {
+          _demoLat = update.latitude;
+          _demoLng = update.longitude;
+          notifyListeners();
+        }
+      }, key: 'driverDashboardDemo');
+    } else {
+      _demoLat = null;
+      _demoLng = null;
+      _socketService.removeDriverLocationUpdatedHandler('driverDashboardDemo');
+    }
+    notifyListeners();
+  }
+
+  double? _demoLat;
+  double? _demoLng;
+  double? get demoLat => _demoLat;
+  double? get demoLng => _demoLng;
 
   bool _isLoadingActiveTrip = false;
   bool get isLoadingActiveTrip => _isLoadingActiveTrip;
@@ -52,34 +90,17 @@ class DriverDashboardProvider extends ChangeNotifier {
       return;
     }
 
-    if (_accessToken == accessToken) {
-      _socketService.onBookingUpdated((update) {
-      if (update.status == 'DriverAssigned' || update.tripId != null) {
-        if (update.tripId != null) {
-          _activeTrip = ActiveDriverTrip(
-            bookingId: update.bookingId,
-            tripId: update.tripId!,
-            tripStatus: update.tripStatus ?? 'ACCEPTED',
-          );
-          notifyListeners();
-        }
-      } else if (update.status == 'Cancelled' || update.status == 'Expired') {
-        if (_activeTrip?.bookingId == update.bookingId) {
-          _activeTrip = null;
-          notifyListeners();
-        }
-      }
-    }, key: 'driverDashboardBooking');
-    try {
-        await loadActiveTrip();
-      } catch (error) {
-        debugPrint('DRIVER_DASHBOARD: reload active trip failed: $error');
-      }
-      return;
-    }
-
     _accessToken = accessToken;
     await _socketService.connect(accessToken);
+    _registerRealtimeHandlers();
+    try {
+      await loadActiveTrip();
+    } catch (error) {
+      debugPrint('DRIVER_DASHBOARD: load active trip failed: $error');
+    }
+  }
+
+  void _registerRealtimeHandlers() {
     _socketService.onDriverOfferReceived((offer) {
       _currentRequest = TripRequest(
         offerId: offer.offerId,
@@ -92,60 +113,110 @@ class DriverDashboardProvider extends ChangeNotifier {
       );
       _hasNewRequest = true;
       notifyListeners();
-    });
+    }, key: 'driverDashboardOfferReceived');
     _socketService.onDriverOfferClosed((offerId) {
       if (_currentRequest?.offerId == offerId) {
         _hasNewRequest = false;
         _currentRequest = null;
         notifyListeners();
       }
-    });
+    }, key: 'driverDashboardOfferClosed');
     _socketService.onTripStatusChanged((update) {
       if (update.tripStatus == 'COMPLETED' ||
           update.tripStatus == 'CANCELLED') {
         if (_activeTrip?.tripId == update.tripId) {
-          _activeTrip = null;
+          if (update.tripStatus == 'COMPLETED') {
+            _completedTripAwaitingPaymentId = update.tripId;
+          }
+          _clearActiveTrip();
           notifyListeners();
         }
         return;
       }
 
+      final oldTrip = _activeTrip;
+      final sameTrip = oldTrip?.tripId == update.tripId;
       _activeTrip = ActiveDriverTrip(
         bookingId: update.bookingId,
         tripId: update.tripId,
         tripStatus: update.tripStatus,
+        pickupLat: sameTrip ? oldTrip?.pickupLat : null,
+        pickupLng: sameTrip ? oldTrip?.pickupLng : null,
+        destLat: sameTrip ? oldTrip?.destLat : null,
+        destLng: sameTrip ? oldTrip?.destLng : null,
+        encodedPolyline: sameTrip ? oldTrip?.encodedPolyline : null,
+        arrivalPolyline: sameTrip ? oldTrip?.arrivalPolyline : null,
       );
       notifyListeners();
-    }, key: 'driverDashboard');
-    _socketService.onBookingUpdated((update) {
-      if (update.status == 'DriverAssigned' || update.tripId != null) {
-        if (update.tripId != null) {
-          _activeTrip = ActiveDriverTrip(
-            bookingId: update.bookingId,
-            tripId: update.tripId!,
-            tripStatus: update.tripStatus ?? 'ACCEPTED',
-          );
-          notifyListeners();
-        }
-      } else if (update.status == 'Cancelled' || update.status == 'Expired') {
-        if (_activeTrip?.bookingId == update.bookingId) {
-          _activeTrip = null;
-          notifyListeners();
-        }
+      _socketService.joinTrip(update.tripId);
+      if (!_hasActiveTripDetails(update.tripId)) {
+        _fetchActiveTripDetails(update.bookingId, update.tripId);
       }
-    }, key: 'driverDashboardBooking');
+    }, key: 'driverDashboard');
+
+    _socketService.onBookingUpdated(
+      _handleBookingUpdate,
+      key: 'driverDashboardBooking',
+    );
+  }
+
+  Future<void> goOnline(double lat, double lng) async {
+    final token = _accessToken;
+    if (token == null) return;
     try {
-      await loadActiveTrip();
-    } catch (error) {
-      debugPrint('DRIVER_DASHBOARD: load active trip failed: $error');
+      await _dio.post(
+        ApiEndpoints.driverOnline,
+        data: {ApiKeys.latitude: lat, ApiKeys.longitude: lng},
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+        ),
+      );
+      _status = DriverStatus.online;
+      _errorMessage = null;
+
+      await initializeRealtime(token);
+
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Failed to go online: $e');
+      _errorMessage = 'Không thể online. Vui lòng thử lại.';
+      notifyListeners();
+      throw e;
     }
   }
 
-  void toggleStatus() {
-    _status = _status == DriverStatus.offline
-        ? DriverStatus.online
-        : DriverStatus.offline;
-    notifyListeners();
+  Future<void> goOffline() async {
+    final token = _accessToken;
+    if (token == null) return;
+    try {
+      await _dio.post(
+        ApiEndpoints.driverOffline,
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+        ),
+      );
+    } catch (e) {
+      debugPrint('Failed to go offline: $e');
+    } finally {
+      if (_socketService.isConnected) {
+        await _socketService.setDriverOffline();
+      }
+      _socketService.removeTripStatusChangedHandler('driverDashboard');
+      _socketService.removeDriverLocationUpdatedHandler('driverDashboardDemo');
+      _socketService.removeBookingUpdatedHandler('driverDashboardBooking');
+      _socketService.removeDriverOfferReceivedHandler(
+        'driverDashboardOfferReceived',
+      );
+      _socketService.removeDriverOfferClosedHandler(
+        'driverDashboardOfferClosed',
+      );
+      await _socketService.disconnect();
+      _hasNewRequest = false;
+      _currentRequest = null;
+      _clearActiveTrip();
+      _status = DriverStatus.offline;
+      notifyListeners();
+    }
   }
 
   void simulateNewRequest() {
@@ -171,23 +242,10 @@ class DriverDashboardProvider extends ChangeNotifier {
 
     _isResponding = true;
     notifyListeners();
-    _socketService.onBookingUpdated((update) {
-      if (update.status == 'DriverAssigned' || update.tripId != null) {
-        if (update.tripId != null) {
-          _activeTrip = ActiveDriverTrip(
-            bookingId: update.bookingId,
-            tripId: update.tripId!,
-            tripStatus: update.tripStatus ?? 'ACCEPTED',
-          );
-          notifyListeners();
-        }
-      } else if (update.status == 'Cancelled' || update.status == 'Expired') {
-        if (_activeTrip?.bookingId == update.bookingId) {
-          _activeTrip = null;
-          notifyListeners();
-        }
-      }
-    }, key: 'driverDashboardBooking');
+    _socketService.onBookingUpdated(
+      _handleBookingUpdate,
+      key: 'driverDashboardBooking',
+    );
     try {
       await _dio.post(
         ApiEndpoints.acceptDriverOffer(request.offerId),
@@ -195,11 +253,15 @@ class DriverDashboardProvider extends ChangeNotifier {
           headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
         ),
       );
-      // Removed immediate trip creation logic. 
+      // Removed immediate trip creation logic.
       // Waiting for SignalR 'BookingDriverAssigned' event.
+      _errorMessage = null;
+    } catch (e) {
+      debugPrint('Failed to accept request: $e');
+      _errorMessage = 'Không thể nhận chuyến. Vui lòng thử lại.';
+    } finally {
       _hasNewRequest = false;
       _currentRequest = null;
-    } finally {
       _isResponding = false;
       notifyListeners();
     }
@@ -214,23 +276,6 @@ class DriverDashboardProvider extends ChangeNotifier {
 
     _isResponding = true;
     notifyListeners();
-    _socketService.onBookingUpdated((update) {
-      if (update.status == 'DriverAssigned' || update.tripId != null) {
-        if (update.tripId != null) {
-          _activeTrip = ActiveDriverTrip(
-            bookingId: update.bookingId,
-            tripId: update.tripId!,
-            tripStatus: update.tripStatus ?? 'ACCEPTED',
-          );
-          notifyListeners();
-        }
-      } else if (update.status == 'Cancelled' || update.status == 'Expired') {
-        if (_activeTrip?.bookingId == update.bookingId) {
-          _activeTrip = null;
-          notifyListeners();
-        }
-      }
-    }, key: 'driverDashboardBooking');
     try {
       await _dio.post(
         ApiEndpoints.rejectDriverOffer(request.offerId),
@@ -238,11 +283,35 @@ class DriverDashboardProvider extends ChangeNotifier {
           headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
         ),
       );
+      _errorMessage = null;
+    } catch (e) {
+      debugPrint('Failed to decline request: $e');
+      _errorMessage = 'Không thể từ chối chuyến. Vui lòng thử lại.';
+    } finally {
       _hasNewRequest = false;
       _currentRequest = null;
-    } finally {
       _isResponding = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> updateLocation(double lat, double lng) async {
+    if (_socketService.isConnected) {
+      await _socketService.updateDriverLocation(lat, lng);
+      return;
+    }
+    final token = _accessToken;
+    if (token == null) return;
+    try {
+      await _dio.patch(
+        ApiEndpoints.driverLocation,
+        data: {ApiKeys.latitude: lat, ApiKeys.longitude: lng},
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+        ),
+      );
+    } catch (e) {
+      debugPrint('Failed to update driver location: $e');
     }
   }
 
@@ -254,12 +323,40 @@ class DriverDashboardProvider extends ChangeNotifier {
     return updateTripStatus('ARRIVED');
   }
 
+  Future<bool> startTrip() {
+    return updateTripStatus('IN_PROGRESS');
+  }
+
   Future<bool> cancelActiveTrip() {
     return updateTripStatus('CANCELLED');
   }
 
-  Future<bool> completeActiveTrip() {
-    return updateTripStatus('COMPLETED');
+  Future<bool> completeActiveTrip() async {
+    final trip = _activeTrip;
+    final token = _accessToken;
+    if (trip == null || token == null || _isUpdatingTrip) {
+      return false;
+    }
+
+    _isUpdatingTrip = true;
+    notifyListeners();
+    try {
+      await _dio.post(
+        ApiEndpoints.completeTrip(trip.tripId),
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+        ),
+      );
+      _completedTripAwaitingPaymentId = trip.tripId;
+      _clearActiveTrip();
+      return true;
+    } catch (e) {
+      debugPrint('Failed to complete trip: $e');
+      throw e;
+    } finally {
+      _isUpdatingTrip = false;
+      notifyListeners();
+    }
   }
 
   Future<void> loadActiveTrip() async {
@@ -274,32 +371,49 @@ class DriverDashboardProvider extends ChangeNotifier {
 
     try {
       final response = await _dio.get(
-        '/drivers/trips/active',
-        options: Options(headers: {ApiKeys.authorization: AuthHeader.bearer(token)}),
+        ApiEndpoints.driverActiveTrip,
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+        ),
       );
       if (response.statusCode == 204 || response.data == null) {
-        _activeTrip = null;
+        _clearActiveTrip();
         return;
       }
 
       if (response.data is Map) {
         final data = Map<String, dynamic>.from(response.data as Map);
-        final bookingId = (data[ApiKeys.bookingId] ?? data['BookingId']) as num?;
+        final bookingId =
+            (data[ApiKeys.bookingId] ?? data['BookingId']) as num?;
         final tripId = (data[ApiKeys.tripId] ?? data['TripId']) as num?;
         final tripStatus = _normalizeTripStatus(
           data[ApiKeys.tripStatus] ?? data['TripStatus'],
         );
         if (bookingId != null && tripId != null && tripStatus != null) {
+          final oldTrip = _activeTrip;
+          final tripIdValue = tripId.toInt();
+          final sameTrip = oldTrip?.tripId == tripIdValue;
           _activeTrip = ActiveDriverTrip(
             bookingId: bookingId.toInt(),
-            tripId: tripId.toInt(),
+            tripId: tripIdValue,
             tripStatus: tripStatus,
+            pickupLat: sameTrip ? oldTrip?.pickupLat : null,
+            pickupLng: sameTrip ? oldTrip?.pickupLng : null,
+            destLat: sameTrip ? oldTrip?.destLat : null,
+            destLng: sameTrip ? oldTrip?.destLng : null,
+            encodedPolyline: sameTrip ? oldTrip?.encodedPolyline : null,
+            arrivalPolyline: sameTrip ? oldTrip?.arrivalPolyline : null,
           );
+          _socketService.joinTrip(tripIdValue);
+          if (!_hasActiveTripDetails(tripIdValue)) {
+            await _fetchActiveTripDetailsSync(bookingId.toInt(), tripIdValue);
+          }
         }
       }
     } catch (e) {
       debugPrint('Error loading active trip: $e');
-      _errorMessage = 'Không thể tải dữ liệu chuyến đi hiện tại. Vui lòng thử lại.';
+      _errorMessage =
+          'Không thể tải dữ liệu chuyến đi hiện tại. Vui lòng thử lại.';
     } finally {
       _isLoadingActiveTrip = false;
       notifyListeners();
@@ -315,23 +429,10 @@ class DriverDashboardProvider extends ChangeNotifier {
 
     _isUpdatingTrip = true;
     notifyListeners();
-    _socketService.onBookingUpdated((update) {
-      if (update.status == 'DriverAssigned' || update.tripId != null) {
-        if (update.tripId != null) {
-          _activeTrip = ActiveDriverTrip(
-            bookingId: update.bookingId,
-            tripId: update.tripId!,
-            tripStatus: update.tripStatus ?? 'ACCEPTED',
-          );
-          notifyListeners();
-        }
-      } else if (update.status == 'Cancelled' || update.status == 'Expired') {
-        if (_activeTrip?.bookingId == update.bookingId) {
-          _activeTrip = null;
-          notifyListeners();
-        }
-      }
-    }, key: 'driverDashboardBooking');
+    _socketService.onBookingUpdated(
+      _handleBookingUpdate,
+      key: 'driverDashboardBooking',
+    );
     try {
       await _dio.patch(
         ApiEndpoints.tripStatus(trip.tripId),
@@ -342,7 +443,10 @@ class DriverDashboardProvider extends ChangeNotifier {
       );
 
       if (tripStatus == 'COMPLETED' || tripStatus == 'CANCELLED') {
-        _activeTrip = null;
+        if (tripStatus == 'COMPLETED') {
+          _completedTripAwaitingPaymentId = trip.tripId;
+        }
+        _clearActiveTrip();
       } else {
         _activeTrip = trip.copyWith(tripStatus: tripStatus);
       }
@@ -351,6 +455,165 @@ class DriverDashboardProvider extends ChangeNotifier {
       _isUpdatingTrip = false;
       notifyListeners();
     }
+  }
+
+  void _handleBookingUpdate(dynamic update) {
+    if (update.status == 'DriverAssigned' || update.tripId != null) {
+      if (update.tripId != null) {
+        final oldTrip = _activeTrip;
+        final sameTrip = oldTrip?.tripId == update.tripId!;
+        _activeTrip = ActiveDriverTrip(
+          bookingId: update.bookingId,
+          tripId: update.tripId!,
+          tripStatus: update.tripStatus ?? 'ACCEPTED',
+          pickupLat: sameTrip ? oldTrip?.pickupLat : null,
+          pickupLng: sameTrip ? oldTrip?.pickupLng : null,
+          destLat: sameTrip ? oldTrip?.destLat : null,
+          destLng: sameTrip ? oldTrip?.destLng : null,
+          encodedPolyline: sameTrip ? oldTrip?.encodedPolyline : null,
+          arrivalPolyline: sameTrip ? oldTrip?.arrivalPolyline : null,
+        );
+        notifyListeners();
+        _socketService.joinTrip(update.tripId!);
+        if (!_hasActiveTripDetails(update.tripId!)) {
+          _fetchActiveTripDetails(update.bookingId, update.tripId!);
+        }
+      }
+    } else if (update.status == 'Cancelled' || update.status == 'Expired') {
+      if (_activeTrip?.bookingId == update.bookingId) {
+        _clearActiveTrip();
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<bool> _fetchActiveTripDetailsSync(
+    int bookingId,
+    int tripId, [
+    int retries = 3,
+  ]) async {
+    final token = _accessToken;
+    final trip = _activeTrip;
+    if (token == null ||
+        trip == null ||
+        trip.tripId != tripId ||
+        trip.bookingId != bookingId ||
+        _hasActiveTripDetails(tripId)) {
+      return false;
+    }
+
+    final existingFetch = _activeTripDetailsFetches[tripId];
+    if (existingFetch != null) {
+      return existingFetch;
+    }
+
+    final fetch = _loadActiveTripDetails(token, bookingId, tripId, retries);
+    _activeTripDetailsFetches[tripId] = fetch;
+    try {
+      return await fetch;
+    } finally {
+      if (identical(_activeTripDetailsFetches[tripId], fetch)) {
+        _activeTripDetailsFetches.remove(tripId);
+      }
+    }
+  }
+
+  void _fetchActiveTripDetails(int bookingId, int tripId) {
+    _fetchActiveTripDetailsSync(bookingId, tripId).then((changed) {
+      if (changed) {
+        notifyListeners();
+      }
+    });
+  }
+
+  Future<bool> _loadActiveTripDetails(
+    String token,
+    int bookingId,
+    int tripId,
+    int retries,
+  ) async {
+    try {
+      for (
+        var remainingRetries = retries;
+        remainingRetries >= 0;
+        remainingRetries--
+      ) {
+        final activeTrip = _activeTrip;
+        if (activeTrip == null ||
+            activeTrip.tripId != tripId ||
+            activeTrip.bookingId != bookingId) {
+          return false;
+        }
+
+        final response = await _dio.get(
+          ApiEndpoints.driverActiveTrip,
+          options: Options(
+            headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+          ),
+        );
+
+        if (response.statusCode == 204 && remainingRetries > 0) {
+          await Future.delayed(const Duration(seconds: 1));
+          continue;
+        }
+
+        if (response.data != null && response.data is Map) {
+          final bData = Map<String, dynamic>.from(response.data as Map);
+          final pickupLat = (bData['pickupLat'] as num?)?.toDouble();
+          final pickupLng = (bData['pickupLng'] as num?)?.toDouble();
+          final destLat = (bData['destLat'] as num?)?.toDouble();
+          final destLng = (bData['destLng'] as num?)?.toDouble();
+          final encodedPoly = bData['encodedPolyline'] as String?;
+          final arrivalPoly = bData['arrivalPolyline'] as String?;
+
+          if (_activeTrip?.tripId != tripId ||
+              _activeTrip?.bookingId != bookingId) {
+            return false;
+          }
+
+          _activeTrip = _activeTrip!.copyWith(
+            pickupLat: pickupLat,
+            pickupLng: pickupLng,
+            destLat: destLat,
+            destLng: destLng,
+            encodedPolyline: encodedPoly,
+            arrivalPolyline: arrivalPoly,
+          );
+          _activeTripDetailsLoaded.add(tripId);
+          return true;
+        }
+
+        return false;
+      }
+    } catch (e) {
+      debugPrint('Failed to load active trip booking details: $e');
+    }
+
+    return false;
+  }
+
+  bool _hasActiveTripDetails(int tripId) {
+    if (_activeTripDetailsLoaded.contains(tripId)) {
+      return true;
+    }
+
+    final trip = _activeTrip;
+    if (trip == null || trip.tripId != tripId) {
+      return false;
+    }
+
+    return trip.pickupLat != null ||
+        trip.pickupLng != null ||
+        trip.destLat != null ||
+        trip.destLng != null ||
+        trip.encodedPolyline != null ||
+        trip.arrivalPolyline != null;
+  }
+
+  void _clearActiveTrip() {
+    _activeTrip = null;
+    _activeTripDetailsLoaded.clear();
+    _activeTripDetailsFetches.clear();
   }
 
   static String? _normalizeTripStatus(Object? value) {
@@ -388,17 +651,43 @@ class ActiveDriverTrip {
     required this.bookingId,
     required this.tripId,
     required this.tripStatus,
+    this.pickupLat,
+    this.pickupLng,
+    this.destLat,
+    this.destLng,
+    this.encodedPolyline,
+    this.arrivalPolyline,
   });
 
   final int bookingId;
   final int tripId;
   final String tripStatus;
+  final double? pickupLat;
+  final double? pickupLng;
+  final double? destLat;
+  final double? destLng;
+  final String? encodedPolyline;
+  final String? arrivalPolyline;
 
-  ActiveDriverTrip copyWith({String? tripStatus}) {
+  ActiveDriverTrip copyWith({
+    String? tripStatus,
+    double? pickupLat,
+    double? pickupLng,
+    double? destLat,
+    double? destLng,
+    String? encodedPolyline,
+    String? arrivalPolyline,
+  }) {
     return ActiveDriverTrip(
       bookingId: bookingId,
       tripId: tripId,
       tripStatus: tripStatus ?? this.tripStatus,
+      pickupLat: pickupLat ?? this.pickupLat,
+      pickupLng: pickupLng ?? this.pickupLng,
+      destLat: destLat ?? this.destLat,
+      destLng: destLng ?? this.destLng,
+      encodedPolyline: encodedPolyline ?? this.encodedPolyline,
+      arrivalPolyline: arrivalPolyline ?? this.arrivalPolyline,
     );
   }
 }

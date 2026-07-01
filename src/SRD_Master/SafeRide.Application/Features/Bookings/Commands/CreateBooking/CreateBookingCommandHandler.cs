@@ -56,10 +56,12 @@ public sealed class CreateBookingCommandHandler
         CancellationToken cancellationToken)
     {
         var utcNow = _dateTimeProvider.UtcNow;
+        // Flow: validate booking type, pickup data, and duplicate active now-booking before loading related state.
         ValidateSchedule(request.BookingType, request.ScheduledAt, utcNow);
         ValidatePickup(request);
         await EnsureNoActiveNowBookingAsync(request, cancellationToken);
 
+        // Flow: validate the customer-owned vehicle and its license requirement before pricing.
         var vehicle = await _bookingRepository.GetCustomerVehicleAsync(
             request.VehicleId,
             request.CustomerId,
@@ -90,6 +92,7 @@ public sealed class CreateBookingCommandHandler
             utcNow,
             cancellationToken);
 
+        // Flow: calculate fare from hourly duration or route distance, preserving route data for distance trips.
         var isHourly = pricingRule.PricePerHour.HasValue;
         decimal estimatedDistanceKm;
         int estimatedDurationMinutes;
@@ -169,6 +172,7 @@ public sealed class CreateBookingCommandHandler
             ? BookingStatus.Searching
             : BookingStatus.PendingSchedule;
 
+        // Flow: create the booking aggregate and attach promotion usage intent before the first save.
         var booking = new Booking
         {
             CustomerId = request.CustomerId,
@@ -201,6 +205,7 @@ public sealed class CreateBookingCommandHandler
 
         await _bookingRepository.AddAsync(booking, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        // Flow: publish customer-visible status, then start matching and lifecycle jobs for now bookings.
         await _realtimeNotificationService.PublishBookingStatusChangedAsync(
             new BookingStatusChangedEvent(
                 booking.BookingId,

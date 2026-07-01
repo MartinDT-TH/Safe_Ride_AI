@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:signalr_netcore/signalr_client.dart';
 
 import '../constants/app_strings.dart';
+import 'mobile_config_service.dart';
 
 class DriverLocationUpdate {
   const DriverLocationUpdate({
@@ -239,7 +240,8 @@ class BookingUpdate {
       estimatedRemainingSeconds:
           (_value(data, ApiKeys.estimatedRemainingSeconds) as num?)?.toInt(),
       matchingMessage:
-          (_value(data, ApiKeys.matchingMessage) ?? _value(data, ApiKeys.message))
+          (_value(data, ApiKeys.matchingMessage) ??
+                  _value(data, ApiKeys.message))
               ?.toString(),
       driverOffer: driverOfferRaw is Map
           ? Map<String, dynamic>.from(driverOfferRaw)
@@ -250,8 +252,9 @@ class BookingUpdate {
   }
 
   static Object? _value(Map<String, dynamic> data, String key) {
-    final pascalKey =
-        key.isEmpty ? key : '${key[0].toUpperCase()}${key.substring(1)}';
+    final pascalKey = key.isEmpty
+        ? key
+        : '${key[0].toUpperCase()}${key.substring(1)}';
     return data[key] ?? data[pascalKey];
   }
 
@@ -327,22 +330,35 @@ class BookingUpdate {
 }
 
 class SocketService {
+  SocketService({MobileConfigService? mobileConfigService})
+    : _mobileConfigService = mobileConfigService ?? MobileConfigService();
+
+  final MobileConfigService _mobileConfigService;
   HubConnection? _connection;
   String? _accessToken;
   bool _driverLocationListenerAttached = false;
   bool _tripStatusListenerAttached = false;
+  bool _driverOfferReceivedListenerAttached = false;
+  bool _driverOfferClosedListenerAttached = false;
   bool _bookingListenerAttached = false;
   final Map<String, void Function(DriverLocationUpdate update)>
   _driverLocationHandlers = {};
   final Map<String, void Function(TripStatusUpdate update)>
   _tripStatusHandlers = {};
+  final Map<String, void Function(DriverOfferUpdate update)>
+  _driverOfferReceivedHandlers = {};
+  final Map<String, void Function(int offerId)> _driverOfferClosedHandlers = {};
 
   final Map<String, void Function(BookingUpdate update)> _bookingHandlers = {};
 
-  final Set<int> _activeTripGroups = {};
-  final Set<int> _activeBookingGroups = {};
+  final Set<int> _desiredTripGroups = {};
+  final Set<int> _joinedTripGroups = {};
+  final Set<int> _desiredBookingGroups = {};
+  final Set<int> _joinedBookingGroups = {};
 
   bool get isConnected => _connection?.state == HubConnectionState.Connected;
+
+  MobileConfigService get _configService => _mobileConfigService;
 
   Future<void> connect(String accessToken) async {
     if (accessToken.isEmpty) {
@@ -353,11 +369,11 @@ class SocketService {
 
     if (_connection != null && _accessToken == accessToken) {
       if (currentState == HubConnectionState.Connected) return;
-      if (currentState == HubConnectionState.Connecting || 
+      if (currentState == HubConnectionState.Connecting ||
           currentState == HubConnectionState.Reconnecting) {
         debugPrint('SOCKET: Already connecting/reconnecting, waiting...');
         while (_connection?.state == HubConnectionState.Connecting ||
-               _connection?.state == HubConnectionState.Reconnecting) {
+            _connection?.state == HubConnectionState.Reconnecting) {
           await Future.delayed(const Duration(milliseconds: 100));
         }
         return;
@@ -370,19 +386,28 @@ class SocketService {
     }
 
     _accessToken = accessToken;
+
+    final options = HttpConnectionOptions(
+      accessTokenFactory: () async => accessToken,
+      requestTimeout: 30000,
+      skipNegotiation: AppConfig.forceWebSockets,
+      transport: AppConfig.forceWebSockets
+          ? HttpTransportType.WebSockets
+          : null,
+    );
+
     _connection ??= HubConnectionBuilder()
-        .withUrl(
-          _hubUrl,
-          options: HttpConnectionOptions(
-            accessTokenFactory: () async => accessToken,
-            requestTimeout: 10000,
-          ),
-        )
+        .withUrl(_hubUrl, options: options)
         .withAutomaticReconnect()
         .build();
 
+    _connection!.serverTimeoutInMilliseconds = 60000;
+    _connection!.keepAliveIntervalInMilliseconds = 30000;
+
     _connection!.onreconnected(({connectionId}) {
-      debugPrint('SOCKET: Reconnected ($connectionId). Re-joining groups: Trips=$_activeTripGroups, Bookings=$_activeBookingGroups');
+      debugPrint(
+        'SOCKET: Reconnected ($connectionId). Re-joining groups: Trips=$_desiredTripGroups, Bookings=$_desiredBookingGroups',
+      );
       _rejoinGroups();
     });
 
@@ -393,13 +418,31 @@ class SocketService {
         debugPrint('SOCKET: Connected successfully');
       } catch (e) {
         debugPrint('SOCKET: Connection failed: $e');
-        _connection = null; 
+        _connection = null;
         rethrow;
       }
     }
 
+    if (_driverLocationHandlers.isNotEmpty &&
+        !_driverLocationListenerAttached) {
+      _attachDriverLocationListener();
+    }
+    if (_tripStatusHandlers.isNotEmpty && !_tripStatusListenerAttached) {
+      _attachTripStatusListener();
+    }
+    if (_driverOfferReceivedHandlers.isNotEmpty &&
+        !_driverOfferReceivedListenerAttached) {
+      _attachDriverOfferReceivedListener();
+    }
+    if (_driverOfferClosedHandlers.isNotEmpty &&
+        !_driverOfferClosedListenerAttached) {
+      _attachDriverOfferClosedListeners();
+    }
     if (_bookingHandlers.isNotEmpty && !_bookingListenerAttached) {
       _attachBookingListeners();
+    }
+    if (_desiredTripGroups.isNotEmpty || _desiredBookingGroups.isNotEmpty) {
+      _rejoinGroups();
     }
   }
 
@@ -408,36 +451,75 @@ class SocketService {
     String key = 'default',
   }) {
     _driverLocationHandlers[key] = handler;
-    if (_driverLocationListenerAttached) {
+    _attachDriverLocationListener();
+  }
+
+  void _attachDriverLocationListener() {
+    if (_connection == null || _driverLocationListenerAttached) {
       return;
     }
 
     _driverLocationListenerAttached = true;
-    _connection?.on('DriverLocationUpdated', (arguments) {
-      final update = DriverLocationUpdate.fromSignalRArguments(arguments);
-      if (update != null) {
-        for (final handler in List.of(_driverLocationHandlers.values)) {
-          handler(update);
+    _connection!.on(
+      _configService.config.realtime.events.driverLocationUpdated,
+      (arguments) {
+        final update = DriverLocationUpdate.fromSignalRArguments(arguments);
+        if (update != null) {
+          for (final handler in List.of(_driverLocationHandlers.values)) {
+            handler(update);
+          }
         }
-      }
-    });
+      },
+    );
   }
 
   void removeDriverLocationUpdatedHandler(String key) {
     _driverLocationHandlers.remove(key);
   }
 
-  void onDriverOfferReceived(void Function(DriverOfferUpdate update) handler) {
-    _connection?.off('ReceiveDriverOffer');
-    _connection?.on('ReceiveDriverOffer', (arguments) {
+  void onDriverOfferReceived(
+    void Function(DriverOfferUpdate update) handler, {
+    String key = 'default',
+  }) {
+    _driverOfferReceivedHandlers[key] = handler;
+    _attachDriverOfferReceivedListener();
+  }
+
+  void _attachDriverOfferReceivedListener() {
+    if (_connection == null || _driverOfferReceivedListenerAttached) {
+      return;
+    }
+
+    _driverOfferReceivedListenerAttached = true;
+    final event = _configService.config.realtime.events.driverOfferReceived;
+    _connection!.on(event, (arguments) {
       final update = DriverOfferUpdate.fromSignalRArguments(arguments);
       if (update != null) {
-        handler(update);
+        for (final handler in List.of(_driverOfferReceivedHandlers.values)) {
+          handler(update);
+        }
       }
     });
   }
 
-  void onDriverOfferClosed(void Function(int offerId) handler) {
+  void removeDriverOfferReceivedHandler(String key) {
+    _driverOfferReceivedHandlers.remove(key);
+  }
+
+  void onDriverOfferClosed(
+    void Function(int offerId) handler, {
+    String key = 'default',
+  }) {
+    _driverOfferClosedHandlers[key] = handler;
+    _attachDriverOfferClosedListeners();
+  }
+
+  void _attachDriverOfferClosedListeners() {
+    if (_connection == null || _driverOfferClosedListenerAttached) {
+      return;
+    }
+
+    _driverOfferClosedListenerAttached = true;
     void handle(List<Object?>? arguments) {
       if (arguments == null || arguments.isEmpty || arguments.first is! Map) {
         return;
@@ -446,14 +528,19 @@ class SocketService {
       final data = Map<String, dynamic>.from(arguments.first as Map);
       final offerId = (data[ApiKeys.offerId] ?? data['OfferId']) as num?;
       if (offerId != null) {
-        handler(offerId.toInt());
+        for (final handler in List.of(_driverOfferClosedHandlers.values)) {
+          handler(offerId.toInt());
+        }
       }
     }
 
-    _connection?.off('DriverOfferExpired');
-    _connection?.off('DriverOfferCancelled');
-    _connection?.on('DriverOfferExpired', handle);
-    _connection?.on('DriverOfferCancelled', handle);
+    final events = _configService.config.realtime.events;
+    _connection?.on(events.driverOfferExpired, handle);
+    _connection?.on(events.driverOfferCancelled, handle);
+  }
+
+  void removeDriverOfferClosedHandler(String key) {
+    _driverOfferClosedHandlers.remove(key);
   }
 
   void onTripStatusChanged(
@@ -461,12 +548,18 @@ class SocketService {
     String key = 'default',
   }) {
     _tripStatusHandlers[key] = handler;
-    if (_tripStatusListenerAttached) {
+    _attachTripStatusListener();
+  }
+
+  void _attachTripStatusListener() {
+    if (_connection == null || _tripStatusListenerAttached) {
       return;
     }
 
     _tripStatusListenerAttached = true;
-    _connection?.on('TripStatusChanged', (arguments) {
+    _connection!.on(_configService.config.realtime.events.tripStatusChanged, (
+      arguments,
+    ) {
       final update = TripStatusUpdate.fromSignalRArguments(arguments);
       if (update != null) {
         for (final handler in List.of(_tripStatusHandlers.values)) {
@@ -498,22 +591,7 @@ class SocketService {
     }
 
     _bookingListenerAttached = true;
-    final events = [
-      'BookingSearchingStarted',
-      'BookingSearchRadiusExpanded',
-      'DriverOfferAccepted',
-      'DriverOfferRejected',
-      'DriverOfferExpired',
-      'DriverOfferCancelled',
-      'DriverMatched',
-      'BookingDriverAssigned',
-      'BookingStatusChanged',
-      'TripCreated',
-      'TripStatusChanged',
-      'CustomerConfirmedDriverOffer',
-      'BookingExpired',
-      'BookingCancelled',
-    ];
+    final events = _configService.config.realtime.events.bookingUpdateEvents;
 
     for (final event in events) {
       _connection?.on(event, (arguments) {
@@ -535,43 +613,93 @@ class SocketService {
   }
 
   Future<void> joinTrip(int tripId) async {
-    _activeTripGroups.add(tripId);
-    await _invokeSafely('JoinTrip', [tripId]);
+    final firstRequest = _desiredTripGroups.add(tripId);
+    if (!firstRequest && _joinedTripGroups.contains(tripId)) {
+      return;
+    }
+
+    await _joinTripGroup(tripId);
   }
 
   Future<void> leaveTrip(int tripId) async {
-    _activeTripGroups.remove(tripId);
+    _desiredTripGroups.remove(tripId);
+    _joinedTripGroups.remove(tripId);
     await _invokeSafely('LeaveTrip', [tripId]);
   }
 
   Future<void> joinBooking(int bookingId) async {
-    _activeBookingGroups.add(bookingId);
-    await _invokeSafely('JoinBooking', [bookingId]);
+    final firstRequest = _desiredBookingGroups.add(bookingId);
+    if (!firstRequest && _joinedBookingGroups.contains(bookingId)) {
+      return;
+    }
+
+    await _joinBookingGroup(bookingId);
   }
 
   Future<void> leaveBooking(int bookingId) async {
-    _activeBookingGroups.remove(bookingId);
+    _desiredBookingGroups.remove(bookingId);
+    _joinedBookingGroups.remove(bookingId);
     await _invokeSafely('LeaveBooking', [bookingId]);
   }
 
+  Future<void> setDriverOnline(double latitude, double longitude) async {
+    await _invokeSafely('SetDriverOnline', [latitude, longitude]);
+  }
+
+  Future<void> updateDriverLocation(double latitude, double longitude) async {
+    await _invokeSafely('UpdateDriverLocation', [latitude, longitude]);
+  }
+
+  Future<void> setDriverOffline() async {
+    await _invokeSafely('SetDriverOffline', []);
+  }
+
   void _rejoinGroups() {
-    for (final tripId in List.of(_activeTripGroups)) {
-      _invokeSafely('JoinTrip', [tripId]);
+    _joinedTripGroups.clear();
+    _joinedBookingGroups.clear();
+    for (final tripId in List.of(_desiredTripGroups)) {
+      _joinTripGroup(tripId, force: true);
     }
-    for (final bookingId in List.of(_activeBookingGroups)) {
-      _invokeSafely('JoinBooking', [bookingId]);
+    for (final bookingId in List.of(_desiredBookingGroups)) {
+      _joinBookingGroup(bookingId, force: true);
     }
   }
 
-  Future<void> _invokeSafely(String methodName, List<Object> args) async {
-    if (_connection?.state != HubConnectionState.Connected) {
-      debugPrint('SOCKET: Cannot invoke $methodName - Not connected (${_connection?.state})');
+  Future<void> _joinTripGroup(int tripId, {bool force = false}) async {
+    if (!force && _joinedTripGroups.contains(tripId)) {
       return;
+    }
+
+    final joined = await _invokeSafely('JoinTrip', [tripId]);
+    if (joined && _desiredTripGroups.contains(tripId)) {
+      _joinedTripGroups.add(tripId);
+    }
+  }
+
+  Future<void> _joinBookingGroup(int bookingId, {bool force = false}) async {
+    if (!force && _joinedBookingGroups.contains(bookingId)) {
+      return;
+    }
+
+    final joined = await _invokeSafely('JoinBooking', [bookingId]);
+    if (joined && _desiredBookingGroups.contains(bookingId)) {
+      _joinedBookingGroups.add(bookingId);
+    }
+  }
+
+  Future<bool> _invokeSafely(String methodName, List<Object> args) async {
+    if (_connection?.state != HubConnectionState.Connected) {
+      debugPrint(
+        'SOCKET: Cannot invoke $methodName - Not connected (${_connection?.state})',
+      );
+      return false;
     }
     try {
       await _connection?.invoke(methodName, args: args);
+      return true;
     } catch (e) {
       debugPrint('SOCKET: Invoke $methodName failed: $e');
+      return false;
     }
   }
 
@@ -583,21 +711,38 @@ class SocketService {
     _accessToken = null;
     _driverLocationListenerAttached = false;
     _tripStatusListenerAttached = false;
+    _driverOfferReceivedListenerAttached = false;
+    _driverOfferClosedListenerAttached = false;
     _bookingListenerAttached = false;
     _driverLocationHandlers.clear();
     _tripStatusHandlers.clear();
+    _driverOfferReceivedHandlers.clear();
+    _driverOfferClosedHandlers.clear();
     _bookingHandlers.clear();
-    _activeTripGroups.clear();
-    _activeBookingGroups.clear();
+    _desiredTripGroups.clear();
+    _joinedTripGroups.clear();
+    _desiredBookingGroups.clear();
+    _joinedBookingGroups.clear();
   }
 
-  static String get _hubUrl {
+  String get _hubUrl {
     final apiBase = AppConfig.apiBaseUrl.endsWith('/')
         ? AppConfig.apiBaseUrl.substring(0, AppConfig.apiBaseUrl.length - 1)
         : AppConfig.apiBaseUrl;
     final root = apiBase.endsWith('/api')
         ? apiBase.substring(0, apiBase.length - 4)
         : apiBase;
-    return '$root/hubs/saferide';
+    final hubPath = _configService.config.realtime.hubPath.startsWith('/')
+        ? _configService.config.realtime.hubPath
+        : '/${_configService.config.realtime.hubPath}';
+    var url = '$root$hubPath';
+    if (AppConfig.forceWebSockets) {
+      if (url.startsWith('https://')) {
+        url = url.replaceFirst('https://', 'wss://');
+      } else if (url.startsWith('http://')) {
+        url = url.replaceFirst('http://', 'ws://');
+      }
+    }
+    return url;
   }
 }

@@ -31,3 +31,11 @@ public sealed record TripLiveCache(
     Guid CustomerId,
     TripStatus TripStatus,
     DateTime DriverAssignedAt);
+
+public sealed record DriverActiveTripCache(
+    long TripId,
+    long BookingId,
+    Guid DriverId,
+    Guid CustomerId,
+    TripStatus TripStatus,
+    DateTime DriverAssignedAt);

@@ -7,6 +7,7 @@ using SafeRide.Application.Features.Bookings.Commands.ConfirmDriver;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
 using SafeRide.Application.Features.Bookings.Commands.RejectDriver;
 using SafeRide.Application.Features.Bookings.DTOs;
+using SafeRide.Application.Features.Bookings.Queries.GetBookingHistory;
 using SafeRide.Application.Features.Bookings.Queries.EstimateBookingFare;
 using SafeRide.Application.Features.Bookings.Queries.GetBookingDetails;
 using SafeRide.Application.Features.Bookings.Queries.GetBookingCatalog;
@@ -105,6 +106,7 @@ public sealed class BookingsController : ControllerBase
         [FromBody] CreateBookingRequest request,
         CancellationToken cancellationToken)
     {
+        // Flow: resolve the authenticated customer, send the create command, and map lifecycle metadata to the API DTO.
         if (!TryGetCustomerId(out var customerId))
         {
             return Unauthorized(CreateUnauthorizedProblem());
@@ -153,6 +155,57 @@ public sealed class BookingsController : ControllerBase
         return StatusCode(StatusCodes.Status201Created, response);
     }
 
+    [HttpGet("history")]
+    [ProducesResponseType<List<BookingHistoryResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<List<BookingHistoryResponse>>> GetBookingHistory(
+        [FromQuery] string? role,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Unauthorized(CreateUnauthorizedProblem());
+        }
+
+        if (!TryParseHistoryRole(role, out var historyRole))
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Invalid role",
+                Detail = "Role must be either 'customer' or 'driver'."
+            });
+        }
+
+        if (historyRole == BookingHistoryRole.Driver && !User.IsInRole("Driver"))
+        {
+            return Forbid();
+        }
+
+        var result = await _sender.Send(
+            new GetBookingHistoryQuery(userId, historyRole),
+            cancellationToken);
+
+        return Ok(result
+            .Select(item => new BookingHistoryResponse(
+                item.Id,
+                item.PickupAddress,
+                item.DestinationAddress,
+                item.OccurredAt,
+                item.EstimatedDistanceKm,
+                item.EstimatedFare,
+                item.FinalFare,
+                item.BookingStatus,
+                item.VehicleName,
+                item.IsMotorbike,
+                item.DriverName,
+                item.DriverRating,
+                item.DriverAvatarUrl))
+            .ToList());
+    }
+
     [HttpGet("active")]
     [ProducesResponseType<BookingResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -194,6 +247,11 @@ public sealed class BookingsController : ControllerBase
         return Ok(ToResponse(result));
     }
 
+    /// <summary>
+    /// Obsolete shortcut for customer to confirm the closest accepted driver. 
+    /// Prefer /confirm-driver-offer/{offerId} to explicitly confirm a specific offer.
+    /// This step actually creates the Trip.
+    /// </summary>
     [HttpPost("{bookingId:long}/confirm-driver")]
     [ProducesResponseType<BookingResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -221,15 +279,25 @@ public sealed class BookingsController : ControllerBase
             result.EstimatedDistanceKm,
             result.EstimatedDurationMinutes,
             result.EstimatedFare,
-            result.EstimatedFare,
-            null,
-            0m,
-            result.EstimatedFare,
+            result.OriginalFare,
+            result.PromotionCode,
+            result.DiscountAmount,
+            result.FinalFare,
             result.EncodedPolyline,
             result.Message,
-            result.DriverOffer));
+            result.DriverOffer,
+            result.CurrentSearchRadiusKm,
+            result.ExpiresAt,
+            result.EstimatedRemainingSeconds,
+            result.MatchingMessage,
+            result.TripId,
+            result.TripStatus));
     }
 
+    /// <summary>
+    /// Explicit endpoint for customer to confirm a specific driver's accepted offer.
+    /// The Trip is created during this step.
+    /// </summary>
     [HttpPost("{bookingId:long}/confirm-driver-offer/{offerId:long}")]
     [ProducesResponseType<BookingResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -241,6 +309,7 @@ public sealed class BookingsController : ControllerBase
         long offerId,
         CancellationToken cancellationToken)
     {
+        // Flow: explicit customer confirmation is the API step that creates the Trip from an accepted offer.
         if (!TryGetCustomerId(out var customerId))
         {
             return Unauthorized(CreateUnauthorizedProblem());
@@ -283,6 +352,7 @@ public sealed class BookingsController : ControllerBase
         long bookingId,
         CancellationToken cancellationToken)
     {
+        // Flow: customer rejection keeps the booking searchable and delegates rematching to the application flow.
         if (!TryGetCustomerId(out var customerId))
         {
             return Unauthorized(CreateUnauthorizedProblem());
@@ -300,13 +370,19 @@ public sealed class BookingsController : ControllerBase
             result.EstimatedDistanceKm,
             result.EstimatedDurationMinutes,
             result.EstimatedFare,
-            result.EstimatedFare,
-            null,
-            0m,
-            result.EstimatedFare,
+            result.OriginalFare,
+            result.PromotionCode,
+            result.DiscountAmount,
+            result.FinalFare,
             result.EncodedPolyline,
             result.Message,
-            result.DriverOffer));
+            result.DriverOffer,
+            result.CurrentSearchRadiusKm,
+            result.ExpiresAt,
+            result.EstimatedRemainingSeconds,
+            result.MatchingMessage,
+            result.TripId,
+            result.TripStatus));
     }
 
     [HttpPost("{bookingId:long}/cancel")]
@@ -320,6 +396,7 @@ public sealed class BookingsController : ControllerBase
         [FromBody] CancelBookingRequest? request,
         CancellationToken cancellationToken)
     {
+        // Flow: cancellation delegates lifecycle cleanup to the command handler and returns the final booking state.
         if (!TryGetCustomerId(out var customerId))
         {
             return Unauthorized(CreateUnauthorizedProblem());
@@ -346,7 +423,7 @@ public sealed class BookingsController : ControllerBase
             result.EstimatedFare,
             result.EncodedPolyline,
             result.Message,
-            result.DriverOffer));
+            null));
     }
 
     [Authorize(Roles = "Customer")]
@@ -461,6 +538,8 @@ public sealed class BookingsController : ControllerBase
                     driverOffer.LicenseClass,
                     driverOffer.ExpiresAt,
                     driverOffer.OfferStatus,
+                    driverOffer.DriverLatitude,
+                    driverOffer.DriverLongitude,
                     driverOffer.CustomerConfirmRemainingSeconds),
             TripStatus: tripStatus,
             TripId: tripId,
@@ -534,6 +613,34 @@ public sealed class BookingsController : ControllerBase
         return Guid.TryParse(
             User.FindFirstValue(ClaimTypes.NameIdentifier),
             out customerId);
+    }
+
+    private bool TryGetCurrentUserId(out Guid userId)
+    {
+        return Guid.TryParse(
+            User.FindFirstValue(ClaimTypes.NameIdentifier),
+            out userId);
+    }
+
+    private static bool TryParseHistoryRole(
+        string? role,
+        out BookingHistoryRole historyRole)
+    {
+        if (string.IsNullOrWhiteSpace(role) ||
+            role.Equals("customer", StringComparison.OrdinalIgnoreCase))
+        {
+            historyRole = BookingHistoryRole.Customer;
+            return true;
+        }
+
+        if (role.Equals("driver", StringComparison.OrdinalIgnoreCase))
+        {
+            historyRole = BookingHistoryRole.Driver;
+            return true;
+        }
+
+        historyRole = default;
+        return false;
     }
 
     private static ProblemDetails CreateUnauthorizedProblem()

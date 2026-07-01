@@ -3,10 +3,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SafeRide.Application.Common.Interfaces;
-using SafeRide.Application.Common.Realtime;
 using SafeRide.Domain.Enums;
 using SafeRide.Infrastructure.Persistence;
-using SafeRide.Infrastructure.Redis;
 
 namespace SafeRide.Infrastructure.BackgroundJobs;
 
@@ -25,24 +23,36 @@ public sealed class BookingMatchingBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            try
-            {
-                await ProcessMatchingAsync(stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception exception)
-            {
-                _logger.LogError(exception, "Booking matching background cycle failed.");
-            }
+        _logger.LogInformation("BookingMatchingBackgroundService started");
 
-            var delay = await GetDelayAsync(stoppingToken);
-            await Task.Delay(delay, stoppingToken);
+        try
+        {
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await ProcessMatchingAsync(stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error occurred executing booking matching logic.");
+                }
+
+                // Wait for next cycle based on config
+                var delay = await GetDelayAsync(stoppingToken);
+                await Task.Delay(delay, stoppingToken);
+            }
         }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Expected on shutdown, ignore.
+        }
+
+        _logger.LogInformation("BookingMatchingBackgroundService stopped");
     }
 
     private async Task<TimeSpan> GetDelayAsync(CancellationToken cancellationToken)
@@ -57,64 +67,40 @@ public sealed class BookingMatchingBackgroundService : BackgroundService
         await using var scope = _scopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var matchingService = scope.ServiceProvider.GetRequiredService<IBookingMatchingService>();
+        var policyProvider = scope.ServiceProvider.GetRequiredService<IMatchingPolicyProvider>();
+        var dateTimeProvider = scope.ServiceProvider.GetRequiredService<IDateTimeProvider>();
 
         var bookingIdsToRetry = await GetSearchingBookingIdsAsync(
             dbContext,
+            policyProvider,
+            dateTimeProvider,
             cancellationToken);
 
+        // Flow: retry matching only for bookings still in Searching; expiry/expansion run in Hangfire jobs.
         foreach (var bookingId in bookingIdsToRetry)
         {
             await matchingService.StartMatchingAsync(bookingId, cancellationToken);
         }
     }
 
-    private static async Task<List<DriverOfferExpiredEvent>> ExpireDriverOffersAsync(
-        ApplicationDbContext dbContext,
-        IRedisService redisService,
-        DateTime utcNow,
-        CancellationToken cancellationToken)
-    {
-        var staleOffers = await dbContext.BookingDriverOffers
-            .Include(x => x.Booking)
-            .Where(x => (x.OfferStatus == DriverOfferStatus.Sent
-                    || x.OfferStatus == DriverOfferStatus.DriverAccepted)
-                && x.ExpiresAt <= utcNow)
-            .ToListAsync(cancellationToken);
-
-        var events = new List<DriverOfferExpiredEvent>();
-        foreach (var offer in staleOffers)
-        {
-            var message = offer.OfferStatus == DriverOfferStatus.DriverAccepted
-                ? "Tài xế không còn khả dụng. SafeRide đang tìm tài xế khác cho bạn."
-                : "Yêu cầu nhận chuyến đã hết hạn.";
-
-            offer.OfferStatus = DriverOfferStatus.Expired;
-            offer.ExpiredAt = utcNow;
-            await redisService.RemoveAsync(RedisKeys.MatchingOffer(offer.BookingId, offer.DriverId));
-            await redisService.RemoveAsync(RedisKeys.MatchingDriverLock(offer.DriverId));
-
-            events.Add(new DriverOfferExpiredEvent(
-                offer.BookingId,
-                offer.Booking.CustomerId,
-                offer.DriverId,
-                offer.Id,
-                utcNow,
-                message));
-        }
-
-        return events;
-    }
-
     private static Task<List<long>> GetSearchingBookingIdsAsync(
         ApplicationDbContext dbContext,
+        IMatchingPolicyProvider policyProvider,
+        IDateTimeProvider dateTimeProvider,
         CancellationToken cancellationToken)
     {
         // Return just the IDs of bookings still actively searching so the
         // matching loop can keep firing offers. Expire / expand logic has been
         // moved to dedicated Hangfire delayed jobs.
+        var cutoff = dateTimeProvider.UtcNow.AddMinutes(-policyProvider.Current.BookingExpireAfterMinutes);
+
         return dbContext.Bookings
             .Where(x => x.BookingStatus == BookingStatus.Searching)
+            .Where(x =>
+                (x.BookingType == BookingType.Now && x.CreatedAt >= cutoff)
+                || (x.BookingType == BookingType.Scheduled && x.UpdatedAt >= cutoff))
             .OrderBy(x => x.CreatedAt)
+            .Take(20)
             .Select(x => x.BookingId)
             .ToListAsync(cancellationToken);
     }

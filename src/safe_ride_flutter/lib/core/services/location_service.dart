@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:flutter/cupertino.dart';
 import 'package:geocoding/geocoding.dart' as native_geo;
 import 'package:geolocator/geolocator.dart';

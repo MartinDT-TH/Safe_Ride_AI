@@ -28,6 +28,18 @@ public sealed class InMemoryRedisServiceTests
     }
 
     [Fact]
+    public async Task GetManyAsync_ReturnsValuesAndNulls()
+    {
+        var redis = new InMemoryRedisService();
+        await redis.SetAsync("existing", "value", TimeSpan.FromMinutes(1));
+
+        var values = await redis.GetManyAsync(["existing", "missing"]);
+
+        Assert.Equal("value", values["existing"]);
+        Assert.Null(values["missing"]);
+    }
+
+    [Fact]
     public async Task GeoRemoveAsync_RemovesMemberFromRadiusResults()
     {
         var redis = new InMemoryRedisService();

@@ -28,6 +28,7 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
   @override
   void initState() {
     super.initState();
+    _promoController.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final token = context.read<AuthProvider>().token;
       if (token != null) {
@@ -47,6 +48,7 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
     final provider = context.watch<BookingProvider>();
     final promos = provider.availablePromotions;
     final isLoading = provider.isLoadingPromotions;
+    final manualCode = _promoController.text.trim();
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.85,
@@ -89,7 +91,11 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
                       color: Color(0xFFF5F5F5),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.close, size: 20, color: Color(0xFF6B6B6B)),
+                    child: const Icon(
+                      Icons.close,
+                      size: 20,
+                      color: Color(0xFF6B6B6B),
+                    ),
                   ),
                 ),
               ],
@@ -109,10 +115,15 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
                       controller: _promoController,
                       decoration: InputDecoration(
                         hintText: PromotionStrings.enterPromoCode,
-                        hintStyle: const TextStyle(color: Color(0xFFAAAAAA), fontSize: 15),
+                        hintStyle: const TextStyle(
+                          color: Color(0xFFAAAAAA),
+                          fontSize: 15,
+                        ),
                         filled: true,
                         fillColor: const Color(0xFFF7F7F7),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide.none,
@@ -125,12 +136,21 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
                 SizedBox(
                   height: 54,
                   child: ElevatedButton(
-                    onPressed: () {
-                      if (_promoController.text.isNotEmpty) {
-                        // Manual entry could be handled by searching or direct apply
-                        // For now, let's just pop with a dummy promo or handle it if API supports
-                      }
-                    },
+                    onPressed: manualCode.isEmpty
+                        ? null
+                        : () {
+                            final promo = PromoModel(
+                              promotionId: -manualCode.hashCode.abs(),
+                              promotionCode: manualCode.toUpperCase(),
+                              discountType: '',
+                              discountValue: 0,
+                              remainingUsageCount: 1,
+                              shortDescription:
+                                  'Mã sẽ được kiểm tra khi đặt chuyến',
+                            );
+                            provider.selectPromo(promo);
+                            Navigator.pop(context, promo);
+                          },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
@@ -142,7 +162,10 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
                     ),
                     child: const Text(
                       PromotionStrings.apply,
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
                     ),
                   ),
                 ),
@@ -155,23 +178,31 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
             child: isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : promos.isEmpty
-                    ? const Center(child: Text('Hiện chưa có mã khuyến mãi khả dụng.'))
-                    : ListView.separated(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                        itemCount: promos.length,
-                        physics: const BouncingScrollPhysics(),
-                        separatorBuilder: (context, index) => const SizedBox(height: 16),
-                        itemBuilder: (context, index) {
-                          return _PromoCard(
-                            promo: promos[index],
-                            isSelected: provider.selectedPromo?.promotionId == promos[index].promotionId,
-                            onUse: () {
-                              provider.selectPromo(promos[index]);
-                              Navigator.pop(context, promos[index]);
-                            },
-                          );
+                ? const Center(
+                    child: Text('Hiện chưa có mã khuyến mãi khả dụng.'),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
+                    itemCount: promos.length,
+                    physics: const BouncingScrollPhysics(),
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 16),
+                    itemBuilder: (context, index) {
+                      return _PromoCard(
+                        promo: promos[index],
+                        isSelected:
+                            provider.selectedPromo?.promotionId ==
+                            promos[index].promotionId,
+                        onUse: () {
+                          provider.selectPromo(promos[index]);
+                          Navigator.pop(context, promos[index]);
                         },
-                      ),
+                      );
+                    },
+                  ),
           ),
           if (provider.selectedPromo != null)
             Padding(
@@ -249,7 +280,10 @@ class _PromoCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFE0F2F2),
                       borderRadius: BorderRadius.circular(6),
@@ -278,7 +312,10 @@ class _PromoCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       'Đơn tối thiểu: ${_formatCurrency(promo.minimumOrderValue)}',
-                      style: const TextStyle(fontSize: 12, color: Color(0xFF888888)),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF888888),
+                      ),
                     ),
                   ],
                   const SizedBox(height: 10),
@@ -292,8 +329,8 @@ class _PromoCard extends StatelessWidget {
                       const SizedBox(width: 4),
                       Text(
                         promo.remainingUsageCount > 0
-                          ? 'Còn lại: ${promo.remainingUsageCount} lượt'
-                          : 'Hết lượt sử dụng',
+                            ? 'Còn lại: ${promo.remainingUsageCount} lượt'
+                            : 'Hết lượt sử dụng',
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -308,7 +345,7 @@ class _PromoCard extends StatelessWidget {
             const SizedBox(width: 12),
             // Action
             TextButton(
-              onPressed: onUse,
+              onPressed: promo.remainingUsageCount > 0 ? onUse : null,
               style: TextButton.styleFrom(
                 foregroundColor: AppColors.primary,
                 padding: const EdgeInsets.symmetric(horizontal: 8),

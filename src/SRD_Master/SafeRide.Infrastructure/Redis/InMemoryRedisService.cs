@@ -34,11 +34,31 @@ public sealed class InMemoryRedisService : IRedisService
         }
     }
 
+    public Task<bool> TryAcquireDistributedLockAsync(
+        string key,
+        string value,
+        TimeSpan expiration)
+    {
+        return SetIfNotExistsAsync(key, value, expiration);
+    }
+
     public Task<string?> GetAsync(string key)
     {
         lock (_sync)
         {
             return Task.FromResult(GetValue(key));
+        }
+    }
+
+    public Task<IReadOnlyDictionary<string, string?>> GetManyAsync(
+        IReadOnlyCollection<string> keys)
+    {
+        lock (_sync)
+        {
+            return Task.FromResult<IReadOnlyDictionary<string, string?>>(
+                keys
+                    .Distinct(StringComparer.Ordinal)
+                    .ToDictionary(key => key, GetValue));
         }
     }
 

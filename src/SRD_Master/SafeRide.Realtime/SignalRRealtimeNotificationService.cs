@@ -99,30 +99,11 @@ public sealed class SignalRRealtimeNotificationService
                 cancellationToken);
         }
 
-        var tasks = new List<Task>
-        {
-            SendToDriverAsync(
-                notification.DriverId,
-                "DriverLocationUpdated",
-                notification,
-                cancellationToken),
-            SendToTripAsync(
-                notification.TripId.Value,
-                "DriverLocationUpdated",
-                notification,
-                cancellationToken)
-        };
-
-        if (notification.CustomerId.HasValue)
-        {
-            tasks.Add(SendToUserAsync(
-                notification.CustomerId.Value,
-                "DriverLocationUpdated",
-                notification,
-                cancellationToken));
-        }
-
-        return Task.WhenAll(tasks);
+        return SendToTripAsync(
+            notification.TripId.Value,
+            "DriverLocationUpdated",
+            notification,
+            cancellationToken);
     }
 
     public Task PublishDriverOfferCreatedAsync(

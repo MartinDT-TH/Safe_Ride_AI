@@ -22,9 +22,12 @@ public sealed class SafeRideHub : Hub
             await Groups.AddToGroupAsync(
                 Context.ConnectionId,
                 RealtimeGroups.User(userId));
-            await Groups.AddToGroupAsync(
-                Context.ConnectionId,
-                RealtimeGroups.Driver(userId));
+            if (Context.User?.IsInRole("Driver") == true)
+            {
+                await Groups.AddToGroupAsync(
+                    Context.ConnectionId,
+                    RealtimeGroups.Driver(userId));
+            }
         }
 
         await base.OnConnectedAsync();
@@ -58,8 +61,11 @@ public sealed class SafeRideHub : Hub
             RealtimeGroups.Trip(tripId));
     }
 
+    [Authorize(Roles = "Driver")]
     public async Task UpdateDriverLocation(double latitude, double longitude)
     {
+        ValidateCoordinate(latitude, longitude);
+
         if (!TryGetUserId(out var driverId))
         {
             throw new HubException("Cannot resolve authenticated driver id.");
@@ -72,8 +78,11 @@ public sealed class SafeRideHub : Hub
             Context.ConnectionAborted);
     }
 
+    [Authorize(Roles = "Driver")]
     public async Task SetDriverOnline(double latitude, double longitude)
     {
+        ValidateCoordinate(latitude, longitude);
+
         if (!TryGetUserId(out var driverId))
         {
             throw new HubException("Cannot resolve authenticated driver id.");
@@ -86,6 +95,7 @@ public sealed class SafeRideHub : Hub
             Context.ConnectionAborted);
     }
 
+    [Authorize(Roles = "Driver")]
     public async Task SetDriverOffline()
     {
         if (!TryGetUserId(out var driverId))
@@ -103,5 +113,16 @@ public sealed class SafeRideHub : Hub
         return Guid.TryParse(
             Context.User?.FindFirstValue(ClaimTypes.NameIdentifier),
             out userId);
+    }
+
+    private static void ValidateCoordinate(double latitude, double longitude)
+    {
+        if (!double.IsFinite(latitude)
+            || !double.IsFinite(longitude)
+            || latitude is < -90 or > 90
+            || longitude is < -180 or > 180)
+        {
+            throw new HubException("Driver location coordinates are invalid.");
+        }
     }
 }

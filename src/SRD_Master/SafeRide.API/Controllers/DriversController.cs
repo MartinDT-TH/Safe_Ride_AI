@@ -1,16 +1,17 @@
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
+using MediatR;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
 using SafeRide.Application.Features.Bookings.DTOs;
+using SafeRide.Application.Features.Drivers.Commands.SetDriverOffline;
+using SafeRide.Application.Features.Drivers.Queries.GetActiveDriverTrip;
+using SafeRide.Application.Features.Drivers.Queries.GetNearbyDrivers;
+using SafeRide.Contracts.Requests.Drivers;
 using SafeRide.Contracts.Responses.Bookings;
 using SafeRide.Contracts.Responses.Drivers;
 using SafeRide.Domain.Enums;
-using SafeRide.Infrastructure.Persistence;
-using SafeRide.Infrastructure.Redis;
 using System.Security.Claims;
-using System.Text.Json;
 
 namespace SafeRide.API.Controllers;
 
@@ -19,18 +20,18 @@ namespace SafeRide.API.Controllers;
 [Route("api/drivers")]
 public sealed class DriversController : ControllerBase
 {
-    private readonly IRedisService _redisService;
+    private readonly ISender _sender;
     private readonly IBookingAssignmentService _bookingAssignmentService;
-    private readonly ApplicationDbContext _dbContext;
+    private readonly IDriverRealtimeService _driverRealtimeService;
 
     public DriversController(
-        IRedisService redisService,
+        ISender sender,
         IBookingAssignmentService bookingAssignmentService,
-        ApplicationDbContext dbContext)
+        IDriverRealtimeService driverRealtimeService)
     {
-        _redisService = redisService;
+        _sender = sender;
         _bookingAssignmentService = bookingAssignmentService;
-        _dbContext = dbContext;
+        _driverRealtimeService = driverRealtimeService;
     }
 
     [HttpGet("nearby")]
@@ -39,30 +40,14 @@ public sealed class DriversController : ControllerBase
         [FromQuery] double latitude,
         [FromQuery] double longitude,
         [FromQuery] double radiusKm = 5.0,
-        [FromQuery] int limit = 10)
+        [FromQuery] int limit = 10,
+        CancellationToken cancellationToken = default)
     {
-        var driverIds = await _redisService.GeoRadiusAsync(
-            RedisKeys.OnlineDriversGeo,
-            longitude,
-            latitude,
-            radiusKm,
-            limit);
+        var results = await _sender.Send(
+            new GetNearbyDriversQuery(latitude, longitude, radiusKm, limit),
+            cancellationToken);
 
-        var tasks = driverIds.Select(async id =>
-        {
-            var guid = Guid.Parse(id);
-            var locationJson = await _redisService.GetAsync(RedisKeys.DriverLocation(guid));
-            if (string.IsNullOrEmpty(locationJson)) return null;
-
-            var cache = JsonSerializer.Deserialize<DriverLocationCache>(locationJson);
-            return cache is null ? null : new NearbyDriverResponse(
-                guid,
-                cache.Latitude,
-                cache.Longitude);
-        });
-
-        var results = await Task.WhenAll(tasks);
-        return Ok(results.Where(x => x is not null).ToList());
+        return Ok(results);
     }
 
     [Authorize(Roles = "Driver")]
@@ -77,25 +62,90 @@ public sealed class DriversController : ControllerBase
             return Unauthorized();
         }
 
-        var activeTrip = await _dbContext.Trips
-            .AsNoTracking()
-            .Where(trip => trip.DriverId == driverId
-                && (trip.TripStatus == TripStatus.ACCEPTED
-                    || trip.TripStatus == TripStatus.DRIVER_ARRIVING
-                    || trip.TripStatus == TripStatus.ARRIVED
-                    || trip.TripStatus == TripStatus.IN_PROGRESS))
-            .OrderByDescending(trip => trip.DriverAssignedAt ?? trip.CreatedAt)
-            .Select(trip => new
-            {
-                bookingId = trip.BookingId,
-                tripId = trip.Id,
-                tripStatus = trip.TripStatus
-            })
-            .FirstOrDefaultAsync(cancellationToken);
+        var activeTrip = await _sender.Send(
+            new GetActiveDriverTripQuery(driverId),
+            cancellationToken);
 
         return activeTrip is null ? NoContent() : Ok(activeTrip);
     }
 
+    [Authorize(Roles = "Driver")]
+    [HttpPost("online")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SetOnline(
+        [FromBody] UpdateDriverLocationRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var driverId))
+        {
+            return Unauthorized();
+        }
+
+        await _driverRealtimeService.SetDriverOnlineAsync(
+            driverId,
+            request.Latitude,
+            request.Longitude,
+            cancellationToken);
+
+        return NoContent();
+    }
+
+    [Authorize(Roles = "Driver")]
+    [HttpPost("offline")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SetOffline(CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var driverId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await _sender.Send(
+            new SetDriverOfflineCommand(driverId),
+            cancellationToken);
+
+        if (!result.CanSetOffline)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Cannot set offline",
+                Detail = "You cannot go offline while busy or having an active trip."
+            });
+        }
+
+        return NoContent();
+    }
+
+    [Authorize(Roles = "Driver")]
+    [HttpPatch("location")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateLocation(
+        [FromBody] UpdateDriverLocationRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var driverId))
+        {
+            return Unauthorized();
+        }
+
+        await _driverRealtimeService.UpdateDriverLocationAsync(
+            driverId,
+            request.Latitude,
+            request.Longitude,
+            cancellationToken);
+
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Driver accepts the offer. This sets the offer status to DriverAccepted but does NOT create a Trip yet.
+    /// The Trip is created only when the customer confirms the accepted driver.
+    /// </summary>
     [Authorize(Roles = "Driver")]
     [HttpPost("offers/{offerId:long}/accept")]
     [HttpPost("/api/driver-offers/{offerId:long}/accept")]
@@ -107,6 +157,7 @@ public sealed class DriversController : ControllerBase
         long offerId,
         CancellationToken cancellationToken)
     {
+        // Flow: driver acceptance only moves the offer to DriverAccepted; customer confirmation creates the Trip.
         if (!TryGetUserId(out var driverId))
         {
             return Unauthorized();
@@ -130,6 +181,7 @@ public sealed class DriversController : ControllerBase
         long offerId,
         CancellationToken cancellationToken)
     {
+        // Flow: driver rejection closes this offer and lets matching search for another candidate.
         if (!TryGetUserId(out var driverId))
         {
             return Unauthorized();
@@ -191,12 +243,8 @@ public sealed class DriversController : ControllerBase
                 driverOffer.LicenseClass,
                 driverOffer.ExpiresAt,
                 driverOffer.OfferStatus,
+                driverOffer.DriverLatitude,
+                driverOffer.DriverLongitude,
                 driverOffer.CustomerConfirmRemainingSeconds);
     }
 }
-
-public record DriverLocationCache(
-    Guid DriverId,
-    double Latitude,
-    double Longitude,
-    DateTime UpdatedAt);

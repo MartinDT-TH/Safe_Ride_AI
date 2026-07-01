@@ -11,13 +11,16 @@ public sealed class AuthRateLimitMiddlewareTests
     public async Task SendOtp_FourthRequest_Returns429()
     {
         var redis = new InMemoryRedisService();
+        var environment = new DummyHostEnvironment();
+
         var middleware = new AuthRateLimitMiddleware(
             context =>
             {
                 context.Response.StatusCode = StatusCodes.Status200OK;
                 return Task.CompletedTask;
             },
-            NullLogger<AuthRateLimitMiddleware>.Instance);
+            NullLogger<AuthRateLimitMiddleware>.Instance,
+            environment);
 
         for (var index = 0; index < 3; index++)
         {
@@ -50,10 +53,21 @@ public sealed class AuthRateLimitMiddlewareTests
             return Task.FromResult(_counters[key]);
         }
         public Task<string?> GetAsync(string key) => Task.FromResult<string?>(null);
+        public Task<IReadOnlyDictionary<string, string?>> GetManyAsync(
+            IReadOnlyCollection<string> keys) =>
+            Task.FromResult<IReadOnlyDictionary<string, string?>>(
+                keys
+                    .Distinct(StringComparer.Ordinal)
+                    .ToDictionary(key => key, _ => (string?)null));
         public Task RemoveAsync(string key) => Task.CompletedTask;
         public Task SetAsync(string key, string value, TimeSpan expiration) => Task.CompletedTask;
         public Task<bool> SetIfNotExistsAsync(string key, string value, TimeSpan expiration) =>
             Task.FromResult(true);
+        public Task<bool> TryAcquireDistributedLockAsync(
+            string key,
+            string value,
+            TimeSpan expiration) =>
+            Task.FromResult(false);
         public Task GeoAddAsync(
             string key,
             double longitude,
@@ -75,5 +89,13 @@ public sealed class AuthRateLimitMiddlewareTests
             string expectedHash,
             int maxAttempts) =>
             Task.FromResult(OtpVerificationResult.Missing);
+    }
+
+    private sealed class DummyHostEnvironment : Microsoft.Extensions.Hosting.IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = "Development";
+        public string ApplicationName { get; set; } = "SafeRide.API";
+        public string ContentRootPath { get; set; } = "";
+        public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } = null!;
     }
 }

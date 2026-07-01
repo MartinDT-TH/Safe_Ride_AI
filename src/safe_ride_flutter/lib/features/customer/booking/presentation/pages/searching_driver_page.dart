@@ -6,6 +6,7 @@ import '../../../../../core/maps/models/map_models.dart';
 import '../../../../../core/maps/widgets/map_renderer_widget.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
+import '../../../../../core/services/mobile_config_service.dart';
 import '../../../../../core/services/socket_service.dart';
 import '../../../../../dependency_injection/injection.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
@@ -17,7 +18,6 @@ import '../../../home/presentation/providers/home_provider.dart';
 import '../providers/booking_provider.dart';
 import '../widgets/booking_cancel_flow.dart';
 import 'driver_profile_page.dart';
-import 'trip_tracking_page.dart';
 
 class SearchingDriverPage extends StatefulWidget {
   const SearchingDriverPage({
@@ -42,10 +42,13 @@ class SearchingDriverPage extends StatefulWidget {
 class _SearchingDriverPageState extends State<SearchingDriverPage> {
   AppMapController? _controller;
   static const _tealColor = Color(0xFF006B70);
+  static const _markerOffsetUpdateMinInterval = Duration(milliseconds: 150);
   Offset? _markerScreenOffset;
   StreamSubscription? _nearbyDriversSubscription;
   StreamSubscription? _bookingStatusSubscription;
   bool _didLeaveSearch = false;
+  bool _markerOffsetUpdateInProgress = false;
+  DateTime? _lastMarkerOffsetUpdateAt;
   final SocketService _socketService = getIt<SocketService>();
   int? _joinedBookingId;
 
@@ -98,20 +101,26 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
     _controller = controller;
     _fitRoute();
     // Delay slightly to ensure map is fully rendered before getting coordinates
-    Future.delayed(const Duration(milliseconds: 300), _updateMarkerOffset);
+    Future.delayed(
+      const Duration(milliseconds: 300),
+      () => _updateMarkerOffset(force: true),
+    );
     _fetchNearbyDrivers();
   }
 
   void _startPolling() {
-    // Refresh nearby drivers every 5 seconds while on this page for better real-time feel
-    _nearbyDriversSubscription = Stream.periodic(const Duration(seconds: 5))
-        .listen((_) {
+    final matchingConfig = getIt<MobileConfigService>().config.matching;
+    _nearbyDriversSubscription =
+        Stream.periodic(
+          Duration(seconds: matchingConfig.nearbyDriversRefreshIntervalSeconds),
+        ).listen((_) {
           if (mounted) _fetchNearbyDrivers();
         });
 
-    // Refresh booking status every 3 seconds to check for driver offers
-    _bookingStatusSubscription = Stream.periodic(const Duration(seconds: 3))
-        .listen((_) {
+    _bookingStatusSubscription =
+        Stream.periodic(
+          Duration(seconds: matchingConfig.searchingBookingPollIntervalSeconds),
+        ).listen((_) {
           if (mounted) _refreshBookingStatus();
         });
   }
@@ -196,17 +205,29 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
     _didLeaveSearch = true;
     _nearbyDriversSubscription?.cancel();
     _bookingStatusSubscription?.cancel();
-    
+
     final bookingProvider = context.read<BookingProvider>();
     final homeProvider = context.read<HomeProvider>();
+    final token = context.read<AuthProvider>().token;
+    final detailedBooking = token == null || token.isEmpty
+        ? null
+        : await bookingProvider.refreshSearchingBooking(
+            token,
+            bookingId: booking.bookingId,
+          );
+    if (!mounted) {
+      return;
+    }
+
+    final trackingBooking = detailedBooking ?? booking;
 
     bookingProvider.setActiveBooking(
-      booking: booking,
-      pickup: booking.pickup ?? widget.pickup,
-      destination: booking.destination ?? widget.destination,
-      vehicle: booking.vehicle ?? widget.vehicle,
+      booking: trackingBooking,
+      pickup: trackingBooking.pickup ?? widget.pickup,
+      destination: trackingBooking.destination ?? widget.destination,
+      vehicle: trackingBooking.vehicle ?? widget.vehicle,
     );
-    
+
     // Switch to tracking tab and pop to main screen
     homeProvider.setSelectedIndex(1);
     Navigator.of(context).popUntil((route) => route.isFirst);
@@ -220,10 +241,10 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
     }
 
     final result = await context.read<BookingProvider>().confirmDriverOffer(
-          token,
-          bookingId: booking.bookingId,
-          offerId: offerId,
-        );
+      token,
+      bookingId: booking.bookingId,
+      offerId: offerId,
+    );
     if (!mounted || result == null) {
       return;
     }
@@ -253,8 +274,21 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
     }
   }
 
-  Future<void> _updateMarkerOffset() async {
-    if (_controller == null) return;
+  Future<void> _updateMarkerOffset({bool force = false}) async {
+    if (_controller == null || !mounted || _markerOffsetUpdateInProgress) {
+      return;
+    }
+
+    final now = DateTime.now();
+    final lastUpdateAt = _lastMarkerOffsetUpdateAt;
+    if (!force &&
+        lastUpdateAt != null &&
+        now.difference(lastUpdateAt) < _markerOffsetUpdateMinInterval) {
+      return;
+    }
+
+    _markerOffsetUpdateInProgress = true;
+    _lastMarkerOffsetUpdateAt = now;
     try {
       final pos = AppLatLng(widget.pickup.latitude, widget.pickup.longitude);
       final screenPos = await _controller!.getScreenCoordinate(pos);
@@ -268,6 +302,8 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
       }
     } catch (e) {
       debugPrint('Error updating marker offset: $e');
+    } finally {
+      _markerOffsetUpdateInProgress = false;
     }
   }
 
@@ -289,7 +325,9 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
     }
 
     if (points.length == 1) {
-      await controller.animateCamera(AppCameraPosition(target: pickup, zoom: 15));
+      await controller.animateCamera(
+        AppCameraPosition(target: pickup, zoom: 15),
+      );
       return;
     }
 
@@ -314,7 +352,10 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
 
   @override
   Widget build(BuildContext context) {
-    final pickupPos = AppLatLng(widget.pickup.latitude, widget.pickup.longitude);
+    final pickupPos = AppLatLng(
+      widget.pickup.latitude,
+      widget.pickup.longitude,
+    );
     final destPos = widget.destination != null
         ? AppLatLng(widget.destination!.latitude, widget.destination!.longitude)
         : null;
@@ -345,7 +386,7 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
               onMapCreated: _onMapCreated,
               // Update on every camera move to keep radar attached
               onCameraMove: _updateMarkerOffset,
-              onCameraIdle: _updateMarkerOffset,
+              onCameraIdle: () => _updateMarkerOffset(force: true),
               markers: {
                 AppMarker(
                   id: 'pickup',
@@ -447,7 +488,8 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
                                         widget.destination,
                                     fareEstimate: widget.fareEstimate,
                                     vehicle:
-                                        currentBooking.vehicle ?? widget.vehicle,
+                                        currentBooking.vehicle ??
+                                        widget.vehicle,
                                   ),
                                 ),
                               );
@@ -576,9 +618,11 @@ class _SearchingPanel extends StatelessWidget {
               width: double.infinity,
               height: 52,
               child: ElevatedButton.icon(
-                onPressed: (booking == null ||
-                          context.watch<BookingProvider>().isLoading)
-                          ? null : onCancelTap,
+                onPressed:
+                    (booking == null ||
+                        context.watch<BookingProvider>().isLoading)
+                    ? null
+                    : onCancelTap,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFF2F2F2),
                   foregroundColor: const Color(0xFFC62828),
@@ -601,7 +645,10 @@ class _SearchingPanel extends StatelessWidget {
                   context.watch<BookingProvider>().isLoading
                       ? 'Đang hủy...'
                       : BookingStrings.cancelBooking,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
                 ),
               ),
             ),
@@ -616,7 +663,10 @@ class _SearchingPanel extends StatelessWidget {
     if (booking?.matchingMessage != null &&
         booking!.matchingMessage!.trim().isNotEmpty) {
       final remaining = booking!.estimatedRemainingSeconds;
-      final cleanMessage = booking!.matchingMessage!.trim().replaceAll(RegExp(r'\.$'), '');
+      final cleanMessage = booking!.matchingMessage!.trim().replaceAll(
+        RegExp(r'\.$'),
+        '',
+      );
       if (remaining != null && remaining > 0) {
         final minutes = remaining ~/ 60;
         final seconds = remaining % 60;
@@ -648,7 +698,9 @@ class _DriverFoundCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final remaining = booking?.driverOffer?.customerConfirmRemainingSeconds;
-    final countdownText = remaining != null && remaining > 0 ? ' • Còn $remaining giây' : '';
+    final countdownText = remaining != null && remaining > 0
+        ? ' • Còn $remaining giây'
+        : '';
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -660,31 +712,34 @@ class _DriverFoundCard extends StatelessWidget {
       child: Column(
         children: [
           Row(
-          children: [
-            const CircleAvatar(
-              backgroundColor: Color(0xFFFFB300),
-              child: Icon(Icons.person_search_rounded, color: Colors.white),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Tài xế phù hợp đã sẵn sàng',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Xem hồ sơ và xác nhận thuê$countdownText.',
-                    style: const TextStyle(fontSize: 12, color: Color(0xFF666666)),
-                  ),
-                ],
+            children: [
+              const CircleAvatar(
+                backgroundColor: Color(0xFFFFB300),
+                child: Icon(Icons.person_search_rounded, color: Colors.white),
               ),
-            ),
-            const Icon(Icons.chevron_right_rounded, color: Color(0xFF006B70)),
-          ],
-        ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Tài xế phù hợp đã sẵn sàng',
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Xem hồ sơ và xác nhận thuê$countdownText.',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF666666),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: Color(0xFF006B70)),
+            ],
+          ),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -861,14 +916,16 @@ class _BookingSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final originalFare = booking?.originalFare ??
+    final originalFare =
+        booking?.originalFare ??
         booking?.estimatedFare ??
         fareEstimate?.estimatedFare;
 
     // Fallback logic: prefer finalFare from booking, then estimatedFare, then fareEstimate
-    final finalFare = booking?.finalFare ??
-                     booking?.estimatedFare ??
-                     fareEstimate?.estimatedFare;
+    final finalFare =
+        booking?.finalFare ??
+        booking?.estimatedFare ??
+        fareEstimate?.estimatedFare;
 
     final discount = booking?.discountAmount ?? 0;
     final promoCode = booking?.promotionCode;
@@ -934,7 +991,10 @@ class _BookingSummary extends StatelessWidget {
               children: [
                 Text(
                   'Khuyến mãi (${promoCode ?? 'Mã đã áp dụng'}):',
-                  style: const TextStyle(fontSize: 13, color: Color(0xFF666666)),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF666666),
+                  ),
                 ),
                 Text(
                   '-${_formatCurrency(discount)}',

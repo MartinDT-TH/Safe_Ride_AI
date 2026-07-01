@@ -6,8 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
 import '../../../../../core/maps/models/map_models.dart';
-import '../../../../../core/maps/widgets/map_renderer_widget.dart';
+import '../../../../../core/maps/widgets/live_trip_map_widget.dart';
 import '../../../../../core/services/map_api_service.dart';
+import '../../../../../core/services/mobile_config_service.dart';
 import '../../../../../core/services/socket_service.dart';
 import '../../../../../dependency_injection/injection.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
@@ -17,7 +18,7 @@ import '../../data/models/booking_response.dart';
 import '../providers/booking_provider.dart';
 import '../widgets/booking_cancel_flow.dart';
 
-import 'trip_summary_page.dart';
+import '../../../../shared/feedback/presentation/pages/trip_summary_page.dart';
 
 enum TripTrackingState { arriving, inProgress }
 
@@ -53,22 +54,21 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   final List<AppLatLng> _tripRoutePoints = [];
   AppLatLng? _driverPosition;
   double _driverHeading = 0;
-  double _arrivalRouteProgress = 0;
-  double _tripRouteProgress = 0;
   DateTime? _lastCameraFitAt;
   DateTime? _lastArrivalRouteRefreshAt;
   AppLatLng? _lastArrivalRouteRefreshOrigin;
   int? _joinedTripId;
+  bool _tripSocketConnecting = false;
+  Timer? _tripSocketRetryTimer;
   Timer? _tripStatusPollingTimer;
+  bool _trackingSnapshotRefreshInProgress = false;
   bool _summaryOpened = false;
   bool _isCompletingTrip = false;
   bool _arrivalRouteRefreshInProgress = false;
   late String? _currentTripStatus;
   static const _tealColor = Color(0xFF006B70);
-  static const double _snapToRouteThresholdMeters = 45;
   static const double _arrivalRerouteThresholdMeters = 35;
   static const double _arrivalRerouteMinMoveMeters = 80;
-  static const double _offRouteThresholdMeters = 90;
   static const Duration _cameraFitInterval = Duration(seconds: 3);
   static const Duration _arrivalRouteRefreshInterval = Duration(seconds: 12);
 
@@ -96,6 +96,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       if (!mounted) return;
       _openSummaryIfCompleted(widget.booking.tripStatus);
       unawaited(_connectTripSocket());
+      unawaited(_refreshTrackingSnapshot());
       _startTripStatusPolling();
     });
   }
@@ -113,6 +114,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
 
     if (oldWidget.booking.tripId == null && widget.booking.tripId != null) {
       unawaited(_connectTripSocket());
+      unawaited(_refreshTrackingSnapshot());
     }
 
     if ((_arrivalRoutePoints.isEmpty &&
@@ -125,6 +127,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
 
   @override
   void dispose() {
+    _tripSocketRetryTimer?.cancel();
     _tripStatusPollingTimer?.cancel();
     _pulseController.dispose();
     final joinedTripId = _joinedTripId;
@@ -148,8 +151,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     }
   }
 
-  void _initializeRoutes() {
-    final arrivalPolyline = widget.booking.arrivalPolyline;
+  void _initializeRoutes([BookingResponse? source]) {
+    final booking = source ?? widget.booking;
+    final arrivalPolyline = booking.arrivalPolyline;
     if (arrivalPolyline != null && arrivalPolyline.isNotEmpty) {
       try {
         final points = decodePolyline(arrivalPolyline);
@@ -162,9 +166,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       }
     }
 
-    if (widget.booking.encodedPolyline.isNotEmpty) {
+    if (booking.encodedPolyline.isNotEmpty) {
       try {
-        final points = decodePolyline(widget.booking.encodedPolyline);
+        final points = decodePolyline(booking.encodedPolyline);
         if (points.isNotEmpty) {
           _tripRoutePoints.clear();
           _tripRoutePoints.addAll(points);
@@ -174,10 +178,49 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       }
     }
 
-    if (_arrivalRoutePoints.isNotEmpty && _driverPosition == null) {
-      _driverPosition = _arrivalRoutePoints.first;
-    } else if (_tripRoutePoints.isNotEmpty && _driverPosition == null) {
-      _driverPosition = _tripRoutePoints.first;
+    if (_driverPosition == null) {
+      final driverLat = booking.driverOffer?.driverLatitude;
+      final driverLng = booking.driverOffer?.driverLongitude;
+      if (driverLat != null && driverLng != null) {
+        _driverPosition = AppLatLng(driverLat, driverLng);
+      } else if (_arrivalRoutePoints.isNotEmpty) {
+        _driverPosition = _arrivalRoutePoints.first;
+      } else if (_tripRoutePoints.isNotEmpty) {
+        _driverPosition = _tripRoutePoints.first;
+      }
+    }
+  }
+
+  Future<void> _refreshTrackingSnapshot() async {
+    if (!mounted || _trackingSnapshotRefreshInProgress) {
+      return;
+    }
+
+    final accessToken = context.read<AuthProvider>().token;
+    if (accessToken == null || accessToken.isEmpty) {
+      return;
+    }
+
+    _trackingSnapshotRefreshInProgress = true;
+    try {
+      final booking = await context
+          .read<BookingProvider>()
+          .refreshActiveBookingDetails(
+            accessToken,
+            bookingId: widget.booking.bookingId,
+          );
+      if (!mounted || booking == null) {
+        return;
+      }
+
+      setState(() {
+        _currentTripStatus = booking.tripStatus ?? _currentTripStatus;
+        _initializeRoutes(booking);
+      });
+      _openSummaryIfCompleted(booking.tripStatus);
+      _fitMapToVisibleRoute();
+    } finally {
+      _trackingSnapshotRefreshInProgress = false;
     }
   }
 
@@ -187,7 +230,11 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     if (tripId == null || accessToken == null || accessToken.isEmpty) {
       return;
     }
+    if (_joinedTripId == tripId || _tripSocketConnecting) {
+      return;
+    }
 
+    _tripSocketConnecting = true;
     try {
       await _socketService.connect(accessToken);
       if (!mounted) return;
@@ -199,12 +246,18 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         }
 
         final rawPosition = AppLatLng(update.latitude, update.longitude);
+
+        if (_driverPosition != null) {
+          final dist =
+              _calculateDirectDistance(_driverPosition!, rawPosition) * 1000;
+          if (dist < 10) return;
+        }
+
         setState(() {
-          final nextPosition = _resolveDriverDisplayPosition(rawPosition);
           if (_driverPosition != null) {
-            _driverHeading = _calculateHeading(_driverPosition!, nextPosition);
+            _driverHeading = _calculateHeading(_driverPosition!, rawPosition);
           }
-          _driverPosition = nextPosition;
+          _driverPosition = rawPosition;
         });
 
         _fitMapToVisibleRoute(throttled: true);
@@ -235,11 +288,23 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       await _socketService.joinTrip(tripId);
       debugPrint('Tracking: Joined Trip Group $tripId');
       _joinedTripId = tripId;
+      _tripSocketRetryTimer?.cancel();
+      _tripSocketRetryTimer = null;
     } catch (e) {
       debugPrint('Tracking Error: $e');
       if (mounted) {
-        _showMessage('Không thể kết nối theo dõi vị trí tài xế.');
+        _showMessage(
+          'Không thể kết nối theo dõi vị trí tài xế. Đang thử lại...',
+        );
+        _tripSocketRetryTimer?.cancel();
+        _tripSocketRetryTimer = Timer(const Duration(seconds: 3), () {
+          if (mounted) {
+            unawaited(_connectTripSocket());
+          }
+        });
       }
+    } finally {
+      _tripSocketConnecting = false;
     }
   }
 
@@ -374,252 +439,32 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   }
 
   Widget _buildMap() {
-    return MapRendererWidget(
-      initialCameraPosition: AppCameraPosition(
-        target: AppLatLng(widget.pickup.latitude, widget.pickup.longitude),
-        zoom: 15,
-      ),
-      onMapCreated: (controller) {
-        _mapController = controller;
-        _fitMapToVisibleRoute();
-      },
-      myLocationButtonEnabled: true,
-      markers: _buildMarkers(),
-      polylines: _buildPolylines(),
+    return LiveTripMapWidget(
+      trackingState: _trackingState == TripTrackingState.arriving
+          ? LiveTripTrackingState.arriving
+          : LiveTripTrackingState.inProgress,
+      pickup: AppLatLng(widget.pickup.latitude, widget.pickup.longitude),
+      destination: widget.destination != null
+          ? AppLatLng(
+              widget.destination!.latitude,
+              widget.destination!.longitude,
+            )
+          : null,
+      arrivalRoutePoints: _arrivalRoutePoints,
+      tripRoutePoints: _tripRoutePoints,
+      driverPosition: _driverPosition,
+      driverHeading: _driverHeading,
       padding: const EdgeInsets.only(
         top: 130,
         bottom: 320,
         left: 24,
         right: 24,
       ),
+      onMapCreated: (controller) {
+        _mapController = controller;
+        _fitMapToVisibleRoute();
+      },
     );
-  }
-
-  Set<AppMarker> _buildMarkers() {
-    final markers = <AppMarker>{
-      AppMarker(
-        id: 'pickup',
-        position: AppLatLng(widget.pickup.latitude, widget.pickup.longitude),
-        markerType: AppMarkerType.pickup,
-      ),
-    };
-
-    final driverPosition = _driverPosition;
-    if (driverPosition != null) {
-      markers.add(
-        AppMarker(
-          id: 'driver',
-          position: driverPosition,
-          markerType: AppMarkerType.driver,
-          rotation: _driverHeading,
-        ),
-      );
-    }
-
-    final destination = widget.destination;
-    if (destination != null) {
-      markers.add(
-        AppMarker(
-          id: 'destination',
-          position: AppLatLng(destination.latitude, destination.longitude),
-          markerType: AppMarkerType.destination,
-        ),
-      );
-    }
-
-    return markers;
-  }
-
-  Set<AppPolyline> _buildPolylines() {
-    final polylines = <AppPolyline>{};
-    final bool isArriving = _trackingState == TripTrackingState.arriving;
-
-    // Very faded full-route background (whole route outline) — zIndex: 1
-    if (_tripRoutePoints.isNotEmpty && !isArriving) {
-      polylines.add(
-        AppPolyline(
-          id: 'trip-route-static',
-          points: _tripRoutePoints,
-          color: _tealColor.withValues(alpha: 0.15),
-          width: 4,
-          zIndex: 1,
-        ),
-      );
-    }
-
-    if (_arrivalRoutePoints.isNotEmpty && isArriving) {
-      polylines.add(
-        AppPolyline(
-          id: 'arrival-route-static',
-          points: _arrivalRoutePoints,
-          color: const Color(0xFF2F80ED).withValues(alpha: 0.15),
-          width: 4,
-          zIndex: 1,
-        ),
-      );
-    }
-
-    // Passed (already driven) portion — extra faded grey, zIndex: 2
-    if (!isArriving) {
-      final passedPoints = _getPassedTripPoints();
-      if (passedPoints.length >= 2) {
-        polylines.add(
-          AppPolyline(
-            id: 'trip-route-passed',
-            points: passedPoints,
-            color: Colors.grey.withValues(alpha: 0.35),
-            width: 5,
-            zIndex: 2,
-            endCapRound: true,
-          ),
-        );
-      }
-    } else {
-      final passedArrival = _getPassedArrivalPoints();
-      if (passedArrival.length >= 2) {
-        polylines.add(
-          AppPolyline(
-            id: 'arrival-route-passed',
-            points: passedArrival,
-            color: Colors.grey.withValues(alpha: 0.35),
-            width: 5,
-            zIndex: 2,
-            endCapRound: true,
-          ),
-        );
-      }
-    }
-
-    // Active (remaining) routes on top — zIndex: 3/4
-    if (_tripRoutePoints.isNotEmpty && !isArriving) {
-      final tripPoints = _getDynamicTripPoints();
-      if (tripPoints.length >= 2) {
-        polylines.add(
-          AppPolyline(
-            id: 'trip-route-active',
-            points: tripPoints,
-            color: _tealColor,
-            width: 6,
-            zIndex: 3,
-            endCapRound: true,
-          ),
-        );
-      }
-    }
-
-    if (isArriving) {
-      final arrivalPoints = _getDynamicArrivalPoints();
-      if (arrivalPoints.length >= 2) {
-        polylines.add(
-          AppPolyline(
-            id: 'arrival-route-active',
-            points: arrivalPoints,
-            color: const Color(0xFF2F80ED),
-            width: 5,
-            zIndex: 4,
-            isDashed: true,
-            endCapRound: true,
-          ),
-        );
-      }
-    }
-
-    return polylines;
-  }
-
-  List<AppLatLng> _getDynamicTripPoints() {
-    if (_tripRoutePoints.isEmpty) return const [];
-    final progress = _routePositionAtProgress(
-      _tripRoutePoints,
-      _tripRouteProgress,
-    );
-    if (progress == null) return _tripRoutePoints;
-
-    final points = [
-      progress.point,
-      ..._tripRoutePoints.skip(progress.segmentIndex + 1),
-    ];
-    return points.length < 2 ? [progress.point, _tripRoutePoints.last] : points;
-  }
-
-  List<AppLatLng> _getDynamicArrivalPoints() {
-    final driverPos = _driverPosition;
-    if (driverPos == null) return const [];
-    if (_arrivalRoutePoints.isEmpty) {
-      return [
-        driverPos,
-        AppLatLng(widget.pickup.latitude, widget.pickup.longitude),
-      ];
-    }
-
-    final progress = _routePositionAtProgress(
-      _arrivalRoutePoints,
-      _arrivalRouteProgress,
-    );
-    if (progress == null) return _arrivalRoutePoints;
-
-    final points = [
-      progress.point,
-      ..._arrivalRoutePoints.skip(progress.segmentIndex + 1),
-    ];
-    return points.length < 2
-        ? [progress.point, _arrivalRoutePoints.last]
-        : points;
-  }
-
-  List<AppLatLng> _getPassedTripPoints() {
-    if (_tripRoutePoints.isEmpty || _tripRouteProgress <= 0) return const [];
-    final progress = _routePositionAtProgress(
-      _tripRoutePoints,
-      _tripRouteProgress,
-    );
-    if (progress == null) return const [];
-    return [
-      ..._tripRoutePoints.take(progress.segmentIndex + 1),
-      progress.point,
-    ];
-  }
-
-  List<AppLatLng> _getPassedArrivalPoints() {
-    if (_arrivalRoutePoints.isEmpty || _arrivalRouteProgress <= 0) {
-      return const [];
-    }
-    final progress = _routePositionAtProgress(
-      _arrivalRoutePoints,
-      _arrivalRouteProgress,
-    );
-    if (progress == null) return const [];
-    return [
-      ..._arrivalRoutePoints.take(progress.segmentIndex + 1),
-      progress.point,
-    ];
-  }
-
-  AppLatLng _resolveDriverDisplayPosition(AppLatLng rawPosition) {
-    final isArriving = _trackingState == TripTrackingState.arriving;
-    final route = isArriving ? _arrivalRoutePoints : _tripRoutePoints;
-    if (route.length < 2) return rawPosition;
-
-    final snap = _findClosestRouteSnap(rawPosition, route);
-    if (snap == null || snap.distanceMeters > _offRouteThresholdMeters) {
-      return rawPosition;
-    }
-
-    if (isArriving) {
-      _arrivalRouteProgress = math.max(_arrivalRouteProgress, snap.progress);
-    } else {
-      _tripRouteProgress = math.max(_tripRouteProgress, snap.progress);
-    }
-
-    if (snap.distanceMeters <= _snapToRouteThresholdMeters) {
-      return _routePositionAtProgress(
-            route,
-            isArriving ? _arrivalRouteProgress : _tripRouteProgress,
-          )?.point ??
-          snap.point;
-    }
-
-    return rawPosition;
   }
 
   Future<void> _refreshArrivalRouteIfNeeded(AppLatLng rawPosition) async {
@@ -671,37 +516,16 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         _arrivalRoutePoints
           ..clear()
           ..addAll(points);
-        _arrivalRouteProgress = 0;
-        final nextPosition = _resolveDriverDisplayPosition(rawPosition);
         if (_driverPosition != null) {
-          _driverHeading = _calculateHeading(_driverPosition!, nextPosition);
+          _driverHeading = _calculateHeading(_driverPosition!, rawPosition);
         }
-        _driverPosition = nextPosition;
+        _driverPosition = rawPosition;
       });
     } catch (e) {
       debugPrint('Tracking: Failed to refresh arrival route: $e');
     } finally {
       _arrivalRouteRefreshInProgress = false;
     }
-  }
-
-  _RouteProgress? _routePositionAtProgress(
-    List<AppLatLng> route,
-    double progress,
-  ) {
-    if (route.length < 2) return null;
-    final clampedProgress = progress.clamp(0, route.length - 1).toDouble();
-    final segmentIndex = math.min(clampedProgress.floor(), route.length - 2);
-    final fraction = (clampedProgress - segmentIndex).clamp(0, 1).toDouble();
-    return _RouteProgress(
-      point: _interpolate(
-        route[segmentIndex],
-        route[segmentIndex + 1],
-        fraction,
-      ),
-      segmentIndex: segmentIndex,
-      progress: segmentIndex + fraction,
-    );
   }
 
   _RouteProgress? _findClosestRouteSnap(
@@ -836,6 +660,15 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       maxLat = math.max(maxLat, point.latitude);
       minLng = math.min(minLng, point.longitude);
       maxLng = math.max(maxLng, point.longitude);
+    }
+
+    if (maxLat - minLat < 0.001) {
+      minLat -= 0.001;
+      maxLat += 0.001;
+    }
+    if (maxLng - minLng < 0.001) {
+      minLng -= 0.001;
+      maxLng += 0.001;
     }
 
     return (AppLatLng(minLat, minLng), AppLatLng(maxLat, maxLng));
@@ -1301,11 +1134,26 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     );
   }
 
+  bool _isPollingTripStatus = false;
+
   void _startTripStatusPolling() {
     _tripStatusPollingTimer?.cancel();
-    _tripStatusPollingTimer = Timer.periodic(const Duration(seconds: 4), (_) {
-      unawaited(_refreshTripStatus());
-    });
+    final intervalSeconds = getIt<MobileConfigService>()
+        .config
+        .matching
+        .tripStatusPollIntervalSeconds;
+    _tripStatusPollingTimer = Timer.periodic(
+      Duration(seconds: intervalSeconds),
+      (_) async {
+        if (_isPollingTripStatus) return;
+        _isPollingTripStatus = true;
+        try {
+          await _refreshTripStatus();
+        } finally {
+          _isPollingTripStatus = false;
+        }
+      },
+    );
   }
 
   Future<void> _refreshTripStatus() async {

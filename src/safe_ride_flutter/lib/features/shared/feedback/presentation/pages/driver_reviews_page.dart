@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../../../../core/constants/app_colors.dart';
-import '../../data/models/driver_rating_summary_model.dart';
-import '../../data/models/driver_review_model.dart';
+import 'package:safe_ride/core/constants/app_colors.dart';
+import 'package:safe_ride/features/customer/booking/data/models/driver_rating_summary_model.dart';
+import 'package:safe_ride/features/customer/booking/data/models/driver_review_model.dart';
 
 class DriverReviewsPage extends StatelessWidget {
   const DriverReviewsPage({

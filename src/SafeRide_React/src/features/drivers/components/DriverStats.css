@@ -1,0 +1,12 @@
+/* ===== Driver Stats Row ===== */
+.driver-stats {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 900px) {
+  .driver-stats {
+    flex-direction: column;
+  }
+}

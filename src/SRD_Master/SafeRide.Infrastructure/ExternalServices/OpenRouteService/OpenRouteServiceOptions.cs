@@ -27,4 +27,6 @@ public sealed class OpenRouteServiceOptions
 
     public string ReverseApiUrl { get; init; }
         = "https://api.openrouteservice.org/geocode/reverse";
+
+    public int TimeoutSeconds { get; init; } = 20;
 }

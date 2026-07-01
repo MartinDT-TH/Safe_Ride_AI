@@ -244,8 +244,27 @@ public sealed class FakeRedisService : IRedisService
         if (key.Contains("cooldown", StringComparison.OrdinalIgnoreCase)) return Task.FromResult(true);
         return Task.FromResult(_values.TryAdd(key, value));
     }
+
+    public Task<bool> TryAcquireDistributedLockAsync(
+        string key,
+        string value,
+        TimeSpan expiration) =>
+        Task.FromResult(_values.TryAdd(key, value));
+
     public Task<string?> GetAsync(string key) =>
         Task.FromResult(_values.TryGetValue(key, out var value) ? value : null);
+
+    public Task<IReadOnlyDictionary<string, string?>> GetManyAsync(
+        IReadOnlyCollection<string> keys)
+    {
+        return Task.FromResult<IReadOnlyDictionary<string, string?>>(
+            keys
+                .Distinct(StringComparer.Ordinal)
+                .ToDictionary(
+                key => key,
+                key => _values.TryGetValue(key, out var value) ? value : null));
+    }
+
     public Task RemoveAsync(string key)
     {
         _values.TryRemove(key, out _);

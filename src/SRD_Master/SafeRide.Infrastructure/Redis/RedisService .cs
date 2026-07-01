@@ -20,9 +20,11 @@ public sealed class RedisService : IRedisService, IDisposable
             var options = ConfigurationOptions.Parse(connectionString);
             options.AbortOnConnectFail = false;
             options.ConnectRetry = 1;
-            options.ConnectTimeout = 1000;
-            options.SyncTimeout = 1000;
-            options.AsyncTimeout = 1000;
+            options.ConnectTimeout = 10000;
+            options.SyncTimeout = 10000;
+            options.AsyncTimeout = 10000;
+            options.KeepAlive = 30;
+            options.Ssl = true;
             return ConnectionMultiplexer.Connect(options);
         });
     }
@@ -42,10 +44,46 @@ public sealed class RedisService : IRedisService, IDisposable
             expiration,
             When.NotExists);
 
+    public Task<bool> TryAcquireDistributedLockAsync(
+        string key,
+        string value,
+        TimeSpan expiration) =>
+        Database.StringSetAsync(
+            key,
+            value,
+            expiration,
+            When.NotExists);
+
     public async Task<string?> GetAsync(string key)
     {
         var value = await Database.StringGetAsync(key);
         return value.HasValue ? value.ToString() : null;
+    }
+
+    public async Task<IReadOnlyDictionary<string, string?>> GetManyAsync(
+        IReadOnlyCollection<string> keys)
+    {
+        var distinctKeys = keys
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (distinctKeys.Count == 0)
+        {
+            return new Dictionary<string, string?>();
+        }
+
+        var redisKeys = distinctKeys
+            .Select(key => (RedisKey)key)
+            .ToArray();
+        var values = await Database.StringGetAsync(redisKeys);
+        var result = new Dictionary<string, string?>(distinctKeys.Count);
+        var index = 0;
+        foreach (var key in distinctKeys)
+        {
+            var value = values[index++];
+            result[key] = value.HasValue ? value.ToString() : null;
+        }
+
+        return result;
     }
 
     public Task RemoveAsync(string key) => Database.KeyDeleteAsync(key);

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Realtime;
 using SafeRide.Application.Features.Bookings;
@@ -24,6 +25,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
     private readonly IBookingMatchingService _bookingMatchingService;
     private readonly IMatchingPolicyProvider _matchingPolicyProvider;
     private readonly IBookingLifecycleJobScheduler _jobScheduler;
+    private readonly IOptionsMonitor<TripTrackingOptions> _tripTrackingOptions;
 
     public BookingAssignmentService(
         ApplicationDbContext dbContext,
@@ -34,7 +36,8 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         IRealtimeNotificationService realtimeNotificationService,
         IBookingMatchingService bookingMatchingService,
         IMatchingPolicyProvider matchingPolicyProvider,
-        IBookingLifecycleJobScheduler jobScheduler)
+        IBookingLifecycleJobScheduler jobScheduler,
+        IOptionsMonitor<TripTrackingOptions> tripTrackingOptions)
     {
         _dbContext = dbContext;
         _dateTimeProvider = dateTimeProvider;
@@ -45,6 +48,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         _bookingMatchingService = bookingMatchingService;
         _matchingPolicyProvider = matchingPolicyProvider;
         _jobScheduler = jobScheduler;
+        _tripTrackingOptions = tripTrackingOptions;
     }
 
     public async Task<CreateBookingResponse> ConfirmDriverAsync(
@@ -60,6 +64,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         DriverProfile driverProfile;
         List<BookingDriverOffer> cancelledOffers = [];
 
+        // Flow: serialize customer confirmation so one booking/driver cannot produce duplicate active trips.
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(
             IsolationLevel.Serializable,
             cancellationToken);
@@ -88,6 +93,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
                 "Chưa có tài xế phù hợp để xác nhận.",
                 409);
 
+        // Flow: idempotent retry returns the existing confirmed trip instead of creating another one.
         trip = await _dbContext.Trips
             .FirstOrDefaultAsync(x => x.BookingId == bookingId, cancellationToken);
 
@@ -145,6 +151,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
                 409);
         }
 
+        // Flow: re-check driver availability, license compatibility, and active trip guards inside the transaction.
         driverProfile = await _dbContext.DriverProfiles
             .FirstOrDefaultAsync(x => x.DriverId == offer.DriverId, cancellationToken)
             ?? throw new BookingException(
@@ -163,6 +170,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         await EnsureDriverCanServeBookingAsync(offer.DriverId, booking, cancellationToken);
         await EnsureDriverHasNoActiveTripAsync(offer.DriverId, cancellationToken);
 
+        // Flow: create the Trip only after customer confirmation, then assign driver and cancel competing offers.
         trip = new Trip
         {
             BookingId = booking.BookingId,
@@ -196,7 +204,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         await _dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        // Cancel scheduled Hangfire lifecycle jobs — booking is no longer Searching.
+        // Flow: booking is no longer Searching, so cancel lifecycle jobs and clean matching cache.
         await _jobScheduler.CancelJobsForBookingAsync(booking.BookingId, cancellationToken);
         await _jobScheduler.CancelExpireDriverOfferAsync(offer.Id, cancellationToken);
 
@@ -205,7 +213,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         await _redisService.SetAsync(
             RedisKeys.DriverStatus(offer.DriverId),
             DriverWorkStatus.Busy.ToString(),
-            TimeSpan.FromMinutes(5));
+            TimeSpan.FromMinutes(_tripTrackingOptions.CurrentValue.DriverStatusTtlMinutes));
 
         foreach (var cancelledOffer in cancelledOffers)
         {
@@ -215,6 +223,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
 
         var driverOffer = await GetOfferDtoAsync(offer.Id, utcNow, cancellationToken);
 
+        // Flow: publish assignment/trip events after durable state and cache updates are complete.
         await _realtimeNotificationService.PublishCustomerConfirmedDriverOfferAsync(
             new CustomerConfirmedDriverOfferEvent(
                 booking.BookingId,
@@ -290,6 +299,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         var utcNow = _dateTimeProvider.UtcNow;
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
 
+        // Flow: customer rejection closes the accepted offer, clears matching keys, then starts another match attempt.
         var booking = await _dbContext.Bookings
             .Include(x => x.BookingPromotions)
                 .ThenInclude(x => x.Promotion)
@@ -359,6 +369,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         BookingDriverOffer offer;
         Booking booking;
 
+        // Flow: driver acceptance reserves the offer for customer confirmation; it still does not create a Trip.
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(
             IsolationLevel.Serializable,
             cancellationToken);
@@ -425,6 +436,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         await EnsureNoOtherActiveBookingOfferAsync(booking.BookingId, offer.Id, cancellationToken);
         await EnsureNoOtherActiveDriverOfferAsync(driverId, offer.Id, cancellationToken);
 
+        // Flow: extend the offer into the customer-confirm window and refresh the matching lock/cache.
         offer.OfferStatus = DriverOfferStatus.DriverAccepted;
         offer.ConfirmedAt = utcNow;
         offer.ExpiresAt = utcNow.AddSeconds(_matchingPolicyProvider.Current.CustomerConfirmExpireSeconds);
@@ -473,6 +485,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         CancellationToken cancellationToken)
     {
         var utcNow = _dateTimeProvider.UtcNow;
+        // Flow: driver rejection is terminal for this offer and immediately triggers another match attempt.
         var offer = await _dbContext.BookingDriverOffers
             .Include(x => x.Booking)
             .FirstOrDefaultAsync(
@@ -635,18 +648,30 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         Trip trip,
         Guid customerId)
     {
+        var assignedAt = trip.DriverAssignedAt ?? _dateTimeProvider.UtcNow;
         var cache = new TripLiveCache(
             trip.Id,
             trip.BookingId,
             trip.DriverId,
             customerId,
             trip.TripStatus,
-            trip.DriverAssignedAt ?? _dateTimeProvider.UtcNow);
+            assignedAt);
+        var driverActiveTrip = new DriverActiveTripCache(
+            trip.Id,
+            trip.BookingId,
+            trip.DriverId,
+            customerId,
+            trip.TripStatus,
+            assignedAt);
 
         await _redisService.SetAsync(
             RedisKeys.TripLive(trip.Id),
             JsonSerializer.Serialize(cache),
-            TimeSpan.FromHours(12));
+            TimeSpan.FromHours(_tripTrackingOptions.CurrentValue.TripLiveTtlHours));
+        await _redisService.SetAsync(
+            RedisKeys.DriverActiveTrip(trip.DriverId),
+            JsonSerializer.Serialize(driverActiveTrip),
+            TimeSpan.FromHours(_tripTrackingOptions.CurrentValue.TripLiveTtlHours));
     }
 
     private Task CacheMatchingOfferAsync(BookingDriverOffer offer)
@@ -734,6 +759,19 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
                 ? (int?)Math.Max(0, (int)Math.Ceiling((confirmedOffer.ExpiresAt - utcNow).TotalSeconds))
                 : null;
 
+        double? driverLatitude = null;
+        double? driverLongitude = null;
+        var locationJson = await _redisService.GetAsync(RedisKeys.DriverLocation(confirmedOffer.DriverId));
+        if (!string.IsNullOrEmpty(locationJson))
+        {
+            var cache = JsonSerializer.Deserialize<DriverLocationCache>(locationJson);
+            if (cache is not null)
+            {
+                driverLatitude = cache.Latitude;
+                driverLongitude = cache.Longitude;
+            }
+        }
+
         return new BookingDriverOfferDto(
             confirmedOffer.Id,
             confirmedOffer.DriverId,
@@ -745,6 +783,8 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             confirmedOffer.LicenseClass,
             confirmedOffer.ExpiresAt,
             confirmedOffer.OfferStatus,
+            driverLatitude,
+            driverLongitude,
             customerConfirmRemainingSeconds);
     }
 
@@ -776,11 +816,4 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             tripStatus);
     }
 
-    private static bool IsActiveTripStatus(TripStatus status)
-    {
-        return status is TripStatus.ACCEPTED
-            or TripStatus.DRIVER_ARRIVING
-            or TripStatus.ARRIVED
-            or TripStatus.IN_PROGRESS;
-    }
 }

@@ -1,9 +1,16 @@
+import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../../../../../core/maps/models/map_models.dart';
+import '../../../../../core/maps/polyline_decoder.dart';
 import '../../../../../core/maps/widgets/map_renderer_widget.dart';
+import '../../../../../core/maps/widgets/live_trip_map_widget.dart';
 import '../../../../../core/services/location_service.dart';
+import '../../../../../core/services/map_api_service.dart';
+import '../../../../../core/widgets/current_location_button.dart';
 import '../../../../../dependency_injection/injection.dart';
 
 import '../providers/driver_dashboard_provider.dart';
@@ -15,6 +22,7 @@ import '../../../../shared/history/presentation/pages/history_page.dart';
 import '../../../../shared/onboarding/presentation/providers/role_provider.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../shared/profile/presentation/pages/profile_page.dart';
+import 'driver_trip_payment_page.dart';
 
 class DriverDashboardPage extends StatefulWidget {
   const DriverDashboardPage({super.key});
@@ -23,11 +31,41 @@ class DriverDashboardPage extends StatefulWidget {
   State<DriverDashboardPage> createState() => _DriverDashboardPageState();
 }
 
+class _RouteProgress {
+  const _RouteProgress({
+    required this.point,
+    required this.segmentIndex,
+    required this.progress,
+    this.distanceMeters = 0,
+  });
+
+  final AppLatLng point;
+  final int segmentIndex;
+  final double progress;
+  final double distanceMeters;
+}
+
 class _DriverDashboardPageState extends State<DriverDashboardPage> {
   AppMapController? _mapController;
   int _selectedIndex = 0;
   bool _isLocating = false;
-
+  StreamSubscription<Position>? _positionStream;
+  AppLatLng? _driverPosition;
+  AppLatLng? _lastReportedPosition;
+  DateTime? _lastReportedTime;
+  double _driverHeading = 0;
+  final List<AppLatLng> _arrivalRoutePoints = [];
+  final List<AppLatLng> _tripRoutePoints = [];
+  final MapApiService _mapApiService = MapApiService();
+  DateTime? _lastArrivalRouteRefreshAt;
+  AppLatLng? _lastArrivalRouteRefreshOrigin;
+  int? _renderedRouteTripId;
+  int? _openingPaymentTripId;
+  bool _arrivalRouteRefreshInProgress = false;
+  static const double _arrivalRerouteThresholdMeters = 35;
+  static const double _arrivalRerouteMinMoveMeters = 80;
+  static const double _locationUiJitterThresholdMeters = 5;
+  static const Duration _arrivalRouteRefreshInterval = Duration(seconds: 12);
 
   Future<void> _goToCurrentLocation() async {
     if (_isLocating) return;
@@ -36,17 +74,14 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     });
     try {
       final locationService = getIt<LocationService>();
-      final location = await locationService.getCurrentLocation().timeout(
-        const Duration(seconds: 10),
-      );
+      final location = await locationService.getCurrentLocation();
       if (!mounted) return;
 
       if (_mapController != null) {
+        final lat = _driverPosition?.latitude ?? location.latitude;
+        final lng = _driverPosition?.longitude ?? location.longitude;
         await _mapController!.animateCamera(
-          AppCameraPosition(
-            target: AppLatLng(location.latitude, location.longitude),
-            zoom: 16,
-          ),
+          AppCameraPosition(target: AppLatLng(lat, lng), zoom: 16),
         );
       }
     } catch (e) {
@@ -65,30 +100,436 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     }
   }
 
+  late DriverDashboardProvider _provider;
+  DateTime? _lastCameraFitAt;
+  static const _cameraFitInterval = Duration(seconds: 3);
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final token = context.read<AuthProvider>().token;
+      _provider = context.read<DriverDashboardProvider>();
       if (token != null) {
-        context.read<DriverDashboardProvider>().initializeRealtime(token);
+        _provider.initializeRealtime(token);
       }
       _checkActiveCustomerBooking();
+      _provider.addListener(_onProviderUpdated);
+      _onProviderUpdated();
     });
+  }
+
+  void _onProviderUpdated() {
+    if (!mounted) return;
+
+    final completedTripId = _provider.takeCompletedTripAwaitingPayment();
+    if (completedTripId != null) {
+      _openTripPayment(completedTripId);
+    }
+
+    final activeTrip = _provider.activeTrip;
+
+    if (activeTrip != null && _positionStream == null) {
+      _startLocationUpdates();
+    }
+
+    if (activeTrip == null) {
+      if (_arrivalRoutePoints.isNotEmpty ||
+          _tripRoutePoints.isNotEmpty ||
+          _renderedRouteTripId != null) {
+        setState(() {
+          _arrivalRoutePoints.clear();
+          _tripRoutePoints.clear();
+          _renderedRouteTripId = null;
+        });
+      }
+      return;
+    }
+
+    var shouldRebuildMap = false;
+    if (_renderedRouteTripId != activeTrip.tripId) {
+      _arrivalRoutePoints.clear();
+      _tripRoutePoints.clear();
+      _renderedRouteTripId = activeTrip.tripId;
+      shouldRebuildMap = true;
+    }
+
+    if (_provider.isDemoMode &&
+        _provider.demoLat != null &&
+        _provider.demoLng != null) {
+      final newPos = AppLatLng(_provider.demoLat!, _provider.demoLng!);
+      if (_driverPosition != null) {
+        _driverHeading = _calculateHeading(_driverPosition!, newPos);
+      }
+      _driverPosition = newPos;
+      shouldRebuildMap = true;
+      _refreshArrivalRouteIfNeeded(newPos);
+    }
+
+    if (_arrivalRoutePoints.isEmpty && activeTrip.arrivalPolyline != null) {
+      try {
+        final pts = decodePolyline(activeTrip.arrivalPolyline!);
+        if (pts.isNotEmpty) {
+          _arrivalRoutePoints.clear();
+          _arrivalRoutePoints.addAll(pts);
+          shouldRebuildMap = true;
+        }
+      } catch (_) {}
+    }
+
+    if (_tripRoutePoints.isEmpty && activeTrip.encodedPolyline != null) {
+      try {
+        final pts = decodePolyline(activeTrip.encodedPolyline!);
+        if (pts.isNotEmpty) {
+          _tripRoutePoints.clear();
+          _tripRoutePoints.addAll(pts);
+          shouldRebuildMap = true;
+        }
+      } catch (_) {}
+    }
+
+    if (shouldRebuildMap) {
+      setState(() {});
+    }
+
+    if (_mapController == null) return;
+
+    final now = DateTime.now();
+    if (_lastCameraFitAt != null &&
+        now.difference(_lastCameraFitAt!) < _cameraFitInterval) {
+      return;
+    }
+    _lastCameraFitAt = now;
+
+    final driverPos = _driverPosition;
+
+    if (driverPos == null) return;
+
+    List<AppLatLng> focusPoints = [driverPos];
+
+    if (activeTrip.tripStatus == 'ACCEPTED' ||
+        activeTrip.tripStatus == 'DRIVER_ARRIVING') {
+      if (activeTrip.pickupLat != null && activeTrip.pickupLng != null) {
+        focusPoints.add(
+          AppLatLng(activeTrip.pickupLat!, activeTrip.pickupLng!),
+        );
+      }
+    } else if (activeTrip.tripStatus == 'IN_PROGRESS' ||
+        activeTrip.tripStatus == 'ARRIVED') {
+      if (activeTrip.destLat != null && activeTrip.destLng != null) {
+        focusPoints.add(AppLatLng(activeTrip.destLat!, activeTrip.destLng!));
+      }
+    }
+
+    if (focusPoints.length == 1) {
+      _mapController!.animateCamera(
+        AppCameraPosition(target: focusPoints.first, zoom: 16),
+      );
+      return;
+    }
+
+    double minLat = focusPoints.first.latitude;
+    double maxLat = focusPoints.first.latitude;
+    double minLng = focusPoints.first.longitude;
+    double maxLng = focusPoints.first.longitude;
+
+    for (final pt in focusPoints) {
+      if (pt.latitude < minLat) minLat = pt.latitude;
+      if (pt.latitude > maxLat) maxLat = pt.latitude;
+      if (pt.longitude < minLng) minLng = pt.longitude;
+      if (pt.longitude > maxLng) maxLng = pt.longitude;
+    }
+
+    _mapController!.animateCameraToBounds(
+      AppLatLng(minLat, minLng),
+      AppLatLng(maxLat, maxLng),
+      60.0,
+    );
+  }
+
+  @override
+  void dispose() {
+    _provider.removeListener(_onProviderUpdated);
+    _stopLocationUpdates();
+    super.dispose();
+  }
+
+  void _startLocationUpdates() {
+    _stopLocationUpdates();
+    if (_provider.isDemoMode) return;
+    _positionStream =
+        Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 5,
+          ),
+        ).listen(
+          (Position position) {
+            _onLocationChanged(position);
+          },
+          onError: (error) {
+            debugPrint('Geolocator stream error: $error');
+          },
+        );
+  }
+
+  Future<void> _publishInitialLocation() async {
+    try {
+      final locationService = getIt<LocationService>();
+      final location = await locationService.getCurrentLocation();
+      if (!mounted) return;
+
+      final newPos = AppLatLng(location.latitude, location.longitude);
+      setState(() {
+        if (_driverPosition != null) {
+          _driverHeading = _calculateHeading(_driverPosition!, newPos);
+        }
+        _driverPosition = newPos;
+      });
+
+      final provider = context.read<DriverDashboardProvider>();
+      await provider.goOnline(location.latitude, location.longitude);
+
+      _startLocationUpdates();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Không thể lấy vị trí hiện tại hoặc không thể online: ${e.toString()}',
+          ),
+        ),
+      );
+      throw e;
+    }
+  }
+
+  void _stopLocationUpdates() {
+    _positionStream?.cancel();
+    _positionStream = null;
+  }
+
+  void _onLocationChanged(Position position) {
+    if (!mounted) return;
+    final newPos = AppLatLng(position.latitude, position.longitude);
+    final currentUiPosition = _driverPosition;
+    final shouldUpdateUi =
+        currentUiPosition == null ||
+        _calculateDirectDistance(currentUiPosition, newPos) * 1000 >=
+            _locationUiJitterThresholdMeters;
+
+    if (shouldUpdateUi) {
+      setState(() {
+        if (currentUiPosition != null) {
+          _driverHeading = _calculateHeading(currentUiPosition, newPos);
+        }
+        _driverPosition = newPos;
+      });
+    }
+
+    bool shouldReport = false;
+    final now = DateTime.now();
+
+    if (_lastReportedPosition == null || _lastReportedTime == null) {
+      shouldReport = true;
+    } else {
+      final dist =
+          _calculateDirectDistance(_lastReportedPosition!, newPos) * 1000;
+      final timeDiff = now.difference(_lastReportedTime!).inSeconds;
+
+      if (dist >= 10 || timeDiff >= 10) {
+        shouldReport = true;
+      }
+    }
+
+    if (shouldReport) {
+      _lastReportedPosition = newPos;
+      _lastReportedTime = now;
+      context.read<DriverDashboardProvider>().updateLocation(
+        position.latitude,
+        position.longitude,
+      );
+    }
+
+    if (shouldUpdateUi) {
+      _refreshArrivalRouteIfNeeded(newPos);
+    }
+  }
+
+  Future<void> _refreshArrivalRouteIfNeeded(AppLatLng rawPosition) async {
+    final activeTrip = _provider.activeTrip;
+    if (activeTrip == null ||
+        (activeTrip.tripStatus != 'ACCEPTED' &&
+            activeTrip.tripStatus != 'DRIVER_ARRIVING')) {
+      return;
+    }
+    if (_arrivalRouteRefreshInProgress) return;
+
+    final now = DateTime.now();
+    if (_lastArrivalRouteRefreshAt != null &&
+        now.difference(_lastArrivalRouteRefreshAt!) <
+            _arrivalRouteRefreshInterval) {
+      return;
+    }
+
+    if (_lastArrivalRouteRefreshOrigin != null &&
+        _calculateDirectDistance(_lastArrivalRouteRefreshOrigin!, rawPosition) *
+                1000 <
+            _arrivalRerouteMinMoveMeters) {
+      return;
+    }
+
+    final snap = _findClosestRouteSnap(rawPosition, _arrivalRoutePoints);
+    final shouldRefresh =
+        _arrivalRoutePoints.length < 2 ||
+        snap == null ||
+        snap.distanceMeters > _arrivalRerouteThresholdMeters;
+    if (!shouldRefresh) return;
+
+    _arrivalRouteRefreshInProgress = true;
+    _lastArrivalRouteRefreshAt = now;
+    _lastArrivalRouteRefreshOrigin = rawPosition;
+
+    try {
+      if (activeTrip.pickupLat == null || activeTrip.pickupLng == null) return;
+      final route = await _mapApiService.estimateRoute(
+        rawPosition.latitude,
+        rawPosition.longitude,
+        activeTrip.pickupLat!,
+        activeTrip.pickupLng!,
+      );
+      final points = decodePolyline(route.encodedPolyline);
+      if (!mounted || points.length < 2) return;
+
+      setState(() {
+        _arrivalRoutePoints.clear();
+        _arrivalRoutePoints.addAll(points);
+      });
+    } catch (e) {
+      debugPrint('DriverDashboard: Failed to refresh arrival route: $e');
+    } finally {
+      _arrivalRouteRefreshInProgress = false;
+    }
+  }
+
+  double _calculateDirectDistance(AppLatLng start, AppLatLng end) {
+    const double earthRadiusKm = 6371.0;
+    final lat1 = start.latitude * (math.pi / 180);
+    final lon1 = start.longitude * (math.pi / 180);
+    final lat2 = end.latitude * (math.pi / 180);
+    final lon2 = end.longitude * (math.pi / 180);
+
+    final dLat = lat2 - lat1;
+    final dLon = lon2 - lon1;
+
+    final a =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1) *
+            math.cos(lat2) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+
+    return earthRadiusKm * c;
+  }
+
+  _RouteProgress? _findClosestRouteSnap(
+    AppLatLng target,
+    List<AppLatLng> route,
+  ) {
+    if (route.length < 2) return null;
+    _RouteProgress? closest;
+    for (int i = 0; i < route.length - 1; i++) {
+      final snap = _projectPointOnSegment(target, route[i], route[i + 1], i);
+      if (closest == null || snap.distanceMeters < closest.distanceMeters) {
+        closest = snap;
+      }
+    }
+    return closest;
+  }
+
+  _RouteProgress _projectPointOnSegment(
+    AppLatLng target,
+    AppLatLng start,
+    AppLatLng end,
+    int segmentIndex,
+  ) {
+    final metersPerLat = 111320.0;
+    final metersPerLng = 111320.0 * math.cos(target.latitude * math.pi / 180);
+    final ax = (start.longitude - target.longitude) * metersPerLng;
+    final ay = (start.latitude - target.latitude) * metersPerLat;
+    final bx = (end.longitude - target.longitude) * metersPerLng;
+    final by = (end.latitude - target.latitude) * metersPerLat;
+    final abx = bx - ax;
+    final aby = by - ay;
+    final abLengthSquared = abx * abx + aby * aby;
+    final fraction = abLengthSquared == 0
+        ? 0.0
+        : ((-ax * abx - ay * aby) / abLengthSquared).clamp(0, 1).toDouble();
+    final point = AppLatLng(
+      start.latitude + (end.latitude - start.latitude) * fraction,
+      start.longitude + (end.longitude - start.longitude) * fraction,
+    );
+    final distanceMeters = _calculateDirectDistance(target, point) * 1000;
+    return _RouteProgress(
+      point: point,
+      segmentIndex: segmentIndex,
+      progress: segmentIndex + fraction,
+      distanceMeters: distanceMeters,
+    );
+  }
+
+  double _calculateHeading(AppLatLng start, AppLatLng end) {
+    final startLat = start.latitude * math.pi / 180;
+    final startLng = start.longitude * math.pi / 180;
+    final endLat = end.latitude * math.pi / 180;
+    final endLng = end.longitude * math.pi / 180;
+
+    final dLng = endLng - startLng;
+    final y = math.sin(dLng) * math.cos(endLat);
+    final x =
+        math.cos(startLat) * math.sin(endLat) -
+        math.sin(startLat) * math.cos(endLat) * math.cos(dLng);
+    final brng = math.atan2(y, x);
+    return (brng * 180 / math.pi + 360) % 360;
   }
 
   void _checkActiveCustomerBooking() {
     final bookingProvider = context.read<BookingProvider>();
     final roleProvider = context.read<RoleProvider>();
-    
+
     if (bookingProvider.activeBooking != null) {
-      debugPrint('DRIVER_DASHBOARD: Active customer booking detected. Forcing switch to customer mode.');
+      debugPrint(
+        'DRIVER_DASHBOARD: Active customer booking detected. Forcing switch to customer mode.',
+      );
       roleProvider.setRole(AppValues.roleCustomer);
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const CustomerHomePage()),
         (route) => false,
       );
     }
+  }
+
+  void _openTripPayment(int tripId) {
+    if (_openingPaymentTripId == tripId) return;
+    _openingPaymentTripId = tripId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.of(context)
+          .push(
+            MaterialPageRoute(
+              builder: (_) => DriverTripPaymentPage(tripId: tripId),
+            ),
+          )
+          .whenComplete(() {
+            if (mounted && _openingPaymentTripId == tripId) {
+              _openingPaymentTripId = null;
+            }
+          });
+    });
   }
 
   @override
@@ -113,16 +554,73 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     return Stack(
       children: [
         // 1. Map Background
-        MapRendererWidget(
-          initialCameraPosition: const AppCameraPosition(
-            target: AppLatLng(10.762622, 106.660172), // HCM City
-            zoom: 14,
-          ),
-          onMapCreated: (controller) {
-            _mapController = controller;
-            _goToCurrentLocation();
+        Selector<DriverDashboardProvider, ActiveDriverTrip?>(
+          selector: (_, provider) => provider.activeTrip,
+          builder: (context, activeTrip, child) {
+            if (activeTrip != null &&
+                activeTrip.pickupLat != null &&
+                activeTrip.pickupLng != null) {
+              final pickup = AppLatLng(
+                activeTrip.pickupLat!,
+                activeTrip.pickupLng!,
+              );
+              final destination =
+                  activeTrip.destLat != null && activeTrip.destLng != null
+                  ? AppLatLng(activeTrip.destLat!, activeTrip.destLng!)
+                  : null;
+              final isArriving =
+                  activeTrip.tripStatus == 'ACCEPTED' ||
+                  activeTrip.tripStatus == 'DRIVER_ARRIVING';
+
+              return LiveTripMapWidget(
+                trackingState: isArriving
+                    ? LiveTripTrackingState.arriving
+                    : LiveTripTrackingState.inProgress,
+                pickup: pickup,
+                destination: destination,
+                arrivalRoutePoints: _arrivalRoutePoints,
+                tripRoutePoints: _tripRoutePoints,
+                driverPosition: _driverPosition,
+                driverHeading: _driverHeading,
+                padding: const EdgeInsets.only(
+                  top: 80,
+                  bottom: 320,
+                  left: 16,
+                  right: 16,
+                ),
+                onMapCreated: (controller) {
+                  _mapController = controller;
+                  _goToCurrentLocation();
+                },
+              );
+            }
+
+            final lat =
+                _driverPosition?.latitude ?? 16.0544; // Default to Da Nang
+            final lng = _driverPosition?.longitude ?? 108.2022;
+
+            return MapRendererWidget(
+              initialCameraPosition: AppCameraPosition(
+                target: AppLatLng(lat, lng),
+                zoom: 15,
+              ),
+              onMapCreated: (controller) {
+                _mapController = controller;
+                _goToCurrentLocation();
+              },
+              myLocationButtonEnabled: false,
+              markers: _driverPosition != null
+                  ? {
+                      AppMarker(
+                        id: 'demo_driver',
+                        position: _driverPosition!,
+                        markerType: AppMarkerType.driver,
+                        rotation: _driverHeading,
+                      ),
+                    }
+                  : {},
+            );
           },
-          myLocationButtonEnabled: false,
         ),
 
         // 2. Top Bar (Income & Drawer/Notification)
@@ -134,10 +632,53 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
               children: [
                 _CircleIconButton(icon: Icons.menu, onPressed: () {}),
                 _IncomeHeader(),
-                _CircleIconButton(
-                  icon: Icons.notifications_none_rounded,
-                  hasBadge: true,
-                  onPressed: () {},
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (const bool.fromEnvironment('dart.vm.product') == false)
+                      Selector<DriverDashboardProvider, bool>(
+                        selector: (_, provider) => provider.isDemoMode,
+                        builder: (context, isDemoMode, _) => IconButton(
+                          icon: Icon(
+                            isDemoMode
+                                ? Icons.bug_report
+                                : Icons.bug_report_outlined,
+                            color: isDemoMode ? Colors.red : Colors.grey,
+                          ),
+                          onPressed: () {
+                            final nextDemoMode = !isDemoMode;
+                            final provider = context
+                                .read<DriverDashboardProvider>();
+                            provider.toggleDemoMode();
+                            if (nextDemoMode) {
+                              _stopLocationUpdates();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Đã bật mô phỏng GPS (Backend)',
+                                  ),
+                                ),
+                              );
+                            } else {
+                              _startLocationUpdates();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Đã tắt mô phỏng GPS, dùng GPS thật',
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                          tooltip: 'Demo GPS Mode',
+                        ),
+                      ),
+                    _CircleIconButton(
+                      icon: Icons.notifications_none_rounded,
+                      hasBadge: true,
+                      onPressed: () {},
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -157,28 +698,37 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                 alignment: Alignment.centerRight,
                 child: Padding(
                   padding: const EdgeInsets.only(right: 16, bottom: 16),
-                  child: _CircleIconButton(
+                  child: CurrentLocationButton(
                     onPressed: _goToCurrentLocation,
-                    child: _isLocating
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Color(0xFF006B70),
-                              ),
-                            ),
-                          )
-                        : const Icon(Icons.my_location, color: Colors.black87),
+                    isLoading: _isLocating,
                   ),
                 ),
               ),
 
               // Request Card or Online/Offline Toggle
-              Consumer<DriverDashboardProvider>(
-                builder: (context, provider, child) {
-                  if (provider.isLoadingActiveTrip) {
+              Selector<
+                DriverDashboardProvider,
+                ({
+                  ActiveDriverTrip? activeTrip,
+                  TripRequest? currentRequest,
+                  String? errorMessage,
+                  bool hasNewRequest,
+                  bool isLoadingActiveTrip,
+                  bool isResponding,
+                  bool isUpdatingTrip,
+                })
+              >(
+                selector: (_, provider) => (
+                  activeTrip: provider.activeTrip,
+                  currentRequest: provider.currentRequest,
+                  errorMessage: provider.errorMessage,
+                  hasNewRequest: provider.hasNewRequest,
+                  isLoadingActiveTrip: provider.isLoadingActiveTrip,
+                  isResponding: provider.isResponding,
+                  isUpdatingTrip: provider.isUpdatingTrip,
+                ),
+                builder: (context, state, child) {
+                  if (state.isLoadingActiveTrip) {
                     return const Padding(
                       padding: EdgeInsets.only(bottom: 24),
                       child: Center(
@@ -189,28 +739,35 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                     );
                   }
 
-                  if (provider.errorMessage != null &&
-                      provider.activeTrip == null) {
+                  if (state.errorMessage != null && state.activeTrip == null) {
                     return _ErrorLoadingActiveTripCard(
-                      errorMessage: provider.errorMessage!,
-                      onRetry: provider.loadActiveTrip,
+                      errorMessage: state.errorMessage!,
+                      onRetry: context
+                          .read<DriverDashboardProvider>()
+                          .loadActiveTrip,
                     );
                   }
 
-                  if (provider.activeTrip != null) {
+                  if (state.activeTrip != null) {
                     return _ActiveTripCard(
-                      trip: provider.activeTrip!,
-                      isUpdating: provider.isUpdatingTrip,
+                      trip: state.activeTrip!,
+                      isUpdating: state.isUpdatingTrip,
                     );
                   }
-                  if (provider.hasNewRequest &&
-                      provider.currentRequest != null) {
+                  if (state.hasNewRequest && state.currentRequest != null) {
                     return _NewRequestCard(
-                      request: provider.currentRequest!,
-                      isResponding: provider.isResponding,
+                      request: state.currentRequest!,
+                      isResponding: state.isResponding,
                     );
                   }
-                  return _StatusToggle();
+                  return _StatusToggle(
+                    onGoOnline: _publishInitialLocation,
+                    onGoOffline: () async {
+                      final provider = context.read<DriverDashboardProvider>();
+                      await provider.goOffline();
+                      _stopLocationUpdates();
+                    },
+                  );
                 },
               ),
 
@@ -305,10 +862,14 @@ class _ActiveTripCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = trip.tripStatus;
-    final canCancel = status == 'DRIVER_ARRIVING';
-    final canComplete = status == 'ARRIVED' || status == 'IN_PROGRESS';
-    final canMarkArrived = status == 'DRIVER_ARRIVING';
+    final canCancel =
+        status == 'ACCEPTED' ||
+        status == 'DRIVER_ARRIVING' ||
+        status == 'ARRIVED';
     final canStartArriving = status == 'ACCEPTED';
+    final canMarkArrived = status == 'DRIVER_ARRIVING';
+    final canStartTrip = status == 'ARRIVED';
+    final canComplete = status == 'IN_PROGRESS';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -434,6 +995,51 @@ class _ActiveTripCard extends StatelessWidget {
                     ),
                 ],
               )
+            else if (canStartTrip)
+              Row(
+                children: [
+                  if (canCancel) ...[
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: isUpdating
+                            ? null
+                            : () => _runTripAction(
+                                context,
+                                () => context
+                                    .read<DriverDashboardProvider>()
+                                    .cancelActiveTrip(),
+                              ),
+                        icon: const Icon(Icons.close_rounded),
+                        label: const Text('Hủy chuyến'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFFE53935),
+                          side: const BorderSide(color: Color(0xFFE53935)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: isUpdating
+                          ? null
+                          : () => _runTripAction(
+                              context,
+                              () => context
+                                  .read<DriverDashboardProvider>()
+                                  .startTrip(),
+                            ),
+                      icon: const Icon(Icons.play_arrow_rounded),
+                      label: const Text('Bắt đầu chuyến'),
+                      style: _primaryButtonStyle(),
+                    ),
+                  ),
+                ],
+              )
             else if (canComplete)
               SizedBox(
                 width: double.infinity,
@@ -445,8 +1051,6 @@ class _ActiveTripCard extends StatelessWidget {
                           () => context
                               .read<DriverDashboardProvider>()
                               .completeActiveTrip(),
-                          successMessage:
-                              'Đã kết thúc chuyến. Chờ khách xác nhận nhận lại xe.',
                         ),
                   icon: const Icon(Icons.check_circle_rounded),
                   label: Text(
@@ -484,10 +1088,15 @@ class _ActiveTripCard extends StatelessWidget {
     BuildContext context,
     Future<bool> Function() action, {
     String? successMessage,
+    VoidCallback? onSuccess,
   }) async {
     try {
       final ok = await action();
-      if (!context.mounted || !ok || successMessage == null) {
+      if (!context.mounted || !ok) {
+        return;
+      }
+      onSuccess?.call();
+      if (successMessage == null) {
         return;
       }
       ScaffoldMessenger.of(context)
@@ -561,8 +1170,13 @@ class _CircleIconButton extends StatelessWidget {
 class _IncomeHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Consumer<DriverDashboardProvider>(
-      builder: (context, provider, child) {
+    return Selector<
+      DriverDashboardProvider,
+      ({double todayIncome, int todayTrips})
+    >(
+      selector: (_, provider) =>
+          (todayIncome: provider.todayIncome, todayTrips: provider.todayTrips),
+      builder: (context, summary, child) {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           decoration: BoxDecoration(
@@ -591,7 +1205,7 @@ class _IncomeHeader extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '${provider.todayIncome.toInt().toString().replaceAllMapped(RegExp(r"(\d{3})(?=\d)"), (m) => "${m[1]},")}đ',
+                    '${summary.todayIncome.toInt().toString().replaceAllMapped(RegExp(r"(\d{3})(?=\d)"), (m) => "${m[1]},")}đ',
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -609,7 +1223,7 @@ class _IncomeHeader extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      '${provider.todayTrips} chuyến',
+                      '${summary.todayTrips} chuyến',
                       style: const TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
@@ -627,12 +1241,40 @@ class _IncomeHeader extends StatelessWidget {
   }
 }
 
-class _StatusToggle extends StatelessWidget {
+class _StatusToggle extends StatefulWidget {
+  final Future<void> Function() onGoOnline;
+  final Future<void> Function() onGoOffline;
+
+  const _StatusToggle({required this.onGoOnline, required this.onGoOffline});
+
+  @override
+  State<_StatusToggle> createState() => _StatusToggleState();
+}
+
+class _StatusToggleState extends State<_StatusToggle> {
+  bool _isLoading = false;
+
+  Future<void> _handleToggle(bool isOnline) async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+    try {
+      if (isOnline) {
+        await widget.onGoOffline();
+      } else {
+        await widget.onGoOnline();
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Consumer<DriverDashboardProvider>(
-      builder: (context, provider, child) {
-        final isOnline = provider.status == DriverStatus.online;
+    return Selector<DriverDashboardProvider, bool>(
+      selector: (_, provider) => provider.status == DriverStatus.online,
+      builder: (context, isOnline, child) {
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Container(
@@ -648,63 +1290,77 @@ class _StatusToggle extends StatelessWidget {
                 ),
               ],
             ),
-            child: Row(
+            child: Stack(
               children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: !isOnline ? null : () => provider.toggleStatus(),
-                    child: Center(
-                      child: Text(
-                        'Offline',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: !isOnline ? Colors.black87 : Colors.grey,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: isOnline ? null : () => provider.toggleStatus(),
-                    child: Container(
-                      margin: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: isOnline
-                            ? const Color(0xFF006B70)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      child: Center(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            if (isOnline) ...[
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: const BoxDecoration(
-                                  color: Colors.cyanAccent,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                            Text(
-                              'Online',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: isOnline ? Colors.white : Colors.grey,
-                              ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: (!isOnline || _isLoading)
+                            ? null
+                            : () => _handleToggle(isOnline),
+                        child: Center(
+                          child: Text(
+                            'Offline',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: !isOnline ? Colors.black87 : Colors.grey,
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: (isOnline || _isLoading)
+                            ? null
+                            : () => _handleToggle(isOnline),
+                        child: Container(
+                          margin: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: isOnline
+                                ? const Color(0xFF006B70)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          child: Center(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (isOnline) ...[
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.cyanAccent,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                ],
+                                Text(
+                                  'Online',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: isOnline
+                                        ? Colors.white
+                                        : Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
+                if (_isLoading)
+                  const Center(
+                    child: CircularProgressIndicator(color: Color(0xFF006B70)),
+                  ),
               ],
             ),
           ),

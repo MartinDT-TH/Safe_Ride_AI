@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -37,9 +38,16 @@ class MapRendererWidget extends StatefulWidget {
   State<MapRendererWidget> createState() => _MapRendererWidgetState();
 }
 
+class _VietmapPolylineEntry {
+  _VietmapPolylineEntry({required this.handle, required this.signature});
+
+  final vmap.Line handle;
+  String signature;
+}
+
 class _MapRendererWidgetState extends State<MapRendererWidget> {
   vmap.VietmapController? _vmapController;
-  final Map<String, vmap.Line> _vmapPolylineHandles = {};
+  final Map<String, _VietmapPolylineEntry> _vmapPolylines = {};
   bool _vmapPolylineSyncInProgress = false;
   bool _vmapPolylineSyncPending = false;
   final Map<AppMarkerType, gmap.BitmapDescriptor> _cachedGoogleMarkerIcons = {};
@@ -150,7 +158,12 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
           radius: Radius.circular(radius),
           clockwise: true,
         );
-        path.quadraticBezierTo(width - 6.0, height * 0.7, width / 2, height - 8.0);
+        path.quadraticBezierTo(
+          width - 6.0,
+          height * 0.7,
+          width / 2,
+          height - 8.0,
+        );
         path.quadraticBezierTo(6.0, height * 0.7, 6.0, yc);
         path.close();
 
@@ -182,7 +195,9 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
 
     final ui.Picture picture = recorder.endRecording();
     final ui.Image image = await picture.toImage(width.toInt(), height.toInt());
-    final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    final ByteData? byteData = await image.toByteData(
+      format: ui.ImageByteFormat.png,
+    );
 
     if (byteData == null) {
       return gmap.BitmapDescriptor.defaultMarker;
@@ -201,8 +216,14 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
   }
 
   /// Only syncs polylines; markers are handled by the MarkerLayer widget overlay.
-  void _syncVietmapPolylines() async {
-    if (_vmapController == null) return;
+  ///
+  /// VietMap keeps native polyline handles outside Flutter's widget diff, so
+  /// each route is keyed by id and a geometry/style signature. Matching
+  /// signatures are left untouched to avoid flicker, changed signatures update
+  /// the existing handle, and stale handles are removed.
+  Future<void> _syncVietmapPolylines() async {
+    final controller = _vmapController;
+    if (controller == null) return;
     if (_vmapPolylineSyncInProgress) {
       _vmapPolylineSyncPending = true;
       return;
@@ -213,34 +234,84 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
       final nextPolylines = {
         for (final polyline in widget.polylines) polyline.id: polyline,
       };
-      final removedIds = _vmapPolylineHandles.keys
+      final removedIds = _vmapPolylines.keys
           .where((id) => !nextPolylines.containsKey(id))
           .toList();
 
       for (final id in removedIds) {
-        final handle = _vmapPolylineHandles.remove(id);
-        if (handle != null) {
-          await _vmapController!.removePolyline(handle);
+        final entry = _vmapPolylines.remove(id);
+        if (entry != null) {
+          await controller.removePolyline(entry.handle);
         }
       }
 
       final sortedPolylines = widget.polylines.toList()
         ..sort((a, b) => a.zIndex.compareTo(b.zIndex));
       for (final polyline in sortedPolylines) {
-        final options = _toVietmapPolylineOptions(polyline);
-        final handle = _vmapPolylineHandles[polyline.id];
-        if (handle == null) {
-          _vmapPolylineHandles[polyline.id] = await _vmapController!
-              .addPolyline(options);
-        } else {
-          await _vmapController!.updatePolyline(handle, options);
+        if (!mounted || !identical(_vmapController, controller)) {
+          return;
         }
+        await _upsertVietmapPolyline(controller, polyline);
       }
-    } catch (_) {}
-    _vmapPolylineSyncInProgress = false;
-    if (_vmapPolylineSyncPending) {
-      _vmapPolylineSyncPending = false;
-      _syncVietmapPolylines();
+    } catch (error) {
+      debugPrint('VietMap polyline sync failed: $error');
+    } finally {
+      _vmapPolylineSyncInProgress = false;
+      if (_vmapPolylineSyncPending) {
+        _vmapPolylineSyncPending = false;
+        unawaited(_syncVietmapPolylines());
+      }
+    }
+  }
+
+  Future<void> _upsertVietmapPolyline(
+    vmap.VietmapController controller,
+    AppPolyline polyline,
+  ) async {
+    final signature = _vietmapPolylineSignature(polyline);
+    final entry = _vmapPolylines[polyline.id];
+    if (entry?.signature == signature) {
+      return;
+    }
+
+    final options = _toVietmapPolylineOptions(polyline);
+    if (entry == null) {
+      final handle = await controller.addPolyline(options);
+      if (!mounted || !identical(_vmapController, controller)) {
+        try {
+          await controller.removePolyline(handle);
+        } catch (_) {}
+        return;
+      }
+      _vmapPolylines[polyline.id] = _VietmapPolylineEntry(
+        handle: handle,
+        signature: signature,
+      );
+      return;
+    }
+
+    try {
+      await controller.updatePolyline(entry.handle, options);
+      entry.signature = signature;
+    } catch (error) {
+      debugPrint('VietMap polyline update failed; recreating handle: $error');
+      try {
+        await controller.removePolyline(entry.handle);
+      } catch (_) {}
+      if (!mounted || !identical(_vmapController, controller)) {
+        return;
+      }
+      final handle = await controller.addPolyline(options);
+      if (!mounted || !identical(_vmapController, controller)) {
+        try {
+          await controller.removePolyline(handle);
+        } catch (_) {}
+        return;
+      }
+      _vmapPolylines[polyline.id] = _VietmapPolylineEntry(
+        handle: handle,
+        signature: signature,
+      );
     }
   }
 
@@ -252,6 +323,29 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
       polylineColor: polyline.color,
       polylineWidth: polyline.width.toDouble(),
     );
+  }
+
+  String _vietmapPolylineSignature(AppPolyline polyline) {
+    final buffer = StringBuffer()
+      ..write(polyline.color)
+      ..write('|')
+      ..write(polyline.width)
+      ..write('|')
+      ..write(polyline.zIndex)
+      ..write('|')
+      ..write(polyline.isDashed)
+      ..write('|')
+      ..write(polyline.endCapRound);
+
+    for (final point in polyline.points) {
+      buffer
+        ..write('|')
+        ..write(point.latitude.toStringAsFixed(6))
+        ..write(',')
+        ..write(point.longitude.toStringAsFixed(6));
+    }
+
+    return buffer.toString();
   }
 
   @override
@@ -384,14 +478,14 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
           onMapCreated: (controller) {
             setState(() {
               _vmapController = controller;
-              _vmapPolylineHandles.clear();
+              _vmapPolylines.clear();
             });
             _syncVietmapPolylines();
             if (widget.onMapCreated != null) {
               widget.onMapCreated!(_VietMapControllerWrapper(controller));
             }
           },
-          myLocationEnabled: true,
+          myLocationEnabled: false,
           myLocationRenderMode: widget.myLocationButtonEnabled
               ? vmap.MyLocationRenderMode.compass
               : vmap.MyLocationRenderMode.normal,
@@ -454,13 +548,7 @@ class _TeardropPinWidget extends StatelessWidget {
           child: SizedBox(
             width: width,
             height: width, // 32x32 area for the circle
-            child: Center(
-              child: Icon(
-                icon,
-                color: Colors.white,
-                size: 18,
-              ),
-            ),
+            child: Center(child: Icon(icon, color: Colors.white, size: 18)),
           ),
         ),
       ),

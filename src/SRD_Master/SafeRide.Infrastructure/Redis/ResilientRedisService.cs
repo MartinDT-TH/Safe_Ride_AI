@@ -71,6 +71,39 @@ public sealed class ResilientRedisService : IRedisService
         }
     }
 
+    public async Task<bool> TryAcquireDistributedLockAsync(
+        string key,
+        string value,
+        TimeSpan expiration)
+    {
+        if (!CanTryPrimary())
+        {
+            _logger.LogWarning(
+                "Redis primary unavailable; distributed lock {LockKey} was not acquired.",
+                key);
+            return false;
+        }
+
+        try
+        {
+            var acquired = await _primary.TryAcquireDistributedLockAsync(
+                key,
+                value,
+                expiration);
+            MarkPrimaryAvailable();
+            return acquired;
+        }
+        catch (Exception exception)
+        {
+            MarkPrimaryUnavailable(exception);
+            _logger.LogWarning(
+                exception,
+                "Redis primary unavailable; distributed lock {LockKey} was not acquired.",
+                key);
+            return false;
+        }
+    }
+
     public async Task<string?> GetAsync(string key)
     {
         if (CanTryPrimary())
@@ -88,6 +121,49 @@ public sealed class ResilientRedisService : IRedisService
         }
 
         return await _fallback.GetAsync(key);
+    }
+
+    public async Task<IReadOnlyDictionary<string, string?>> GetManyAsync(
+        IReadOnlyCollection<string> keys)
+    {
+        var distinctKeys = keys
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (distinctKeys.Count == 0)
+        {
+            return new Dictionary<string, string?>();
+        }
+
+        if (CanTryPrimary())
+        {
+            try
+            {
+                var primaryValues = await _primary.GetManyAsync(distinctKeys);
+                MarkPrimaryAvailable();
+                var missingKeys = distinctKeys
+                    .Where(key => !primaryValues.TryGetValue(key, out var value)
+                        || value is null)
+                    .ToList();
+                if (missingKeys.Count == 0)
+                {
+                    return primaryValues;
+                }
+
+                var fallbackValues = await _fallback.GetManyAsync(missingKeys);
+                return distinctKeys.ToDictionary(
+                    key => key,
+                    key => primaryValues.TryGetValue(key, out var primaryValue)
+                        && primaryValue is not null
+                            ? primaryValue
+                            : fallbackValues.GetValueOrDefault(key));
+            }
+            catch (Exception exception)
+            {
+                MarkPrimaryUnavailable(exception);
+            }
+        }
+
+        return await _fallback.GetManyAsync(distinctKeys);
     }
 
     public async Task RemoveAsync(string key)
@@ -159,10 +235,7 @@ public sealed class ResilientRedisService : IRedisService
                     radiusKm,
                     count);
                 MarkPrimaryAvailable();
-                if (results.Count > 0)
-                {
-                    return results;
-                }
+                return results;
             }
             catch (Exception exception)
             {
