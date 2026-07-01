@@ -23,29 +23,19 @@ public class AuthController : ControllerBase
     private readonly IJwtTokenService _jwtTokenService;
     private readonly ICloudinaryImageService _cloudinaryImageService;
     private readonly IHostEnvironment _environment;
-    private readonly IConfiguration _configuration;
-    private readonly IWebHostEnvironment _env;
-
-    private readonly ILogger<AuthController> _logger;
 
     public AuthController(
         IAuthService authService,
         UserManager<AspNetUser> userManager,
         IJwtTokenService jwtTokenService,
         ICloudinaryImageService cloudinaryImageService,
-        IHostEnvironment environment,
-        IConfiguration configuration,
-        IWebHostEnvironment env,
-        ILogger<AuthController> logger)
+        IHostEnvironment environment)
     {
         _authService = authService;
         _userManager = userManager;
         _jwtTokenService = jwtTokenService;
         _cloudinaryImageService = cloudinaryImageService;
-        _configuration = configuration;
-        _environment = environment;
-        _env = env;
-        _logger = logger;
+        _environment = environment;;
     }
 
 
@@ -203,42 +193,13 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> GoogleLogin(
         [FromBody] GoogleLoginRequest request)
     {
-        var googleClientIds = _configuration
-            .GetSection("Authentication:Google:ClientIds")
-            .Get<string[]>() ?? [];
-        _logger.LogInformation(
-            "GoogleLogin Debug: HasIdToken={HasIdToken}, IdTokenLength={IdTokenLength}, GoogleClientIdCount={GoogleClientIdCount}, HasJwtKey={HasJwtKey}, Environment={Environment}",
-            !string.IsNullOrWhiteSpace(request.GoogleIdToken),
-            request.GoogleIdToken?.Length ?? 0,
+        var response = await _authService.GoogleLoginAsync(
+        request,
+        HttpContext.Connection.RemoteIpAddress?.ToString(),
+        Request.Headers.UserAgent.ToString());
 
-            googleClientIds.Length,
-            !string.IsNullOrWhiteSpace(_configuration["Jwt:Key"]),
-            _env.EnvironmentName
-        );
-        _logger.LogInformation(
-        "Google login hit. HasIdToken={HasIdToken}, IdTokenLength={IdTokenLength}, DeviceId={DeviceId}, DeviceName={DeviceName}",
-        !string.IsNullOrWhiteSpace(request.GoogleIdToken),
-        request.GoogleIdToken?.Length ?? 0,
-        request.DeviceId,
-        request.DeviceName
-    );
-        
-        try
-            {
-                var response = await _authService.GoogleLoginAsync(
-                request,
-                HttpContext.Connection.RemoteIpAddress?.ToString(),
-                Request.Headers.UserAgent.ToString());
 
-                _logger.LogInformation("Google login completed successfully.");
-
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Google login failed on Render.");
-                throw;
-            }
+        return Ok(response);
     }
 
     [HttpPost("verify-otp")]
