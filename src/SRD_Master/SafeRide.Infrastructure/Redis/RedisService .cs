@@ -20,9 +20,11 @@ public sealed class RedisService : IRedisService, IDisposable
             var options = ConfigurationOptions.Parse(connectionString);
             options.AbortOnConnectFail = false;
             options.ConnectRetry = 1;
-            options.ConnectTimeout = 1000;
-            options.SyncTimeout = 1000;
-            options.AsyncTimeout = 1000;
+            options.ConnectTimeout = 10000;
+            options.SyncTimeout = 10000;
+            options.AsyncTimeout = 10000;
+            options.KeepAlive = 30;
+            options.Ssl = true;
             return ConnectionMultiplexer.Connect(options);
         });
     }
