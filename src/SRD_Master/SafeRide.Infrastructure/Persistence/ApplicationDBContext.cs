@@ -537,7 +537,7 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
 
             entity.ToTable(tb =>
             {
-                tb.HasCheckConstraint("CK_Trips_TripStatus", "[TripStatus] IN ('ACCEPTED', 'DRIVER_ARRIVING', 'ARRIVED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED')");
+                tb.HasCheckConstraint("CK_Trips_TripStatus", "[TripStatus] IN ('ACCEPTED', 'DRIVER_ARRIVING', 'ARRIVED', 'IN_PROGRESS', 'WAITING_RETURN_CONFIRM', 'RETURN_CONFIRMED', 'COMPLETED', 'CANCELLED')");
             });
 
 
