@@ -16,9 +16,8 @@ public sealed class TripStatusServiceTests
 {
     private static readonly DateTime UtcNow =
         new(2026, 6, 15, 8, 0, 0, DateTimeKind.Utc);
-
     [Fact]
-    public async Task EndTrip_MovesTripToWaitingReturnConfirmation()
+    public async Task EndTrip_MovesTripToCompleted()
     {
         using var fixture = await TripStatusFixture.CreateAsync(TripStatus.IN_PROGRESS);
 
@@ -35,17 +34,17 @@ public sealed class TripStatusServiceTests
         var driver = await fixture.DbContext.DriverProfiles
             .SingleAsync(x => x.DriverId == fixture.DriverId);
 
-        Assert.Equal(TripStatus.WAITING_RETURN_CONFIRM, trip.TripStatus);
-        Assert.Equal(BookingStatus.DriverAssigned, trip.Booking.BookingStatus);
-        Assert.Null(trip.CompletedAt);
-        Assert.Equal(2, fixture.Promotion.CurrentUsageCount);
+        Assert.Equal(TripStatus.COMPLETED, trip.TripStatus);
+        Assert.Equal(BookingStatus.Completed, trip.Booking.BookingStatus);
+        Assert.NotNull(trip.CompletedAt);
+        Assert.Equal(3, fixture.Promotion.CurrentUsageCount);
         Assert.Single(trip.Booking.BookingPromotions);
-        Assert.Equal(DriverWorkStatus.Busy, driver.WorkStatus);
+        Assert.Equal(DriverWorkStatus.Online, driver.WorkStatus);
         Assert.Null(fixture.Redis.DriverStatusValue);
-        Assert.DoesNotContain(fixture.TripLiveKey, fixture.Redis.RemovedKeys);
-        Assert.DoesNotContain(fixture.DriverActiveTripKey, fixture.Redis.RemovedKeys);
+        Assert.Contains(fixture.TripLiveKey, fixture.Redis.RemovedKeys);
+        Assert.Contains(fixture.DriverActiveTripKey, fixture.Redis.RemovedKeys);
         Assert.Single(fixture.Realtime.TripStatusNotifications);
-        Assert.Empty(fixture.Realtime.BookingStatusNotifications);
+        Assert.Single(fixture.Realtime.BookingStatusNotifications);
     }
 
     [Fact]

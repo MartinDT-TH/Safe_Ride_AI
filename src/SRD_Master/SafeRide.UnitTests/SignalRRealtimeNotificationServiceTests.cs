@@ -1,11 +1,55 @@
 using Microsoft.AspNetCore.SignalR;
 using SafeRide.Application.Common.Realtime;
+using SafeRide.Domain.Enums;
 using SafeRide.Realtime;
 
 namespace SafeRide.UnitTests;
 
 public sealed class SignalRRealtimeNotificationServiceTests
 {
+    [Fact]
+    public async Task PublishTripStatusChangedAsync_SendsToCustomerDriverBookingAndTripGroups()
+    {
+        var clients = new RecordingHubClients();
+        var service = new SignalRRealtimeNotificationService(
+            new HubContextFake(clients));
+        var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+
+        await service.PublishTripStatusChangedAsync(
+            new TripStatusChangedEvent(
+                42,
+                24,
+                customerId,
+                driverId,
+                TripStatus.COMPLETED,
+                DateTime.UtcNow,
+                BookingStatus.DriverAssigned));
+
+        Assert.Collection(
+            clients.Sends,
+            send =>
+            {
+                Assert.Equal(RealtimeGroups.User(customerId), send.GroupName);
+                Assert.Equal("TripStatusChanged", send.Method);
+            },
+            send =>
+            {
+                Assert.Equal(RealtimeGroups.Driver(driverId), send.GroupName);
+                Assert.Equal("TripStatusChanged", send.Method);
+            },
+            send =>
+            {
+                Assert.Equal(RealtimeGroups.Booking(24), send.GroupName);
+                Assert.Equal("TripStatusChanged", send.Method);
+            },
+            send =>
+            {
+                Assert.Equal(RealtimeGroups.Trip(42), send.GroupName);
+                Assert.Equal("TripStatusChanged", send.Method);
+            });
+    }
+
     [Fact]
     public async Task PublishDriverLocationUpdatedAsync_WithActiveTrip_SendsOnlyToTripGroup()
     {
