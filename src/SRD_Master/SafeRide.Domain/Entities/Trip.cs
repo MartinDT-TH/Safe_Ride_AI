@@ -20,6 +20,9 @@ public partial class Trip
     public DateTime? StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
 
+    public decimal? ActualFare { get; set; }
+    public decimal? FinalFare { get; set; }
+
     public string? RoutePolyline { get; set; }
 
     public bool IsSOSActivated { get; set; } = false;

@@ -538,6 +538,8 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
             entity.ToTable(tb =>
             {
                 tb.HasCheckConstraint("CK_Trips_TripStatus", "[TripStatus] IN ('ACCEPTED', 'DRIVER_ARRIVING', 'ARRIVED', 'IN_PROGRESS', 'WAITING_RETURN_CONFIRM', 'RETURN_CONFIRMED', 'COMPLETED', 'CANCELLED')");
+                tb.HasCheckConstraint("CK_Trips_ActualFare", "[ActualFare] IS NULL OR [ActualFare] >= 0");
+                tb.HasCheckConstraint("CK_Trips_FinalFare", "[FinalFare] IS NULL OR [FinalFare] >= 0");
             });
 
 
@@ -546,6 +548,8 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
 
             entity.Property(e => e.CancellationReason).HasMaxLength(255);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
+            entity.Property(e => e.ActualFare).HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.FinalFare).HasColumnType("decimal(18, 2)");
             entity.Property(e => e.IsSOSActivated)
                 .HasDefaultValue(false)
                 .HasColumnName("IsSOSActivated");
