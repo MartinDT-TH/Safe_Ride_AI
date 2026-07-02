@@ -390,18 +390,21 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
               markers: {
                 AppMarker(
                   id: 'pickup',
+                  markerType: AppMarkerType.pickup,
                   position: pickupPos,
                   hue: 210.0, // Azure
                 ),
                 if (destPos != null)
                   AppMarker(
                     id: 'destination',
+                    markerType: AppMarkerType.destination,
                     position: destPos,
                     hue: 0.0, // Red
                   ),
                 ...nearbyDrivers.map(
                   (driver) => AppMarker(
                     id: 'driver_${driver.driverId}',
+                    markerType: AppMarkerType.driver,
                     position: AppLatLng(driver.latitude, driver.longitude),
                     hue: 30.0, // Orange
                   ),
