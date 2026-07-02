@@ -55,6 +55,33 @@ public sealed class TripsController : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("{tripId:long}/end")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> End(
+        long tripId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetDriverId(out var driverId))
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Unauthorized",
+                Detail = "Cannot resolve authenticated driver account."
+            });
+        }
+
+        await _tripStatusService.EndTripAsync(
+            driverId,
+            tripId,
+            cancellationToken);
+
+        return NoContent();
+    }
+
     [HttpPost("{tripId:long}/complete")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]

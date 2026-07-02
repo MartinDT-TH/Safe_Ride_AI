@@ -97,6 +97,39 @@ public sealed class TripStatusService : ITripStatusService
             cancellationToken);
     }
 
+    public async Task EndTripAsync(
+        Guid driverId,
+        long tripId,
+        CancellationToken cancellationToken)
+    {
+        var trip = await _dbContext.Trips
+            .Include(x => x.Booking)
+            .FirstOrDefaultAsync(
+                x => x.Id == tripId && x.DriverId == driverId,
+                cancellationToken);
+        if (trip is null)
+        {
+            throw new BookingException(
+                "trip.not_found",
+                "Khong tim thay chuyen di cua tai xe.",
+                404);
+        }
+
+        if (trip.TripStatus != TripStatus.IN_PROGRESS)
+        {
+            throw new BookingException(
+                "trip.invalid_status_transition",
+                "Chi co the ket thuc chuyen khi chuyen dang di chuyen.",
+                409);
+        }
+
+        await ApplyTripStatusAsync(
+            trip,
+            TripStatus.WAITING_RETURN_CONFIRM,
+            driverId,
+            cancellationToken);
+    }
+
     private async Task ApplyTripStatusAsync(
         Domain.Entities.Trip trip,
         TripStatus tripStatus,

@@ -18,11 +18,11 @@ public sealed class TripStatusServiceTests
         new(2026, 6, 15, 8, 0, 0, DateTimeKind.Utc);
 
     [Fact]
-    public async Task CompleteTrip_IncrementsPromotionUsageAndReleasesDriver()
+    public async Task EndTrip_MovesTripToWaitingReturnConfirmation()
     {
         using var fixture = await TripStatusFixture.CreateAsync(TripStatus.IN_PROGRESS);
 
-        await fixture.Service.CompleteTripAsync(
+        await fixture.Service.EndTripAsync(
             fixture.DriverId,
             fixture.TripId,
             CancellationToken.None);
@@ -35,17 +35,17 @@ public sealed class TripStatusServiceTests
         var driver = await fixture.DbContext.DriverProfiles
             .SingleAsync(x => x.DriverId == fixture.DriverId);
 
-        Assert.Equal(TripStatus.COMPLETED, trip.TripStatus);
-        Assert.Equal(BookingStatus.Completed, trip.Booking.BookingStatus);
-        Assert.Equal(UtcNow, trip.CompletedAt);
-        Assert.Equal(3, fixture.Promotion.CurrentUsageCount);
+        Assert.Equal(TripStatus.WAITING_RETURN_CONFIRM, trip.TripStatus);
+        Assert.Equal(BookingStatus.DriverAssigned, trip.Booking.BookingStatus);
+        Assert.Null(trip.CompletedAt);
+        Assert.Equal(2, fixture.Promotion.CurrentUsageCount);
         Assert.Single(trip.Booking.BookingPromotions);
-        Assert.Equal(DriverWorkStatus.Online, driver.WorkStatus);
-        Assert.Equal(DriverWorkStatus.Online.ToString(), fixture.Redis.DriverStatusValue);
-        Assert.Contains(fixture.TripLiveKey, fixture.Redis.RemovedKeys);
-        Assert.Contains(fixture.DriverActiveTripKey, fixture.Redis.RemovedKeys);
+        Assert.Equal(DriverWorkStatus.Busy, driver.WorkStatus);
+        Assert.Null(fixture.Redis.DriverStatusValue);
+        Assert.DoesNotContain(fixture.TripLiveKey, fixture.Redis.RemovedKeys);
+        Assert.DoesNotContain(fixture.DriverActiveTripKey, fixture.Redis.RemovedKeys);
         Assert.Single(fixture.Realtime.TripStatusNotifications);
-        Assert.Single(fixture.Realtime.BookingStatusNotifications);
+        Assert.Empty(fixture.Realtime.BookingStatusNotifications);
     }
 
     [Fact]
@@ -78,12 +78,12 @@ public sealed class TripStatusServiceTests
     }
 
     [Fact]
-    public async Task CompleteTrip_WhenTripNotInProgress_RejectsInvalidTransition()
+    public async Task EndTrip_WhenTripNotInProgress_RejectsInvalidTransition()
     {
         using var fixture = await TripStatusFixture.CreateAsync(TripStatus.ACCEPTED);
 
         var exception = await Assert.ThrowsAsync<BookingException>(
-            () => fixture.Service.CompleteTripAsync(
+            () => fixture.Service.EndTripAsync(
                 fixture.DriverId,
                 fixture.TripId,
                 CancellationToken.None));

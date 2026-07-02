@@ -10,6 +10,11 @@ public interface ITripStatusService
         TripStatus tripStatus,
         CancellationToken cancellationToken);
 
+    Task EndTripAsync(
+        Guid driverId,
+        long tripId,
+        CancellationToken cancellationToken);
+
     Task CompleteTripAsync(
         Guid userId,
         long tripId,
