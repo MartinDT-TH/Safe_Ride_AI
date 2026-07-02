@@ -50,5 +50,7 @@ public partial class Trip
 
     public virtual ICollection<TripShare> TripShares { get; set; } = new List<TripShare>();
 
+    public virtual ICollection<TripReturnConfirmation> ReturnConfirmations { get; set; } = new List<TripReturnConfirmation>();
+
     public virtual ICollection<WalletTransaction> WalletTransactions { get; set; } = new List<WalletTransaction>();
 }

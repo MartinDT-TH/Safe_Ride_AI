@@ -184,6 +184,7 @@ public static class DependencyInjection
                 provider.GetRequiredService<ILogger<ResilientRedisService>>()));
         services.AddSingleton<ICloudinaryImageService, CloudinaryImageService>();
         services.AddSingleton<IIdentityDocumentStorage, CloudinaryIdentityDocumentStorage>();
+        services.AddSingleton<ITripReturnEvidenceStorage, CloudinaryTripReturnEvidenceStorage>();
         services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IGoogleTokenVerifier, GoogleTokenVerifier>();

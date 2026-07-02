@@ -49,6 +49,63 @@ public sealed class TripStatusServiceTests
     }
 
     [Fact]
+    public async Task ConfirmReturnByCustomer_CreatesAuditRecordAndMovesTripToReturnConfirmed()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.WAITING_RETURN_CONFIRM);
+
+        await fixture.Service.ConfirmReturnByCustomerAsync(
+            fixture.CustomerId,
+            fixture.TripId,
+            vehicleReturnedConfirmed: true,
+            CancellationToken.None);
+
+        var trip = await fixture.DbContext.Trips
+            .Include(x => x.Booking)
+                .ThenInclude(x => x.BookingPromotions)
+                    .ThenInclude(x => x.Promotion)
+            .Include(x => x.ReturnConfirmations)
+            .SingleAsync(x => x.Id == fixture.TripId);
+        var confirmation = Assert.Single(trip.ReturnConfirmations);
+
+        Assert.Equal(TripStatus.RETURN_CONFIRMED, trip.TripStatus);
+        Assert.Equal(BookingStatus.DriverAssigned, trip.Booking.BookingStatus);
+        Assert.Null(trip.CompletedAt);
+        Assert.Equal(2, fixture.Promotion.CurrentUsageCount);
+        Assert.Equal(fixture.DriverId, confirmation.DriverId);
+        Assert.Equal(fixture.CustomerId, confirmation.ConfirmedByUserId);
+        Assert.Equal(HandoverStatus.CustomerConfirmed, confirmation.HandoverStatus);
+        Assert.Equal(UtcNow, confirmation.ConfirmedAt);
+        Assert.Empty(confirmation.Evidence);
+        Assert.Single(fixture.Realtime.TripStatusNotifications);
+        Assert.Empty(fixture.Realtime.BookingStatusNotifications);
+        Assert.DoesNotContain(fixture.TripLiveKey, fixture.Redis.RemovedKeys);
+        Assert.DoesNotContain(fixture.DriverActiveTripKey, fixture.Redis.RemovedKeys);
+    }
+
+    [Fact]
+    public async Task ConfirmReturnByCustomer_WhenVehicleReturnNotConfirmed_RejectsRequest()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.WAITING_RETURN_CONFIRM);
+
+        var exception = await Assert.ThrowsAsync<BookingException>(
+            () => fixture.Service.ConfirmReturnByCustomerAsync(
+                fixture.CustomerId,
+                fixture.TripId,
+                vehicleReturnedConfirmed: false,
+                CancellationToken.None));
+
+        var trip = await fixture.DbContext.Trips
+            .Include(x => x.ReturnConfirmations)
+            .SingleAsync(x => x.Id == fixture.TripId);
+
+        Assert.Equal("trip.return_confirmation_required", exception.Code);
+        Assert.Equal(400, exception.StatusCode);
+        Assert.Equal(TripStatus.WAITING_RETURN_CONFIRM, trip.TripStatus);
+        Assert.Empty(trip.ReturnConfirmations);
+        Assert.Empty(fixture.Realtime.TripStatusNotifications);
+    }
+
+    [Fact]
     public async Task CancelTrip_RemovesPromotionWithoutIncrementingUsageAndReleasesDriver()
     {
         using var fixture = await TripStatusFixture.CreateAsync(TripStatus.ACCEPTED);
@@ -155,6 +212,7 @@ public sealed class TripStatusServiceTests
                 new DateTimeProviderFake(UtcNow),
                 redis,
                 realtime,
+                new NoOpTripReturnEvidenceStorage(),
                 new OptionsMonitorFake<TripTrackingOptions>(new TripTrackingOptions()));
 
             return new TripStatusFixture(
@@ -472,5 +530,25 @@ public sealed class TripStatusServiceTests
         public TOptions Get(string? name) => CurrentValue;
 
         public IDisposable? OnChange(Action<TOptions, string?> listener) => null;
+    }
+
+    private sealed class NoOpTripReturnEvidenceStorage : ITripReturnEvidenceStorage
+    {
+        public Task<StoredReturnEvidenceFile> SaveAsync(
+            long tripId,
+            int displayOrder,
+            string originalFileName,
+            string contentType,
+            Stream content,
+            CancellationToken cancellationToken)
+        {
+            // Test stub: returns a fake URL; no real upload is performed.
+            return Task.FromResult(new StoredReturnEvidenceFile(
+                $"https://fake.cloudinary.com/trip-{tripId}/photo-{displayOrder}.jpg",
+                $"fake-public-id-{displayOrder}",
+                originalFileName,
+                contentType,
+                0L));
+        }
     }
 }

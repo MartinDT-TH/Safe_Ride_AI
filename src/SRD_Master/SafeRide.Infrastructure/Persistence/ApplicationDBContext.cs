@@ -60,6 +60,10 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
 
     public virtual DbSet<Trip> Trips { get; set; }
 
+    public virtual DbSet<TripReturnConfirmation> TripReturnConfirmations { get; set; }
+
+    public virtual DbSet<TripReturnEvidence> TripReturnEvidence { get; set; }
+
     public virtual DbSet<TripShare> TripShares { get; set; }
 
     public virtual DbSet<Vehicle> Vehicles { get; set; }
@@ -116,6 +120,8 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
         });
 
         modelBuilder.ApplyConfiguration(new BookingConfiguration());
+        modelBuilder.ApplyConfiguration(new TripReturnConfirmationConfiguration());
+        modelBuilder.ApplyConfiguration(new TripReturnEvidenceConfiguration());
 
         modelBuilder.Entity<BookingDriverOffer>(entity =>
         {
