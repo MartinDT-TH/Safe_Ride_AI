@@ -1,6 +1,7 @@
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
 using SafeRide.Application.Features.Bookings.DTOs;
+using SafeRide.Application.Features.Trips.DTOs;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
 
@@ -65,10 +66,41 @@ internal static class BookingDetailsMapper
                 booking.Vehicle.VehicleType == VehicleType.Motorbike),
             booking.Trip?.Id,
             booking.Trip?.TripStatus,
+            MapReturnConfirmation(booking.Trip),
             matchingSnapshot.CurrentSearchRadiusKm,
             matchingSnapshot.ExpiresAt,
             matchingSnapshot.EstimatedRemainingSeconds,
             matchingMessage);
+    }
+
+    private static TripReturnConfirmationSummaryDto? MapReturnConfirmation(Trip? trip)
+    {
+        var confirmation = trip?.ReturnConfirmations
+            .OrderByDescending(returnConfirmation => returnConfirmation.ConfirmedAt)
+            .ThenByDescending(returnConfirmation => returnConfirmation.Id)
+            .FirstOrDefault();
+        if (confirmation is null)
+        {
+            return null;
+        }
+
+        return new TripReturnConfirmationSummaryDto(
+            confirmation.Id,
+            confirmation.HandoverStatus,
+            confirmation.DriverId,
+            confirmation.ConfirmedByUserId,
+            confirmation.ConfirmedAt,
+            confirmation.DriverLatitude,
+            confirmation.DriverLongitude,
+            confirmation.Note,
+            confirmation.Evidence
+                .OrderBy(evidence => evidence.DisplayOrder)
+                .Select(evidence => new TripReturnEvidenceSummaryDto(
+                    evidence.Id,
+                    evidence.ImageUrl,
+                    evidence.ContentType,
+                    evidence.DisplayOrder))
+                .ToList());
     }
 
     private static async Task<string?> GetArrivalPolylineAsync(

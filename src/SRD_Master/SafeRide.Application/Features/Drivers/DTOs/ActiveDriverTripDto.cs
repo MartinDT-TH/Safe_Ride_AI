@@ -1,3 +1,4 @@
+using SafeRide.Application.Features.Trips.DTOs;
 using SafeRide.Domain.Enums;
 
 namespace SafeRide.Application.Features.Drivers.DTOs;
@@ -10,4 +11,5 @@ public sealed record ActiveDriverTripDto(
     double PickupLng,
     double? DestLat,
     double? DestLng,
-    string? EncodedPolyline);
+    string? EncodedPolyline,
+    TripReturnConfirmationSummaryDto? ReturnConfirmation = null);
