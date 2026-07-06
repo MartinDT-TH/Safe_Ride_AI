@@ -171,6 +171,7 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
             entity.Property(e => e.CreatedAt)
                 .IsRequired()
                 .HasDefaultValueSql("(getutcdate())");
+            entity.Property(e => e.DiscountAmount).HasColumnType("decimal(18, 2)");
 
             entity.HasOne(d => d.Booking).WithMany(p => p.BookingPromotions)
                 .HasForeignKey(d => d.BookingId)
@@ -210,6 +211,7 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
             entity.Property(e => e.KycStatus)
                 .HasConversion<string>()
                 .HasMaxLength(20)
+                .HasSentinel((KycStatus)(-1))
                 .HasDefaultValueSql("('Pending')");
             entity.Property(e => e.LicenseClass)
                 .HasConversion<string>()
@@ -245,6 +247,7 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
             entity.Property(e => e.WorkStatus)
                 .HasConversion<string>()
                 .HasMaxLength(20)
+                .HasSentinel((DriverWorkStatus)(-1))
                 .HasDefaultValueSql("('Offline')");
 
 
@@ -308,12 +311,14 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
                 .HasMaxLength(10)
                 .IsUnicode(false)
                 .HasDefaultValue("VND");
+            entity.Property(e => e.Amount).HasColumnType("decimal(18, 2)");
             entity.Property(e => e.PaymentMethod)
                 .HasConversion<string>()
                 .HasMaxLength(20);
             entity.Property(e => e.PaymentStatus)
                 .HasConversion<string>()
                 .HasMaxLength(20)
+                .HasSentinel((PaymentStatus)(-1))
                 .HasDefaultValueSql("('Pending')");
             entity.Property(e => e.TransactionReference)
                 .HasMaxLength(100)
@@ -338,6 +343,7 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
                 tb.HasCheckConstraint("CK_PricingRules_PricePerHour", "[PricePerHour] IS NULL OR [PricePerHour] >= 0");
             });
 
+            entity.Property(e => e.BaseFare).HasColumnType("decimal(18, 2)");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.MinFare).HasColumnType("decimal(18, 2)");
             entity.Property(e => e.PricePerHour).HasColumnType("decimal(18, 2)");
@@ -445,6 +451,7 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
             entity.Property(e => e.Status)
                 .HasConversion<string>()
                 .HasMaxLength(20)
+                .HasSentinel((ReportStatus)(-1))
                 .HasDefaultValueSql("('Pending')");
             entity.Property(e => e.Subject).HasMaxLength(255);
 
@@ -494,6 +501,7 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
             entity.Property(e => e.SOSStatus)
                 .HasConversion<string>()
                 .HasMaxLength(20)
+                .HasSentinel((SOSStatus)(-1))
                 .HasDefaultValueSql("('Active')");
 
             entity.HasOne(d => d.ResolvedByUser).WithMany(p => p.SOSAlertResolvedByUsers)
@@ -562,6 +570,7 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
             entity.Property(e => e.TripStatus)
                 .HasConversion<string>()
                 .HasMaxLength(30)
+                .HasSentinel((TripStatus)(-1))
                 .HasDefaultValueSql("('ACCEPTED')");
 
             entity.HasOne(d => d.Booking).WithOne(p => p.Trip)
@@ -694,6 +703,7 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
             entity.Property(e => e.Status)
                 .HasConversion<string>()
                 .HasMaxLength(20)
+                .HasSentinel((WithdrawalRequestStatus)(-1))
                 .HasDefaultValueSql("('Pending')");
 
             entity.HasOne(d => d.Wallet).WithMany(p => p.WithdrawalRequests)
