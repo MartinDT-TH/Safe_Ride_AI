@@ -64,6 +64,7 @@ class MobileConfig {
           value: 'RETURN_CONFIRMED',
           label: 'Đã xác nhận nhận lại xe',
         ),
+        MobileStatusOption(value: 'WAITING_PAYMENT', label: 'Chờ thanh toán'),
         MobileStatusOption(value: 'COMPLETED', label: 'Hoàn thành'),
         MobileStatusOption(value: 'CANCELLED', label: 'Đã hủy'),
       ],
@@ -145,6 +146,8 @@ class MobileRealtimeEvents {
     required this.customerConfirmedDriverOffer,
     required this.tripCreated,
     required this.tripStatusChanged,
+    required this.tripPaymentPending,
+    required this.tripPaymentSucceeded,
   });
 
   final String bookingSearchingStarted;
@@ -164,6 +167,8 @@ class MobileRealtimeEvents {
   final String customerConfirmedDriverOffer;
   final String tripCreated;
   final String tripStatusChanged;
+  final String tripPaymentPending;
+  final String tripPaymentSucceeded;
 
   List<String> get bookingUpdateEvents => [
     bookingSearchingStarted,
@@ -257,6 +262,16 @@ class MobileRealtimeEvents {
         'tripStatusChanged',
         fallback.tripStatusChanged,
       ),
+      tripPaymentPending: _read(
+        json,
+        'tripPaymentPending',
+        fallback.tripPaymentPending,
+      ),
+      tripPaymentSucceeded: _read(
+        json,
+        'tripPaymentSucceeded',
+        fallback.tripPaymentSucceeded,
+      ),
     );
   }
 
@@ -278,6 +293,8 @@ class MobileRealtimeEvents {
     customerConfirmedDriverOffer: 'CustomerConfirmedDriverOffer',
     tripCreated: 'TripCreated',
     tripStatusChanged: 'TripStatusChanged',
+    tripPaymentPending: 'TripPaymentPending',
+    tripPaymentSucceeded: 'TripPaymentSucceeded',
   );
 
   static String _read(Map<String, dynamic> json, String key, String fallback) {

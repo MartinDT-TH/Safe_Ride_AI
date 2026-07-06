@@ -270,12 +270,17 @@ abstract final class ApiEndpoints {
       '/payments/driver/trips/$tripId/qr';
   static String driverTripPaymentStatus(int tripId) =>
       '/payments/driver/trips/$tripId/status';
+  static String customerTripPaymentStatus(int tripId) =>
+      '/payments/trips/$tripId/status';
   static String confirmDriverTripCashPayment(int tripId) =>
       '/payments/driver/trips/$tripId/cash';
-  static String submitTripRating(int tripId) => '/feedbacks/trips/$tripId/rating';
+  static String submitTripRating(int tripId) =>
+      '/feedbacks/trips/$tripId/rating';
   static const identityVerificationDocuments =
       '/identity-verification/documents';
   static String endTrip(int tripId) => '/trips/$tripId/end';
+  static String customerReturnConfirmation(int tripId) =>
+      '/trips/$tripId/return-confirmation/customer';
   static String driverReturnConfirmation(int tripId) =>
       '/trips/$tripId/return-confirmation/driver';
 }
@@ -327,6 +332,13 @@ abstract final class ApiKeys {
   static const arrivalPolyline = 'arrivalPolyline';
   static const driverOffer = 'driverOffer';
   static const vehicle = 'vehicle';
+  static const payment = 'payment';
+  static const paymentId = 'paymentId';
+  static const paymentMethod = 'paymentMethod';
+  static const paymentStatus = 'paymentStatus';
+  static const amount = 'amount';
+  static const currency = 'currency';
+  static const paidAt = 'paidAt';
   static const tripStatus = 'tripStatus';
   static const tripId = 'tripId';
   static const address = 'address';
@@ -362,6 +374,7 @@ abstract final class ApiKeys {
   static const originalFare = 'originalFare';
   static const discountAmount = 'discountAmount';
   static const finalFare = 'finalFare';
+  static const vehicleReturnedConfirmed = 'vehicleReturnedConfirmed';
   static const currentSearchRadiusKm = 'currentSearchRadiusKm';
   static const estimatedRemainingSeconds = 'estimatedRemainingSeconds';
   static const matchingMessage = 'matchingMessage';

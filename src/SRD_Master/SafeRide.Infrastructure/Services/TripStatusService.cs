@@ -74,6 +74,7 @@ public sealed class TripStatusService : ITripStatusService
             .Include(x => x.Booking)
                 .ThenInclude(x => x.BookingPromotions)
                     .ThenInclude(x => x.Promotion)
+            .Include(x => x.Payments)
             .FirstOrDefaultAsync(
                 x => x.Id == tripId
                     && (x.DriverId == userId || x.Booking.CustomerId == userId),
@@ -86,11 +87,19 @@ public sealed class TripStatusService : ITripStatusService
                 404);
         }
 
-        if (trip.TripStatus != TripStatus.IN_PROGRESS && trip.TripStatus != TripStatus.RETURN_CONFIRMED)
+        if (trip.TripStatus != TripStatus.WAITING_PAYMENT)
         {
             throw new BookingException(
                 "trip.invalid_status_transition",
-                "Chỉ có thể hoàn tất chuyến khi chuyến đang di chuyển hoặc đã xác nhận trả xe.",
+                "Chi co the hoan tat chuyen sau khi thanh toan thanh cong.",
+                409);
+        }
+
+        if (!trip.Payments.Any(payment => payment.PaymentStatus == PaymentStatus.Success))
+        {
+            throw new BookingException(
+                "payment.required",
+                "Chi co the hoan tat chuyen sau khi thanh toan thanh cong.",
                 409);
         }
 
@@ -150,6 +159,9 @@ public sealed class TripStatusService : ITripStatusService
 
         var trip = await _dbContext.Trips
             .Include(x => x.Booking)
+                .ThenInclude(x => x.BookingPromotions)
+                    .ThenInclude(x => x.Promotion)
+            .Include(x => x.Payments)
             .FirstOrDefaultAsync(
                 x => x.Id == tripId && x.Booking.CustomerId == customerId,
                 cancellationToken);
@@ -185,6 +197,12 @@ public sealed class TripStatusService : ITripStatusService
             TripStatus.RETURN_CONFIRMED,
             customerId,
             cancellationToken);
+
+        await ApplyTripStatusAsync(
+            trip,
+            TripStatus.WAITING_PAYMENT,
+            customerId,
+            cancellationToken);
     }
 
     public async Task ConfirmReturnByDriverAsync(
@@ -205,6 +223,9 @@ public sealed class TripStatusService : ITripStatusService
 
         var trip = await _dbContext.Trips
             .Include(x => x.Booking)
+                .ThenInclude(x => x.BookingPromotions)
+                    .ThenInclude(x => x.Promotion)
+            .Include(x => x.Payments)
             .FirstOrDefaultAsync(
                 x => x.Id == tripId && x.DriverId == driverId,
                 cancellationToken);
@@ -291,6 +312,12 @@ public sealed class TripStatusService : ITripStatusService
             TripStatus.RETURN_CONFIRMED,
             driverId,
             cancellationToken);
+
+        await ApplyTripStatusAsync(
+            trip,
+            TripStatus.WAITING_PAYMENT,
+            driverId,
+            cancellationToken);
     }
 
     private async Task ApplyTripStatusAsync(
@@ -310,6 +337,7 @@ public sealed class TripStatusService : ITripStatusService
         var utcNow = _dateTimeProvider.UtcNow;
         var previousTripStatus = trip.TripStatus;
         var previousBookingStatus = trip.Booking.BookingStatus;
+        Domain.Entities.Payment? pendingPaymentNotification = null;
         trip.TripStatus = tripStatus;
         // Flow: state machine stamps milestone times; terminal states settle promotion/driver/cache state.
         switch (tripStatus)
@@ -322,26 +350,20 @@ public sealed class TripStatusService : ITripStatusService
                 break;
             case TripStatus.WAITING_RETURN_CONFIRM:
                 trip.StartedAt ??= utcNow;
-                if (trip.ActualFare == null)
-                {
-                    trip.ActualFare = trip.Booking.EstimatedFare;
-                    var discountAmount = trip.Booking.BookingPromotions.FirstOrDefault()?.DiscountAmount ?? 0m;
-                    trip.FinalFare = Math.Max(0m, trip.Booking.EstimatedFare - discountAmount);
-                }
+                EnsureTripFare(trip);
+                break;
+            case TripStatus.WAITING_PAYMENT:
+                trip.StartedAt ??= utcNow;
+                EnsureTripFare(trip);
+                pendingPaymentNotification = UpsertPendingPayment(trip, utcNow);
                 break;
             case TripStatus.COMPLETED:
                 trip.StartedAt ??= utcNow;
                 trip.CompletedAt ??= utcNow;
-                if (trip.ActualFare == null)
-                {
-                    trip.ActualFare = trip.Booking.EstimatedFare;
-                    var discountAmount = trip.Booking.BookingPromotions.FirstOrDefault()?.DiscountAmount ?? 0m;
-                    trip.FinalFare = Math.Max(0m, trip.Booking.EstimatedFare - discountAmount);
-                }
+                EnsureTripFare(trip);
                 trip.Booking.BookingStatus = BookingStatus.Completed;
                 trip.Booking.UpdatedAt = utcNow;
-                if (previousTripStatus != TripStatus.COMPLETED &&
-                    previousBookingStatus != BookingStatus.Completed)
+                if (previousTripStatus != TripStatus.COMPLETED)
                 {
                     IncrementPromotionUsage(trip.Booking);
                 }
@@ -382,6 +404,28 @@ public sealed class TripStatusService : ITripStatusService
                 utcNow,
                 trip.Booking.BookingStatus),
             cancellationToken);
+
+        if (tripStatus == TripStatus.WAITING_PAYMENT
+            && previousTripStatus != TripStatus.WAITING_PAYMENT
+            && pendingPaymentNotification is not null)
+        {
+            await _realtimeNotificationService.PublishTripPaymentPendingAsync(
+                new TripPaymentPendingEvent(
+                    trip.Id,
+                    trip.BookingId,
+                    trip.Booking.CustomerId,
+                    trip.DriverId,
+                    pendingPaymentNotification.Id,
+                    pendingPaymentNotification.PaymentMethod,
+                    pendingPaymentNotification.PaymentStatus,
+                    pendingPaymentNotification.Amount,
+                    pendingPaymentNotification.Currency,
+                    trip.TripStatus,
+                    pendingPaymentNotification.CreatedAt,
+                    "Vui lòng thanh toán cho tài xế để hoàn tất chuyến đi.",
+                    trip.Booking.BookingStatus),
+                cancellationToken);
+        }
 
         if (tripStatus is TripStatus.COMPLETED or TripStatus.CANCELLED)
         {
@@ -458,6 +502,63 @@ public sealed class TripStatusService : ITripStatusService
         }
     }
 
+    private static void EnsureTripFare(Domain.Entities.Trip trip)
+    {
+        if (trip.ActualFare != null && trip.FinalFare != null)
+        {
+            return;
+        }
+
+        trip.ActualFare ??= trip.Booking.EstimatedFare;
+        var discountAmount = trip.Booking.BookingPromotions.FirstOrDefault()?.DiscountAmount ?? 0m;
+        trip.FinalFare ??= Math.Max(0m, trip.ActualFare.Value - discountAmount);
+    }
+
+    private static Domain.Entities.Payment? UpsertPendingPayment(
+        Domain.Entities.Trip trip,
+        DateTime utcNow)
+    {
+        var amount = trip.FinalFare ?? trip.ActualFare ?? trip.Booking.EstimatedFare;
+        if (amount <= 0m)
+        {
+            return null;
+        }
+
+        var existingSuccess = trip.Payments
+            .Any(payment => payment.PaymentStatus == PaymentStatus.Success);
+        if (existingSuccess)
+        {
+            return null;
+        }
+
+        var pending = trip.Payments
+            .OrderByDescending(payment => payment.CreatedAt)
+            .FirstOrDefault(payment => payment.PaymentStatus == PaymentStatus.Pending);
+        if (pending is not null)
+        {
+            pending.PaymentMethod = PaymentMethod.CASH;
+            pending.TransactionReference = null;
+            pending.Amount = amount;
+            pending.Currency = "VND";
+            pending.UpdatedAt = utcNow;
+            return pending;
+        }
+
+        var payment = new Domain.Entities.Payment
+        {
+            TripId = trip.Id,
+            PaymentMethod = PaymentMethod.CASH,
+            TransactionReference = null,
+            Amount = amount,
+            Currency = "VND",
+            PaymentStatus = PaymentStatus.Pending,
+            CreatedAt = utcNow,
+            UpdatedAt = utcNow
+        };
+        trip.Payments.Add(payment);
+        return payment;
+    }
+
     private void RemoveBookingPromotions(Domain.Entities.Booking booking)
     {
         if (booking.BookingPromotions.Count == 0)
@@ -486,9 +587,10 @@ public sealed class TripStatusService : ITripStatusService
                 or TripStatus.CANCELLED,
             TripStatus.ARRIVED => requested is TripStatus.IN_PROGRESS
                 or TripStatus.CANCELLED,
-            TripStatus.IN_PROGRESS => requested is TripStatus.COMPLETED || requested is TripStatus.WAITING_RETURN_CONFIRM,
+            TripStatus.IN_PROGRESS => requested is TripStatus.WAITING_RETURN_CONFIRM,
             TripStatus.WAITING_RETURN_CONFIRM => requested is TripStatus.RETURN_CONFIRMED,
-            TripStatus.RETURN_CONFIRMED => requested is TripStatus.COMPLETED,
+            TripStatus.RETURN_CONFIRMED => requested is TripStatus.WAITING_PAYMENT,
+            TripStatus.WAITING_PAYMENT => requested is TripStatus.COMPLETED,
             _ => false
         };
     }

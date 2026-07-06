@@ -80,6 +80,8 @@ public sealed class BookingRepository : IBookingRepository
             .Include(booking => booking.Trip)
                 .ThenInclude(trip => trip!.ReturnConfirmations)
                     .ThenInclude(returnConfirmation => returnConfirmation.Evidence)
+            .Include(booking => booking.Trip)
+                .ThenInclude(trip => trip!.Payments)
             .Include(booking => booking.BookingPromotions)
                 .ThenInclude(bookingPromotion => bookingPromotion.Promotion)
             .FirstOrDefaultAsync(
@@ -98,6 +100,8 @@ public sealed class BookingRepository : IBookingRepository
             .Include(booking => booking.Trip)
                 .ThenInclude(trip => trip!.ReturnConfirmations)
                     .ThenInclude(returnConfirmation => returnConfirmation.Evidence)
+            .Include(booking => booking.Trip)
+                .ThenInclude(trip => trip!.Payments)
             .Include(booking => booking.BookingPromotions)
                 .ThenInclude(bookingPromotion => bookingPromotion.Promotion)
             .Where(booking => booking.CustomerId == customerId

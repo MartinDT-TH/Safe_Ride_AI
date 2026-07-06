@@ -31,7 +31,9 @@ public sealed record MobileRealtimeEventsResponse(
     string DriverOfferCancelled,
     string CustomerConfirmedDriverOffer,
     string TripCreated,
-    string TripStatusChanged);
+    string TripStatusChanged,
+    string TripPaymentPending,
+    string TripPaymentSucceeded);
 
 public sealed record MobileStatusGroupResponse(
     IReadOnlyList<MobileStatusOptionResponse> Statuses);

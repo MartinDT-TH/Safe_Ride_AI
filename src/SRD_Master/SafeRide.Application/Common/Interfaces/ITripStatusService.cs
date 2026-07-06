@@ -26,7 +26,7 @@ public interface ITripStatusService
     /// Driver confirms return on behalf of the customer.
     /// Requires 1–3 evidence photos. Server reads GPS from Redis; the driver
     /// cannot inject timestamp or coordinates directly.
-    /// Moves trip from WAITING_RETURN_CONFIRM → RETURN_CONFIRMED.
+    /// Moves trip from WAITING_RETURN_CONFIRM to RETURN_CONFIRMED, then WAITING_PAYMENT.
     /// </summary>
     Task ConfirmReturnByDriverAsync(
         Guid driverId,

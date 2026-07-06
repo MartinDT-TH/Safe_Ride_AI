@@ -46,6 +46,15 @@ public sealed record TripReturnConfirmationSummaryResponse(
     string? Note,
     IReadOnlyList<TripReturnEvidenceSummaryResponse> Evidence);
 
+public sealed record TripPaymentSummaryResponse(
+    long? PaymentId,
+    PaymentMethod? PaymentMethod,
+    PaymentStatus PaymentStatus,
+    decimal Amount,
+    string Currency,
+    DateTime? PaidAt,
+    string Message);
+
 public sealed record BookingResponse(
     long BookingId,
     BookingType BookingType,
@@ -71,4 +80,5 @@ public sealed record BookingResponse(
     DateTime? ExpiresAt = null,
     int? EstimatedRemainingSeconds = null,
     string? MatchingMessage = null,
-    TripReturnConfirmationSummaryResponse? ReturnConfirmation = null);
+    TripReturnConfirmationSummaryResponse? ReturnConfirmation = null,
+    TripPaymentSummaryResponse? Payment = null);

@@ -15,6 +15,15 @@ public sealed record BookingVehicleSummaryDto(
     string Color,
     bool IsMotorbike);
 
+public sealed record TripPaymentSummaryDto(
+    long? PaymentId,
+    PaymentMethod? PaymentMethod,
+    PaymentStatus PaymentStatus,
+    decimal Amount,
+    string Currency,
+    DateTime? PaidAt,
+    string Message);
+
 public sealed record BookingDetailsDto(
     long BookingId,
     BookingType BookingType,
@@ -40,4 +49,5 @@ public sealed record BookingDetailsDto(
     double? CurrentSearchRadiusKm = null,
     DateTime? ExpiresAt = null,
     int? EstimatedRemainingSeconds = null,
-    string? MatchingMessage = null);
+    string? MatchingMessage = null,
+    TripPaymentSummaryDto? Payment = null);

@@ -170,8 +170,9 @@ class TripStatusUpdate {
         3 => 'IN_PROGRESS',
         4 => 'WAITING_RETURN_CONFIRM',
         5 => 'RETURN_CONFIRMED',
-        6 => 'COMPLETED',
-        7 => 'CANCELLED',
+        6 => 'WAITING_PAYMENT',
+        7 => 'COMPLETED',
+        8 => 'CANCELLED',
         _ => value.toString(),
       };
     }
@@ -184,10 +185,99 @@ class TripStatusUpdate {
       '3' => 'IN_PROGRESS',
       '4' => 'WAITING_RETURN_CONFIRM',
       '5' => 'RETURN_CONFIRMED',
-      '6' => 'COMPLETED',
-      '7' => 'CANCELLED',
+      '6' => 'WAITING_PAYMENT',
+      '7' => 'COMPLETED',
+      '8' => 'CANCELLED',
       _ => text,
     };
+  }
+}
+
+class TripPaymentUpdate {
+  const TripPaymentUpdate({
+    required this.tripId,
+    required this.bookingId,
+    required this.customerId,
+    required this.driverId,
+    required this.paymentStatus,
+    required this.amount,
+    required this.currency,
+    required this.tripStatus,
+    required this.message,
+    required this.eventName,
+    this.paymentId,
+    this.paymentMethod,
+    this.occurredAt,
+  });
+
+  final int tripId;
+  final int bookingId;
+  final String customerId;
+  final String driverId;
+  final int? paymentId;
+  final String? paymentMethod;
+  final String paymentStatus;
+  final double amount;
+  final String currency;
+  final String tripStatus;
+  final String message;
+  final String eventName;
+  final DateTime? occurredAt;
+
+  bool get isSuccess => paymentStatus.toLowerCase() == 'success';
+
+  static TripPaymentUpdate? fromSignalRArgumentsForEvent(
+    List<Object?>? arguments,
+    String eventName,
+  ) {
+    if (arguments == null || arguments.isEmpty || arguments.first is! Map) {
+      return null;
+    }
+
+    final data = Map<String, dynamic>.from(arguments.first as Map);
+    final tripId = (_value(data, ApiKeys.tripId) as num?)?.toInt();
+    final bookingId = (_value(data, ApiKeys.bookingId) as num?)?.toInt();
+    final amount = (_value(data, ApiKeys.amount) as num?)?.toDouble();
+    final tripStatus = TripStatusUpdate._normalizeTripStatus(
+      _value(data, ApiKeys.tripStatus),
+    );
+    if (tripId == null ||
+        bookingId == null ||
+        amount == null ||
+        tripStatus == null) {
+      return null;
+    }
+
+    final occurredAtRaw =
+        _value(data, 'paidAt') ??
+        _value(data, 'createdAt') ??
+        _value(data, 'updatedAt');
+
+    return TripPaymentUpdate(
+      tripId: tripId,
+      bookingId: bookingId,
+      customerId: _value(data, 'customerId')?.toString() ?? '',
+      driverId: _value(data, ApiKeys.driverId)?.toString() ?? '',
+      paymentId: (_value(data, ApiKeys.paymentId) as num?)?.toInt(),
+      paymentMethod: _value(data, ApiKeys.paymentMethod)?.toString(),
+      paymentStatus:
+          _value(data, ApiKeys.paymentStatus)?.toString() ?? 'Pending',
+      amount: amount,
+      currency: _value(data, ApiKeys.currency)?.toString() ?? 'VND',
+      tripStatus: tripStatus,
+      message: _value(data, ApiKeys.message)?.toString() ?? '',
+      eventName: eventName,
+      occurredAt: occurredAtRaw == null
+          ? null
+          : DateTime.tryParse(occurredAtRaw.toString()),
+    );
+  }
+
+  static Object? _value(Map<String, dynamic> data, String key) {
+    final pascalKey = key.isEmpty
+        ? key
+        : '${key[0].toUpperCase()}${key.substring(1)}';
+    return data[key] ?? data[pascalKey];
   }
 }
 
@@ -316,8 +406,9 @@ class BookingUpdate {
         3 => 'IN_PROGRESS',
         4 => 'WAITING_RETURN_CONFIRM',
         5 => 'RETURN_CONFIRMED',
-        6 => 'COMPLETED',
-        7 => 'CANCELLED',
+        6 => 'WAITING_PAYMENT',
+        7 => 'COMPLETED',
+        8 => 'CANCELLED',
         _ => value.toString(),
       };
     }
@@ -330,8 +421,9 @@ class BookingUpdate {
       '3' => 'IN_PROGRESS',
       '4' => 'WAITING_RETURN_CONFIRM',
       '5' => 'RETURN_CONFIRMED',
-      '6' => 'COMPLETED',
-      '7' => 'CANCELLED',
+      '6' => 'WAITING_PAYMENT',
+      '7' => 'COMPLETED',
+      '8' => 'CANCELLED',
       _ => text,
     };
   }
@@ -346,6 +438,7 @@ class SocketService {
   String? _accessToken;
   bool _driverLocationListenerAttached = false;
   bool _tripStatusListenerAttached = false;
+  bool _tripPaymentListenerAttached = false;
   bool _driverOfferReceivedListenerAttached = false;
   bool _driverOfferClosedListenerAttached = false;
   bool _bookingListenerAttached = false;
@@ -354,6 +447,8 @@ class SocketService {
   _driverLocationHandlers = {};
   final Map<String, void Function(TripStatusUpdate update)>
   _tripStatusHandlers = {};
+  final Map<String, void Function(TripPaymentUpdate update)>
+  _tripPaymentHandlers = {};
   final Map<String, void Function(DriverOfferUpdate update)>
   _driverOfferReceivedHandlers = {};
   final Map<String, void Function(int offerId)> _driverOfferClosedHandlers = {};
@@ -437,6 +532,7 @@ class SocketService {
       _connection = null;
       _driverLocationListenerAttached = false;
       _tripStatusListenerAttached = false;
+      _tripPaymentListenerAttached = false;
       _driverOfferReceivedListenerAttached = false;
       _driverOfferClosedListenerAttached = false;
       _bookingListenerAttached = false;
@@ -465,6 +561,9 @@ class SocketService {
     }
     if (_tripStatusHandlers.isNotEmpty && !_tripStatusListenerAttached) {
       _attachTripStatusListener();
+    }
+    if (_tripPaymentHandlers.isNotEmpty && !_tripPaymentListenerAttached) {
+      _attachTripPaymentListeners();
     }
     if (_driverOfferReceivedHandlers.isNotEmpty &&
         !_driverOfferReceivedListenerAttached) {
@@ -609,6 +708,47 @@ class SocketService {
     _tripStatusHandlers.remove(key);
   }
 
+  void onTripPaymentUpdated(
+    void Function(TripPaymentUpdate update) handler, {
+    String key = 'default',
+  }) {
+    _tripPaymentHandlers[key] = handler;
+    _attachTripPaymentListeners();
+  }
+
+  void _attachTripPaymentListeners() {
+    if (_connection == null || _tripPaymentListenerAttached) {
+      return;
+    }
+
+    _tripPaymentListenerAttached = true;
+    final events = _configService.config.realtime.events;
+    void handle(String eventName, List<Object?>? arguments) {
+      final update = TripPaymentUpdate.fromSignalRArgumentsForEvent(
+        arguments,
+        eventName,
+      );
+      if (update != null) {
+        for (final handler in List.of(_tripPaymentHandlers.values)) {
+          handler(update);
+        }
+      }
+    }
+
+    _connection!.on(
+      events.tripPaymentPending,
+      (arguments) => handle(events.tripPaymentPending, arguments),
+    );
+    _connection!.on(
+      events.tripPaymentSucceeded,
+      (arguments) => handle(events.tripPaymentSucceeded, arguments),
+    );
+  }
+
+  void removeTripPaymentUpdatedHandler(String key) {
+    _tripPaymentHandlers.remove(key);
+  }
+
   void onBookingUpdated(
     void Function(BookingUpdate update) handler, {
     String key = 'default',
@@ -747,11 +887,13 @@ class SocketService {
     _accessToken = null;
     _driverLocationListenerAttached = false;
     _tripStatusListenerAttached = false;
+    _tripPaymentListenerAttached = false;
     _driverOfferReceivedListenerAttached = false;
     _driverOfferClosedListenerAttached = false;
     _bookingListenerAttached = false;
     _driverLocationHandlers.clear();
     _tripStatusHandlers.clear();
+    _tripPaymentHandlers.clear();
     _driverOfferReceivedHandlers.clear();
     _driverOfferClosedHandlers.clear();
     _bookingHandlers.clear();

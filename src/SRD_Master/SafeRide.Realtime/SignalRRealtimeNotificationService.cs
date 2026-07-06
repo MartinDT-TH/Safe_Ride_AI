@@ -86,6 +86,60 @@ public sealed class SignalRRealtimeNotificationService
                 cancellationToken));
     }
 
+    public Task PublishTripPaymentPendingAsync(
+        TripPaymentPendingEvent notification,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.WhenAll(
+            SendToUserAsync(
+                notification.CustomerId,
+                "TripPaymentPending",
+                notification,
+                cancellationToken),
+            SendToDriverAsync(
+                notification.DriverId,
+                "TripPaymentPending",
+                notification,
+                cancellationToken),
+            SendToBookingAsync(
+                notification.BookingId,
+                "TripPaymentPending",
+                notification,
+                cancellationToken),
+            SendToTripAsync(
+                notification.TripId,
+                "TripPaymentPending",
+                notification,
+                cancellationToken));
+    }
+
+    public Task PublishTripPaymentSucceededAsync(
+        TripPaymentSucceededEvent notification,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.WhenAll(
+            SendToUserAsync(
+                notification.CustomerId,
+                "TripPaymentSucceeded",
+                notification,
+                cancellationToken),
+            SendToDriverAsync(
+                notification.DriverId,
+                "TripPaymentSucceeded",
+                notification,
+                cancellationToken),
+            SendToBookingAsync(
+                notification.BookingId,
+                "TripPaymentSucceeded",
+                notification,
+                cancellationToken),
+            SendToTripAsync(
+                notification.TripId,
+                "TripPaymentSucceeded",
+                notification,
+                cancellationToken));
+    }
+
     public Task PublishDriverLocationUpdatedAsync(
         DriverLocationUpdatedEvent notification,
         CancellationToken cancellationToken = default)

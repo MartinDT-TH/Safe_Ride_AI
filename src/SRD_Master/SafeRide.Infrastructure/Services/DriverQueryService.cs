@@ -75,7 +75,8 @@ public sealed class DriverQueryService : IDriverQueryService
                     || trip.TripStatus == TripStatus.ARRIVED
                     || trip.TripStatus == TripStatus.IN_PROGRESS
                     || trip.TripStatus == TripStatus.WAITING_RETURN_CONFIRM
-                    || trip.TripStatus == TripStatus.RETURN_CONFIRMED))
+                    || trip.TripStatus == TripStatus.RETURN_CONFIRMED
+                    || trip.TripStatus == TripStatus.WAITING_PAYMENT))
             .OrderByDescending(trip => trip.DriverAssignedAt ?? trip.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
 

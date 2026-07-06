@@ -108,6 +108,14 @@ class BookingRepositoryImpl implements BookingRepository {
   }
 
   @override
+  Future<void> confirmCustomerReturn(
+    String accessToken, {
+    required int tripId,
+  }) {
+    return _remoteDatasource.confirmCustomerReturn(accessToken, tripId: tripId);
+  }
+
+  @override
   Future<void> submitTripRating(
     String accessToken, {
     required int tripId,

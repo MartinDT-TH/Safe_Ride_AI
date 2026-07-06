@@ -70,7 +70,44 @@ internal static class BookingDetailsMapper
             matchingSnapshot.CurrentSearchRadiusKm,
             matchingSnapshot.ExpiresAt,
             matchingSnapshot.EstimatedRemainingSeconds,
-            matchingMessage);
+            matchingMessage,
+            MapPayment(booking.Trip, price.FinalFare));
+    }
+
+    private static TripPaymentSummaryDto? MapPayment(Trip? trip, decimal finalFare)
+    {
+        if (trip is null
+            || trip.TripStatus is not (TripStatus.WAITING_PAYMENT or TripStatus.COMPLETED))
+        {
+            return null;
+        }
+
+        var payment = trip.Payments
+            .OrderByDescending(x => x.PaymentStatus == PaymentStatus.Success)
+            .ThenByDescending(x => x.CreatedAt)
+            .FirstOrDefault();
+        var status = payment?.PaymentStatus ?? PaymentStatus.Pending;
+
+        return new TripPaymentSummaryDto(
+            payment?.Id,
+            payment?.PaymentMethod,
+            status,
+            payment?.Amount ?? finalFare,
+            payment?.Currency ?? "VND",
+            payment?.PaidAt,
+            BuildPaymentMessage(trip.TripStatus, status));
+    }
+
+    private static string BuildPaymentMessage(
+        TripStatus tripStatus,
+        PaymentStatus paymentStatus)
+    {
+        if (paymentStatus == PaymentStatus.Success || tripStatus == TripStatus.COMPLETED)
+        {
+            return "Thanh toán đã hoàn tất.";
+        }
+
+        return "Vui lòng thanh toán cho tài xế để hoàn tất chuyến đi.";
     }
 
     private static TripReturnConfirmationSummaryDto? MapReturnConfirmation(Trip? trip)

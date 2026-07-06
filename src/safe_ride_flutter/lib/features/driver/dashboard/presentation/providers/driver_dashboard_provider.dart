@@ -24,11 +24,11 @@ class DriverDashboardProvider extends ChangeNotifier {
   DriverStatus get status => _status;
 
   // debug: Mock value until driver income summary API is available.
-  double _todayIncome = 500000;
+  final double _todayIncome = 500000;
   double get todayIncome => _todayIncome;
 
   // debug: Mock value until driver trip summary API is available.
-  int _todayTrips = 3;
+  final int _todayTrips = 3;
   int get todayTrips => _todayTrips;
 
   bool _hasNewRequest = false;
@@ -43,18 +43,22 @@ class DriverDashboardProvider extends ChangeNotifier {
   bool _isUpdatingTrip = false;
   bool get isUpdatingTrip => _isUpdatingTrip;
 
+  bool _isWaitingForCustomerConfirmation = false;
+  bool get isWaitingForCustomerConfirmation =>
+      _isWaitingForCustomerConfirmation;
+
   bool _isDemoMode = false;
   bool get isDemoMode => _isDemoMode;
 
   ActiveDriverTrip? _activeTrip;
   ActiveDriverTrip? get activeTrip => _activeTrip;
-  int? _completedTripAwaitingPaymentId;
+  int? _tripAwaitingPaymentId;
   final Map<int, Future<bool>> _activeTripDetailsFetches = {};
   final Set<int> _activeTripDetailsLoaded = {};
 
-  int? takeCompletedTripAwaitingPayment() {
-    final tripId = _completedTripAwaitingPaymentId;
-    _completedTripAwaitingPaymentId = null;
+  int? takeTripAwaitingPayment() {
+    final tripId = _tripAwaitingPaymentId;
+    _tripAwaitingPaymentId = null;
     return tripId;
   }
 
@@ -120,6 +124,7 @@ class DriverDashboardProvider extends ChangeNotifier {
       if (_currentRequest?.offerId == offerId) {
         _hasNewRequest = false;
         _currentRequest = null;
+        _isWaitingForCustomerConfirmation = false;
         notifyListeners();
       }
     }, key: 'driverDashboardOfferClosed');
@@ -127,9 +132,6 @@ class DriverDashboardProvider extends ChangeNotifier {
       if (update.tripStatus == 'COMPLETED' ||
           update.tripStatus == 'CANCELLED') {
         if (_activeTrip?.tripId == update.tripId) {
-          if (update.tripStatus == 'COMPLETED') {
-            _completedTripAwaitingPaymentId = update.tripId;
-          }
           _clearActiveTrip();
           notifyListeners();
         }
@@ -154,10 +156,29 @@ class DriverDashboardProvider extends ChangeNotifier {
       if (!_hasActiveTripDetails(update.tripId)) {
         _fetchActiveTripDetails(update.bookingId, update.tripId);
       }
-      if (update.tripStatus == 'RETURN_CONFIRMED' && sameTrip) {
-        completeActiveTrip();
+      if (update.tripStatus == 'WAITING_PAYMENT' && sameTrip) {
+        _tripAwaitingPaymentId = update.tripId;
+        notifyListeners();
       }
     }, key: 'driverDashboard');
+
+    _socketService.onTripPaymentUpdated((update) {
+      if (_activeTrip?.tripId != update.tripId) {
+        return;
+      }
+
+      if (update.isSuccess || update.tripStatus == 'COMPLETED') {
+        _clearActiveTrip();
+        notifyListeners();
+        return;
+      }
+
+      if (update.tripStatus == 'WAITING_PAYMENT') {
+        _activeTrip = _activeTrip!.copyWith(tripStatus: 'WAITING_PAYMENT');
+        _tripAwaitingPaymentId = update.tripId;
+        notifyListeners();
+      }
+    }, key: 'driverDashboardPayment');
 
     _socketService.onBookingUpdated(
       _handleBookingUpdate,
@@ -186,7 +207,7 @@ class DriverDashboardProvider extends ChangeNotifier {
       debugPrint('Failed to go online: $e');
       _errorMessage = 'Không thể online. Vui lòng thử lại.';
       notifyListeners();
-      throw e;
+      rethrow;
     }
   }
 
@@ -207,6 +228,7 @@ class DriverDashboardProvider extends ChangeNotifier {
         await _socketService.setDriverOffline();
       }
       _socketService.removeTripStatusChangedHandler('driverDashboard');
+      _socketService.removeTripPaymentUpdatedHandler('driverDashboardPayment');
       _socketService.removeDriverLocationUpdatedHandler('driverDashboardDemo');
       _socketService.removeBookingUpdatedHandler('driverDashboardBooking');
       _socketService.removeDriverOfferReceivedHandler(
@@ -218,6 +240,7 @@ class DriverDashboardProvider extends ChangeNotifier {
       await _socketService.disconnect();
       _hasNewRequest = false;
       _currentRequest = null;
+      _isWaitingForCustomerConfirmation = false;
       _clearActiveTrip();
       _status = DriverStatus.offline;
       notifyListeners();
@@ -258,15 +281,15 @@ class DriverDashboardProvider extends ChangeNotifier {
           headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
         ),
       );
-      // Removed immediate trip creation logic.
-      // Waiting for SignalR 'BookingDriverAssigned' event.
+      // Wait for SignalR 'BookingDriverAssigned' event.
       _errorMessage = null;
+      _isWaitingForCustomerConfirmation = true;
     } catch (e) {
       debugPrint('Failed to accept request: $e');
       _errorMessage = 'Không thể nhận chuyến. Vui lòng thử lại.';
-    } finally {
       _hasNewRequest = false;
       _currentRequest = null;
+    } finally {
       _isResponding = false;
       notifyListeners();
     }
@@ -352,12 +375,11 @@ class DriverDashboardProvider extends ChangeNotifier {
           headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
         ),
       );
-      _completedTripAwaitingPaymentId = trip.tripId;
       _clearActiveTrip();
       return true;
     } catch (e) {
       debugPrint('Failed to complete trip: $e');
-      throw e;
+      rethrow;
     } finally {
       _isUpdatingTrip = false;
       notifyListeners();
@@ -442,7 +464,8 @@ class DriverDashboardProvider extends ChangeNotifier {
 
     // Reflect locally — SignalR TripStatusChanged will arrive shortly and confirm.
     if (_activeTrip?.tripId == tripId) {
-      _activeTrip = _activeTrip!.copyWith(tripStatus: 'RETURN_CONFIRMED');
+      _activeTrip = _activeTrip!.copyWith(tripStatus: 'WAITING_PAYMENT');
+      _tripAwaitingPaymentId = tripId;
       notifyListeners();
     }
   }
@@ -492,6 +515,9 @@ class DriverDashboardProvider extends ChangeNotifier {
             encodedPolyline: sameTrip ? oldTrip?.encodedPolyline : null,
             arrivalPolyline: sameTrip ? oldTrip?.arrivalPolyline : null,
           );
+          if (tripStatus == 'WAITING_PAYMENT') {
+            _tripAwaitingPaymentId = tripIdValue;
+          }
           _socketService.joinTrip(tripIdValue);
           if (!_hasActiveTripDetails(tripIdValue)) {
             await _fetchActiveTripDetailsSync(bookingId.toInt(), tripIdValue);
@@ -506,6 +532,14 @@ class DriverDashboardProvider extends ChangeNotifier {
       _isLoadingActiveTrip = false;
       notifyListeners();
     }
+  }
+
+  void markTripPaymentCompleted(int tripId) {
+    if (_activeTrip?.tripId != tripId) {
+      return;
+    }
+    _clearActiveTrip();
+    notifyListeners();
   }
 
   Future<bool> updateTripStatus(String tripStatus) async {
@@ -531,9 +565,6 @@ class DriverDashboardProvider extends ChangeNotifier {
       );
 
       if (tripStatus == 'COMPLETED' || tripStatus == 'CANCELLED') {
-        if (tripStatus == 'COMPLETED') {
-          _completedTripAwaitingPaymentId = trip.tripId;
-        }
         _clearActiveTrip();
       } else {
         _activeTrip = trip.copyWith(tripStatus: tripStatus);
@@ -548,6 +579,9 @@ class DriverDashboardProvider extends ChangeNotifier {
   void _handleBookingUpdate(dynamic update) {
     if (update.status == 'DriverAssigned' || update.tripId != null) {
       if (update.tripId != null) {
+        _hasNewRequest = false;
+        _currentRequest = null;
+        _isWaitingForCustomerConfirmation = false;
         final oldTrip = _activeTrip;
         final sameTrip = oldTrip?.tripId == update.tripId!;
         _activeTrip = ActiveDriverTrip(
@@ -561,6 +595,9 @@ class DriverDashboardProvider extends ChangeNotifier {
           encodedPolyline: sameTrip ? oldTrip?.encodedPolyline : null,
           arrivalPolyline: sameTrip ? oldTrip?.arrivalPolyline : null,
         );
+        if (_activeTrip!.tripStatus == 'WAITING_PAYMENT') {
+          _tripAwaitingPaymentId = _activeTrip!.tripId;
+        }
         notifyListeners();
         _socketService.joinTrip(update.tripId!);
         if (!_hasActiveTripDetails(update.tripId!)) {
@@ -717,8 +754,9 @@ class DriverDashboardProvider extends ChangeNotifier {
         3 => 'IN_PROGRESS',
         4 => 'WAITING_RETURN_CONFIRM',
         5 => 'RETURN_CONFIRMED',
-        6 => 'COMPLETED',
-        7 => 'CANCELLED',
+        6 => 'WAITING_PAYMENT',
+        7 => 'COMPLETED',
+        8 => 'CANCELLED',
         _ => value.toString(),
       };
     }
@@ -731,8 +769,9 @@ class DriverDashboardProvider extends ChangeNotifier {
       '3' => 'IN_PROGRESS',
       '4' => 'WAITING_RETURN_CONFIRM',
       '5' => 'RETURN_CONFIRMED',
-      '6' => 'COMPLETED',
-      '7' => 'CANCELLED',
+      '6' => 'WAITING_PAYMENT',
+      '7' => 'COMPLETED',
+      '8' => 'CANCELLED',
       _ => text,
     };
   }

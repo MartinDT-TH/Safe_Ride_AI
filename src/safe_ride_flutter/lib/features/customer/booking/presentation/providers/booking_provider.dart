@@ -497,6 +497,17 @@ class BookingProvider extends ChangeNotifier {
     return ok == true;
   }
 
+  Future<bool> confirmCustomerReturn(
+    String accessToken, {
+    required int tripId,
+  }) async {
+    final ok = await _run(() async {
+      await _repository.confirmCustomerReturn(accessToken, tripId: tripId);
+      return true;
+    });
+    return ok == true;
+  }
+
   Future<bool> submitTripRating(
     String accessToken, {
     required int tripId,

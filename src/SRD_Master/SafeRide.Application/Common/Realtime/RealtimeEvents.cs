@@ -25,6 +25,36 @@ public sealed record TripStatusChangedEvent(
     DateTime UpdatedAt,
     BookingStatus? BookingStatus = null);
 
+public sealed record TripPaymentPendingEvent(
+    long TripId,
+    long BookingId,
+    Guid CustomerId,
+    Guid DriverId,
+    long? PaymentId,
+    PaymentMethod? PaymentMethod,
+    PaymentStatus PaymentStatus,
+    decimal Amount,
+    string Currency,
+    TripStatus TripStatus,
+    DateTime CreatedAt,
+    string Message,
+    BookingStatus? BookingStatus = null);
+
+public sealed record TripPaymentSucceededEvent(
+    long TripId,
+    long BookingId,
+    Guid CustomerId,
+    Guid DriverId,
+    long PaymentId,
+    PaymentMethod PaymentMethod,
+    PaymentStatus PaymentStatus,
+    decimal Amount,
+    string Currency,
+    TripStatus TripStatus,
+    DateTime PaidAt,
+    string Message,
+    BookingStatus? BookingStatus = null);
+
 public sealed record TripCreatedEvent(
     long TripId,
     long BookingId,

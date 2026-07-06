@@ -119,7 +119,7 @@ public sealed class TripsController : ControllerBase
     /// Driver confirms vehicle return on behalf of the customer.
     /// Requires 1–3 evidence photos (multipart/form-data, field name: evidence).
     /// Server captures GPS from Redis; the driver cannot supply source-of-truth location.
-    /// Moves trip WAITING_RETURN_CONFIRM → RETURN_CONFIRMED.
+    /// Moves trip WAITING_RETURN_CONFIRM to RETURN_CONFIRMED, then WAITING_PAYMENT.
     /// </summary>
     [HttpPost("{tripId:long}/return-confirmation/driver")]
     [Authorize(Roles = "Driver")]

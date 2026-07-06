@@ -623,7 +623,17 @@ public sealed class BookingsController : ControllerBase
                             evidence.ImageUrl,
                             evidence.ContentType,
                             evidence.DisplayOrder))
-                        .ToList()));
+                        .ToList()),
+            Payment: result.Payment is null
+                ? null
+                : new TripPaymentSummaryResponse(
+                    result.Payment.PaymentId,
+                    result.Payment.PaymentMethod,
+                    result.Payment.PaymentStatus,
+                    result.Payment.Amount,
+                    result.Payment.Currency,
+                    result.Payment.PaidAt,
+                    result.Payment.Message));
     }
 
     private bool TryGetCustomerId(out Guid customerId)
