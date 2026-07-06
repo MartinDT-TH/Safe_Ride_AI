@@ -100,5 +100,53 @@ public static class PolylineUtils
         return path[^1];
     }
 
+    /// <summary>
+    /// Calculates the distance along the path to the point closest to the target coordinates.
+    /// </summary>
+    public static double GetDistanceAlongPathToClosestPoint(List<(double Lat, double Lng)> path, double targetLat, double targetLng)
+    {
+        if (path == null || path.Count < 2) return 0;
+
+        double minDistance = double.MaxValue;
+        double bestAccumulatedDistance = 0;
+        double currentAccumulatedDistance = 0;
+
+        for (int i = 0; i < path.Count - 1; i++)
+        {
+            var start = path[i];
+            var end = path[i + 1];
+
+            double metersPerLat = 111320.0;
+            double metersPerLng = 111320.0 * Math.Cos(targetLat * Math.PI / 180.0);
+
+            double ax = (start.Lng - targetLng) * metersPerLng;
+            double ay = (start.Lat - targetLat) * metersPerLat;
+            double bx = (end.Lng - targetLng) * metersPerLng;
+            double by = (end.Lat - targetLat) * metersPerLat;
+
+            double abx = bx - ax;
+            double aby = by - ay;
+            double abLengthSquared = abx * abx + aby * aby;
+
+            double fraction = abLengthSquared == 0 ? 0.0 : Math.Clamp((-ax * abx - ay * aby) / abLengthSquared, 0, 1);
+
+            double px = ax + fraction * abx;
+            double py = ay + fraction * aby;
+            double distanceToSegment = Math.Sqrt(px * px + py * py);
+
+            double segmentDist = GetDistance(start.Lat, start.Lng, end.Lat, end.Lng);
+
+            if (distanceToSegment < minDistance)
+            {
+                minDistance = distanceToSegment;
+                bestAccumulatedDistance = currentAccumulatedDistance + (fraction * segmentDist);
+            }
+
+            currentAccumulatedDistance += segmentDist;
+        }
+
+        return bestAccumulatedDistance;
+    }
+
     private static double ToRadians(double degree) => degree * Math.PI / 180;
 }

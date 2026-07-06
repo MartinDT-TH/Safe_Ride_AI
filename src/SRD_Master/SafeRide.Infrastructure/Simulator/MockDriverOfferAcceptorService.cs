@@ -300,18 +300,15 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
 
         foreach (var mockDriver in _mockDrivers.Where(d => d.IsActive))
         {
-            // Find trips where customer confirmed the offer
-            var confirmedTrips = await (
-                from offer in dbContext.BookingDriverOffers.AsNoTracking()
-                join trip in dbContext.Trips.AsNoTracking() on offer.BookingId equals trip.BookingId
-                where offer.DriverId == mockDriver.DriverId
-                    && offer.OfferStatus == DriverOfferStatus.CustomerConfirmed
-                    && trip.DriverId == mockDriver.DriverId
-                    && trip.TripStatus == TripStatus.ACCEPTED
-                select new { trip.Id, trip.BookingId }
-            ).ToListAsync(cancellationToken);
+            var activeTrips = await dbContext.Trips.AsNoTracking()
+                .Where(trip => trip.DriverId == mockDriver.DriverId
+                    && (trip.TripStatus == TripStatus.ACCEPTED 
+                        || trip.TripStatus == TripStatus.DRIVER_ARRIVING
+                        || trip.TripStatus == TripStatus.IN_PROGRESS))
+                .Select(trip => new { trip.Id, trip.BookingId })
+                .ToListAsync(cancellationToken);
 
-            foreach (var trip in confirmedTrips)
+            foreach (var trip in activeTrips)
             {
                 if (!mockDriver.StartedTrips.Add(trip.Id)) continue;
 
@@ -349,13 +346,18 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
                 .FirstOrDefaultAsync(b => b.BookingId == bookingId, cancellationToken);
             if (booking is null || booking.BookingStatus == BookingStatus.Cancelled) return;
 
-            // 1. DRIVER_ARRIVING: Current -> Pickup
-            await tripStatusService.UpdateDriverTripStatusAsync(
-                mockDriver.DriverId,
-                trip.Id,
-                TripStatus.DRIVER_ARRIVING,
-                cancellationToken);
-            trip = await dbContext.Trips.AsNoTracking().FirstAsync(t => t.Id == trip.Id, cancellationToken);
+            if (trip.TripStatus == TripStatus.ACCEPTED || trip.TripStatus == TripStatus.DRIVER_ARRIVING)
+            {
+                // 1. DRIVER_ARRIVING: Current -> Pickup
+                if (trip.TripStatus == TripStatus.ACCEPTED)
+                {
+                    await tripStatusService.UpdateDriverTripStatusAsync(
+                        mockDriver.DriverId,
+                        trip.Id,
+                        TripStatus.DRIVER_ARRIVING,
+                        cancellationToken);
+                    trip = await dbContext.Trips.AsNoTracking().FirstAsync(t => t.Id == trip.Id, cancellationToken);
+                }
 
             var mapRoutingService = scope.ServiceProvider.GetRequiredService<IMapRoutingService>();
             List<(double Lat, double Lng)> arrivalPath;
@@ -395,32 +397,44 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
                 arrivalPath = new List<(double Lat, double Lng)> { (mockDriver.CurrentLat, mockDriver.CurrentLng), (booking.PickupLocation.Y, booking.PickupLocation.X) };
             }
             // chỉnh tốc độ di chuyển của tài xế 13.8 m/s ~ 50 km/h có thể thay đổi tùy ý
-            bool arrived = await MoveDriverAlongPathAsync(mockDriver, arrivalPath, 13.8, booking, trip, realtimeService, redisService, dateTimeProvider, logger, cancellationToken);
-            if (!arrived) return;
+                bool arrived = await MoveDriverAlongPathAsync(mockDriver, arrivalPath, 13.8, booking, trip, realtimeService, redisService, dateTimeProvider, logger, cancellationToken);
+                if (!arrived) return;
+            }
 
             // Re-fetch to check for cancellation
             trip = await dbContext.Trips.AsNoTracking().FirstOrDefaultAsync(t => t.Id == trip.Id, cancellationToken);
             if (trip is null || trip.TripStatus == TripStatus.CANCELLED) return;
 
-            // 2. ARRIVED: At pickup
-            await tripStatusService.UpdateDriverTripStatusAsync(
-                mockDriver.DriverId,
-                trip.Id,
-                TripStatus.ARRIVED,
-                cancellationToken);
-            await Task.Delay(5000, cancellationToken);
+            if (trip.TripStatus == TripStatus.DRIVER_ARRIVING || trip.TripStatus == TripStatus.ARRIVED)
+            {
+                // 2. ARRIVED: At pickup
+                if (trip.TripStatus == TripStatus.DRIVER_ARRIVING)
+                {
+                    await tripStatusService.UpdateDriverTripStatusAsync(
+                        mockDriver.DriverId,
+                        trip.Id,
+                        TripStatus.ARRIVED,
+                        cancellationToken);
+                }
+                await Task.Delay(5000, cancellationToken);
+            }
 
             // Re-fetch to check for cancellation
             trip = await dbContext.Trips.AsNoTracking().FirstOrDefaultAsync(t => t.Id == trip.Id, cancellationToken);
             if (trip is null || trip.TripStatus == TripStatus.CANCELLED) return;
 
-            // 3. IN_PROGRESS: Pickup -> Destination
-            await tripStatusService.UpdateDriverTripStatusAsync(
-                mockDriver.DriverId,
-                trip.Id,
-                TripStatus.IN_PROGRESS,
-                cancellationToken);
-            trip = await dbContext.Trips.AsNoTracking().FirstAsync(t => t.Id == trip.Id, cancellationToken);
+            if (trip.TripStatus == TripStatus.ARRIVED || trip.TripStatus == TripStatus.IN_PROGRESS)
+            {
+                // 3. IN_PROGRESS: Pickup -> Destination
+                if (trip.TripStatus == TripStatus.ARRIVED)
+                {
+                    await tripStatusService.UpdateDriverTripStatusAsync(
+                        mockDriver.DriverId,
+                        trip.Id,
+                        TripStatus.IN_PROGRESS,
+                        cancellationToken);
+                    trip = await dbContext.Trips.AsNoTracking().FirstAsync(t => t.Id == trip.Id, cancellationToken);
+                }
             if (!autoCompleteTrips)
             {
                 logger.LogInformation("Trip {TripId} left IN_PROGRESS for manual completion by customer or driver", trip.Id);
@@ -443,7 +457,8 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
                 completed = await MoveDriverAlongPathAsync(mockDriver, decodedPath, 11.1, booking, trip, realtimeService, redisService, dateTimeProvider, logger, cancellationToken);
             }
 
-            if (!completed) return;
+                if (!completed) return;
+            }
 
             // Re-fetch to check for cancellation
             trip = await dbContext.Trips.AsNoTracking().FirstOrDefaultAsync(t => t.Id == trip.Id, cancellationToken);
@@ -469,6 +484,25 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
 
         double totalDistance = PolylineUtils.CalculateTotalDistance(path);
         double currentDistance = 0;
+        
+        // Resume logic: Use driver's current coordinates to find where they left off
+        var locStr = await redisService.GetAsync(RedisKeys.DriverLocation(mockDriver.DriverId));
+        if (!string.IsNullOrEmpty(locStr))
+        {
+            var parts = locStr.Split(',');
+            if (parts.Length == 2 && double.TryParse(parts[0], out var lat) && double.TryParse(parts[1], out var lng))
+            {
+                // Only resume if they actually moved significantly, to avoid getting stuck at start
+                var startDist = PolylineUtils.GetDistance(path[0].Lat, path[0].Lng, lat, lng);
+                if (startDist > 5.0)
+                {
+                    currentDistance = PolylineUtils.GetDistanceAlongPathToClosestPoint(path, lat, lng);
+                    mockDriver.CurrentLat = lat;
+                    mockDriver.CurrentLng = lng;
+                }
+            }
+        }
+
         const int intervalMs = 1000;
         int checkCounter = 0;
 
