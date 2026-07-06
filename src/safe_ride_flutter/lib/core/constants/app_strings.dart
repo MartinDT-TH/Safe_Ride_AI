@@ -221,6 +221,8 @@ abstract final class AppConfig {
     'API_BASE_URL',
     defaultValue: 'http://192.168.100.116:5026/api/',
   );
+  // https://safe-ride-ai.onrender.com
+  // http://192.168.100.116:5026
   static const forceWebSockets = bool.fromEnvironment(
     'FORCE_WEBSOCKETS',
     defaultValue: true, // Dev only or config-based

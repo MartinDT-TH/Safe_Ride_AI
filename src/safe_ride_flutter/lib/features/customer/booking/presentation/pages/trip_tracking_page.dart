@@ -1243,8 +1243,25 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     _tripStatusPollingTimer?.cancel();
 
     final bookingProvider = context.read<BookingProvider>();
-    final booking =
-        completedBooking ?? bookingProvider.activeBooking ?? widget.booking;
+    final token = context.read<AuthProvider>().token;
+    BookingResponse? finalBooking = completedBooking;
+
+    if (finalBooking == null && token != null && token.isNotEmpty) {
+      try {
+        final refreshed = await bookingProvider.refreshActiveBookingDetails(
+          token,
+          bookingId: widget.booking.bookingId,
+        );
+        if (refreshed != null) {
+          finalBooking = refreshed;
+        }
+      } catch (e) {
+        debugPrint('Failed to refresh latest booking before summary: $e');
+      }
+    }
+
+    if (!mounted) return;
+    final booking = finalBooking ?? bookingProvider.activeBooking ?? widget.booking;
 
     await Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => TripSummaryPage(booking: booking)),
@@ -1256,7 +1273,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   static String _driverLocationHandlerKey(int tripId) =>
       'tripTrackingLocation:$tripId';
   static bool _isCompletedStatus(String? status) =>
-      status == 'COMPLETED' || status == '4';
+      status == 'COMPLETED' ||
+      status == '4' ||
+      status == 'WAITING_RETURN_CONFIRM';
 }
 
 class _RouteProgress {

@@ -421,8 +421,8 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
         width: p.width,
         zIndex: p.zIndex,
         patterns: p.isDashed
-            ? [gmap.PatternItem.dash(12), gmap.PatternItem.gap(8)]
-            : [],
+            ? <gmap.PatternItem>[gmap.PatternItem.dash(12), gmap.PatternItem.gap(8)]
+            : const <gmap.PatternItem>[],
         startCap: p.endCapRound ? gmap.Cap.roundCap : gmap.Cap.buttCap,
         endCap: p.endCapRound ? gmap.Cap.roundCap : gmap.Cap.buttCap,
         jointType: gmap.JointType.round,

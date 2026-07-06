@@ -320,9 +320,24 @@ public sealed class TripStatusService : ITripStatusService
             case TripStatus.IN_PROGRESS:
                 trip.StartedAt ??= utcNow;
                 break;
+            case TripStatus.WAITING_RETURN_CONFIRM:
+                trip.StartedAt ??= utcNow;
+                if (trip.ActualFare == null)
+                {
+                    trip.ActualFare = trip.Booking.EstimatedFare;
+                    var discountAmount = trip.Booking.BookingPromotions.FirstOrDefault()?.DiscountAmount ?? 0m;
+                    trip.FinalFare = Math.Max(0m, trip.Booking.EstimatedFare - discountAmount);
+                }
+                break;
             case TripStatus.COMPLETED:
                 trip.StartedAt ??= utcNow;
                 trip.CompletedAt ??= utcNow;
+                if (trip.ActualFare == null)
+                {
+                    trip.ActualFare = trip.Booking.EstimatedFare;
+                    var discountAmount = trip.Booking.BookingPromotions.FirstOrDefault()?.DiscountAmount ?? 0m;
+                    trip.FinalFare = Math.Max(0m, trip.Booking.EstimatedFare - discountAmount);
+                }
                 trip.Booking.BookingStatus = BookingStatus.Completed;
                 trip.Booking.UpdatedAt = utcNow;
                 if (previousTripStatus != TripStatus.COMPLETED &&
