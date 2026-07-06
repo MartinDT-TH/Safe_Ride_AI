@@ -61,16 +61,48 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
     final isPaid =
         _paymentStatus?.isSuccess == true || _qrPayment?.isSuccess == true;
 
-    return Scaffold(
-      backgroundColor: _surface,
-      appBar: AppBar(
+    return PopScope(
+      canPop: isPaid,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (_selectedMode != null) {
+          setState(() {
+            _selectedMode = null;
+          });
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Vui lòng hoàn thành thanh toán trước khi thoát'),
+            ),
+          );
+        }
+      },
+      child: Scaffold(
         backgroundColor: _surface,
-        elevation: 0.8,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
-          color: _primary,
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+        appBar: AppBar(
+          backgroundColor: _surface,
+          elevation: 0.8,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded),
+            color: _primary,
+            onPressed: () {
+              if (isPaid) {
+                Navigator.of(context).pop();
+                return;
+              }
+              if (_selectedMode != null) {
+                setState(() {
+                  _selectedMode = null;
+                });
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Vui lòng hoàn thành thanh toán trước khi thoát'),
+                  ),
+                );
+              }
+            },
+          ),
         title: const Text(
           'Thanh toán chuyến đi',
           maxLines: 1,
@@ -145,6 +177,7 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
           ),
         ),
       ),
+      ),
     );
   }
 
@@ -194,6 +227,28 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
               color: _primaryDark,
               fontSize: 24,
               fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 32),
+          SizedBox(
+            width: double.infinity,
+            height: 54,
+            child: ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: const Text(
+                'Về màn hình chính',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ),
         ],
@@ -293,6 +348,23 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
                 ),
               ),
             ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextButton(
+          onPressed: () {
+            setState(() {
+              _selectedMode = null;
+            });
+          },
+          child: const Text(
+            'Chuyển phương thức khác',
+            style: TextStyle(
+              color: _primary,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              decoration: TextDecoration.underline,
+            ),
           ),
         ),
       ],

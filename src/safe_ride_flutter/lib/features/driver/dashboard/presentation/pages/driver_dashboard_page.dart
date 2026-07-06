@@ -867,10 +867,6 @@ class _ActiveTripCard extends StatelessWidget {
         status == 'ACCEPTED' ||
         status == 'DRIVER_ARRIVING' ||
         status == 'ARRIVED';
-    final canStartArriving = status == 'ACCEPTED';
-    final canMarkArrived = status == 'DRIVER_ARRIVING';
-    final canStartTrip = status == 'ARRIVED';
-    final canComplete = status == 'IN_PROGRESS';
     final isWaitingReturn = status == 'WAITING_RETURN_CONFIRM';
     final isReturnConfirmed = status == 'RETURN_CONFIRMED';
 
@@ -935,7 +931,7 @@ class _ActiveTripCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 20),
-            if (canStartArriving)
+            if (status == 'ACCEPTED')
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -952,7 +948,7 @@ class _ActiveTripCard extends StatelessWidget {
                   style: _primaryButtonStyle(),
                 ),
               )
-            else if (canCancel || canMarkArrived)
+            else if (status == 'DRIVER_ARRIVING')
               Row(
                 children: [
                   if (canCancel) ...[
@@ -980,25 +976,24 @@ class _ActiveTripCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 12),
                   ],
-                  if (canMarkArrived)
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: isUpdating
-                            ? null
-                            : () => _runTripAction(
-                                context,
-                                () => context
-                                    .read<DriverDashboardProvider>()
-                                    .markArrived(),
-                              ),
-                        icon: const Icon(Icons.flag_rounded),
-                        label: const Text('Đã tới đón'),
-                        style: _primaryButtonStyle(),
-                      ),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: isUpdating
+                          ? null
+                          : () => _runTripAction(
+                              context,
+                              () => context
+                                  .read<DriverDashboardProvider>()
+                                  .markArrived(),
+                            ),
+                      icon: const Icon(Icons.flag_rounded),
+                      label: const Text('Đã tới đón'),
+                      style: _primaryButtonStyle(),
                     ),
+                  ),
                 ],
               )
-            else if (canStartTrip)
+            else if (status == 'ARRIVED')
               Row(
                 children: [
                   if (canCancel) ...[
@@ -1043,7 +1038,7 @@ class _ActiveTripCard extends StatelessWidget {
                   ),
                 ],
               )
-            else if (canComplete)
+            else if (status == 'IN_PROGRESS')
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
