@@ -3,18 +3,21 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NetTopologySuite.Geometries;
 using SafeRide.Infrastructure.Persistence;
 
 #nullable disable
 
-namespace SafeRide.Infrastructure.Migrations
+namespace SafeRide.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260702112501_AddTripActualFinalFare")]
+    partial class AddTripActualFinalFare
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1270,125 +1273,6 @@ namespace SafeRide.Infrastructure.Migrations
                         });
                 });
 
-            modelBuilder.Entity("SafeRide.Domain.Entities.TripReturnConfirmation", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<DateTime>("ConfirmedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime2")
-                        .HasDefaultValueSql("(getutcdate())");
-
-                    b.Property<Guid>("ConfirmedByUserId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime2")
-                        .HasDefaultValueSql("(getutcdate())");
-
-                    b.Property<Guid>("DriverId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<decimal?>("DriverLatitude")
-                        .HasColumnType("decimal(9, 6)");
-
-                    b.Property<decimal?>("DriverLongitude")
-                        .HasColumnType("decimal(9, 6)");
-
-                    b.Property<string>("HandoverStatus")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
-
-                    b.Property<string>("Note")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
-                    b.Property<long>("TripId")
-                        .HasColumnType("bigint");
-
-                    b.HasKey("Id")
-                        .HasName("PK_TripReturnConfirmations");
-
-                    b.HasIndex("ConfirmedByUserId");
-
-                    b.HasIndex("DriverId");
-
-                    b.HasIndex("TripId");
-
-                    b.HasIndex("TripId", "HandoverStatus");
-
-                    b.ToTable("TripReturnConfirmations", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_TripReturnConfirmations_DriverLatitude", "[DriverLatitude] IS NULL OR ([DriverLatitude] >= -90 AND [DriverLatitude] <= 90)");
-
-                            t.HasCheckConstraint("CK_TripReturnConfirmations_DriverLongitude", "[DriverLongitude] IS NULL OR ([DriverLongitude] >= -180 AND [DriverLongitude] <= 180)");
-
-                            t.HasCheckConstraint("CK_TripReturnConfirmations_HandoverStatus", "[HandoverStatus] IN ('Pending', 'CustomerConfirmed', 'DriverConfirmed', 'Disputed', 'Resolved')");
-                        });
-                });
-
-            modelBuilder.Entity("SafeRide.Domain.Entities.TripReturnEvidence", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("ContentType")
-                        .HasMaxLength(100)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime2")
-                        .HasDefaultValueSql("(getutcdate())");
-
-                    b.Property<int>("DisplayOrder")
-                        .HasColumnType("int");
-
-                    b.Property<long?>("FileSizeBytes")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("ImagePublicId")
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.Property<string>("ImageUrl")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<string>("OriginalFileName")
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.Property<long>("TripReturnConfirmationId")
-                        .HasColumnType("bigint");
-
-                    b.HasKey("Id")
-                        .HasName("PK_TripReturnEvidence");
-
-                    b.HasIndex("TripReturnConfirmationId");
-
-                    b.HasIndex("TripReturnConfirmationId", "DisplayOrder")
-                        .IsUnique();
-
-                    b.ToTable("TripReturnEvidence", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_TripReturnEvidence_DisplayOrder", "[DisplayOrder] BETWEEN 1 AND 3");
-
-                            t.HasCheckConstraint("CK_TripReturnEvidence_FileSizeBytes", "[FileSizeBytes] IS NULL OR [FileSizeBytes] > 0");
-                        });
-                });
-
             modelBuilder.Entity("SafeRide.Domain.Entities.TripShare", b =>
                 {
                     b.Property<long>("Id")
@@ -1933,45 +1817,6 @@ namespace SafeRide.Infrastructure.Migrations
                     b.Navigation("Driver");
                 });
 
-            modelBuilder.Entity("SafeRide.Domain.Entities.TripReturnConfirmation", b =>
-                {
-                    b.HasOne("SafeRide.Domain.Entities.AspNetUser", "ConfirmedByUser")
-                        .WithMany()
-                        .HasForeignKey("ConfirmedByUserId")
-                        .IsRequired()
-                        .HasConstraintName("FK_TripReturnConfirmations_AspNetUsers");
-
-                    b.HasOne("SafeRide.Domain.Entities.DriverProfile", "Driver")
-                        .WithMany()
-                        .HasForeignKey("DriverId")
-                        .IsRequired()
-                        .HasConstraintName("FK_TripReturnConfirmations_DriverProfiles");
-
-                    b.HasOne("SafeRide.Domain.Entities.Trip", "Trip")
-                        .WithMany("ReturnConfirmations")
-                        .HasForeignKey("TripId")
-                        .IsRequired()
-                        .HasConstraintName("FK_TripReturnConfirmations_Trips");
-
-                    b.Navigation("ConfirmedByUser");
-
-                    b.Navigation("Driver");
-
-                    b.Navigation("Trip");
-                });
-
-            modelBuilder.Entity("SafeRide.Domain.Entities.TripReturnEvidence", b =>
-                {
-                    b.HasOne("SafeRide.Domain.Entities.TripReturnConfirmation", "TripReturnConfirmation")
-                        .WithMany("Evidence")
-                        .HasForeignKey("TripReturnConfirmationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("FK_TripReturnEvidence_TripReturnConfirmations");
-
-                    b.Navigation("TripReturnConfirmation");
-                });
-
             modelBuilder.Entity("SafeRide.Domain.Entities.TripShare", b =>
                 {
                     b.HasOne("SafeRide.Domain.Entities.AspNetUser", "RecipientUser")
@@ -2125,8 +1970,6 @@ namespace SafeRide.Infrastructure.Migrations
 
                     b.Navigation("Reports");
 
-                    b.Navigation("ReturnConfirmations");
-
                     b.Navigation("RouteDeviations");
 
                     b.Navigation("SOSAlerts");
@@ -2134,11 +1977,6 @@ namespace SafeRide.Infrastructure.Migrations
                     b.Navigation("TripShares");
 
                     b.Navigation("WalletTransactions");
-                });
-
-            modelBuilder.Entity("SafeRide.Domain.Entities.TripReturnConfirmation", b =>
-                {
-                    b.Navigation("Evidence");
                 });
 
             modelBuilder.Entity("SafeRide.Domain.Entities.Vehicle", b =>

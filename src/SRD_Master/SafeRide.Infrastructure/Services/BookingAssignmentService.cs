@@ -171,12 +171,15 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         await EnsureDriverHasNoActiveTripAsync(offer.DriverId, cancellationToken);
 
         // Flow: create the Trip only after customer confirmation, then assign driver and cancel competing offers.
+        var price = BookingPriceMapper.FromBooking(booking);
         trip = new Trip
         {
             BookingId = booking.BookingId,
             DriverId = offer.DriverId,
             TripStatus = TripStatus.ACCEPTED,
             DriverAssignedAt = utcNow,
+            ActualFare = price.OriginalFare,
+            FinalFare = price.FinalFare,
             RoutePolyline = booking.RoutePolyline,
             CreatedAt = utcNow
         };

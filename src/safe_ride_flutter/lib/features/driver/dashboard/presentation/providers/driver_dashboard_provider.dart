@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
+import 'package:http_parser/http_parser.dart';
 
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/network/auth_header.dart';
@@ -359,6 +361,89 @@ class DriverDashboardProvider extends ChangeNotifier {
     }
   }
 
+  /// Ends an IN_PROGRESS trip — moves it to WAITING_RETURN_CONFIRM.
+  /// Returns true on success. Does NOT set COMPLETED.
+  Future<bool> endTripAsync() async {
+    final trip = _activeTrip;
+    final token = _accessToken;
+    if (trip == null || token == null || _isUpdatingTrip) {
+      return false;
+    }
+
+    _isUpdatingTrip = true;
+    notifyListeners();
+    try {
+      await _dio.post(
+        ApiEndpoints.endTrip(trip.tripId),
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+        ),
+      );
+      _activeTrip = trip.copyWith(tripStatus: 'WAITING_RETURN_CONFIRM');
+      return true;
+    } catch (e) {
+      debugPrint('Failed to end trip: $e');
+      rethrow;
+    } finally {
+      _isUpdatingTrip = false;
+      notifyListeners();
+    }
+  }
+
+  /// Driver submits 1–3 evidence photos to confirm vehicle return on behalf of customer.
+  /// Moves trip from WAITING_RETURN_CONFIRM → RETURN_CONFIRMED.
+  Future<void> confirmReturnByDriver({
+    required int tripId,
+    required List<File> evidenceFiles,
+    String? note,
+  }) async {
+    final token = _accessToken;
+    if (token == null) throw Exception('Not authenticated');
+    if (evidenceFiles.isEmpty || evidenceFiles.length > 3) {
+      throw Exception('Cần từ 1 đến 3 ảnh bằng chứng.');
+    }
+
+    final formFields = <String, dynamic>{};
+    if (note != null && note.trim().isNotEmpty) {
+      formFields['note'] = note.trim();
+    }
+
+    // Attach all evidence photos; the backend reads all files from the form.
+    final multipartFiles = <MultipartFile>[];
+    for (final file in evidenceFiles) {
+      final fileName = file.path.split(RegExp(r'[/\\]')).last;
+      final ext = fileName.split('.').last.toLowerCase();
+      final mimeType = switch (ext) {
+        'png' => AppValues.pngMimeType,
+        'webp' => AppValues.webpMimeType,
+        _ => AppValues.jpegMimeType,
+      };
+      multipartFiles.add(
+        await MultipartFile.fromFile(
+          file.path,
+          filename: fileName,
+          contentType: MediaType.parse(mimeType),
+        ),
+      );
+    }
+    formFields['evidence'] = multipartFiles;
+
+    await _dio.post(
+      ApiEndpoints.driverReturnConfirmation(tripId),
+      data: FormData.fromMap(formFields),
+      options: Options(
+        headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+        contentType: AppValues.multipartFormData,
+      ),
+    );
+
+    // Reflect locally — SignalR TripStatusChanged will arrive shortly and confirm.
+    if (_activeTrip?.tripId == tripId) {
+      _activeTrip = _activeTrip!.copyWith(tripStatus: 'RETURN_CONFIRMED');
+      notifyListeners();
+    }
+  }
+
   Future<void> loadActiveTrip() async {
     final token = _accessToken;
     if (token == null || token.isEmpty) {
@@ -627,8 +712,10 @@ class DriverDashboardProvider extends ChangeNotifier {
         1 => 'DRIVER_ARRIVING',
         2 => 'ARRIVED',
         3 => 'IN_PROGRESS',
-        4 => 'COMPLETED',
-        5 => 'CANCELLED',
+        4 => 'WAITING_RETURN_CONFIRM',
+        5 => 'RETURN_CONFIRMED',
+        6 => 'COMPLETED',
+        7 => 'CANCELLED',
         _ => value.toString(),
       };
     }
@@ -639,8 +726,10 @@ class DriverDashboardProvider extends ChangeNotifier {
       '1' => 'DRIVER_ARRIVING',
       '2' => 'ARRIVED',
       '3' => 'IN_PROGRESS',
-      '4' => 'COMPLETED',
-      '5' => 'CANCELLED',
+      '4' => 'WAITING_RETURN_CONFIRM',
+      '5' => 'RETURN_CONFIRMED',
+      '6' => 'COMPLETED',
+      '7' => 'CANCELLED',
       _ => text,
     };
   }

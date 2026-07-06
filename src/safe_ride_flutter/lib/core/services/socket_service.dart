@@ -168,8 +168,10 @@ class TripStatusUpdate {
         1 => 'DRIVER_ARRIVING',
         2 => 'ARRIVED',
         3 => 'IN_PROGRESS',
-        4 => 'COMPLETED',
-        5 => 'CANCELLED',
+        4 => 'WAITING_RETURN_CONFIRM',
+        5 => 'RETURN_CONFIRMED',
+        6 => 'COMPLETED',
+        7 => 'CANCELLED',
         _ => value.toString(),
       };
     }
@@ -180,8 +182,10 @@ class TripStatusUpdate {
       '1' => 'DRIVER_ARRIVING',
       '2' => 'ARRIVED',
       '3' => 'IN_PROGRESS',
-      '4' => 'COMPLETED',
-      '5' => 'CANCELLED',
+      '4' => 'WAITING_RETURN_CONFIRM',
+      '5' => 'RETURN_CONFIRMED',
+      '6' => 'COMPLETED',
+      '7' => 'CANCELLED',
       _ => text,
     };
   }
@@ -310,8 +314,10 @@ class BookingUpdate {
         1 => 'DRIVER_ARRIVING',
         2 => 'ARRIVED',
         3 => 'IN_PROGRESS',
-        4 => 'COMPLETED',
-        5 => 'CANCELLED',
+        4 => 'WAITING_RETURN_CONFIRM',
+        5 => 'RETURN_CONFIRMED',
+        6 => 'COMPLETED',
+        7 => 'CANCELLED',
         _ => value.toString(),
       };
     }
@@ -322,8 +328,10 @@ class BookingUpdate {
       '1' => 'DRIVER_ARRIVING',
       '2' => 'ARRIVED',
       '3' => 'IN_PROGRESS',
-      '4' => 'COMPLETED',
-      '5' => 'CANCELLED',
+      '4' => 'WAITING_RETURN_CONFIRM',
+      '5' => 'RETURN_CONFIRMED',
+      '6' => 'COMPLETED',
+      '7' => 'CANCELLED',
       _ => text,
     };
   }
@@ -341,6 +349,7 @@ class SocketService {
   bool _driverOfferReceivedListenerAttached = false;
   bool _driverOfferClosedListenerAttached = false;
   bool _bookingListenerAttached = false;
+  final List<void Function()> _connectionLostHandlers = [];
   final Map<String, void Function(DriverLocationUpdate update)>
   _driverLocationHandlers = {};
   final Map<String, void Function(TripStatusUpdate update)>
@@ -359,6 +368,16 @@ class SocketService {
   bool get isConnected => _connection?.state == HubConnectionState.Connected;
 
   MobileConfigService get _configService => _mobileConfigService;
+
+  /// Register a callback that fires when SignalR connection is permanently lost
+  /// (i.e. automatic reconnect exhausted all retries and gave up).
+  void addConnectionLostHandler(void Function() handler) {
+    _connectionLostHandlers.add(handler);
+  }
+
+  void removeConnectionLostHandler(void Function() handler) {
+    _connectionLostHandlers.remove(handler);
+  }
 
   Future<void> connect(String accessToken) async {
     if (accessToken.isEmpty) {
@@ -411,9 +430,26 @@ class SocketService {
       _rejoinGroups();
     });
 
+    // When automatic reconnect is exhausted, SignalR fires onclose. We null out
+    // the connection object so the next connect() call rebuilds it from scratch.
+    _connection!.onclose(({error}) {
+      debugPrint('SOCKET: Connection permanently closed. error=$error');
+      _connection = null;
+      _driverLocationListenerAttached = false;
+      _tripStatusListenerAttached = false;
+      _driverOfferReceivedListenerAttached = false;
+      _driverOfferClosedListenerAttached = false;
+      _bookingListenerAttached = false;
+      _joinedTripGroups.clear();
+      _joinedBookingGroups.clear();
+      for (final h in List.of(_connectionLostHandlers)) {
+        h();
+      }
+    });
+
     if (_connection!.state == HubConnectionState.Disconnected) {
       try {
-        debugPrint('SOCKET: Starting connection...');
+        debugPrint('SOCKET: Starting connection to $_hubUrl ...');
         await _connection!.start();
         debugPrint('SOCKET: Connected successfully');
       } catch (e) {

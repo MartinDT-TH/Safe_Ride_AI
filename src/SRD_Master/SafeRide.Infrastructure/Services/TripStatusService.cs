@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Realtime;
 using SafeRide.Application.Features.Bookings;
+using SafeRide.Application.Features.Trips.DTOs;
 using SafeRide.Domain.Enums;
 using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
@@ -16,6 +17,7 @@ public sealed class TripStatusService : ITripStatusService
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IRedisService _redisService;
     private readonly IRealtimeNotificationService _realtimeNotificationService;
+    private readonly ITripReturnEvidenceStorage _tripReturnEvidenceStorage;
     private readonly IOptionsMonitor<TripTrackingOptions> _options;
 
     public TripStatusService(
@@ -23,12 +25,14 @@ public sealed class TripStatusService : ITripStatusService
         IDateTimeProvider dateTimeProvider,
         IRedisService redisService,
         IRealtimeNotificationService realtimeNotificationService,
+        ITripReturnEvidenceStorage tripReturnEvidenceStorage,
         IOptionsMonitor<TripTrackingOptions> options)
     {
         _dbContext = dbContext;
         _dateTimeProvider = dateTimeProvider;
         _redisService = redisService;
         _realtimeNotificationService = realtimeNotificationService;
+        _tripReturnEvidenceStorage = tripReturnEvidenceStorage;
         _options = options;
     }
 
@@ -94,6 +98,198 @@ public sealed class TripStatusService : ITripStatusService
             trip,
             TripStatus.COMPLETED,
             userId,
+            cancellationToken);
+    }
+
+    public async Task EndTripAsync(
+        Guid driverId,
+        long tripId,
+        CancellationToken cancellationToken)
+    {
+        var trip = await _dbContext.Trips
+            .Include(x => x.Booking)
+            .FirstOrDefaultAsync(
+                x => x.Id == tripId && x.DriverId == driverId,
+                cancellationToken);
+        if (trip is null)
+        {
+            throw new BookingException(
+                "trip.not_found",
+                "Khong tim thay chuyen di cua tai xe.",
+                404);
+        }
+
+        if (trip.TripStatus != TripStatus.IN_PROGRESS)
+        {
+            throw new BookingException(
+                "trip.invalid_status_transition",
+                "Chi co the ket thuc chuyen khi chuyen dang di chuyen.",
+                409);
+        }
+
+        await ApplyTripStatusAsync(
+            trip,
+            TripStatus.WAITING_RETURN_CONFIRM,
+            driverId,
+            cancellationToken);
+    }
+
+    public async Task ConfirmReturnByCustomerAsync(
+        Guid customerId,
+        long tripId,
+        bool vehicleReturnedConfirmed,
+        CancellationToken cancellationToken)
+    {
+        if (!vehicleReturnedConfirmed)
+        {
+            throw new BookingException(
+                "trip.return_confirmation_required",
+                "Khach hang can xac nhan da nhan lai xe.",
+                400);
+        }
+
+        var trip = await _dbContext.Trips
+            .Include(x => x.Booking)
+            .FirstOrDefaultAsync(
+                x => x.Id == tripId && x.Booking.CustomerId == customerId,
+                cancellationToken);
+        if (trip is null)
+        {
+            throw new BookingException(
+                "trip.not_found",
+                "Khong tim thay chuyen di cua khach hang.",
+                404);
+        }
+
+        if (trip.TripStatus != TripStatus.WAITING_RETURN_CONFIRM)
+        {
+            throw new BookingException(
+                "trip.invalid_status_transition",
+                "Chi co the xac nhan tra xe khi chuyen dang cho xac nhan.",
+                409);
+        }
+
+        var utcNow = _dateTimeProvider.UtcNow;
+        _dbContext.TripReturnConfirmations.Add(new Domain.Entities.TripReturnConfirmation
+        {
+            TripId = trip.Id,
+            DriverId = trip.DriverId,
+            ConfirmedByUserId = customerId,
+            HandoverStatus = HandoverStatus.CustomerConfirmed,
+            ConfirmedAt = utcNow,
+            CreatedAt = utcNow
+        });
+
+        await ApplyTripStatusAsync(
+            trip,
+            TripStatus.RETURN_CONFIRMED,
+            customerId,
+            cancellationToken);
+    }
+
+    public async Task ConfirmReturnByDriverAsync(
+        Guid driverId,
+        long tripId,
+        IReadOnlyList<ReturnEvidenceItem> evidence,
+        string? note,
+        CancellationToken cancellationToken)
+    {
+        // Evidence count guard: 1–3 photos required (mirrors DB CHECK constraint on DisplayOrder).
+        if (evidence.Count < 1 || evidence.Count > 3)
+        {
+            throw new BookingException(
+                "trip.return_evidence_invalid_count",
+                "Cần cung cấp từ 1 đến 3 ảnh bằng chứng bàn giao xe.",
+                400);
+        }
+
+        var trip = await _dbContext.Trips
+            .Include(x => x.Booking)
+            .FirstOrDefaultAsync(
+                x => x.Id == tripId && x.DriverId == driverId,
+                cancellationToken);
+        if (trip is null)
+        {
+            throw new BookingException(
+                "trip.not_found",
+                "Không tìm thấy chuyến đi của tài xế.",
+                404);
+        }
+
+        if (trip.TripStatus != TripStatus.WAITING_RETURN_CONFIRM)
+        {
+            throw new BookingException(
+                "trip.invalid_status_transition",
+                "Chỉ có thể xác nhận trả xe thay khách khi chuyến đang chờ xác nhận.",
+                409);
+        }
+
+        // GPS is read from the server-side Redis cache; the driver cannot inject coordinates.
+        decimal? capturedLatitude = null;
+        decimal? capturedLongitude = null;
+        var locationJson = await _redisService.GetAsync(RedisKeys.DriverLocation(driverId));
+        if (locationJson is not null)
+        {
+            var locationCache = JsonSerializer.Deserialize<DriverLocationCache>(locationJson);
+            if (locationCache is not null)
+            {
+                capturedLatitude = (decimal)locationCache.Latitude;
+                capturedLongitude = (decimal)locationCache.Longitude;
+            }
+        }
+
+        var utcNow = _dateTimeProvider.UtcNow;
+
+        // Upload each evidence photo; order is 1-based to satisfy the DB CHECK (1–3).
+        var storedFiles = new List<StoredReturnEvidenceFile>(evidence.Count);
+        for (var i = 0; i < evidence.Count; i++)
+        {
+            var item = evidence[i];
+            var stored = await _tripReturnEvidenceStorage.SaveAsync(
+                tripId,
+                displayOrder: i + 1,
+                item.FileName,
+                item.ContentType,
+                item.Content,
+                cancellationToken);
+            storedFiles.Add(stored);
+        }
+
+        var confirmation = new Domain.Entities.TripReturnConfirmation
+        {
+            TripId = trip.Id,
+            DriverId = driverId,
+            ConfirmedByUserId = driverId,   // driver acted on behalf of customer
+            HandoverStatus = HandoverStatus.DriverConfirmed,
+            ConfirmedAt = utcNow,
+            DriverLatitude = capturedLatitude,
+            DriverLongitude = capturedLongitude,
+            Note = note,
+            CreatedAt = utcNow
+        };
+
+        for (var i = 0; i < storedFiles.Count; i++)
+        {
+            var sf = storedFiles[i];
+            confirmation.Evidence.Add(new Domain.Entities.TripReturnEvidence
+            {
+                ImageUrl = sf.ImageUrl,
+                ImagePublicId = sf.ImagePublicId,
+                OriginalFileName = sf.OriginalFileName,
+                ContentType = sf.ContentType,
+                FileSizeBytes = sf.FileSizeBytes,
+                DisplayOrder = i + 1,
+                CreatedAt = utcNow
+            });
+        }
+
+        _dbContext.TripReturnConfirmations.Add(confirmation);
+
+        // ApplyTripStatusAsync calls SaveChangesAsync, so the confirmation is persisted atomically.
+        await ApplyTripStatusAsync(
+            trip,
+            TripStatus.RETURN_CONFIRMED,
+            driverId,
             cancellationToken);
     }
 
@@ -275,7 +471,8 @@ public sealed class TripStatusService : ITripStatusService
                 or TripStatus.CANCELLED,
             TripStatus.ARRIVED => requested is TripStatus.IN_PROGRESS
                 or TripStatus.CANCELLED,
-            TripStatus.IN_PROGRESS => requested is TripStatus.COMPLETED,
+            TripStatus.IN_PROGRESS => requested is TripStatus.COMPLETED || requested is TripStatus.WAITING_RETURN_CONFIRM,
+            TripStatus.WAITING_RETURN_CONFIRM => requested is TripStatus.RETURN_CONFIRMED,
             _ => false
         };
     }

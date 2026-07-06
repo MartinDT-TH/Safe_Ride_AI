@@ -344,15 +344,16 @@ class _LiveTripMapWidgetState extends State<LiveTripMapWidget> {
         isArriving ? widget.arrivalRoutePoints : widget.tripRoutePoints;
     if (route.length < 2) return rawPosition;
 
-    final snap = _findClosestRouteSnap(rawPosition, route);
+    final currentProgress = isArriving ? _arrivalRouteProgress : _tripRouteProgress;
+    final snap = _findClosestRouteSnap(rawPosition, route, currentProgress);
     if (snap == null || snap.distanceMeters > _offRouteThresholdMeters) {
       return rawPosition;
     }
 
     if (isArriving) {
-      _arrivalRouteProgress = math.max(_arrivalRouteProgress, snap.progress);
+      _arrivalRouteProgress = snap.progress;
     } else {
-      _tripRouteProgress = math.max(_tripRouteProgress, snap.progress);
+      _tripRouteProgress = snap.progress;
     }
 
     if (snap.distanceMeters <= _snapToRouteThresholdMeters) {
@@ -388,11 +389,19 @@ class _LiveTripMapWidgetState extends State<LiveTripMapWidget> {
   _RouteProgress? _findClosestRouteSnap(
     AppLatLng target,
     List<AppLatLng> route,
+    double currentProgress,
   ) {
     if (route.length < 2) return null;
 
     _RouteProgress? closest;
-    for (int i = 0; i < route.length - 1; i++) {
+    
+    // Windowed Search: Chỉ quét lùi lại tối đa 2 đoạn và tiến lên 10 đoạn so với vị trí hiện tại
+    // Điều này ngăn chặn việc xe bị hút vào các đoạn đường lặp vòng hoặc song song xa hơn trong lộ trình.
+    int currentSegment = currentProgress.floor();
+    int startIdx = math.max(0, currentSegment - 2);
+    int endIdx = math.min(route.length - 2, currentSegment + 10);
+
+    for (int i = startIdx; i <= endIdx; i++) {
       final snap = _projectPointOnSegment(target, route[i], route[i + 1], i);
       if (closest == null || snap.distanceMeters < closest.distanceMeters) {
         closest = snap;

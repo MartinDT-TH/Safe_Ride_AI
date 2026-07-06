@@ -20,6 +20,9 @@ public partial class Trip
     public DateTime? StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
 
+    public decimal? ActualFare { get; set; }
+    public decimal? FinalFare { get; set; }
+
     public string? RoutePolyline { get; set; }
 
     public bool IsSOSActivated { get; set; } = false;
@@ -46,6 +49,8 @@ public partial class Trip
     public virtual ICollection<SOSAlert> SOSAlerts { get; set; } = new List<SOSAlert>();
 
     public virtual ICollection<TripShare> TripShares { get; set; } = new List<TripShare>();
+
+    public virtual ICollection<TripReturnConfirmation> ReturnConfirmations { get; set; } = new List<TripReturnConfirmation>();
 
     public virtual ICollection<WalletTransaction> WalletTransactions { get; set; } = new List<WalletTransaction>();
 }

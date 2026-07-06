@@ -605,7 +605,25 @@ public sealed class BookingsController : ControllerBase
             CurrentSearchRadiusKm: result.CurrentSearchRadiusKm,
             ExpiresAt: result.ExpiresAt,
             EstimatedRemainingSeconds: result.EstimatedRemainingSeconds,
-            MatchingMessage: result.MatchingMessage);
+            MatchingMessage: result.MatchingMessage,
+            ReturnConfirmation: result.ReturnConfirmation is null
+                ? null
+                : new TripReturnConfirmationSummaryResponse(
+                    result.ReturnConfirmation.Id,
+                    result.ReturnConfirmation.HandoverStatus,
+                    result.ReturnConfirmation.DriverId,
+                    result.ReturnConfirmation.ConfirmedByUserId,
+                    result.ReturnConfirmation.ConfirmedAt,
+                    result.ReturnConfirmation.DriverLatitude,
+                    result.ReturnConfirmation.DriverLongitude,
+                    result.ReturnConfirmation.Note,
+                    result.ReturnConfirmation.Evidence
+                        .Select(evidence => new TripReturnEvidenceSummaryResponse(
+                            evidence.Id,
+                            evidence.ImageUrl,
+                            evidence.ContentType,
+                            evidence.DisplayOrder))
+                        .ToList()));
     }
 
     private bool TryGetCustomerId(out Guid customerId)

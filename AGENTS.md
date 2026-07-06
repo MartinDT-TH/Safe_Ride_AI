@@ -62,7 +62,7 @@ Flutter:
 
 ## Change Checks
 - For database changes, check EF entities, configurations, migrations, DTO/contracts, handlers/services, and tests together.
-- Only create, remove, update, drop, or rollback EF migrations/databases when explicitly requested. Use `SafeRide_EFCore_Migration_Workflow.md` for exact EF commands.
+- Use `SafeRide_EFCore_Migration_Workflow.md` for exact EF commands.
 - For Flutter changes, check service, provider/state, page/widget, model DTO, and route usage together.
 
 ## Verification

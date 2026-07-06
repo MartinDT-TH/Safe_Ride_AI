@@ -1,3 +1,4 @@
+using SafeRide.Application.Features.Trips.DTOs;
 using SafeRide.Domain.Enums;
 
 namespace SafeRide.Application.Features.Bookings.DTOs;
@@ -35,6 +36,7 @@ public sealed record BookingDetailsDto(
     BookingVehicleSummaryDto Vehicle,
     long? TripId,
     TripStatus? TripStatus,
+    TripReturnConfirmationSummaryDto? ReturnConfirmation,
     double? CurrentSearchRadiusKm = null,
     DateTime? ExpiresAt = null,
     int? EstimatedRemainingSeconds = null,

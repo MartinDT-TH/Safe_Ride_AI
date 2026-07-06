@@ -340,8 +340,10 @@ class BookingResponse {
         1 => 'DRIVER_ARRIVING',
         2 => 'ARRIVED',
         3 => 'IN_PROGRESS',
-        4 => 'COMPLETED',
-        5 => 'CANCELLED',
+        4 => 'WAITING_RETURN_CONFIRM',
+        5 => 'RETURN_CONFIRMED',
+        6 => 'COMPLETED',
+        7 => 'CANCELLED',
         _ => value.toString(),
       };
     }
@@ -352,8 +354,10 @@ class BookingResponse {
       '1' => 'DRIVER_ARRIVING',
       '2' => 'ARRIVED',
       '3' => 'IN_PROGRESS',
-      '4' => 'COMPLETED',
-      '5' => 'CANCELLED',
+      '4' => 'WAITING_RETURN_CONFIRM',
+      '5' => 'RETURN_CONFIRMED',
+      '6' => 'COMPLETED',
+      '7' => 'CANCELLED',
       _ => text,
     };
   }
