@@ -22,7 +22,7 @@ public sealed class SignalRRealtimeNotificationServiceTests
                 24,
                 customerId,
                 driverId,
-                TripStatus.COMPLETED,
+                TripStatus.WAITING_RETURN_CONFIRM,
                 DateTime.UtcNow,
                 BookingStatus.DriverAssigned));
 

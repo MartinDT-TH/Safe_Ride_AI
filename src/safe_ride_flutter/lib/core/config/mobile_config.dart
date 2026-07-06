@@ -56,6 +56,14 @@ class MobileConfig {
         MobileStatusOption(value: 'DRIVER_ARRIVING', label: 'Tài xế đang đến'),
         MobileStatusOption(value: 'ARRIVED', label: 'Tài xế đã đến'),
         MobileStatusOption(value: 'IN_PROGRESS', label: 'Đang di chuyển'),
+        MobileStatusOption(
+          value: 'WAITING_RETURN_CONFIRM',
+          label: 'Chờ xác nhận nhận lại xe',
+        ),
+        MobileStatusOption(
+          value: 'RETURN_CONFIRMED',
+          label: 'Đã xác nhận nhận lại xe',
+        ),
         MobileStatusOption(value: 'COMPLETED', label: 'Hoàn thành'),
         MobileStatusOption(value: 'CANCELLED', label: 'Đã hủy'),
       ],

@@ -17,10 +17,9 @@ public sealed class TripStatusServiceTests
     private static readonly DateTime UtcNow =
         new(2026, 6, 15, 8, 0, 0, DateTimeKind.Utc);
     [Fact]
-    public async Task EndTrip_MovesTripToCompleted()
+    public async Task EndTrip_MovesTripToWaitingReturnConfirmation()
     {
         using var fixture = await TripStatusFixture.CreateAsync(TripStatus.IN_PROGRESS);
-
         await fixture.Service.EndTripAsync(
             fixture.DriverId,
             fixture.TripId,
@@ -34,30 +33,33 @@ public sealed class TripStatusServiceTests
         var driver = await fixture.DbContext.DriverProfiles
             .SingleAsync(x => x.DriverId == fixture.DriverId);
 
-        Assert.Equal(TripStatus.COMPLETED, trip.TripStatus);
-        Assert.Equal(BookingStatus.Completed, trip.Booking.BookingStatus);
-        Assert.NotNull(trip.CompletedAt);
-        Assert.Equal(3, fixture.Promotion.CurrentUsageCount);
+        Assert.Equal(TripStatus.WAITING_RETURN_CONFIRM, trip.TripStatus);
+        Assert.Equal(BookingStatus.DriverAssigned, trip.Booking.BookingStatus);
+        Assert.Null(trip.CompletedAt);
+        Assert.Equal(2, fixture.Promotion.CurrentUsageCount);
         Assert.Single(trip.Booking.BookingPromotions);
-        Assert.Equal(DriverWorkStatus.Online, driver.WorkStatus);
+        Assert.Equal(DriverWorkStatus.Busy, driver.WorkStatus);
         Assert.Null(fixture.Redis.DriverStatusValue);
-        Assert.Contains(fixture.TripLiveKey, fixture.Redis.RemovedKeys);
-        Assert.Contains(fixture.DriverActiveTripKey, fixture.Redis.RemovedKeys);
-        Assert.Single(fixture.Realtime.TripStatusNotifications);
-        Assert.Single(fixture.Realtime.BookingStatusNotifications);
+        Assert.DoesNotContain(fixture.TripLiveKey, fixture.Redis.RemovedKeys);
+        Assert.DoesNotContain(fixture.DriverActiveTripKey, fixture.Redis.RemovedKeys);
+        var notification = Assert.Single(fixture.Realtime.TripStatusNotifications);
+        Assert.Equal(fixture.TripId, notification.TripId);
+        Assert.Equal(trip.BookingId, notification.BookingId);
+        Assert.Equal(fixture.CustomerId, notification.CustomerId);
+        Assert.Equal(fixture.DriverId, notification.DriverId);
+        Assert.Equal(TripStatus.WAITING_RETURN_CONFIRM, notification.TripStatus);
+        Assert.Equal(BookingStatus.DriverAssigned, notification.BookingStatus);
+        Assert.Empty(fixture.Realtime.BookingStatusNotifications);
     }
-
     [Fact]
     public async Task ConfirmReturnByCustomer_CreatesAuditRecordAndMovesTripToReturnConfirmed()
     {
         using var fixture = await TripStatusFixture.CreateAsync(TripStatus.WAITING_RETURN_CONFIRM);
-
         await fixture.Service.ConfirmReturnByCustomerAsync(
             fixture.CustomerId,
             fixture.TripId,
             vehicleReturnedConfirmed: true,
             CancellationToken.None);
-
         var trip = await fixture.DbContext.Trips
             .Include(x => x.Booking)
                 .ThenInclude(x => x.BookingPromotions)
@@ -65,7 +67,6 @@ public sealed class TripStatusServiceTests
             .Include(x => x.ReturnConfirmations)
             .SingleAsync(x => x.Id == fixture.TripId);
         var confirmation = Assert.Single(trip.ReturnConfirmations);
-
         Assert.Equal(TripStatus.RETURN_CONFIRMED, trip.TripStatus);
         Assert.Equal(BookingStatus.DriverAssigned, trip.Booking.BookingStatus);
         Assert.Null(trip.CompletedAt);
@@ -75,35 +76,36 @@ public sealed class TripStatusServiceTests
         Assert.Equal(HandoverStatus.CustomerConfirmed, confirmation.HandoverStatus);
         Assert.Equal(UtcNow, confirmation.ConfirmedAt);
         Assert.Empty(confirmation.Evidence);
-        Assert.Single(fixture.Realtime.TripStatusNotifications);
+        var notification = Assert.Single(fixture.Realtime.TripStatusNotifications);
+        Assert.Equal(fixture.TripId, notification.TripId);
+        Assert.Equal(trip.BookingId, notification.BookingId);
+        Assert.Equal(fixture.CustomerId, notification.CustomerId);
+        Assert.Equal(fixture.DriverId, notification.DriverId);
+        Assert.Equal(TripStatus.RETURN_CONFIRMED, notification.TripStatus);
+        Assert.Equal(BookingStatus.DriverAssigned, notification.BookingStatus);
         Assert.Empty(fixture.Realtime.BookingStatusNotifications);
         Assert.DoesNotContain(fixture.TripLiveKey, fixture.Redis.RemovedKeys);
         Assert.DoesNotContain(fixture.DriverActiveTripKey, fixture.Redis.RemovedKeys);
     }
-
     [Fact]
     public async Task ConfirmReturnByCustomer_WhenVehicleReturnNotConfirmed_RejectsRequest()
     {
         using var fixture = await TripStatusFixture.CreateAsync(TripStatus.WAITING_RETURN_CONFIRM);
-
         var exception = await Assert.ThrowsAsync<BookingException>(
             () => fixture.Service.ConfirmReturnByCustomerAsync(
                 fixture.CustomerId,
                 fixture.TripId,
                 vehicleReturnedConfirmed: false,
                 CancellationToken.None));
-
         var trip = await fixture.DbContext.Trips
             .Include(x => x.ReturnConfirmations)
             .SingleAsync(x => x.Id == fixture.TripId);
-
         Assert.Equal("trip.return_confirmation_required", exception.Code);
         Assert.Equal(400, exception.StatusCode);
         Assert.Equal(TripStatus.WAITING_RETURN_CONFIRM, trip.TripStatus);
         Assert.Empty(trip.ReturnConfirmations);
         Assert.Empty(fixture.Realtime.TripStatusNotifications);
     }
-
     [Fact]
     public async Task CancelTrip_RemovesPromotionWithoutIncrementingUsageAndReleasesDriver()
     {
@@ -137,7 +139,6 @@ public sealed class TripStatusServiceTests
     public async Task EndTrip_WhenTripNotInProgress_RejectsInvalidTransition()
     {
         using var fixture = await TripStatusFixture.CreateAsync(TripStatus.ACCEPTED);
-
         var exception = await Assert.ThrowsAsync<BookingException>(
             () => fixture.Service.EndTripAsync(
                 fixture.DriverId,
@@ -525,12 +526,9 @@ public sealed class TripStatusServiceTests
     private sealed class OptionsMonitorFake<TOptions>(TOptions currentValue) : IOptionsMonitor<TOptions>
     {
         public TOptions CurrentValue { get; } = currentValue;
-
         public TOptions Get(string? name) => CurrentValue;
-
         public IDisposable? OnChange(Action<TOptions, string?> listener) => null;
     }
-
     private sealed class NoOpTripReturnEvidenceStorage : ITripReturnEvidenceStorage
     {
         public Task<StoredReturnEvidenceFile> SaveAsync(
