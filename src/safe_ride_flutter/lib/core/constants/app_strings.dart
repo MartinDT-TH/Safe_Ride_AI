@@ -219,7 +219,7 @@ abstract final class LocationStrings {
 abstract final class AppConfig {
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://safe-ride-ai.onrender.com/api/',
+    defaultValue: 'http://192.168.100.116:5026/api/',
   );
   static const forceWebSockets = bool.fromEnvironment(
     'FORCE_WEBSOCKETS',
@@ -273,6 +273,9 @@ abstract final class ApiEndpoints {
   static String submitTripRating(int tripId) => '/feedbacks/trips/$tripId/rating';
   static const identityVerificationDocuments =
       '/identity-verification/documents';
+  static String endTrip(int tripId) => '/trips/$tripId/end';
+  static String driverReturnConfirmation(int tripId) =>
+      '/trips/$tripId/return-confirmation/driver';
 }
 
 abstract final class ApiKeys {
@@ -400,4 +403,31 @@ abstract final class DeviceStrings {
   static const linux = 'SafeRide Linux';
   static const fuchsia = 'SafeRide Fuchsia';
   static const idPrefix = 'saferide';
+}
+
+abstract final class DriverReturnEvidenceStrings {
+  static const pageTitle = 'Xác nhận trả xe';
+  static const instruction =
+      'Chụp hoặc chọn ảnh bằng chứng bàn giao xe cho khách. Cần 1–3 ảnh.';
+  static const addPhoto = 'Thêm ảnh bằng chứng';
+  static const tapToAdd = 'Nhấn để thêm ảnh';
+  static const noteLabel = 'Ghi chú (tùy chọn)';
+  static const noteHint = 'Nhập ghi chú nếu cần...';
+  static const submitButton = 'Xác nhận trả xe';
+  static const submitting = 'Đang gửi...';
+  static const successTitle = 'Xác nhận thành công';
+  static const successMessage =
+      'Đã ghi nhận trả xe. Chuyến đi đang được hoàn tất.';
+  static const done = 'Hoàn tất';
+  static const errorMinPhoto = 'Cần ít nhất 1 ảnh bằng chứng.';
+  static const errorMaxPhoto = 'Không được tải lên quá 3 ảnh.';
+  static const errorUploadFailed = 'Không thể gửi bằng chứng. Thử lại.';
+  static const camera = 'Chụp ảnh';
+  static const gallery = 'Chọn từ thư viện';
+  static const removePhoto = 'Xóa ảnh';
+  static const confirmRemove = 'Bạn có muốn xóa ảnh này không?';
+  static const photoOf = 'Ảnh';
+  static const waitingReturnLabel = 'Chờ xác nhận trả xe';
+  static const returnConfirmedLabel = 'Đã xác nhận trả xe';
+  static const endTripButton = 'Kết thúc chuyến';
 }

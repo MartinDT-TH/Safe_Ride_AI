@@ -23,6 +23,7 @@ import '../../../../shared/onboarding/presentation/providers/role_provider.dart'
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../shared/profile/presentation/pages/profile_page.dart';
 import 'driver_trip_payment_page.dart';
+import 'driver_return_evidence_page.dart';
 
 class DriverDashboardPage extends StatefulWidget {
   const DriverDashboardPage({super.key});
@@ -870,6 +871,8 @@ class _ActiveTripCard extends StatelessWidget {
     final canMarkArrived = status == 'DRIVER_ARRIVING';
     final canStartTrip = status == 'ARRIVED';
     final canComplete = status == 'IN_PROGRESS';
+    final isWaitingReturn = status == 'WAITING_RETURN_CONFIRM';
+    final isReturnConfirmed = status == 'RETURN_CONFIRMED';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -1050,15 +1053,19 @@ class _ActiveTripCard extends StatelessWidget {
                           context,
                           () => context
                               .read<DriverDashboardProvider>()
-                              .completeActiveTrip(),
+                              .endTripAsync(),
                         ),
-                  icon: const Icon(Icons.check_circle_rounded),
+                  icon: const Icon(Icons.flag_rounded),
                   label: Text(
-                    isUpdating ? 'Đang xử lý...' : 'Kết thúc chuyến đi',
+                    isUpdating ? 'Đang xử lý...' : DriverReturnEvidenceStrings.endTripButton,
                   ),
                   style: _primaryButtonStyle(),
                 ),
-              ),
+              )
+            else if (isWaitingReturn)
+              _buildWaitingReturnSection(context, trip.tripId, isUpdating)
+            else if (isReturnConfirmed)
+              _buildReturnConfirmedBanner(),
           ],
         ),
       ),
@@ -1074,12 +1081,115 @@ class _ActiveTripCard extends StatelessWidget {
     );
   }
 
+
+  // ─────────── WAITING_RETURN_CONFIRM section ──────────────────────────
+
+  static Widget _buildWaitingReturnSection(
+    BuildContext context,
+    int tripId,
+    bool isUpdating,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Status banner
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF8E1),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFFFCC02).withOpacity(0.5)),
+          ),
+          child: const Row(
+            children: [
+              Icon(Icons.hourglass_top_rounded,
+                  color: Color(0xFFF9A825), size: 20),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Đang chờ khách xác nhận trả xe.\nNếu khách không phản hồi, bạn có thể xác nhận thay.',
+                  style: TextStyle(
+                    color: Color(0xFF7B5800),
+                    fontSize: 13,
+                    height: 1.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // Driver substitute confirm button
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: isUpdating
+                ? null
+                : () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            DriverReturnEvidencePage(tripId: tripId),
+                      ),
+                    );
+                  },
+            icon: const Icon(Icons.add_photo_alternate_rounded),
+            label: const Text('Xác nhận thay bằng ảnh bằng chứng'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF006B70),
+              side: const BorderSide(color: Color(0xFF006B70), width: 1.5),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─────────── RETURN_CONFIRMED banner ─────────────────────────────────
+
+  static Widget _buildReturnConfirmedBanner() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE8F7F0),
+        borderRadius: BorderRadius.circular(14),
+        border:
+            Border.all(color: const Color(0xFF0A8F62).withOpacity(0.3)),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.check_circle_rounded,
+              color: Color(0xFF0A8F62), size: 22),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Đã xác nhận trả xe. Đang hoàn tất chuyến đi...',
+              style: TextStyle(
+                color: Color(0xFF0A5C3E),
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   static String _statusLabel(String status) {
     return switch (status) {
       'ACCEPTED' => 'Đã nhận chuyến',
       'DRIVER_ARRIVING' => 'Đang đến điểm đón',
       'ARRIVED' => 'Đã tới điểm đón',
       'IN_PROGRESS' => 'Đang thực hiện chuyến',
+      'WAITING_RETURN_CONFIRM' => DriverReturnEvidenceStrings.waitingReturnLabel,
+      'RETURN_CONFIRMED' => DriverReturnEvidenceStrings.returnConfirmedLabel,
       _ => status,
     };
   }
