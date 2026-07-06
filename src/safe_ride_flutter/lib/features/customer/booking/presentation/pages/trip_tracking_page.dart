@@ -95,6 +95,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _openSummaryIfCompleted(widget.booking.tripStatus);
+      _socketService.addConnectionLostHandler(_onSocketConnectionLost);
       unawaited(_connectTripSocket());
       unawaited(_refreshTrackingSnapshot());
       _startTripStatusPolling();
@@ -130,6 +131,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     _tripSocketRetryTimer?.cancel();
     _tripStatusPollingTimer?.cancel();
     _pulseController.dispose();
+    _socketService.removeConnectionLostHandler(_onSocketConnectionLost);
     final joinedTripId = _joinedTripId;
     if (joinedTripId != null) {
       _cleanupSocketHandlers(joinedTripId);
@@ -148,6 +150,23 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       await _socketService.leaveTrip(tripId);
     } catch (e) {
       debugPrint('Tracking: Error during socket cleanup: $e');
+    }
+  }
+
+  /// Called by SocketService when the SignalR connection is permanently closed
+  /// (auto-reconnect exhausted). We clear _joinedTripId so that the retry
+  /// timer can call _connectTripSocket() again and go through a full reconnect.
+  void _onSocketConnectionLost() {
+    if (!mounted) return;
+    debugPrint('Tracking: Socket connection lost — will retry reconnect');
+    _joinedTripId = null;
+    _tripSocketConnecting = false;
+    if (mounted) {
+      _showMessage('Mất kết nối tới máy chủ. Đang thử kết nối lại...');
+      _tripSocketRetryTimer?.cancel();
+      _tripSocketRetryTimer = Timer(const Duration(seconds: 3), () {
+        if (mounted) unawaited(_connectTripSocket());
+      });
     }
   }
 
@@ -290,6 +309,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       _joinedTripId = tripId;
       _tripSocketRetryTimer?.cancel();
       _tripSocketRetryTimer = null;
+      // Refresh snapshot after reconnect to restore driver position immediately
+      unawaited(_refreshTrackingSnapshot());
     } catch (e) {
       debugPrint('Tracking Error: $e');
       if (mounted) {
