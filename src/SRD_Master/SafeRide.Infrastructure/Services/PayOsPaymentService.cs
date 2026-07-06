@@ -83,8 +83,8 @@ public sealed class PayOsPaymentService : IPaymentService
         string? cancelUrl,
         CancellationToken cancellationToken)
     {
-        var price = BookingPriceMapper.FromBooking(trip.Booking);
-        var amount = ToVnd(price.FinalFare);
+        var amounts = GetPaymentAmounts(trip);
+        var amount = amounts.FinalFare;
         if (amount <= 0)
         {
             throw new BookingException(
@@ -260,9 +260,9 @@ public sealed class PayOsPaymentService : IPaymentService
             return BuildStatusResult(trip);
         }
 
-        var price = BookingPriceMapper.FromBooking(trip.Booking);
-        var finalFare = ToVnd(price.FinalFare);
-        var platformShare = ToVnd(price.OriginalFare * PlatformShareRate);
+        var amounts = GetPaymentAmounts(trip);
+        var finalFare = amounts.FinalFare;
+        var platformShare = amounts.PlatformShare;
         var wallet = await GetDriverWalletAsync(trip.DriverId, cancellationToken);
 
         if (wallet.CurrentBalance < platformShare)
@@ -461,8 +461,8 @@ public sealed class PayOsPaymentService : IPaymentService
             return;
         }
 
-        var price = BookingPriceMapper.FromBooking(trip.Booking);
-        var driverShare = ToVnd(price.OriginalFare * DriverShareRate);
+        var amounts = GetPaymentAmounts(trip);
+        var driverShare = amounts.DriverShare;
         var wallet = await GetDriverWalletAsync(trip.DriverId, cancellationToken);
         var alreadyCredited = await _dbContext.WalletTransactions.AnyAsync(
             x => x.TripId == trip.Id
@@ -672,13 +672,21 @@ public sealed class PayOsPaymentService : IPaymentService
             cancellationToken);
     }
 
+    private static TripPaymentAmounts GetPaymentAmounts(Trip trip)
+    {
+        var bookingPrice = BookingPriceMapper.FromBooking(trip.Booking);
+        var originalFare = ToVnd(trip.ActualFare ?? bookingPrice.OriginalFare);
+        var finalFare = ToVnd(trip.FinalFare ?? bookingPrice.FinalFare);
+        return new TripPaymentAmounts(
+            originalFare,
+            finalFare,
+            ToVnd(originalFare * DriverShareRate),
+            ToVnd(originalFare * PlatformShareRate));
+    }
+
     private PaymentStatusResult BuildStatusResult(Trip trip)
     {
-        var price = BookingPriceMapper.FromBooking(trip.Booking);
-        var originalFare = ToVnd(price.OriginalFare);
-        var finalFare = ToVnd(price.FinalFare);
-        var driverShare = ToVnd(originalFare * DriverShareRate);
-        var platformShare = ToVnd(originalFare * PlatformShareRate);
+        var amounts = GetPaymentAmounts(trip);
         var payment = trip.Payments
             .OrderByDescending(x => x.PaymentStatus == PaymentStatus.Success)
             .ThenByDescending(x => x.CreatedAt)
@@ -689,11 +697,11 @@ public sealed class PayOsPaymentService : IPaymentService
             payment?.Id,
             payment?.PaymentMethod,
             payment?.PaymentStatus ?? PaymentStatus.Pending,
-            payment?.Amount ?? finalFare,
-            originalFare,
-            finalFare,
-            driverShare,
-            platformShare,
+            payment?.Amount ?? amounts.FinalFare,
+            amounts.OriginalFare,
+            amounts.FinalFare,
+            amounts.DriverShare,
+            amounts.PlatformShare,
             Currency,
             payment?.PaidAt,
             trip.TripStatus,
@@ -776,6 +784,12 @@ public sealed class PayOsPaymentService : IPaymentService
     }
 
     private static decimal ToVnd(decimal value) => Math.Round(value, 0, MidpointRounding.AwayFromZero);
+
+    private readonly record struct TripPaymentAmounts(
+        decimal OriginalFare,
+        decimal FinalFare,
+        decimal DriverShare,
+        decimal PlatformShare);
 
     private static string BuildOrderCode(long tripId)
     {

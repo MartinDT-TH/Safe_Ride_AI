@@ -562,6 +562,9 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
   TripTrackingState _trackingState(BookingResponse booking) {
     return booking.tripStatus == 'IN_PROGRESS' ||
+            booking.tripStatus == 'WAITING_RETURN_CONFIRM' ||
+            booking.tripStatus == 'RETURN_CONFIRMED' ||
+            booking.tripStatus == 'WAITING_PAYMENT' ||
             booking.tripStatus == 'COMPLETED'
         ? TripTrackingState.inProgress
         : TripTrackingState.arriving;

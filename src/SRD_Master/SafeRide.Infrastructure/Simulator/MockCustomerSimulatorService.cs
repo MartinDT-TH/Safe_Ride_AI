@@ -319,8 +319,19 @@ public sealed class MockCustomerSimulatorService : BackgroundService
                 trip = await dbContext.Trips.AsNoTracking().FirstOrDefaultAsync(t => t.Id == tripId, cancellationToken);
                 if (trip is null || trip.TripStatus == TripStatus.CANCELLED) return;
 
-                await tripStatusService.CompleteTripAsync(driverId, trip.Id, cancellationToken);
-                _logger.LogInformation("DemoFlow completed trip {TripId} for real driver {DriverId}", trip.Id, driverId);
+                await tripStatusService.EndTripAsync(driverId, trip.Id, cancellationToken);
+                _logger.LogInformation("DemoFlow ended trip {TripId} for real driver {DriverId}; waiting for return confirmation", trip.Id, driverId);
+
+                if (_simulatorOptionsMonitor.CurrentValue.MockCustomerAutoConfirmDriver)
+                {
+                    await Task.Delay(1000, cancellationToken);
+                    await tripStatusService.ConfirmReturnByCustomerAsync(
+                        booking.CustomerId,
+                        trip.Id,
+                        vehicleReturnedConfirmed: true,
+                        cancellationToken);
+                    _logger.LogInformation("DemoFlow confirmed return for trip {TripId}; waiting for driver payment handling", trip.Id);
+                }
             }
         }
         catch (Exception ex)

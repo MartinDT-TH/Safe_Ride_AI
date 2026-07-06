@@ -35,6 +35,7 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
   bool _isSubmittingRating = false;
   bool _canRateLater = false;
   bool _isWaitingForPayment = false;
+  bool _isSubmittingFinalRating = false;
   Timer? _paymentPollingTimer;
   final Dio _dio = DioClient().dio;
   final TextEditingController _commentController = TextEditingController();
@@ -105,44 +106,10 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
       return;
     }
 
-    final comment = _commentController.text.trim();
-    final ok = await bookingProvider.submitTripRating(
-      token,
-      tripId: tripId,
-      ratingScore: _rating,
-      comment: comment.isEmpty ? null : comment,
-    );
-
-    if (!mounted) return;
-
     setState(() {
       _isSubmittingRating = false;
-      _canRateLater = (bookingProvider.errorStatusCode ?? 0) >= 500;
     });
-
-    if (ok) {
-      _startWaitingForPayment();
-      return;
-    }
-
-    final isAlreadyRated =
-        bookingProvider.errorStatusCode == 409 ||
-        (bookingProvider.errorMessage != null &&
-            (bookingProvider.errorMessage!.toLowerCase().contains('already') ||
-                bookingProvider.errorMessage!.toLowerCase().contains('rated') ||
-                bookingProvider.errorMessage!.toLowerCase().contains(
-                  'đã đánh giá',
-                )));
-
-    if (isAlreadyRated) {
-      _startWaitingForPayment();
-      return;
-    }
-
-    _showSnack(
-      bookingProvider.errorMessage ??
-          'Không thể gửi đánh giá. Vui lòng thử lại.',
-    );
+    _startWaitingForPayment();
   }
 
   Future<bool> _confirmReturnIfNeeded(
@@ -215,16 +182,57 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
       );
       final payload = _responsePayload(response.data);
       final status = PaymentStatusResult.fromJson(payload);
-      if (status.isSuccess) {
-        if (mounted) {
-          _finishAndGoHome();
-        }
-        return true;
+      if (status.isSuccess || status.tripStatus.toUpperCase() == 'COMPLETED') {
+        return await _submitRatingAfterPayment(token, tripId);
       }
     } catch (e) {
       debugPrint('Polling payment status failed: $e');
     }
     return false;
+  }
+
+  Future<bool> _submitRatingAfterPayment(String token, int tripId) async {
+    if (_isSubmittingFinalRating) {
+      return true;
+    }
+
+    _isSubmittingFinalRating = true;
+    final bookingProvider = context.read<BookingProvider>();
+    final comment = _commentController.text.trim();
+    final ok = await bookingProvider.submitTripRating(
+      token,
+      tripId: tripId,
+      ratingScore: _rating,
+      comment: comment.isEmpty ? null : comment,
+    );
+
+    if (!mounted) return true;
+
+    _isSubmittingFinalRating = false;
+    if (ok || _isAlreadyRated(bookingProvider)) {
+      _finishAndGoHome();
+      return true;
+    }
+
+    setState(() {
+      _isWaitingForPayment = false;
+      _isSubmittingRating = false;
+      _canRateLater = (bookingProvider.errorStatusCode ?? 0) >= 500;
+    });
+    _showSnack(
+      bookingProvider.errorMessage ??
+          'Không thể gửi đánh giá. Vui lòng thử lại.',
+    );
+    return true;
+  }
+
+  static bool _isAlreadyRated(BookingProvider bookingProvider) {
+    final message = bookingProvider.errorMessage?.toLowerCase();
+    return bookingProvider.errorStatusCode == 409 &&
+        message != null &&
+        (message.contains('already') ||
+            message.contains('rated') ||
+            message.contains('đã đánh giá'));
   }
 
   @override

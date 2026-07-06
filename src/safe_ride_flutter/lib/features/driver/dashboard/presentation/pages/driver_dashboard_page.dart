@@ -520,11 +520,17 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
       }
 
       Navigator.of(context)
-          .push(
+          .push<bool>(
             MaterialPageRoute(
               builder: (_) => DriverTripPaymentPage(tripId: tripId),
             ),
           )
+          .then((completed) async {
+            if (mounted && completed == true) {
+              _provider.markTripPaymentCompleted(tripId);
+              await _provider.loadActiveTrip();
+            }
+          })
           .whenComplete(() {
             if (mounted && _openingPaymentTripId == tripId) {
               _openingPaymentTripId = null;
