@@ -609,6 +609,16 @@ public sealed class BookingTests
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
+        public Task PublishTripPaymentPendingAsync(
+            TripPaymentPendingEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task PublishTripPaymentSucceededAsync(
+            TripPaymentSucceededEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
         public Task PublishDriverLocationUpdatedAsync(
             DriverLocationUpdatedEvent notification,
             CancellationToken cancellationToken = default) =>

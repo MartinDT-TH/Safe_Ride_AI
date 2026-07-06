@@ -6,6 +6,7 @@ using SafeRide.Application.Common.Realtime;
 using SafeRide.Application.Features.Bookings;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
+using SafeRide.Infrastructure.ExternalServices.PayOS;
 using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
 using SafeRide.Infrastructure.Services;
@@ -52,7 +53,7 @@ public sealed class TripStatusServiceTests
         Assert.Empty(fixture.Realtime.BookingStatusNotifications);
     }
     [Fact]
-    public async Task ConfirmReturnByCustomer_CreatesAuditRecordAndMovesTripToReturnConfirmed()
+    public async Task ConfirmReturnByCustomer_CreatesAuditRecordAndMovesTripToWaitingPayment()
     {
         using var fixture = await TripStatusFixture.CreateAsync(TripStatus.WAITING_RETURN_CONFIRM);
         await fixture.Service.ConfirmReturnByCustomerAsync(
@@ -64,25 +65,58 @@ public sealed class TripStatusServiceTests
             .Include(x => x.Booking)
                 .ThenInclude(x => x.BookingPromotions)
                     .ThenInclude(x => x.Promotion)
+            .Include(x => x.Payments)
             .Include(x => x.ReturnConfirmations)
             .SingleAsync(x => x.Id == fixture.TripId);
         var confirmation = Assert.Single(trip.ReturnConfirmations);
-        Assert.Equal(TripStatus.RETURN_CONFIRMED, trip.TripStatus);
+        Assert.Equal(TripStatus.WAITING_PAYMENT, trip.TripStatus);
         Assert.Equal(BookingStatus.DriverAssigned, trip.Booking.BookingStatus);
         Assert.Null(trip.CompletedAt);
         Assert.Equal(2, fixture.Promotion.CurrentUsageCount);
+        var payment = Assert.Single(trip.Payments);
+        Assert.Equal(PaymentMethod.CASH, payment.PaymentMethod);
+        Assert.Equal(PaymentStatus.Pending, payment.PaymentStatus);
+        Assert.Null(payment.TransactionReference);
+        Assert.Equal(62_000m, payment.Amount);
+        Assert.Equal("VND", payment.Currency);
         Assert.Equal(fixture.DriverId, confirmation.DriverId);
         Assert.Equal(fixture.CustomerId, confirmation.ConfirmedByUserId);
         Assert.Equal(HandoverStatus.CustomerConfirmed, confirmation.HandoverStatus);
         Assert.Equal(UtcNow, confirmation.ConfirmedAt);
         Assert.Empty(confirmation.Evidence);
-        var notification = Assert.Single(fixture.Realtime.TripStatusNotifications);
-        Assert.Equal(fixture.TripId, notification.TripId);
-        Assert.Equal(trip.BookingId, notification.BookingId);
-        Assert.Equal(fixture.CustomerId, notification.CustomerId);
-        Assert.Equal(fixture.DriverId, notification.DriverId);
-        Assert.Equal(TripStatus.RETURN_CONFIRMED, notification.TripStatus);
-        Assert.Equal(BookingStatus.DriverAssigned, notification.BookingStatus);
+        Assert.Collection(
+            fixture.Realtime.TripStatusNotifications,
+            notification =>
+            {
+                Assert.Equal(fixture.TripId, notification.TripId);
+                Assert.Equal(trip.BookingId, notification.BookingId);
+                Assert.Equal(fixture.CustomerId, notification.CustomerId);
+                Assert.Equal(fixture.DriverId, notification.DriverId);
+                Assert.Equal(TripStatus.RETURN_CONFIRMED, notification.TripStatus);
+                Assert.Equal(BookingStatus.DriverAssigned, notification.BookingStatus);
+            },
+            notification =>
+            {
+                Assert.Equal(fixture.TripId, notification.TripId);
+                Assert.Equal(trip.BookingId, notification.BookingId);
+                Assert.Equal(fixture.CustomerId, notification.CustomerId);
+                Assert.Equal(fixture.DriverId, notification.DriverId);
+                Assert.Equal(TripStatus.WAITING_PAYMENT, notification.TripStatus);
+                Assert.Equal(BookingStatus.DriverAssigned, notification.BookingStatus);
+            });
+        var paymentPending = Assert.Single(fixture.Realtime.TripPaymentPendingNotifications);
+        Assert.Equal(fixture.TripId, paymentPending.TripId);
+        Assert.Equal(trip.BookingId, paymentPending.BookingId);
+        Assert.Equal(fixture.CustomerId, paymentPending.CustomerId);
+        Assert.Equal(fixture.DriverId, paymentPending.DriverId);
+        Assert.Equal(payment.Id, paymentPending.PaymentId);
+        Assert.Equal(PaymentMethod.CASH, paymentPending.PaymentMethod);
+        Assert.Equal(PaymentStatus.Pending, paymentPending.PaymentStatus);
+        Assert.Equal(62_000m, paymentPending.Amount);
+        Assert.Equal("VND", paymentPending.Currency);
+        Assert.Equal(TripStatus.WAITING_PAYMENT, paymentPending.TripStatus);
+        Assert.Equal(BookingStatus.DriverAssigned, paymentPending.BookingStatus);
+        Assert.Equal("Vui lòng thanh toán cho tài xế để hoàn tất chuyến đi.", paymentPending.Message);
         Assert.Empty(fixture.Realtime.BookingStatusNotifications);
         Assert.DoesNotContain(fixture.TripLiveKey, fixture.Redis.RemovedKeys);
         Assert.DoesNotContain(fixture.DriverActiveTripKey, fixture.Redis.RemovedKeys);
@@ -106,6 +140,137 @@ public sealed class TripStatusServiceTests
         Assert.Empty(trip.ReturnConfirmations);
         Assert.Empty(fixture.Realtime.TripStatusNotifications);
     }
+
+    [Fact]
+    public async Task CompleteTrip_WhenPaymentPending_RejectsCompletion()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.WAITING_PAYMENT);
+        fixture.DbContext.Payments.Add(new Payment
+        {
+            TripId = fixture.TripId,
+            PaymentMethod = PaymentMethod.CASH,
+            Amount = 62_000m,
+            Currency = "VND",
+            PaymentStatus = PaymentStatus.Pending,
+            CreatedAt = UtcNow
+        });
+        await fixture.DbContext.SaveChangesAsync();
+
+        var exception = await Assert.ThrowsAsync<BookingException>(
+            () => fixture.Service.CompleteTripAsync(
+                fixture.DriverId,
+                fixture.TripId,
+                CancellationToken.None));
+
+        var trip = await fixture.DbContext.Trips
+            .Include(x => x.Booking)
+                .ThenInclude(x => x.BookingPromotions)
+                    .ThenInclude(x => x.Promotion)
+            .SingleAsync(x => x.Id == fixture.TripId);
+
+        Assert.Equal("payment.required", exception.Code);
+        Assert.Equal(TripStatus.WAITING_PAYMENT, trip.TripStatus);
+        Assert.Equal(BookingStatus.DriverAssigned, trip.Booking.BookingStatus);
+        Assert.Equal(2, fixture.Promotion.CurrentUsageCount);
+        Assert.Empty(fixture.Realtime.TripStatusNotifications);
+    }
+
+    [Fact]
+    public async Task CompleteTrip_WhenPaymentSucceeded_CompletesAndIncrementsPromotionUsage()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.WAITING_PAYMENT);
+        fixture.DbContext.Payments.Add(new Payment
+        {
+            TripId = fixture.TripId,
+            PaymentMethod = PaymentMethod.CASH,
+            Amount = 62_000m,
+            Currency = "VND",
+            PaymentStatus = PaymentStatus.Success,
+            PaidAt = UtcNow,
+            CreatedAt = UtcNow
+        });
+        await fixture.DbContext.SaveChangesAsync();
+
+        await fixture.Service.CompleteTripAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            CancellationToken.None);
+
+        var trip = await fixture.DbContext.Trips
+            .Include(x => x.Booking)
+                .ThenInclude(x => x.BookingPromotions)
+                    .ThenInclude(x => x.Promotion)
+            .SingleAsync(x => x.Id == fixture.TripId);
+
+        Assert.Equal(TripStatus.COMPLETED, trip.TripStatus);
+        Assert.Equal(BookingStatus.Completed, trip.Booking.BookingStatus);
+        Assert.Equal(UtcNow, trip.CompletedAt);
+        Assert.Equal(3, fixture.Promotion.CurrentUsageCount);
+        var notification = Assert.Single(fixture.Realtime.TripStatusNotifications);
+        Assert.Equal(TripStatus.COMPLETED, notification.TripStatus);
+        Assert.Equal(BookingStatus.Completed, notification.BookingStatus);
+        Assert.Empty(fixture.Realtime.TripPaymentPendingNotifications);
+        Assert.Empty(fixture.Realtime.TripPaymentSucceededNotifications);
+        Assert.Single(fixture.Realtime.BookingStatusNotifications);
+    }
+
+    [Fact]
+    public async Task ConfirmCashPayment_CompletesTripPublishesPaymentSucceededAndIncrementsPromotionUsage()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.WAITING_PAYMENT);
+        fixture.DbContext.Payments.Add(new Payment
+        {
+            TripId = fixture.TripId,
+            PaymentMethod = PaymentMethod.CASH,
+            Amount = 62_000m,
+            Currency = "VND",
+            PaymentStatus = PaymentStatus.Pending,
+            CreatedAt = UtcNow
+        });
+        fixture.DbContext.DriverWallets.Add(new DriverWallet
+        {
+            DriverId = fixture.DriverId,
+            CurrentBalance = 100_000m
+        });
+        await fixture.DbContext.SaveChangesAsync();
+
+        var paymentService = fixture.CreatePaymentService();
+        var result = await paymentService.ConfirmCashPaymentAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            CancellationToken.None);
+
+        var trip = await fixture.DbContext.Trips
+            .Include(x => x.Booking)
+                .ThenInclude(x => x.BookingPromotions)
+                    .ThenInclude(x => x.Promotion)
+            .Include(x => x.Payments)
+            .SingleAsync(x => x.Id == fixture.TripId);
+        var payment = Assert.Single(trip.Payments);
+
+        Assert.Equal(PaymentStatus.Success, result.PaymentStatus);
+        Assert.Equal(TripStatus.COMPLETED, result.TripStatus);
+        Assert.Equal(TripStatus.COMPLETED, trip.TripStatus);
+        Assert.Equal(BookingStatus.Completed, trip.Booking.BookingStatus);
+        Assert.Equal(3, fixture.Promotion.CurrentUsageCount);
+        Assert.Equal(PaymentStatus.Success, payment.PaymentStatus);
+        Assert.Equal(PaymentMethod.CASH, payment.PaymentMethod);
+
+        var succeeded = Assert.Single(fixture.Realtime.TripPaymentSucceededNotifications);
+        Assert.Equal(fixture.TripId, succeeded.TripId);
+        Assert.Equal(trip.BookingId, succeeded.BookingId);
+        Assert.Equal(fixture.CustomerId, succeeded.CustomerId);
+        Assert.Equal(fixture.DriverId, succeeded.DriverId);
+        Assert.Equal(payment.Id, succeeded.PaymentId);
+        Assert.Equal(PaymentMethod.CASH, succeeded.PaymentMethod);
+        Assert.Equal(PaymentStatus.Success, succeeded.PaymentStatus);
+        Assert.Equal(62_000m, succeeded.Amount);
+        Assert.Equal("VND", succeeded.Currency);
+        Assert.Equal(TripStatus.COMPLETED, succeeded.TripStatus);
+        Assert.Equal(BookingStatus.Completed, succeeded.BookingStatus);
+        Assert.Equal("Thanh toán đã hoàn tất.", succeeded.Message);
+    }
+
     [Fact]
     public async Task CancelTrip_RemovesPromotionWithoutIncrementingUsageAndReleasesDriver()
     {
@@ -191,6 +356,16 @@ public sealed class TripStatusServiceTests
         public Promotion Promotion { get; }
         public string TripLiveKey => RedisKeys.TripLive(TripId);
         public string DriverActiveTripKey => RedisKeys.DriverActiveTrip(DriverId);
+
+        public PayOsPaymentService CreatePaymentService()
+        {
+            return new PayOsPaymentService(
+                new HttpClient(),
+                DbContext,
+                Service,
+                Realtime,
+                Options.Create(new PayOsOptions()));
+        }
 
         public static async Task<TripStatusFixture> CreateAsync(
             TripStatus initialTripStatus)
@@ -434,6 +609,8 @@ public sealed class TripStatusServiceTests
         : IRealtimeNotificationService
     {
         public List<TripStatusChangedEvent> TripStatusNotifications { get; } = [];
+        public List<TripPaymentPendingEvent> TripPaymentPendingNotifications { get; } = [];
+        public List<TripPaymentSucceededEvent> TripPaymentSucceededNotifications { get; } = [];
         public List<BookingStatusChangedEvent> BookingStatusNotifications { get; } = [];
 
         public Task PublishBookingStatusChangedAsync(
@@ -449,6 +626,22 @@ public sealed class TripStatusServiceTests
             CancellationToken cancellationToken = default)
         {
             TripStatusNotifications.Add(notification);
+            return Task.CompletedTask;
+        }
+
+        public Task PublishTripPaymentPendingAsync(
+            TripPaymentPendingEvent notification,
+            CancellationToken cancellationToken = default)
+        {
+            TripPaymentPendingNotifications.Add(notification);
+            return Task.CompletedTask;
+        }
+
+        public Task PublishTripPaymentSucceededAsync(
+            TripPaymentSucceededEvent notification,
+            CancellationToken cancellationToken = default)
+        {
+            TripPaymentSucceededNotifications.Add(notification);
             return Task.CompletedTask;
         }
 

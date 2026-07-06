@@ -26,21 +26,14 @@ List<AppLatLng> decodePolyline(String encoded) {
 
   if (rawPoints.isEmpty) return points;
 
-  // Auto-detect precision (1e5 or 1e6) and coordinate order
-  // Vietnam coordinates: lat ~ 8-24, lng ~ 102-110
-  double bestDistance = double.infinity;
-  double bestPrecision = 1e5;
-  bool bestSwap = false;
-  
+  // Auto-detect precision (1e5 or 1e6) and coordinate order.
+  // Prefer Vietnam-shaped routes for app data, but keep standard Google
+  // polyline decoding for valid non-Vietnam coordinates.
+  final candidates = <({double precision, bool swap, double distance})>[];
   final firstLatRaw = rawPoints.first.lat.toDouble();
   final firstLngRaw = rawPoints.first.lng.toDouble();
 
-  final options = [
-    (1e5, false),
-    (1e5, true),
-    (1e6, false),
-    (1e6, true)
-  ];
+  const options = [(1e5, false), (1e5, true), (1e6, false), (1e6, true)];
 
   for (final opt in options) {
     final prec = opt.$1;
@@ -48,23 +41,34 @@ List<AppLatLng> decodePolyline(String encoded) {
     final lat = (swap ? firstLngRaw : firstLatRaw) / prec;
     final lng = (swap ? firstLatRaw : firstLngRaw) / prec;
 
-    // Check if valid coordinate (latitude must be [-90, 90])
     if (lat.abs() <= 90 && lng.abs() <= 180) {
-      // Check distance to center of Vietnam (lat 16, lng 106)
       final dLat = lat - 16;
       final dLng = lng - 106;
       final distSq = dLat * dLat + dLng * dLng;
-      if (distSq < bestDistance) {
-        bestDistance = distSq;
-        bestPrecision = prec;
-        bestSwap = swap;
-      }
+      candidates.add((precision: prec, swap: swap, distance: distSq));
     }
   }
 
+  if (candidates.isEmpty) {
+    throw const FormatException('Encoded polyline contains invalid points.');
+  }
+
+  final vietnamCandidates = candidates.where((candidate) {
+    final lat =
+        (candidate.swap ? firstLngRaw : firstLatRaw) / candidate.precision;
+    final lng =
+        (candidate.swap ? firstLatRaw : firstLngRaw) / candidate.precision;
+    return lat >= 8 && lat <= 24 && lng >= 102 && lng <= 110;
+  }).toList();
+
+  final best = vietnamCandidates.isNotEmpty
+      ? (vietnamCandidates..sort((a, b) => a.distance.compareTo(b.distance)))
+            .first
+      : candidates.first;
+
   for (final p in rawPoints) {
-    final lat = (bestSwap ? p.lng : p.lat) / bestPrecision;
-    final lng = (bestSwap ? p.lat : p.lng) / bestPrecision;
+    final lat = (best.swap ? p.lng : p.lat) / best.precision;
+    final lng = (best.swap ? p.lat : p.lng) / best.precision;
     points.add(AppLatLng(lat, lng));
   }
 
@@ -90,4 +94,3 @@ List<AppLatLng> decodePolyline(String encoded) {
   final delta = (result & 1) != 0 ? ~(result >> 1) : result >> 1;
   return (delta: delta, nextIndex: index);
 }
-
