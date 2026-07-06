@@ -154,6 +154,9 @@ class DriverDashboardProvider extends ChangeNotifier {
       if (!_hasActiveTripDetails(update.tripId)) {
         _fetchActiveTripDetails(update.bookingId, update.tripId);
       }
+      if (update.tripStatus == 'RETURN_CONFIRMED' && sameTrip) {
+        completeActiveTrip();
+      }
     }, key: 'driverDashboard');
 
     _socketService.onBookingUpdated(

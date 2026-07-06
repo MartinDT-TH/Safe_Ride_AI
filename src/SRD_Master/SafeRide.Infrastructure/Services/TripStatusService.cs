@@ -86,11 +86,11 @@ public sealed class TripStatusService : ITripStatusService
                 404);
         }
 
-        if (trip.TripStatus != TripStatus.IN_PROGRESS)
+        if (trip.TripStatus != TripStatus.IN_PROGRESS && trip.TripStatus != TripStatus.RETURN_CONFIRMED)
         {
             throw new BookingException(
                 "trip.invalid_status_transition",
-                "Chỉ có thể kết thúc chuyến khi chuyến đang di chuyển.",
+                "Chỉ có thể hoàn tất chuyến khi chuyến đang di chuyển hoặc đã xác nhận trả xe.",
                 409);
         }
 
@@ -473,6 +473,7 @@ public sealed class TripStatusService : ITripStatusService
                 or TripStatus.CANCELLED,
             TripStatus.IN_PROGRESS => requested is TripStatus.COMPLETED || requested is TripStatus.WAITING_RETURN_CONFIRM,
             TripStatus.WAITING_RETURN_CONFIRM => requested is TripStatus.RETURN_CONFIRMED,
+            TripStatus.RETURN_CONFIRMED => requested is TripStatus.COMPLETED,
             _ => false
         };
     }
