@@ -127,6 +127,19 @@ public sealed class PaymentsController : ControllerBase
         return Ok(new { success = true });
     }
 
+    [AllowAnonymous]
+    [HttpPost("demo/qr/webhook")]
+    [ProducesResponseType<PaymentStatusResult>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<PaymentStatusResult>> DemoQrWebhook(
+        [FromBody] DemoQrPaymentWebhookRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _paymentService.ConfirmDemoQrPaymentAsync(
+            request,
+            cancellationToken);
+        return Ok(result);
+    }
+
     private bool TryGetUserId(out Guid userId)
     {
         return Guid.TryParse(

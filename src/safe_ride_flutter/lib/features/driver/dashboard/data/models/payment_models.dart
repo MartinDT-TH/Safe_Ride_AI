@@ -6,8 +6,11 @@ class QrPaymentResult {
     required this.amount,
     required this.currency,
     required this.paymentStatus,
+    required this.tripStatus,
+    required this.message,
     this.qrCode,
     this.checkoutUrl,
+    this.createdAt,
   });
 
   final int tripId;
@@ -16,8 +19,11 @@ class QrPaymentResult {
   final double amount;
   final String currency;
   final String paymentStatus;
+  final String tripStatus;
+  final String message;
   final String? qrCode;
   final String? checkoutUrl;
+  final DateTime? createdAt;
 
   bool get isSuccess => paymentStatus.toLowerCase() == 'success';
 
@@ -29,8 +35,15 @@ class QrPaymentResult {
       amount: (json['amount'] as num?)?.toDouble() ?? 0,
       currency: json['currency']?.toString() ?? 'VND',
       paymentStatus: json['paymentStatus']?.toString() ?? 'Pending',
+      tripStatus: json['tripStatus']?.toString() ?? 'WAITING_PAYMENT',
+      message:
+          json['message']?.toString() ??
+          'Vui lòng thanh toán cho tài xế để hoàn tất chuyến đi.',
       qrCode: json['qrCode']?.toString(),
       checkoutUrl: json['checkoutUrl']?.toString(),
+      createdAt: json['createdAt'] == null
+          ? null
+          : DateTime.tryParse(json['createdAt'].toString()),
     );
   }
 }
@@ -45,8 +58,11 @@ class PaymentStatusResult {
     required this.driverShare,
     required this.platformShare,
     required this.currency,
+    required this.tripStatus,
+    required this.message,
     this.paymentId,
     this.paymentMethod,
+    this.paidAt,
   });
 
   final int tripId;
@@ -59,6 +75,9 @@ class PaymentStatusResult {
   final double driverShare;
   final double platformShare;
   final String currency;
+  final String tripStatus;
+  final String message;
+  final DateTime? paidAt;
 
   bool get isSuccess => paymentStatus.toLowerCase() == 'success';
 
@@ -74,6 +93,13 @@ class PaymentStatusResult {
       driverShare: (json['driverShare'] as num?)?.toDouble() ?? 0,
       platformShare: (json['platformShare'] as num?)?.toDouble() ?? 0,
       currency: json['currency']?.toString() ?? 'VND',
+      tripStatus: json['tripStatus']?.toString() ?? 'WAITING_PAYMENT',
+      message:
+          json['message']?.toString() ??
+          'Vui lòng thanh toán cho tài xế để hoàn tất chuyến đi.',
+      paidAt: json['paidAt'] == null
+          ? null
+          : DateTime.tryParse(json['paidAt'].toString()),
     );
   }
 }

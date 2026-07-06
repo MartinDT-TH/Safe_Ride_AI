@@ -15,10 +15,7 @@ import '../../data/models/payment_models.dart';
 enum _DriverPaymentMode { qr, cash }
 
 class DriverTripPaymentPage extends StatefulWidget {
-  const DriverTripPaymentPage({
-    super.key,
-    required this.tripId,
-  });
+  const DriverTripPaymentPage({super.key, required this.tripId});
 
   final int tripId;
 
@@ -36,6 +33,7 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
   bool _isLoading = false;
   bool _isRefreshing = false;
   bool _isConfirmingCash = false;
+  bool _returnedToDashboard = false;
   String? _errorMessage;
 
   static const _surface = Color(0xFFFBF9F8);
@@ -87,96 +85,102 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
             color: _primary,
             onPressed: () {
               if (isPaid) {
-                Navigator.of(context).pop();
+                _finishAndReturnToDashboard();
                 return;
               }
               if (_selectedMode != null) {
+                _statusTimer?.cancel();
                 setState(() {
                   _selectedMode = null;
                 });
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Vui lòng hoàn thành thanh toán trước khi thoát'),
+                    content: Text('Vui lòng hoàn thành thanh toán.'),
+                    duration: Duration(seconds: 2),
                   ),
                 );
               }
             },
           ),
-        title: const Text(
-          'Thanh toán chuyến đi',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: _primary,
-            fontSize: 22,
-            fontWeight: FontWeight.w900,
+          title: const Text(
+            'Thanh toán chuyến đi',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: _primary,
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+            ),
           ),
+          centerTitle: true,
         ),
-        centerTitle: true,
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
-          child: Column(
-            children: [
-              Text(
-                'Số tiền khách cần thanh toán',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: _muted,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                _formatCurrency(amount),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: _primaryDark,
-                  fontSize: 44,
-                  height: 1,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 38),
-              Expanded(
-                child: Center(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 220),
-                    child: _buildPaymentContent(qrData, isPaid),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+            child: Column(
+              children: [
+                Text(
+                  'Số tiền khách cần thanh toán',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: _muted,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-              ),
-              const SizedBox(height: 20),
-              if (_selectedMode == _DriverPaymentMode.qr)
-                SizedBox(
-                  width: double.infinity,
-                  height: 58,
-                  child: OutlinedButton.icon(
-                    onPressed: _isRefreshing || isPaid ? null : _refreshStatus,
-                    icon: _isRefreshing
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2.2),
-                          )
-                        : const Icon(Icons.sync_rounded),
-                    label: Text(isPaid ? 'Đã thanh toán' : 'Kiểm tra lại'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: _primary,
-                      side: const BorderSide(color: _primary, width: 2),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
+                const SizedBox(height: 12),
+                Text(
+                  _formatCurrency(amount),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: _primaryDark,
+                    fontSize: 44,
+                    height: 1,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 38),
+                Expanded(
+                  child: Center(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      child: _buildPaymentContent(qrData, isPaid),
                     ),
                   ),
                 ),
-            ],
+                const SizedBox(height: 20),
+                if (_selectedMode == _DriverPaymentMode.qr)
+                  SizedBox(
+                    width: double.infinity,
+                    height: 58,
+                    child: OutlinedButton.icon(
+                      onPressed: _isRefreshing || isPaid
+                          ? null
+                          : _refreshStatus,
+                      icon: _isRefreshing
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.2,
+                              ),
+                            )
+                          : const Icon(Icons.sync_rounded),
+                      label: Text(isPaid ? 'Đã thanh toán' : 'Kiểm tra lại'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: _primary,
+                        side: const BorderSide(color: _primary, width: 2),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }
@@ -234,7 +238,7 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
             width: double.infinity,
             height: 54,
             child: ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: _finishAndReturnToDashboard,
               style: ElevatedButton.styleFrom(
                 backgroundColor: _primary,
                 foregroundColor: Colors.white,
@@ -244,10 +248,7 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
               ),
               child: const Text(
                 'Về màn hình chính',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
           ),
@@ -285,6 +286,16 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
                   ? 'Xác nhận lại tiền mặt'
                   : 'Tạo lại mã QR',
             ),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: () {
+              _statusTimer?.cancel();
+              setState(() {
+                _selectedMode = null;
+              });
+            },
+            child: const Text('Chuyển phương thức khác'),
           ),
         ],
       );
@@ -331,11 +342,7 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
           child: const Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.qr_code_scanner_rounded,
-                color: _muted,
-                size: 24,
-              ),
+              Icon(Icons.qr_code_scanner_rounded, color: _muted, size: 24),
               SizedBox(width: 8),
               Text(
                 'Đưa khách quét mã này',
@@ -353,6 +360,7 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
         const SizedBox(height: 16),
         TextButton(
           onPressed: () {
+            _statusTimer?.cancel();
             setState(() {
               _selectedMode = null;
             });
@@ -447,6 +455,9 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
         _isLoading = false;
         _isConfirmingCash = false;
       });
+      if (status.isSuccess) {
+        _finishAndReturnToDashboard();
+      }
     } on DioException catch (exception) {
       if (!mounted) return;
       setState(() {
@@ -462,7 +473,7 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
 
   void _startStatusPolling(String token) {
     _statusTimer?.cancel();
-    _statusTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+    _statusTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
       await _loadStatus(token, showLoading: false);
     });
   }
@@ -494,6 +505,7 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
       setState(() => _paymentStatus = status);
       if (status.isSuccess) {
         _statusTimer?.cancel();
+        _finishAndReturnToDashboard();
       }
     } on DioException catch (_) {
       if (!mounted || showLoading) return;
@@ -514,12 +526,21 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
     return fallback;
   }
 
+  void _finishAndReturnToDashboard() {
+    if (!mounted || _returnedToDashboard) {
+      return;
+    }
+    _returnedToDashboard = true;
+    _statusTimer?.cancel();
+    Navigator.of(context).pop(true);
+  }
+
   static String _formatCurrency(double value) {
     final formatter = value.round().toString().replaceAllMapped(
       RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
       (match) => '${match[1]}.',
     );
-    return '${formatter}đ';
+    return '$formatterđ';
   }
 }
 

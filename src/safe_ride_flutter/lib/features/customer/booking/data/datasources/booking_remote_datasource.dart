@@ -342,6 +342,35 @@ class BookingRemoteDatasource {
     }
   }
 
+  Future<void> confirmCustomerReturn(
+    String accessToken, {
+    required int tripId,
+  }) async {
+    try {
+      await _dio.post(
+        ApiEndpoints.customerReturnConfirmation(tripId),
+        data: {ApiKeys.vehicleReturnedConfirmed: true},
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+        ),
+      );
+    } on DioException catch (exception) {
+      final statusCode = exception.response?.statusCode;
+      final data = exception.response?.data;
+      if (data is Map) {
+        final detail = data[ApiKeys.detail]?.toString();
+        final code = data[ApiKeys.code]?.toString();
+        if (detail != null) {
+          throw BookingApiException(detail, code: code, statusCode: statusCode);
+        }
+      }
+      throw BookingApiException(
+        'Không thể xác nhận trả xe. Vui lòng thử lại.',
+        statusCode: statusCode,
+      );
+    }
+  }
+
   Future<void> submitTripRating(
     String accessToken, {
     required int tripId,
