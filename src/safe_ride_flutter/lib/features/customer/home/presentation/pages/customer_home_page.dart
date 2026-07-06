@@ -31,19 +31,22 @@ class CustomerHomePage extends StatefulWidget {
 class _CustomerHomePageState extends State<CustomerHomePage> {
   bool _handledAuthGate = false;
 
+  AuthProvider? _authProvider;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      context.read<AuthProvider>().addListener(_handleAuthGate);
+      _authProvider = context.read<AuthProvider>();
+      _authProvider?.addListener(_handleAuthGate);
       _handleAuthGate();
     });
   }
 
   @override
   void dispose() {
-    context.read<AuthProvider>().removeListener(_handleAuthGate);
+    _authProvider?.removeListener(_handleAuthGate);
     super.dispose();
   }
 

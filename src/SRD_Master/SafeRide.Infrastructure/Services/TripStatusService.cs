@@ -471,7 +471,7 @@ public sealed class TripStatusService : ITripStatusService
                 or TripStatus.CANCELLED,
             TripStatus.ARRIVED => requested is TripStatus.IN_PROGRESS
                 or TripStatus.CANCELLED,
-            TripStatus.IN_PROGRESS => requested is TripStatus.WAITING_RETURN_CONFIRM,
+            TripStatus.IN_PROGRESS => requested is TripStatus.COMPLETED || requested is TripStatus.WAITING_RETURN_CONFIRM,
             TripStatus.WAITING_RETURN_CONFIRM => requested is TripStatus.RETURN_CONFIRMED,
             _ => false
         };
