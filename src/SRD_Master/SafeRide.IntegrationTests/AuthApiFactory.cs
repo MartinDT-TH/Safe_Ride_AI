@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,12 +15,14 @@ namespace SafeRide.IntegrationTests;
 
 public sealed class AuthApiFactory : WebApplicationFactory<Program>
 {
-    private readonly string _databaseName = $"saferide-auth-{Guid.NewGuid():N}";
-    private SqliteConnection? _keeperConnection;
+    private readonly string _databasePath = Path.Combine(
+        Path.GetTempPath(),
+        $"saferide-auth-{Guid.NewGuid():N}.db");
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+        builder.UseSetting("BackgroundJobs:Enabled", "false");
         builder.ConfigureLogging(logging => { /* logging.ClearProviders(); */ });
         builder.ConfigureAppConfiguration((_, configuration) =>
         {
@@ -29,6 +30,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
             {
                 ["ConnectionStrings:DefaultConnection"] = "Server=unused",
                 ["ConnectionStrings:Redis"] = string.Empty,
+                ["BackgroundJobs:Enabled"] = "false",
                 ["Jwt:Issuer"] = "SafeRide.Tests",
                 ["Jwt:Audience"] = "SafeRide.Tests.Client",
                 ["Jwt:SecretKey"] = "integration-test-secret-key-that-is-long-enough-123456",
@@ -50,10 +52,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
             services.RemoveAll<ISpeedSmsService>();
             services.RemoveAll<IGoogleTokenVerifier>();
 
-            var connectionString =
-                $"Data Source={_databaseName};Mode=Memory;Cache=Shared;Default Timeout=30";
-            _keeperConnection = new SqliteConnection(connectionString);
-            _keeperConnection.Open();
+            var connectionString = $"Data Source={_databasePath};Default Timeout=30";
 
             services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseSqlite(connectionString, sqlite => sqlite.UseNetTopologySuite()));
@@ -224,7 +223,23 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
         base.Dispose(disposing);
         if (disposing)
         {
-            _keeperConnection?.Dispose();
+            DeleteDatabaseFile(_databasePath);
+            DeleteDatabaseFile($"{_databasePath}-wal");
+            DeleteDatabaseFile($"{_databasePath}-shm");
+        }
+    }
+
+    private static void DeleteDatabaseFile(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
         }
     }
 }
