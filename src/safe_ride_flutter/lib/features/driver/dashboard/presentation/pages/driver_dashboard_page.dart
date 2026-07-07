@@ -54,6 +54,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
   AppLatLng? _driverPosition;
   AppLatLng? _lastReportedPosition;
   DateTime? _lastReportedTime;
+  int _locationSequence = 0;
   double _driverHeading = 0;
   final List<AppLatLng> _arrivalRoutePoints = [];
   final List<AppLatLng> _tripRoutePoints = [];
@@ -346,9 +347,16 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     if (shouldReport) {
       _lastReportedPosition = newPos;
       _lastReportedTime = now;
+      final sequence = ++_locationSequence;
       context.read<DriverDashboardProvider>().updateLocation(
         position.latitude,
         position.longitude,
+        clientTimestampUtc: position.timestamp,
+        sequence: sequence,
+        accuracyMeters: position.accuracy.isFinite ? position.accuracy : null,
+        speedMetersPerSecond: position.speed.isFinite && position.speed >= 0
+            ? position.speed
+            : null,
       );
     }
 

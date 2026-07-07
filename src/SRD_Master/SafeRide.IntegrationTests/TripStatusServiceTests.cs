@@ -1,9 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NetTopologySuite.Geometries;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Common.Models;
 using SafeRide.Application.Common.Realtime;
 using SafeRide.Application.Features.Bookings;
+using SafeRide.Application.Features.Bookings.Services;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
 using SafeRide.Infrastructure.ExternalServices.PayOS;
@@ -37,12 +40,18 @@ public sealed class TripStatusServiceTests
         Assert.Equal(TripStatus.WAITING_RETURN_CONFIRM, trip.TripStatus);
         Assert.Equal(BookingStatus.DriverAssigned, trip.Booking.BookingStatus);
         Assert.Null(trip.CompletedAt);
+        Assert.Equal(UtcNow, trip.EndedAt);
+        Assert.Equal(5.2m, trip.ActualDistanceKm);
+        Assert.Equal(5, trip.ActualDurationMinutes);
+        Assert.Equal(72_000m, trip.ActualFare);
+        Assert.Equal(62_000m, trip.FinalFare);
         Assert.Equal(2, fixture.Promotion.CurrentUsageCount);
         Assert.Single(trip.Booking.BookingPromotions);
         Assert.Equal(DriverWorkStatus.Busy, driver.WorkStatus);
         Assert.Null(fixture.Redis.DriverStatusValue);
         Assert.DoesNotContain(fixture.TripLiveKey, fixture.Redis.RemovedKeys);
         Assert.DoesNotContain(fixture.DriverActiveTripKey, fixture.Redis.RemovedKeys);
+        Assert.Contains(RedisKeys.TripTrackingPath(fixture.TripId), fixture.Redis.RemovedKeys);
         var notification = Assert.Single(fixture.Realtime.TripStatusNotifications);
         Assert.Equal(fixture.TripId, notification.TripId);
         Assert.Equal(trip.BookingId, notification.BookingId);
@@ -388,7 +397,10 @@ public sealed class TripStatusServiceTests
                 redis,
                 realtime,
                 new NoOpTripReturnEvidenceStorage(),
-                new OptionsMonitorFake<TripTrackingOptions>(new TripTrackingOptions()));
+                new OptionsMonitorFake<TripTrackingOptions>(new TripTrackingOptions()),
+                new NoOpMapRoutingService(),
+                new TripFareFinalizationService(new FareEstimationService()),
+                NullLogger<TripStatusService>.Instance);
 
             return new TripStatusFixture(
                 dbContext,
@@ -434,6 +446,16 @@ public sealed class TripStatusServiceTests
             {
                 ServiceName = "Ride"
             };
+            var pricingRule = new PricingRule
+            {
+                ServiceType = serviceType,
+                VehicleClass = RequiredLicenseClass.A1,
+                BaseFare = 20_000m,
+                MinFare = 30_000m,
+                PricePerKm = 10_000m,
+                IsActive = true,
+                CreatedAt = UtcNow
+            };
             var vehicle = new Vehicle
             {
                 OwnerUserId = customerId,
@@ -469,6 +491,7 @@ public sealed class TripStatusServiceTests
                 ServiceType = serviceType,
                 BookingType = BookingType.Now,
                 BookingStatus = BookingStatus.DriverAssigned,
+                PricingRule = pricingRule,
                 PickupAddress = "Pickup",
                 PickupLocation = new Point(106.660172, 10.762622) { SRID = 4326 },
                 DestinationAddress = "Destination",
@@ -603,6 +626,25 @@ public sealed class TripStatusServiceTests
             string expectedHash,
             int maxAttempts) =>
             Task.FromResult(OtpVerificationResult.Missing);
+
+        public Task<TripTrackingUpdateResult> RecordTripTrackingPointAsync(
+            TripTrackingPoint point,
+            TripTrackingWriteOptions options,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new TripTrackingUpdateResult(true, true, 0, 0, "accepted"));
+
+        public Task<TripTrackingSnapshot> GetTripTrackingSnapshotAsync(
+            long tripId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new TripTrackingSnapshot([], 0, null, null, null, null));
+
+        public Task RemoveTripTrackingAsync(
+            long tripId,
+            CancellationToken cancellationToken = default)
+        {
+            RemovedKeys.AddRange(RedisKeys.TripTrackingKeys(tripId));
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class RealtimeNotificationServiceFake
@@ -739,6 +781,21 @@ public sealed class TripStatusServiceTests
                 originalFileName,
                 contentType,
                 0L));
+        }
+    }
+
+    private sealed class NoOpMapRoutingService : IMapRoutingService
+    {
+        public Task<RouteEstimateResult> GetRouteEstimateAsync(
+            RouteEstimateRequest request,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new RouteEstimateResult
+            {
+                Provider = MapProvider.Auto,
+                DistanceMeters = 0,
+                DurationSeconds = 0
+            });
         }
     }
 }

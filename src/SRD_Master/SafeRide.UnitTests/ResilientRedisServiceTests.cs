@@ -231,6 +231,36 @@ public sealed class ResilientRedisServiceTests
                 maxAttempts);
         }
 
+        public Task<TripTrackingUpdateResult> RecordTripTrackingPointAsync(
+            TripTrackingPoint point,
+            TripTrackingWriteOptions options,
+            CancellationToken cancellationToken = default)
+        {
+            BeforeCall();
+            return _storage.RecordTripTrackingPointAsync(
+                point,
+                options,
+                cancellationToken);
+        }
+
+        public Task<TripTrackingSnapshot> GetTripTrackingSnapshotAsync(
+            long tripId,
+            CancellationToken cancellationToken = default)
+        {
+            BeforeCall();
+            return _storage.GetTripTrackingSnapshotAsync(
+                tripId,
+                cancellationToken);
+        }
+
+        public Task RemoveTripTrackingAsync(
+            long tripId,
+            CancellationToken cancellationToken = default)
+        {
+            BeforeCall();
+            return _storage.RemoveTripTrackingAsync(tripId, cancellationToken);
+        }
+
         private void BeforeCall()
         {
             CallCount++;

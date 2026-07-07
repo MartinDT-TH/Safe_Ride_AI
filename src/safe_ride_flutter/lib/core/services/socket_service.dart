@@ -822,8 +822,42 @@ class SocketService {
     await _invokeSafely('SetDriverOnline', [latitude, longitude]);
   }
 
-  Future<void> updateDriverLocation(double latitude, double longitude) async {
-    await _invokeSafely('UpdateDriverLocation', [latitude, longitude]);
+  Future<void> updateDriverLocation(
+    double latitude,
+    double longitude, {
+    DateTime? clientTimestampUtc,
+    int? sequence,
+    double? accuracyMeters,
+    double? speedMetersPerSecond,
+  }) async {
+    final hasDetailedPayload =
+        clientTimestampUtc != null ||
+        sequence != null ||
+        accuracyMeters != null ||
+        speedMetersPerSecond != null;
+    if (!hasDetailedPayload) {
+      await _invokeSafely('UpdateDriverLocation', [latitude, longitude]);
+      return;
+    }
+
+    final payload = <String, dynamic>{
+      ApiKeys.latitude: latitude,
+      ApiKeys.longitude: longitude,
+    };
+    if (clientTimestampUtc != null) {
+      payload[ApiKeys.clientTimestampUtc] = clientTimestampUtc
+          .toUtc()
+          .toIso8601String();
+    }
+    if (sequence != null) payload[ApiKeys.sequence] = sequence;
+    if (accuracyMeters != null) {
+      payload[ApiKeys.accuracyMeters] = accuracyMeters;
+    }
+    if (speedMetersPerSecond != null) {
+      payload[ApiKeys.speedMetersPerSecond] = speedMetersPerSecond;
+    }
+
+    await _invokeSafely('UpdateDriverLocationDetailed', [payload]);
   }
 
   Future<void> setDriverOffline() async {

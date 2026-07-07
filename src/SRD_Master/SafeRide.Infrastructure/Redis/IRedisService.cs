@@ -55,6 +55,19 @@ namespace SafeRide.Infrastructure.Redis
             string attemptsKey,
             string expectedHash,
             int maxAttempts);
+
+        Task<TripTrackingUpdateResult> RecordTripTrackingPointAsync(
+            TripTrackingPoint point,
+            TripTrackingWriteOptions options,
+            CancellationToken cancellationToken = default);
+
+        Task<TripTrackingSnapshot> GetTripTrackingSnapshotAsync(
+            long tripId,
+            CancellationToken cancellationToken = default);
+
+        Task RemoveTripTrackingAsync(
+            long tripId,
+            CancellationToken cancellationToken = default);
     }
 }
 

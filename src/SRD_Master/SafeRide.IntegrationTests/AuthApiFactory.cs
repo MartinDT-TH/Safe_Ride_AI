@@ -347,6 +347,22 @@ public sealed class FakeRedisService : IRedisService
         _counters.TryRemove(attemptsKey, out _);
         return Task.FromResult(OtpVerificationResult.Success);
     }
+
+    public Task<TripTrackingUpdateResult> RecordTripTrackingPointAsync(
+        TripTrackingPoint point,
+        TripTrackingWriteOptions options,
+        CancellationToken cancellationToken = default) =>
+        _geoStorage.RecordTripTrackingPointAsync(point, options, cancellationToken);
+
+    public Task<TripTrackingSnapshot> GetTripTrackingSnapshotAsync(
+        long tripId,
+        CancellationToken cancellationToken = default) =>
+        _geoStorage.GetTripTrackingSnapshotAsync(tripId, cancellationToken);
+
+    public Task RemoveTripTrackingAsync(
+        long tripId,
+        CancellationToken cancellationToken = default) =>
+        _geoStorage.RemoveTripTrackingAsync(tripId, cancellationToken);
 }
 
 public sealed class FakeSmsService : ISpeedSmsService

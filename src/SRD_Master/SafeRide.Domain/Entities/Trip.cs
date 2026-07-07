@@ -18,7 +18,11 @@ public partial class Trip
     public DateTime? DriverAssignedAt { get; set; }
     public DateTime? ArrivedAt { get; set; }
     public DateTime? StartedAt { get; set; }
+    public DateTime? EndedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
+
+    public decimal? ActualDistanceKm { get; set; }
+    public int? ActualDurationMinutes { get; set; }
 
     public decimal? ActualFare { get; set; }
     public decimal? FinalFare { get; set; }

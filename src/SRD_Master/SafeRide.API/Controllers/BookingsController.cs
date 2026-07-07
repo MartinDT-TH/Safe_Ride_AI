@@ -633,7 +633,11 @@ public sealed class BookingsController : ControllerBase
                     result.Payment.Amount,
                     result.Payment.Currency,
                     result.Payment.PaidAt,
-                    result.Payment.Message));
+                    result.Payment.Message),
+            ActualDistanceKm: result.ActualDistanceKm,
+            ActualDurationMinutes: result.ActualDurationMinutes,
+            ActualEncodedPolyline: result.ActualEncodedPolyline,
+            TripEndedAt: result.TripEndedAt);
     }
 
     private bool TryGetCustomerId(out Guid customerId)

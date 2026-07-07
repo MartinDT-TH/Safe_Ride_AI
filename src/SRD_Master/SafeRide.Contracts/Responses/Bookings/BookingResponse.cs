@@ -81,4 +81,8 @@ public sealed record BookingResponse(
     int? EstimatedRemainingSeconds = null,
     string? MatchingMessage = null,
     TripReturnConfirmationSummaryResponse? ReturnConfirmation = null,
-    TripPaymentSummaryResponse? Payment = null);
+    TripPaymentSummaryResponse? Payment = null,
+    double? ActualDistanceKm = null,
+    int? ActualDurationMinutes = null,
+    string? ActualEncodedPolyline = null,
+    DateTime? TripEndedAt = null);

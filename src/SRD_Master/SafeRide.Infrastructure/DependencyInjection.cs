@@ -147,6 +147,14 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(TripTrackingOptions.SectionName))
             .Validate(options => options.TripLiveTtlHours > 0, "TripTracking:TripLiveTtlHours must be greater than zero.")
             .Validate(options => options.DriverStatusTtlMinutes > 0, "TripTracking:DriverStatusTtlMinutes must be greater than zero.")
+            .Validate(options => options.TrackingTtlHours > 0, "TripTracking:TrackingTtlHours must be greater than zero.")
+            .Validate(options => options.MaxPathPoints > 0, "TripTracking:MaxPathPoints must be greater than zero.")
+            .Validate(options => options.AccumulatorJitterThresholdMeters >= 0, "TripTracking:AccumulatorJitterThresholdMeters must be greater than or equal to zero.")
+            .Validate(options => options.PathSampleDistanceMeters >= 0, "TripTracking:PathSampleDistanceMeters must be greater than or equal to zero.")
+            .Validate(options => options.PathSampleIntervalSeconds > 0, "TripTracking:PathSampleIntervalSeconds must be greater than zero.")
+            .Validate(options => options.MaxInferredSpeedKmh > 0, "TripTracking:MaxInferredSpeedKmh must be greater than zero.")
+            .Validate(options => options.MaxAccuracyMeters > 0, "TripTracking:MaxAccuracyMeters must be greater than zero.")
+            .Validate(options => options.FinalizeLockSeconds > 0, "TripTracking:FinalizeLockSeconds must be greater than zero.")
             .ValidateOnStart();
 
         // ── Hangfire ───────────────────────────────────────────────────────────────
@@ -198,6 +206,7 @@ public static class DependencyInjection
         services.AddScoped<IBookingAssignmentService, BookingAssignmentService>();
         services.AddScoped<IDriverQueryService, DriverQueryService>();
         services.AddScoped<IDriverRealtimeService, DriverRealtimeService>();
+        services.AddScoped<TripFareFinalizationService>();
         services.AddScoped<ITripStatusService, TripStatusService>();
         services.AddHttpClient<ISpeedSmsService, InfobipSmsService>();
         services.AddHttpClient<IPaymentService, PayOsPaymentService>((provider, client) =>
