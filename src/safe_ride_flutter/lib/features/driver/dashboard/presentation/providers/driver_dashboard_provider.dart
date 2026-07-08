@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
@@ -11,6 +12,45 @@ import '../../../../../core/services/socket_service.dart';
 
 enum DriverStatus { offline, online }
 
+class _PendingDriverLocationUpdate {
+  const _PendingDriverLocationUpdate({
+    required this.latitude,
+    required this.longitude,
+    this.clientTimestampUtc,
+    this.sequence,
+    this.accuracyMeters,
+    this.speedMetersPerSecond,
+  });
+
+  final double latitude;
+  final double longitude;
+  final DateTime? clientTimestampUtc;
+  final int? sequence;
+  final double? accuracyMeters;
+  final double? speedMetersPerSecond;
+
+  Map<String, dynamic> toJson() {
+    final payload = <String, dynamic>{
+      ApiKeys.latitude: latitude,
+      ApiKeys.longitude: longitude,
+    };
+    if (clientTimestampUtc != null) {
+      payload[ApiKeys.clientTimestampUtc] = clientTimestampUtc!
+          .toUtc()
+          .toIso8601String();
+    }
+    if (sequence != null) payload[ApiKeys.sequence] = sequence;
+    if (accuracyMeters != null) {
+      payload[ApiKeys.accuracyMeters] = accuracyMeters;
+    }
+    if (speedMetersPerSecond != null) {
+      payload[ApiKeys.speedMetersPerSecond] = speedMetersPerSecond;
+    }
+
+    return payload;
+  }
+}
+
 class DriverDashboardProvider extends ChangeNotifier {
   DriverDashboardProvider({SocketService? socketService, Dio? dio})
     : _socketService = socketService ?? SocketService(),
@@ -19,6 +59,9 @@ class DriverDashboardProvider extends ChangeNotifier {
   final SocketService _socketService;
   final Dio _dio;
   String? _accessToken;
+  static const int _maxPendingLocationUpdates = 20;
+  final Queue<_PendingDriverLocationUpdate> _pendingLocationUpdates = Queue();
+  bool _isFlushingLocationUpdates = false;
 
   DriverStatus _status = DriverStatus.offline;
   DriverStatus get status => _status;
@@ -323,23 +366,97 @@ class DriverDashboardProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> updateLocation(double lat, double lng) async {
-    if (_socketService.isConnected) {
-      await _socketService.updateDriverLocation(lat, lng);
-      return;
+  Future<void> updateLocation(
+    double lat,
+    double lng, {
+    DateTime? clientTimestampUtc,
+    int? sequence,
+    double? accuracyMeters,
+    double? speedMetersPerSecond,
+  }) async {
+    final update = _PendingDriverLocationUpdate(
+      latitude: lat,
+      longitude: lng,
+      clientTimestampUtc: clientTimestampUtc,
+      sequence: sequence,
+      accuracyMeters: accuracyMeters,
+      speedMetersPerSecond: speedMetersPerSecond,
+    );
+
+    await _flushPendingLocationUpdates();
+    final sent = await _sendLocationUpdate(update);
+    if (!sent) {
+      _enqueueLocationUpdate(update);
+    } else {
+      await _flushPendingLocationUpdates();
     }
+  }
+
+  Future<bool> _sendLocationUpdate(_PendingDriverLocationUpdate update) async {
+    if (_socketService.isConnected) {
+      try {
+        await _socketService.updateDriverLocation(
+          update.latitude,
+          update.longitude,
+          clientTimestampUtc: update.clientTimestampUtc,
+          sequence: update.sequence,
+          accuracyMeters: update.accuracyMeters,
+          speedMetersPerSecond: update.speedMetersPerSecond,
+        );
+        return true;
+      } catch (e) {
+        debugPrint('Failed to update driver location over socket: $e');
+      }
+    }
+
     final token = _accessToken;
-    if (token == null) return;
+    if (token == null) return false;
     try {
       await _dio.patch(
         ApiEndpoints.driverLocation,
-        data: {ApiKeys.latitude: lat, ApiKeys.longitude: lng},
+        data: update.toJson(),
         options: Options(
           headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
         ),
       );
+      return true;
     } catch (e) {
       debugPrint('Failed to update driver location: $e');
+      return false;
+    }
+  }
+
+  void _enqueueLocationUpdate(_PendingDriverLocationUpdate update) {
+    if (update.sequence != null &&
+        _pendingLocationUpdates.any(
+          (item) => item.sequence == update.sequence,
+        )) {
+      return;
+    }
+
+    while (_pendingLocationUpdates.length >= _maxPendingLocationUpdates) {
+      _pendingLocationUpdates.removeFirst();
+    }
+    _pendingLocationUpdates.addLast(update);
+  }
+
+  Future<void> _flushPendingLocationUpdates() async {
+    if (_isFlushingLocationUpdates || _pendingLocationUpdates.isEmpty) {
+      return;
+    }
+
+    _isFlushingLocationUpdates = true;
+    try {
+      while (_pendingLocationUpdates.isNotEmpty) {
+        final update = _pendingLocationUpdates.first;
+        final sent = await _sendLocationUpdate(update);
+        if (!sent) {
+          break;
+        }
+        _pendingLocationUpdates.removeFirst();
+      }
+    } finally {
+      _isFlushingLocationUpdates = false;
     }
   }
 
@@ -577,7 +694,22 @@ class DriverDashboardProvider extends ChangeNotifier {
   }
 
   void _handleBookingUpdate(dynamic update) {
-    if (update.status == 'DriverAssigned' || update.tripId != null) {
+    if (update.status == 'Cancelled' || update.status == 'Expired') {
+      var changed = false;
+      if (_activeTrip?.bookingId == update.bookingId) {
+        _clearActiveTrip();
+        changed = true;
+      }
+      if (_currentRequest?.bookingId == update.bookingId) {
+        _hasNewRequest = false;
+        _currentRequest = null;
+        _isWaitingForCustomerConfirmation = false;
+        changed = true;
+      }
+      if (changed) {
+        notifyListeners();
+      }
+    } else if (update.status == 'DriverAssigned' || update.tripId != null) {
       if (update.tripId != null) {
         _hasNewRequest = false;
         _currentRequest = null;
@@ -603,11 +735,6 @@ class DriverDashboardProvider extends ChangeNotifier {
         if (!_hasActiveTripDetails(update.tripId!)) {
           _fetchActiveTripDetails(update.bookingId, update.tripId!);
         }
-      }
-    } else if (update.status == 'Cancelled' || update.status == 'Expired') {
-      if (_activeTrip?.bookingId == update.bookingId) {
-        _clearActiveTrip();
-        notifyListeners();
       }
     }
   }

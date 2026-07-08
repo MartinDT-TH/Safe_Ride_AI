@@ -71,7 +71,13 @@ internal static class BookingDetailsMapper
             matchingSnapshot.ExpiresAt,
             matchingSnapshot.EstimatedRemainingSeconds,
             matchingMessage,
-            MapPayment(booking.Trip, price.FinalFare));
+            MapPayment(booking.Trip, price.FinalFare),
+            ActualDistanceKm: booking.Trip?.ActualDistanceKm is null
+                ? null
+                : (double)booking.Trip.ActualDistanceKm.Value,
+            ActualDurationMinutes: booking.Trip?.ActualDurationMinutes,
+            ActualEncodedPolyline: booking.Trip?.RoutePolyline,
+            TripEndedAt: booking.Trip?.EndedAt);
     }
 
     private static TripPaymentSummaryDto? MapPayment(Trip? trip, decimal finalFare)

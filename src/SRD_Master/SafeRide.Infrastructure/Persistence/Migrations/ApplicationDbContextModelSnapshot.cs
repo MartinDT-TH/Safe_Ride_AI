@@ -1198,6 +1198,12 @@ namespace SafeRide.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
+                    b.Property<decimal?>("ActualDistanceKm")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<int?>("ActualDurationMinutes")
+                        .HasColumnType("int");
+
                     b.Property<decimal?>("ActualFare")
                         .HasColumnType("decimal(18, 2)");
 
@@ -1227,6 +1233,9 @@ namespace SafeRide.Infrastructure.Migrations
 
                     b.Property<Guid>("DriverId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("EndedAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<decimal?>("FinalFare")
                         .HasColumnType("decimal(18, 2)");
@@ -1262,6 +1271,10 @@ namespace SafeRide.Infrastructure.Migrations
 
                     b.ToTable("Trips", t =>
                         {
+                            t.HasCheckConstraint("CK_Trips_ActualDistanceKm", "[ActualDistanceKm] IS NULL OR [ActualDistanceKm] >= 0");
+
+                            t.HasCheckConstraint("CK_Trips_ActualDurationMinutes", "[ActualDurationMinutes] IS NULL OR [ActualDurationMinutes] >= 0");
+
                             t.HasCheckConstraint("CK_Trips_ActualFare", "[ActualFare] IS NULL OR [ActualFare] >= 0");
 
                             t.HasCheckConstraint("CK_Trips_FinalFare", "[FinalFare] IS NULL OR [FinalFare] >= 0");

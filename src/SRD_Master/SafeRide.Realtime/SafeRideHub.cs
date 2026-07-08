@@ -2,6 +2,8 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Common.Models;
+using SafeRide.Contracts.Requests.Drivers;
 
 namespace SafeRide.Realtime;
 
@@ -75,6 +77,28 @@ public sealed class SafeRideHub : Hub
             driverId,
             latitude,
             longitude,
+            Context.ConnectionAborted);
+    }
+
+    [Authorize(Roles = "Driver")]
+    public async Task UpdateDriverLocationDetailed(UpdateDriverLocationRequest request)
+    {
+        ValidateCoordinate(request.Latitude, request.Longitude);
+
+        if (!TryGetUserId(out var driverId))
+        {
+            throw new HubException("Cannot resolve authenticated driver id.");
+        }
+
+        await _driverRealtimeService.UpdateDriverLocationAsync(
+            driverId,
+            new DriverLocationUpdateInput(
+                request.Latitude,
+                request.Longitude,
+                request.ClientTimestampUtc,
+                request.Sequence,
+                request.AccuracyMeters,
+                request.SpeedMetersPerSecond),
             Context.ConnectionAborted);
     }
 

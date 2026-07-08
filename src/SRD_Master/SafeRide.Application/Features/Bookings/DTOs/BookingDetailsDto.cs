@@ -50,4 +50,8 @@ public sealed record BookingDetailsDto(
     DateTime? ExpiresAt = null,
     int? EstimatedRemainingSeconds = null,
     string? MatchingMessage = null,
-    TripPaymentSummaryDto? Payment = null);
+    TripPaymentSummaryDto? Payment = null,
+    double? ActualDistanceKm = null,
+    int? ActualDurationMinutes = null,
+    string? ActualEncodedPolyline = null,
+    DateTime? TripEndedAt = null);

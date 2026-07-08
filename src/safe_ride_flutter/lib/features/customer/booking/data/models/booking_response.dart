@@ -13,6 +13,10 @@ class BookingResponse {
     required this.encodedPolyline,
     required this.message,
     this.arrivalPolyline,
+    this.actualDistanceKm,
+    this.actualDurationMinutes,
+    this.actualEncodedPolyline,
+    this.tripEndedAt,
     this.scheduledAt,
     this.driverOffer,
     this.pickup,
@@ -40,6 +44,10 @@ class BookingResponse {
   final double estimatedFare;
   final String encodedPolyline;
   final String? arrivalPolyline;
+  final double? actualDistanceKm;
+  final int? actualDurationMinutes;
+  final String? actualEncodedPolyline;
+  final DateTime? tripEndedAt;
   final String message;
   final BookingDriverOffer? driverOffer;
   final BookingLocation? pickup;
@@ -118,6 +126,17 @@ class BookingResponse {
       estimatedFare: estimatedFareValue,
       encodedPolyline: _value(json, ApiKeys.encodedPolyline)?.toString() ?? '',
       arrivalPolyline: _value(json, ApiKeys.arrivalPolyline)?.toString(),
+      actualDistanceKm: (_value(json, ApiKeys.actualDistanceKm) as num?)
+          ?.toDouble(),
+      actualDurationMinutes:
+          (_value(json, ApiKeys.actualDurationMinutes) as num?)?.toInt(),
+      actualEncodedPolyline: _value(
+        json,
+        ApiKeys.actualEncodedPolyline,
+      )?.toString(),
+      tripEndedAt: _value(json, ApiKeys.tripEndedAt) == null
+          ? null
+          : DateTime.tryParse(_value(json, ApiKeys.tripEndedAt).toString()),
       message:
           _value(json, ApiKeys.message)?.toString() ??
           BookingStrings.bookingSuccess,
@@ -165,6 +184,10 @@ class BookingResponse {
     double? estimatedFare,
     String? encodedPolyline,
     String? arrivalPolyline,
+    double? actualDistanceKm,
+    int? actualDurationMinutes,
+    String? actualEncodedPolyline,
+    DateTime? tripEndedAt,
     String? message,
     BookingDriverOffer? driverOffer,
     BookingLocation? pickup,
@@ -193,6 +216,12 @@ class BookingResponse {
       estimatedFare: estimatedFare ?? this.estimatedFare,
       encodedPolyline: encodedPolyline ?? this.encodedPolyline,
       arrivalPolyline: arrivalPolyline ?? this.arrivalPolyline,
+      actualDistanceKm: actualDistanceKm ?? this.actualDistanceKm,
+      actualDurationMinutes:
+          actualDurationMinutes ?? this.actualDurationMinutes,
+      actualEncodedPolyline:
+          actualEncodedPolyline ?? this.actualEncodedPolyline,
+      tripEndedAt: tripEndedAt ?? this.tripEndedAt,
       message: message ?? this.message,
       driverOffer: driverOffer ?? this.driverOffer,
       pickup: pickup ?? this.pickup,
@@ -238,6 +267,13 @@ class BookingResponse {
       preservedArrivalPolyline = arrivalPolyline;
     }
 
+    String? preservedActualEncodedPolyline = newer.actualEncodedPolyline;
+    if ((preservedActualEncodedPolyline == null ||
+            preservedActualEncodedPolyline.isEmpty) &&
+        (actualEncodedPolyline != null && actualEncodedPolyline!.isNotEmpty)) {
+      preservedActualEncodedPolyline = actualEncodedPolyline;
+    }
+
     // Case 1: Newer response is completely missing promotion info (typical polling)
     if (oldHasPromo && !newHasPromo) {
       final double preservedOriginalFare =
@@ -258,6 +294,11 @@ class BookingResponse {
         finalFare: calculatedFinalFare,
         encodedPolyline: preservedEncodedPolyline,
         arrivalPolyline: preservedArrivalPolyline,
+        actualDistanceKm: newer.actualDistanceKm ?? actualDistanceKm,
+        actualDurationMinutes:
+            newer.actualDurationMinutes ?? actualDurationMinutes,
+        actualEncodedPolyline: preservedActualEncodedPolyline,
+        tripEndedAt: newer.tripEndedAt ?? tripEndedAt,
         pickup: newer.pickup ?? pickup,
         destination: newer.destination ?? destination,
         vehicle: newer.vehicle ?? vehicle,
@@ -286,6 +327,11 @@ class BookingResponse {
         finalFare: newerFinal,
         encodedPolyline: preservedEncodedPolyline,
         arrivalPolyline: preservedArrivalPolyline,
+        actualDistanceKm: newer.actualDistanceKm ?? actualDistanceKm,
+        actualDurationMinutes:
+            newer.actualDurationMinutes ?? actualDurationMinutes,
+        actualEncodedPolyline: preservedActualEncodedPolyline,
+        tripEndedAt: newer.tripEndedAt ?? tripEndedAt,
         pickup: newer.pickup ?? pickup,
         destination: newer.destination ?? destination,
         vehicle: newer.vehicle ?? vehicle,
@@ -297,6 +343,11 @@ class BookingResponse {
     return newer.copyWith(
       encodedPolyline: preservedEncodedPolyline,
       arrivalPolyline: preservedArrivalPolyline,
+      actualDistanceKm: newer.actualDistanceKm ?? actualDistanceKm,
+      actualDurationMinutes:
+          newer.actualDurationMinutes ?? actualDurationMinutes,
+      actualEncodedPolyline: preservedActualEncodedPolyline,
+      tripEndedAt: newer.tripEndedAt ?? tripEndedAt,
       pickup: newer.pickup ?? pickup,
       destination: newer.destination ?? destination,
       vehicle: newer.vehicle ?? vehicle,

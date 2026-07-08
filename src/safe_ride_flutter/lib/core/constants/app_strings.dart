@@ -329,6 +329,10 @@ abstract final class ApiKeys {
   static const estimatedDistanceKm = 'estimatedDistanceKm';
   static const estimatedDurationMinutes = 'estimatedDurationMinutes';
   static const encodedPolyline = 'encodedPolyline';
+  static const actualDistanceKm = 'actualDistanceKm';
+  static const actualDurationMinutes = 'actualDurationMinutes';
+  static const actualEncodedPolyline = 'actualEncodedPolyline';
+  static const tripEndedAt = 'tripEndedAt';
   static const arrivalPolyline = 'arrivalPolyline';
   static const driverOffer = 'driverOffer';
   static const vehicle = 'vehicle';
@@ -344,6 +348,10 @@ abstract final class ApiKeys {
   static const address = 'address';
   static const latitude = 'latitude';
   static const longitude = 'longitude';
+  static const clientTimestampUtc = 'clientTimestampUtc';
+  static const sequence = 'sequence';
+  static const accuracyMeters = 'accuracyMeters';
+  static const speedMetersPerSecond = 'speedMetersPerSecond';
   static const offerId = 'offerId';
   static const driverId = 'driverId';
   static const driverLatitude = 'driverLatitude';

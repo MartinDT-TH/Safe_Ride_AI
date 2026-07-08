@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using SafeRide.API.Controllers;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Common.Models;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
 using SafeRide.Contracts.Requests.Drivers;
 
@@ -90,6 +91,17 @@ public sealed class DriversControllerTests
         public Guid? DriverId { get; private set; }
         public double? Latitude { get; private set; }
         public double? Longitude { get; private set; }
+
+        public Task UpdateDriverLocationAsync(
+            Guid driverId,
+            DriverLocationUpdateInput location,
+            CancellationToken cancellationToken = default)
+        {
+            DriverId = driverId;
+            Latitude = location.Latitude;
+            Longitude = location.Longitude;
+            return Task.CompletedTask;
+        }
 
         public Task UpdateDriverLocationAsync(
             Guid driverId,
