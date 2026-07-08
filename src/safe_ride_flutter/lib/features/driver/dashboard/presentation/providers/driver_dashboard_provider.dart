@@ -9,6 +9,7 @@ import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/network/auth_header.dart';
 import '../../../../../core/network/dio_client.dart';
 import '../../../../../core/services/socket_service.dart';
+import '../../../../../core/session/session_manager.dart';
 
 enum DriverStatus { offline, online }
 
@@ -52,13 +53,23 @@ class _PendingDriverLocationUpdate {
 }
 
 class DriverDashboardProvider extends ChangeNotifier {
-  DriverDashboardProvider({SocketService? socketService, Dio? dio})
-    : _socketService = socketService ?? SocketService(),
-      _dio = dio ?? DioClient().dio;
+  DriverDashboardProvider({
+    SocketService? socketService,
+    Dio? dio,
+    SessionManager? sessionManager,
+  }) : _socketService = socketService ?? SocketService(),
+       _dio = dio ?? DioClient().dio {
+    _sessionExpiredSubscription = sessionManager?.sessionExpiredStream.listen((
+      _,
+    ) {
+      resetLocalAvailability();
+    });
+  }
 
   final SocketService _socketService;
   final Dio _dio;
   String? _accessToken;
+  StreamSubscription<void>? _sessionExpiredSubscription;
   static const int _maxPendingLocationUpdates = 20;
   final Queue<_PendingDriverLocationUpdate> _pendingLocationUpdates = Queue();
   bool _isFlushingLocationUpdates = false;
@@ -140,7 +151,7 @@ class DriverDashboardProvider extends ChangeNotifier {
     }
 
     _accessToken = accessToken;
-    await _socketService.connect(accessToken);
+    await _socketService.connect();
     _registerRealtimeHandlers();
     try {
       await loadActiveTrip();
@@ -254,40 +265,65 @@ class DriverDashboardProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> goOffline() async {
+  Future<void> goOffline({String? accessToken}) async {
+    if (accessToken != null && accessToken.trim().isNotEmpty) {
+      _accessToken = accessToken;
+    }
+
     final token = _accessToken;
-    if (token == null) return;
     try {
-      await _dio.post(
-        ApiEndpoints.driverOffline,
-        options: Options(
-          headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
-        ),
-      );
+      if (token != null && token.trim().isNotEmpty) {
+        await _dio.post(
+          ApiEndpoints.driverOffline,
+          options: Options(
+            headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+          ),
+        );
+      }
     } catch (e) {
       debugPrint('Failed to go offline: $e');
     } finally {
-      if (_socketService.isConnected) {
-        await _socketService.setDriverOffline();
-      }
-      _socketService.removeTripStatusChangedHandler('driverDashboard');
-      _socketService.removeTripPaymentUpdatedHandler('driverDashboardPayment');
-      _socketService.removeDriverLocationUpdatedHandler('driverDashboardDemo');
-      _socketService.removeBookingUpdatedHandler('driverDashboardBooking');
-      _socketService.removeDriverOfferReceivedHandler(
-        'driverDashboardOfferReceived',
-      );
-      _socketService.removeDriverOfferClosedHandler(
-        'driverDashboardOfferClosed',
-      );
-      await _socketService.disconnect();
-      _hasNewRequest = false;
-      _currentRequest = null;
-      _isWaitingForCustomerConfirmation = false;
-      _clearActiveTrip();
-      _status = DriverStatus.offline;
-      notifyListeners();
+      await _disconnectRealtime();
+      resetLocalAvailability();
     }
+  }
+
+  void resetLocalAvailability() {
+    _hasNewRequest = false;
+    _currentRequest = null;
+    _isResponding = false;
+    _isUpdatingTrip = false;
+    _isWaitingForCustomerConfirmation = false;
+    _isDemoMode = false;
+    _demoLat = null;
+    _demoLng = null;
+    _pendingLocationUpdates.clear();
+    _isFlushingLocationUpdates = false;
+    _isLoadingActiveTrip = false;
+    _errorMessage = null;
+    _tripAwaitingPaymentId = null;
+    _clearActiveTrip();
+    _status = DriverStatus.offline;
+    notifyListeners();
+  }
+
+  Future<void> _disconnectRealtime() async {
+    if (_socketService.isConnected) {
+      try {
+        await _socketService.setDriverOffline();
+      } catch (e) {
+        debugPrint('Failed to notify socket offline: $e');
+      }
+    }
+    _socketService.removeTripStatusChangedHandler('driverDashboard');
+    _socketService.removeTripPaymentUpdatedHandler('driverDashboardPayment');
+    _socketService.removeDriverLocationUpdatedHandler('driverDashboardDemo');
+    _socketService.removeBookingUpdatedHandler('driverDashboardBooking');
+    _socketService.removeDriverOfferReceivedHandler(
+      'driverDashboardOfferReceived',
+    );
+    _socketService.removeDriverOfferClosedHandler('driverDashboardOfferClosed');
+    await _socketService.disconnect();
   }
 
   void simulateNewRequest() {
@@ -901,6 +937,12 @@ class DriverDashboardProvider extends ChangeNotifier {
       '8' => 'CANCELLED',
       _ => text,
     };
+  }
+
+  @override
+  void dispose() {
+    _sessionExpiredSubscription?.cancel();
+    super.dispose();
   }
 }
 

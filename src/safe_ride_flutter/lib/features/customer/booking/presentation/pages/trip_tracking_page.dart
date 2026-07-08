@@ -254,7 +254,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
 
     _tripSocketConnecting = true;
     try {
-      await _socketService.connect(accessToken);
+      await _socketService.connect();
       if (!mounted) return;
       debugPrint('Tracking: Connected to Socket for Trip $tripId');
 

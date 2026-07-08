@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:signalr_netcore/signalr_client.dart';
 
 import '../constants/app_strings.dart';
+import '../session/session_manager.dart';
 import 'mobile_config_service.dart';
 
 class DriverLocationUpdate {
@@ -430,12 +433,22 @@ class BookingUpdate {
 }
 
 class SocketService {
-  SocketService({MobileConfigService? mobileConfigService})
-    : _mobileConfigService = mobileConfigService ?? MobileConfigService();
+  SocketService({
+    MobileConfigService? mobileConfigService,
+    SessionManager? sessionManager,
+  })  : _mobileConfigService = mobileConfigService ?? MobileConfigService(),
+        _sessionManager = sessionManager {
+    _sessionExpiredSubscription = _sessionManager?.sessionExpiredStream.listen((
+      _,
+    ) {
+      disconnect();
+    });
+  }
 
   final MobileConfigService _mobileConfigService;
+  final SessionManager? _sessionManager;
+  StreamSubscription<void>? _sessionExpiredSubscription;
   HubConnection? _connection;
-  String? _accessToken;
   bool _driverLocationListenerAttached = false;
   bool _tripStatusListenerAttached = false;
   bool _tripPaymentListenerAttached = false;
@@ -474,14 +487,16 @@ class SocketService {
     _connectionLostHandlers.remove(handler);
   }
 
-  Future<void> connect(String accessToken) async {
-    if (accessToken.isEmpty) {
+  Future<void> connect([String? legacyAccessToken]) async {
+    final accessToken =
+        await _sessionManager?.getValidAccessToken() ?? legacyAccessToken;
+    if (accessToken == null || accessToken.isEmpty) {
       return;
     }
 
     final currentState = _connection?.state;
 
-    if (_connection != null && _accessToken == accessToken) {
+    if (_connection != null) {
       if (currentState == HubConnectionState.Connected) return;
       if (currentState == HubConnectionState.Connecting ||
           currentState == HubConnectionState.Reconnecting) {
@@ -494,15 +509,9 @@ class SocketService {
       }
     }
 
-    if (_connection != null && _accessToken != accessToken) {
-      debugPrint('SOCKET: New token, disconnecting old session');
-      await disconnect();
-    }
-
-    _accessToken = accessToken;
-
     final options = HttpConnectionOptions(
-      accessTokenFactory: () async => accessToken,
+      accessTokenFactory: () async =>
+          await _sessionManager?.getValidAccessToken() ?? accessToken,
       requestTimeout: 30000,
       skipNegotiation: AppConfig.forceWebSockets,
       transport: AppConfig.forceWebSockets
@@ -918,7 +927,6 @@ class SocketService {
       await _connection!.stop();
     }
     _connection = null;
-    _accessToken = null;
     _driverLocationListenerAttached = false;
     _tripStatusListenerAttached = false;
     _tripPaymentListenerAttached = false;
@@ -935,6 +943,12 @@ class SocketService {
     _joinedTripGroups.clear();
     _desiredBookingGroups.clear();
     _joinedBookingGroups.clear();
+  }
+
+  Future<void> dispose() async {
+    await _sessionExpiredSubscription?.cancel();
+    _sessionExpiredSubscription = null;
+    await disconnect();
   }
 
   String get _hubUrl {

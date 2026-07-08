@@ -181,7 +181,7 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
     }
 
     try {
-      await _socketService.connect(token);
+      await _socketService.connect();
       await _socketService.joinBooking(bookingId);
       _joinedBookingId = bookingId;
       debugPrint('Searching: joined booking group $bookingId');

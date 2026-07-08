@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:provider/provider.dart';
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/session/session_manager.dart';
+import '../../../../../dependency_injection/injection.dart';
 import '../../../../auth/presentation/pages/login_page.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../customer/home/presentation/pages/customer_home_page.dart';
@@ -84,10 +86,11 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
       Future.delayed(const Duration(milliseconds: 500), _checkSessionAndNavigate);
       return;
     }
-    _navigateToNext(context);
+    unawaited(_navigateToNext(context));
   }
 
-  void _navigateToNext(BuildContext context) {
+  Future<void> _navigateToNext(BuildContext context) async {
+    final navigator = Navigator.of(context);
     final auth = context.read<AuthProvider>();
     final roleProvider = context.read<RoleProvider>();
     final restoredRole = auth.lastSelectedRole;
@@ -98,6 +101,16 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
 
     Widget destination;
     if (auth.token != null && auth.token!.isNotEmpty) {
+      final continuation = await getIt<SessionManager>()
+          .isTripContinuationSession();
+      if (!mounted) return;
+      if (continuation) {
+        final isDriverContinuation =
+            restoredRole == AppValues.roleDriver || auth.isDriverEligible;
+        destination = isDriverContinuation
+            ? const DriverDashboardPage()
+            : const CustomerHomePage();
+      } else
       if (auth.isProfileComplete) {
         destination = restoredRole == AppValues.roleDriver
             ? const DriverDashboardPage()
@@ -116,7 +129,7 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
       destination = const LoginPage();
     }
 
-    Navigator.of(context).pushReplacement(
+    navigator.pushReplacement(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) => destination,
         transitionsBuilder: (context, animation, secondaryAnimation, child) {

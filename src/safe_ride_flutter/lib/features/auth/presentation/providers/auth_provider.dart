@@ -26,6 +26,7 @@
 //   }
 // }
 
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
@@ -33,7 +34,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../../../../core/config/api_keys_config.dart';
 import '../../../../../core/constants/app_strings.dart';
-import '../../../../../core/network/auth_header.dart';
+import '../../../../../core/session/session_manager.dart';
 import '../../../../../core/services/device_identity_service.dart';
 import '../../../../../core/storage/secure_storage_service.dart';
 import '../../domain/repositories/auth_repository.dart';
@@ -44,8 +45,29 @@ class AuthProvider extends ChangeNotifier {
   final AuthRepository repository;
   final SecureStorageService _storage;
   final DeviceIdentityService _deviceIdentityService;
+  final SessionManager _sessionManager;
+  StreamSubscription<SessionTokens>? _tokenUpdatedSubscription;
+  StreamSubscription<void>? _sessionExpiredSubscription;
 
-  AuthProvider(this.repository, this._storage, this._deviceIdentityService) {
+  AuthProvider(
+    this.repository,
+    this._storage,
+    this._deviceIdentityService,
+    this._sessionManager,
+  ) {
+    _tokenUpdatedSubscription = _sessionManager.tokenUpdatedStream.listen((
+      tokens,
+    ) {
+      _token = tokens.accessToken;
+      notifyListeners();
+    });
+    _sessionExpiredSubscription = _sessionManager.sessionExpiredStream.listen((
+      _,
+    ) {
+      _token = null;
+      _clearAuthState();
+      notifyListeners();
+    });
     _restoreSession();
   }
 
@@ -421,7 +443,7 @@ class AuthProvider extends ChangeNotifier {
       }
 
       await repository.logout(refreshToken);
-      await _storage.clearTokens();
+      await _sessionManager.clearSession(notify: true);
 
       // Sign out from Google to clear the cached account
       final googleSignIn = _getGoogleSignIn();
@@ -433,6 +455,7 @@ class AuthProvider extends ChangeNotifier {
       _clearAuthState();
       return true;
     } catch (e) {
+      _lastErrorCode = _extractErrorCode(e);
       debugPrint('Logout error: $e');
       return false;
     } finally {
@@ -442,24 +465,13 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<bool> _saveSession(Map<String, dynamic> response) async {
-    final rawAccessToken = response[ApiKeys.accessToken]?.toString();
-    final refreshToken = response[ApiKeys.refreshToken]?.toString();
-    final accessToken = rawAccessToken == null
-        ? null
-        : AuthHeader.normalizeAccessToken(rawAccessToken);
-    if (accessToken == null ||
-        !AuthHeader.isCompactJwt(accessToken) ||
-        refreshToken == null ||
-        refreshToken.isEmpty) {
+    final saved = await _sessionManager.persistAuthResponse(response);
+    if (!saved) {
       debugPrint('Auth response is missing required tokens.');
       return false;
     }
 
-    await _storage.saveTokens(
-      accessToken: accessToken,
-      refreshToken: refreshToken,
-    );
-    _token = accessToken;
+    _token = await _storage.readAccessToken();
     return true;
   }
 
@@ -476,15 +488,8 @@ class AuthProvider extends ChangeNotifier {
         }
       }
 
-      final savedToken = await _storage.readAccessToken();
-      if (savedToken == null || savedToken.trim().isEmpty) {
-        return;
-      }
-
-      final accessToken = AuthHeader.normalizeAccessToken(savedToken);
-      if (!AuthHeader.isCompactJwt(accessToken)) {
-        debugPrint('Discarding malformed saved access token.');
-        await _storage.clearTokens();
+      final accessToken = await _sessionManager.getValidAccessToken();
+      if (accessToken == null || accessToken.trim().isEmpty) {
         return;
       }
 
@@ -510,7 +515,7 @@ class AuthProvider extends ChangeNotifier {
 
       if (shouldLogout) {
         debugPrint('Authentication failed during session restore. Logging out.');
-        await _storage.clearTokens();
+        await _sessionManager.clearSession(notify: true);
         _token = null;
         _clearAuthState();
       }
@@ -639,5 +644,12 @@ class AuthProvider extends ChangeNotifier {
     return GoogleSignIn(
       serverClientId: configuredClientId.isEmpty ? null : configuredClientId,
     );
+  }
+
+  @override
+  void dispose() {
+    _tokenUpdatedSubscription?.cancel();
+    _sessionExpiredSubscription?.cancel();
+    super.dispose();
   }
 }
