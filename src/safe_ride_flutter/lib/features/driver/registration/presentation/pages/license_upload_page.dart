@@ -1,11 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import '../../application/services/document_image_cropper.dart';
 import '../../application/services/identity_ocr_scanner.dart';
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/widgets/custom_button.dart';
 import '../../data/models/identity_verification_submission.dart';
 import 'criminal_record_upload_page.dart';
+import 'document_camera_page.dart';
 
 enum LicenseType { motorbike, car }
 
@@ -33,7 +34,6 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
 
   File? _frontImage;
   File? _backImage;
-  final ImagePicker _picker = ImagePicker();
   final IdentityOcrScanner _ocrScanner = IdentityOcrScanner();
 
   final List<String> _grades = ['A1', 'A2', 'A', 'B1', 'B2', 'B'];
@@ -59,13 +59,16 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
 
   Future<void> _pickImage(bool isFront) async {
     try {
-      final XFile? image = await _picker.pickImage(
-        source: ImageSource.camera,
-        imageQuality: 70,
+      final file = await Navigator.of(context).push<File>(
+        MaterialPageRoute(
+          builder: (_) => DocumentCameraPage(
+            title: isFront ? 'Mặt trước GPLX' : 'Mặt sau GPLX',
+            instruction: 'Đặt bằng lái nằm gọn trong khung, đủ sáng và rõ nét.',
+          ),
+        ),
       );
 
-      if (image != null) {
-        final file = File(image.path);
+      if (file != null) {
         setState(() {
           if (isFront) {
             _frontImage = file;
@@ -720,36 +723,43 @@ class _PhotoUploadBoxSmall extends StatelessWidget {
                   ? AppColors.primary
                   : const Color(0xFFCFD8DC),
             ),
-            child: Container(
-              height: 120,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: image == null
-                  ? Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.add_a_photo_outlined,
-                          color: Color(0xFF607D8B),
-                          size: 28,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          label,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF455A64),
+            child: AspectRatio(
+              aspectRatio: DocumentImageCropper.documentAspectRatio,
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: image == null
+                    ? Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.add_a_photo_outlined,
+                            color: Color(0xFF607D8B),
+                            size: 28,
                           ),
+                          const SizedBox(height: 8),
+                          Text(
+                            label,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF455A64),
+                            ),
+                          ),
+                        ],
+                      )
+                    : ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.file(
+                          image!,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          height: double.infinity,
                         ),
-                      ],
-                    )
-                  : ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.file(image!, fit: BoxFit.cover),
-                    ),
+                      ),
+              ),
             ),
           ),
           if (image != null)
