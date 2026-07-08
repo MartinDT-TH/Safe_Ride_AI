@@ -1,10 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import '../../application/services/document_image_cropper.dart';
 import '../../application/services/identity_ocr_scanner.dart';
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/widgets/custom_button.dart';
 import '../../data/models/identity_verification_submission.dart';
+import 'document_camera_page.dart';
 import 'license_upload_page.dart';
 
 class UploadCccdPage extends StatefulWidget {
@@ -23,7 +24,6 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
   final TextEditingController _documentNumberController =
       TextEditingController();
   bool _isScanning = false;
-  final ImagePicker _picker = ImagePicker();
   final IdentityOcrScanner _ocrScanner = IdentityOcrScanner();
   late final IdentityVerificationSubmission _submission;
 
@@ -45,13 +45,16 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
 
   Future<void> _pickImage(bool isFront) async {
     try {
-      final XFile? pickedFile = await _picker.pickImage(
-        source: ImageSource.camera,
-        imageQuality: 80,
+      final image = await Navigator.of(context).push<File>(
+        MaterialPageRoute(
+          builder: (_) => DocumentCameraPage(
+            title: isFront ? 'Mặt trước CCCD' : 'Mặt sau CCCD',
+            instruction: 'Đặt CCCD nằm gọn trong khung, đủ sáng và rõ nét.',
+          ),
+        ),
       );
 
-      if (pickedFile != null) {
-        final image = File(pickedFile.path);
+      if (image != null) {
         setState(() {
           if (isFront) {
             _frontImage = image;
@@ -432,57 +435,59 @@ class _PhotoUploadBox extends StatelessWidget {
                   ? AppColors.primary
                   : const Color(0xFFCFD8DC),
             ),
-            child: Container(
-              width: double.infinity,
-              height: 180,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: image == null
-                  ? Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFF5F5F5),
-                            shape: BoxShape.circle,
+            child: AspectRatio(
+              aspectRatio: DocumentImageCropper.documentAspectRatio,
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: image == null
+                    ? Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFF5F5F5),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.add_photo_alternate_outlined,
+                              color: Color(0xFF607D8B),
+                              size: 32,
+                            ),
                           ),
-                          child: const Icon(
-                            Icons.add_photo_alternate_outlined,
-                            color: Color(0xFF607D8B),
-                            size: 32,
+                          const SizedBox(height: 16),
+                          Text(
+                            label,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF263238),
+                            ),
                           ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Chạm để chụp hoặc tải lên',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Color(0xFF78909C),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      )
+                    : ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.file(
+                          image!,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          height: double.infinity,
                         ),
-                        const SizedBox(height: 16),
-                        Text(
-                          label,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF263238),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'Chạm để chụp hoặc tải lên',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Color(0xFF78909C),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    )
-                  : ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: Image.file(
-                        image!,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        height: 180,
                       ),
-                    ),
+              ),
             ),
           ),
           if (image != null)
