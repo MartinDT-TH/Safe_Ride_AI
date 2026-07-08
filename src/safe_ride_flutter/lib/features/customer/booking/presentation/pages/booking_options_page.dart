@@ -9,6 +9,9 @@ import '../../../../../core/maps/polyline_decoder.dart';
 import '../../../../../core/widgets/app_loading_screen.dart';
 import '../../../../../core/widgets/server_error_card.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
+import '../../../../shared/profile/data/models/vehicle_model.dart';
+import '../../../../shared/profile/presentation/providers/vehicle_provider.dart';
+import '../../../../shared/profile/presentation/widgets/vehicle_form_sheet.dart';
 import '../../data/models/booking_catalog.dart';
 import '../../data/models/booking_fare_estimate.dart';
 import '../../data/models/booking_location.dart';
@@ -278,6 +281,56 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<BookingVehicleOption?> _showAddVehicleSheet() async {
+    final vehicleProvider = context.read<VehicleProvider>();
+    final bookingProvider = context.read<BookingProvider>();
+    final knownVehicleIds = vehicleProvider.vehicles
+        .map((item) => item.id)
+        .toSet();
+    VehicleModel? savedVehicle;
+
+    await VehicleFormSheet.show(
+      context,
+      onSave: (newVehicle) async {
+        final saved = await vehicleProvider.saveVehicle(newVehicle);
+        if (!mounted) return false;
+        if (!saved) {
+          _showMessage(
+            vehicleProvider.errorMessage ??
+                'Không thể thêm xe. Vui lòng thử lại.',
+          );
+          return false;
+        }
+
+        savedVehicle =
+            vehicleProvider.vehicles
+                .where((item) => !knownVehicleIds.contains(item.id))
+                .lastOrNull ??
+            vehicleProvider.vehicles.lastOrNull;
+        return true;
+      },
+    );
+
+    if (!mounted || savedVehicle == null) return null;
+
+    final token = context.read<AuthProvider>().token;
+    if (token != null && token.isNotEmpty) {
+      await bookingProvider.loadCatalog(token, forceRefresh: true);
+    }
+    if (!mounted) return null;
+
+    final catalogVehicle = bookingProvider.catalog?.vehicles
+        .where((item) => item.id == savedVehicle!.id)
+        .firstOrNull;
+    final selectedVehicle =
+        catalogVehicle ?? _bookingVehicleFrom(savedVehicle!);
+
+    setState(() => _vehicle = selectedVehicle);
+    await _refreshEstimate();
+    _showMessage('Đã thêm xe mới.');
+    return selectedVehicle;
+  }
+
   Future<void> _showVehiclePicker(List<BookingVehicleOption> vehicles) async {
     final selected = await showModalBottomSheet<BookingVehicleOption>(
       context: context,
@@ -314,15 +367,24 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
               ),
               child: SingleChildScrollView(
                 child: Column(
-                  children: vehicles
-                      .map(
-                        (vehicle) => _VehicleCard(
-                          vehicle: vehicle,
-                          selected: vehicle.id == _vehicle?.id,
-                          onTap: () => Navigator.pop(context, vehicle),
-                        ),
-                      )
-                      .toList(),
+                  children: [
+                    _AddVehicleTile(
+                      onTap: () {
+                        Navigator.pop(context);
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) _showAddVehicleSheet();
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    ...vehicles.map(
+                      (vehicle) => _VehicleCard(
+                        vehicle: vehicle,
+                        selected: vehicle.id == _vehicle?.id,
+                        onTap: () => Navigator.pop(context, vehicle),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -335,6 +397,16 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
       setState(() => _vehicle = selected);
       await _refreshEstimate();
     }
+  }
+
+  BookingVehicleOption _bookingVehicleFrom(VehicleModel vehicle) {
+    return BookingVehicleOption(
+      id: vehicle.id,
+      name: vehicle.name,
+      plateNumber: vehicle.plateNumber,
+      color: vehicle.color,
+      isMotorbike: vehicle.type == VehicleType.motorbike,
+    );
   }
 
   @override
@@ -402,9 +474,7 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                     ),
                   ),
                   const SizedBox(height: 18),
-                  if (catalog == null ||
-                      catalog.services.isEmpty ||
-                      catalog.vehicles.isEmpty) ...[
+                  if (catalog == null || catalog.services.isEmpty) ...[
                     if (hasError)
                       Padding(
                         padding: const EdgeInsets.only(top: 24),
@@ -484,7 +554,9 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                         selected: true,
                         isDropdown: true,
                         onTap: () => _showVehiclePicker(catalog.vehicles),
-                      ),
+                      )
+                    else
+                      _AddVehiclePrompt(onTap: _showAddVehicleSheet),
                   ],
                   const SizedBox(height: 12),
                   _PromoTile(
@@ -526,6 +598,7 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
               onPressed:
                   provider.isLoading ||
                       provider.isEstimating ||
+                      _vehicle == null ||
                       provider.fareEstimate == null
                   ? null
                   : _startDriverSearch,
@@ -645,7 +718,9 @@ class _MapPreviewState extends State<_MapPreview> {
         : [_pickup, destination];
 
     if (boundsPoints.length == 1) {
-      await controller.animateCamera(AppCameraPosition(target: _pickup, zoom: 15));
+      await controller.animateCamera(
+        AppCameraPosition(target: _pickup, zoom: 15),
+      );
       return;
     }
 
@@ -824,13 +899,18 @@ class _RouteSummary extends StatelessWidget {
                 ),
               ],
             ),
-            if (estimate!.surgeMultiplier != null && estimate!.surgeMultiplier! > 1.0)
+            if (estimate!.surgeMultiplier != null &&
+                estimate!.surgeMultiplier! > 1.0)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.trending_up, color: Colors.orange, size: 18),
+                    const Icon(
+                      Icons.trending_up,
+                      color: Colors.orange,
+                      size: 18,
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       'Giá đang tăng do nhu cầu cao (x${estimate!.surgeMultiplier})',
@@ -1113,6 +1193,101 @@ class _ServiceSelector extends StatelessWidget {
     }
     // Fallback if the name is already Vietnamese or something else
     return service.name;
+  }
+}
+
+class _AddVehiclePrompt extends StatelessWidget {
+  const _AddVehiclePrompt({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF8EC),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFFFC56D), width: 1.2),
+        ),
+        child: Row(
+          children: [
+            const CircleAvatar(
+              backgroundColor: Color(0xFFFFE8BD),
+              child: Icon(Icons.add_road_rounded, color: Color(0xFF9A5A00)),
+            ),
+            const SizedBox(width: 14),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Thêm xe mới',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Lưu xe vào tài khoản rồi tiếp tục đặt chuyến.',
+                    style: TextStyle(color: Color(0xFF626A6C), fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+            FilledButton.icon(
+              onPressed: onTap,
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Thêm'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AddVehicleTile extends StatelessWidget {
+  const _AddVehicleTile({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEAF4F4),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.primary, width: 1.2),
+        ),
+        child: const Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: Colors.white,
+              child: Icon(Icons.add, color: AppColors.primary),
+            ),
+            SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                'Thêm xe mới',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+              ),
+            ),
+            Icon(Icons.chevron_right, color: AppColors.primary),
+          ],
+        ),
+      ),
+    );
   }
 }
 

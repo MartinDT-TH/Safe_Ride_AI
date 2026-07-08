@@ -466,12 +466,12 @@ public sealed class BookingRepository : IBookingRepository
             .Distinct()
             .ToListAsync(cancellationToken);
 
+        var activeRules = await GetActivePricingRulesAsync(cancellationToken);
+
         if (customerVehicleClasses.Count == 0)
         {
-            return [];
+            return activeRules;
         }
-
-        var activeRules = await GetActivePricingRulesAsync(cancellationToken);
 
         return activeRules
             .Where(rule => customerVehicleClasses.Contains(rule.VehicleClass))

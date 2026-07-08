@@ -56,14 +56,6 @@ public sealed class GetBookingCatalogQueryHandler
             .OrderBy(service => service.Id)
             .ToList();
 
-        if (vehicles.Count == 0)
-        {
-            throw new BookingException(
-                "booking.no_registered_vehicles",
-                "Bạn chưa đăng ký phương tiện nào. Vui lòng đăng ký xe để bắt đầu đặt chuyến.",
-                404);
-        }
-
         var vehicleOptions = vehicles
             .Select(vehicle => new BookingVehicleOptionResult(
                 vehicle.Id,
