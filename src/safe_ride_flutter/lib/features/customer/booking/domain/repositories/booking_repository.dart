@@ -51,6 +51,8 @@ abstract class BookingRepository {
 
   Future<void> completeTrip(String accessToken, {required int tripId});
 
+  Future<void> confirmCustomerReturn(String accessToken, {required int tripId});
+
   Future<void> submitTripRating(
     String accessToken, {
     required int tripId,

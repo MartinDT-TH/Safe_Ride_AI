@@ -6,6 +6,7 @@ public sealed class InMemoryRedisService : IRedisService
 {
     private readonly ConcurrentDictionary<string, CacheEntry> _entries = new();
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, GeoEntry>> _geoEntries = new();
+    private readonly ConcurrentDictionary<long, TripTrackingState> _tripTracking = new();
     private readonly object _sync = new();
 
     public Task SetAsync(string key, string value, TimeSpan expiration)
@@ -213,6 +214,125 @@ public sealed class InMemoryRedisService : IRedisService
         }
     }
 
+    public Task<TripTrackingUpdateResult> RecordTripTrackingPointAsync(
+        TripTrackingPoint point,
+        TripTrackingWriteOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        lock (_sync)
+        {
+            RemoveExpiredTripTracking(point.TripId);
+            var state = _tripTracking.GetOrAdd(
+                point.TripId,
+                _ => new TripTrackingState());
+            state.ExpiresAt = GetExpiration(options.Ttl);
+
+            if (point.AccuracyMeters is > 0
+                && point.AccuracyMeters > options.MaxAccuracyMeters)
+            {
+                return Task.FromResult(Reject(state, "low_accuracy"));
+            }
+
+            var segmentMeters = 0d;
+            if (state.LastAcceptedPoint is not null)
+            {
+                var validationError = ValidateSegment(
+                    state.LastAcceptedPoint,
+                    point,
+                    options,
+                    out segmentMeters);
+                if (validationError is not null)
+                {
+                    return Task.FromResult(Reject(state, validationError));
+                }
+            }
+
+            state.DistanceMeters += segmentMeters;
+            state.FirstAcceptedPoint ??= point;
+            state.TrackingStartedAtUtc ??= point.ServerTimestampUtc;
+            state.LastAcceptedPoint = point;
+            state.LastUpdatedAtUtc = point.ServerTimestampUtc;
+            state.AcceptedCount++;
+
+            var appendPath = state.LastPathPoint is null
+                || CalculateDistanceKm(
+                    state.LastPathPoint.Latitude,
+                    state.LastPathPoint.Longitude,
+                    point.Latitude,
+                    point.Longitude) * 1000d >= options.PathSampleDistanceMeters
+                || (point.EffectiveTimestampUnixMs - state.LastPathPoint.EffectiveTimestampUnixMs) / 1000d
+                    >= options.PathSampleIntervalSeconds;
+
+            if (appendPath)
+            {
+                state.PathPoints.Add(point);
+                state.LastPathPoint = point;
+                if (state.PathPoints.Count > options.MaxPathPoints)
+                {
+                    state.PathPoints.RemoveRange(
+                        0,
+                        state.PathPoints.Count - options.MaxPathPoints);
+                }
+            }
+
+            return Task.FromResult(new TripTrackingUpdateResult(
+                true,
+                appendPath,
+                segmentMeters,
+                state.DistanceMeters,
+                "accepted"));
+        }
+    }
+
+    public Task<TripTrackingSnapshot> GetTripTrackingSnapshotAsync(
+        long tripId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        lock (_sync)
+        {
+            RemoveExpiredTripTracking(tripId);
+            if (!_tripTracking.TryGetValue(tripId, out var state))
+            {
+                return Task.FromResult(new TripTrackingSnapshot(
+                    [],
+                    0,
+                    null,
+                    null,
+                    null,
+                    null));
+            }
+
+            return Task.FromResult(new TripTrackingSnapshot(
+                state.PathPoints.ToList(),
+                state.DistanceMeters,
+                state.FirstAcceptedPoint,
+                state.LastAcceptedPoint,
+                state.TrackingStartedAtUtc,
+                state.LastUpdatedAtUtc));
+        }
+    }
+
+    public Task RemoveTripTrackingAsync(
+        long tripId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_sync)
+        {
+            _tripTracking.TryRemove(tripId, out _);
+            foreach (var key in RedisKeys.TripTrackingKeys(tripId))
+            {
+                _entries.TryRemove(key, out _);
+            }
+
+            return Task.CompletedTask;
+        }
+    }
+
     private string? GetValue(string key)
     {
         if (!_entries.TryGetValue(key, out var entry))
@@ -235,6 +355,74 @@ public sealed class InMemoryRedisService : IRedisService
         _entries.TryRemove(attemptsKey, out _);
     }
 
+    private static TripTrackingUpdateResult Reject(
+        TripTrackingState state,
+        string reason)
+    {
+        state.RejectedCount++;
+        return new TripTrackingUpdateResult(
+            false,
+            false,
+            0,
+            state.DistanceMeters,
+            reason);
+    }
+
+    private static string? ValidateSegment(
+        TripTrackingPoint previous,
+        TripTrackingPoint current,
+        TripTrackingWriteOptions options,
+        out double segmentMeters)
+    {
+        segmentMeters = 0;
+        if (current.Sequence.HasValue
+            && previous.Sequence.HasValue
+            && current.Sequence.Value <= previous.Sequence.Value)
+        {
+            return "old_sequence";
+        }
+
+        var elapsedSeconds =
+            (current.EffectiveTimestampUnixMs - previous.EffectiveTimestampUnixMs) / 1000d;
+        if (elapsedSeconds <= 0)
+        {
+            return "old_timestamp";
+        }
+
+        segmentMeters = CalculateDistanceKm(
+            previous.Latitude,
+            previous.Longitude,
+            current.Latitude,
+            current.Longitude) * 1000d;
+        if (segmentMeters < options.JitterThresholdMeters)
+        {
+            return "jitter";
+        }
+
+        var inferredSpeedKmh = segmentMeters / elapsedSeconds * 3.6d;
+        if (inferredSpeedKmh > options.MaxInferredSpeedKmh)
+        {
+            return "gps_jump";
+        }
+
+        if (current.SpeedMetersPerSecond is > 0
+            && current.SpeedMetersPerSecond.Value * 3.6d > options.MaxInferredSpeedKmh)
+        {
+            return "reported_speed";
+        }
+
+        return null;
+    }
+
+    private void RemoveExpiredTripTracking(long tripId)
+    {
+        if (_tripTracking.TryGetValue(tripId, out var state)
+            && state.ExpiresAt <= DateTimeOffset.UtcNow)
+        {
+            _tripTracking.TryRemove(tripId, out _);
+        }
+    }
+
     private static DateTimeOffset GetExpiration(TimeSpan expiration)
     {
         return DateTimeOffset.UtcNow.Add(expiration);
@@ -243,4 +431,18 @@ public sealed class InMemoryRedisService : IRedisService
     private sealed record CacheEntry(string Value, DateTimeOffset ExpiresAt);
 
     private sealed record GeoEntry(double Longitude, double Latitude);
+
+    private sealed class TripTrackingState
+    {
+        public List<TripTrackingPoint> PathPoints { get; } = [];
+        public double DistanceMeters { get; set; }
+        public TripTrackingPoint? FirstAcceptedPoint { get; set; }
+        public TripTrackingPoint? LastAcceptedPoint { get; set; }
+        public TripTrackingPoint? LastPathPoint { get; set; }
+        public DateTime? TrackingStartedAtUtc { get; set; }
+        public DateTime? LastUpdatedAtUtc { get; set; }
+        public int AcceptedCount { get; set; }
+        public int RejectedCount { get; set; }
+        public DateTimeOffset ExpiresAt { get; set; } = DateTimeOffset.MaxValue;
+    }
 }

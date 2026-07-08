@@ -219,8 +219,10 @@ abstract final class LocationStrings {
 abstract final class AppConfig {
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://safe-ride-ai.onrender.com/api/',
+    defaultValue: 'http://192.168.100.116:5026/api/',
   );
+  // https://safe-ride-ai.onrender.com
+  // http://192.168.100.116:5026
   static const forceWebSockets = bool.fromEnvironment(
     'FORCE_WEBSOCKETS',
     defaultValue: true, // Dev only or config-based
@@ -268,11 +270,19 @@ abstract final class ApiEndpoints {
       '/payments/driver/trips/$tripId/qr';
   static String driverTripPaymentStatus(int tripId) =>
       '/payments/driver/trips/$tripId/status';
+  static String customerTripPaymentStatus(int tripId) =>
+      '/payments/trips/$tripId/status';
   static String confirmDriverTripCashPayment(int tripId) =>
       '/payments/driver/trips/$tripId/cash';
-  static String submitTripRating(int tripId) => '/feedbacks/trips/$tripId/rating';
+  static String submitTripRating(int tripId) =>
+      '/feedbacks/trips/$tripId/rating';
   static const identityVerificationDocuments =
       '/identity-verification/documents';
+  static String endTrip(int tripId) => '/trips/$tripId/end';
+  static String customerReturnConfirmation(int tripId) =>
+      '/trips/$tripId/return-confirmation/customer';
+  static String driverReturnConfirmation(int tripId) =>
+      '/trips/$tripId/return-confirmation/driver';
 }
 
 abstract final class ApiKeys {
@@ -304,6 +314,10 @@ abstract final class ApiKeys {
   static const lastSelectedRole = 'lastSelectedRole';
   static const message = 'message';
   static const nextStep = 'nextStep';
+  static const sessionMode = 'sessionMode';
+  static const reloginRequiredAfterTrip = 'reloginRequiredAfterTrip';
+  static const continuationTripId = 'continuationTripId';
+  static const continuationAbsoluteExpiresAt = 'continuationAbsoluteExpiresAt';
   static const detail = 'detail';
   static const code = 'code';
   static const retryAfterSeconds = 'retryAfterSeconds';
@@ -319,14 +333,29 @@ abstract final class ApiKeys {
   static const estimatedDistanceKm = 'estimatedDistanceKm';
   static const estimatedDurationMinutes = 'estimatedDurationMinutes';
   static const encodedPolyline = 'encodedPolyline';
+  static const actualDistanceKm = 'actualDistanceKm';
+  static const actualDurationMinutes = 'actualDurationMinutes';
+  static const actualEncodedPolyline = 'actualEncodedPolyline';
+  static const tripEndedAt = 'tripEndedAt';
   static const arrivalPolyline = 'arrivalPolyline';
   static const driverOffer = 'driverOffer';
   static const vehicle = 'vehicle';
+  static const payment = 'payment';
+  static const paymentId = 'paymentId';
+  static const paymentMethod = 'paymentMethod';
+  static const paymentStatus = 'paymentStatus';
+  static const amount = 'amount';
+  static const currency = 'currency';
+  static const paidAt = 'paidAt';
   static const tripStatus = 'tripStatus';
   static const tripId = 'tripId';
   static const address = 'address';
   static const latitude = 'latitude';
   static const longitude = 'longitude';
+  static const clientTimestampUtc = 'clientTimestampUtc';
+  static const sequence = 'sequence';
+  static const accuracyMeters = 'accuracyMeters';
+  static const speedMetersPerSecond = 'speedMetersPerSecond';
   static const offerId = 'offerId';
   static const driverId = 'driverId';
   static const driverLatitude = 'driverLatitude';
@@ -357,6 +386,7 @@ abstract final class ApiKeys {
   static const originalFare = 'originalFare';
   static const discountAmount = 'discountAmount';
   static const finalFare = 'finalFare';
+  static const vehicleReturnedConfirmed = 'vehicleReturnedConfirmed';
   static const currentSearchRadiusKm = 'currentSearchRadiusKm';
   static const estimatedRemainingSeconds = 'estimatedRemainingSeconds';
   static const matchingMessage = 'matchingMessage';
@@ -389,6 +419,11 @@ abstract final class StorageKeys {
   static const accessToken = 'auth.access_token';
   static const refreshToken = 'auth.refresh_token';
   static const userProfile = 'auth.user_profile';
+  static const reloginRequired = 'auth.relogin_required';
+  static const sessionMode = 'auth.session_mode';
+  static const continuationTripId = 'auth.continuation_trip_id';
+  static const continuationAbsoluteExpiresAt =
+      'auth.continuation_absolute_expires_at';
   static const deviceId = 'device.id';
 }
 
@@ -400,4 +435,31 @@ abstract final class DeviceStrings {
   static const linux = 'SafeRide Linux';
   static const fuchsia = 'SafeRide Fuchsia';
   static const idPrefix = 'saferide';
+}
+
+abstract final class DriverReturnEvidenceStrings {
+  static const pageTitle = 'Xác nhận trả xe';
+  static const instruction =
+      'Chụp hoặc chọn ảnh bằng chứng bàn giao xe cho khách. Cần 1–3 ảnh.';
+  static const addPhoto = 'Thêm ảnh bằng chứng';
+  static const tapToAdd = 'Nhấn để thêm ảnh';
+  static const noteLabel = 'Ghi chú (tùy chọn)';
+  static const noteHint = 'Nhập ghi chú nếu cần...';
+  static const submitButton = 'Xác nhận trả xe';
+  static const submitting = 'Đang gửi...';
+  static const successTitle = 'Xác nhận thành công';
+  static const successMessage =
+      'Đã ghi nhận trả xe. Chuyến đi đang được hoàn tất.';
+  static const done = 'Hoàn tất';
+  static const errorMinPhoto = 'Cần ít nhất 1 ảnh bằng chứng.';
+  static const errorMaxPhoto = 'Không được tải lên quá 3 ảnh.';
+  static const errorUploadFailed = 'Không thể gửi bằng chứng. Thử lại.';
+  static const camera = 'Chụp ảnh';
+  static const gallery = 'Chọn từ thư viện';
+  static const removePhoto = 'Xóa ảnh';
+  static const confirmRemove = 'Bạn có muốn xóa ảnh này không?';
+  static const photoOf = 'Ảnh';
+  static const waitingReturnLabel = 'Chờ xác nhận trả xe';
+  static const returnConfirmedLabel = 'Đã xác nhận trả xe';
+  static const endTripButton = 'Kết thúc chuyến';
 }

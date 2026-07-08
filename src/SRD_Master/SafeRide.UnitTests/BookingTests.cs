@@ -191,13 +191,13 @@ public sealed class BookingTests
             new CancelBookingCommand(
                 HandlerFixture.CustomerId,
                 booking.BookingId,
-                "Äá»•i káº¿ hoáº¡ch"),
+                "Đổi kế hoạch"),
             CancellationToken.None);
 
         Assert.Equal(BookingStatus.Cancelled, result.BookingStatus);
         Assert.Equal(BookingStatus.Cancelled, booking.BookingStatus);
         Assert.Equal(HandlerFixture.CustomerId, booking.CancelledBy);
-        Assert.Equal("Äá»•i káº¿ hoáº¡ch", booking.CancellationReason);
+        Assert.Equal("Đổi kế hoạch", booking.CancellationReason);
         Assert.Equal(1, fixture.UnitOfWork.SaveCount);
         Assert.Equal(1, fixture.Scheduler.CancelJobsForBookingCallCount);
         Assert.Equal([booking.BookingId], fixture.Scheduler.CancelledBookingIds);
@@ -606,6 +606,16 @@ public sealed class BookingTests
 
         public Task PublishTripStatusChangedAsync(
             TripStatusChangedEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task PublishTripPaymentPendingAsync(
+            TripPaymentPendingEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task PublishTripPaymentSucceededAsync(
+            TripPaymentSucceededEvent notification,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 

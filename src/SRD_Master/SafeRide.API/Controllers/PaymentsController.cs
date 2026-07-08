@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SafeRide.API.Authorization;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Features.Auth;
 
 namespace SafeRide.API.Controllers;
 
@@ -18,6 +20,7 @@ public sealed class PaymentsController : ControllerBase
 
     [Authorize]
     [HttpPost("trips/{tripId:long}/qr")]
+    [AllowTripContinuation(TripContinuationOperation.TripPayment)]
     [ProducesResponseType<QrPaymentResult>(StatusCodes.Status200OK)]
     public async Task<ActionResult<QrPaymentResult>> CreateQrPayment(
         long tripId,
@@ -40,6 +43,7 @@ public sealed class PaymentsController : ControllerBase
 
     [Authorize]
     [HttpPost("driver/trips/{tripId:long}/qr")]
+    [AllowTripContinuation(TripContinuationOperation.TripPayment)]
     [ProducesResponseType<QrPaymentResult>(StatusCodes.Status200OK)]
     public async Task<ActionResult<QrPaymentResult>> CreateDriverQrPayment(
         long tripId,
@@ -62,6 +66,7 @@ public sealed class PaymentsController : ControllerBase
 
     [Authorize]
     [HttpPost("driver/trips/{tripId:long}/cash")]
+    [AllowTripContinuation(TripContinuationOperation.TripPayment)]
     [ProducesResponseType<PaymentStatusResult>(StatusCodes.Status200OK)]
     public async Task<ActionResult<PaymentStatusResult>> ConfirmCashPayment(
         long tripId,
@@ -81,6 +86,7 @@ public sealed class PaymentsController : ControllerBase
 
     [Authorize]
     [HttpGet("trips/{tripId:long}/status")]
+    [AllowTripContinuation(TripContinuationOperation.TripPayment)]
     [ProducesResponseType<PaymentStatusResult>(StatusCodes.Status200OK)]
     public async Task<ActionResult<PaymentStatusResult>> GetPaymentStatus(
         long tripId,
@@ -100,6 +106,7 @@ public sealed class PaymentsController : ControllerBase
 
     [Authorize]
     [HttpGet("driver/trips/{tripId:long}/status")]
+    [AllowTripContinuation(TripContinuationOperation.TripPayment)]
     [ProducesResponseType<PaymentStatusResult>(StatusCodes.Status200OK)]
     public async Task<ActionResult<PaymentStatusResult>> GetDriverPaymentStatus(
         long tripId,
@@ -125,6 +132,19 @@ public sealed class PaymentsController : ControllerBase
     {
         await _paymentService.HandlePayOsWebhookAsync(request, cancellationToken);
         return Ok(new { success = true });
+    }
+
+    [AllowAnonymous]
+    [HttpPost("demo/qr/webhook")]
+    [ProducesResponseType<PaymentStatusResult>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<PaymentStatusResult>> DemoQrWebhook(
+        [FromBody] DemoQrPaymentWebhookRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _paymentService.ConfirmDemoQrPaymentAsync(
+            request,
+            cancellationToken);
+        return Ok(result);
     }
 
     private bool TryGetUserId(out Guid userId)

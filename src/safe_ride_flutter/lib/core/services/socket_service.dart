@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:signalr_netcore/signalr_client.dart';
 
 import '../constants/app_strings.dart';
+import '../session/session_manager.dart';
 import 'mobile_config_service.dart';
 
 class DriverLocationUpdate {
@@ -168,8 +171,11 @@ class TripStatusUpdate {
         1 => 'DRIVER_ARRIVING',
         2 => 'ARRIVED',
         3 => 'IN_PROGRESS',
-        4 => 'COMPLETED',
-        5 => 'CANCELLED',
+        4 => 'WAITING_RETURN_CONFIRM',
+        5 => 'RETURN_CONFIRMED',
+        6 => 'WAITING_PAYMENT',
+        7 => 'COMPLETED',
+        8 => 'CANCELLED',
         _ => value.toString(),
       };
     }
@@ -180,10 +186,101 @@ class TripStatusUpdate {
       '1' => 'DRIVER_ARRIVING',
       '2' => 'ARRIVED',
       '3' => 'IN_PROGRESS',
-      '4' => 'COMPLETED',
-      '5' => 'CANCELLED',
+      '4' => 'WAITING_RETURN_CONFIRM',
+      '5' => 'RETURN_CONFIRMED',
+      '6' => 'WAITING_PAYMENT',
+      '7' => 'COMPLETED',
+      '8' => 'CANCELLED',
       _ => text,
     };
+  }
+}
+
+class TripPaymentUpdate {
+  const TripPaymentUpdate({
+    required this.tripId,
+    required this.bookingId,
+    required this.customerId,
+    required this.driverId,
+    required this.paymentStatus,
+    required this.amount,
+    required this.currency,
+    required this.tripStatus,
+    required this.message,
+    required this.eventName,
+    this.paymentId,
+    this.paymentMethod,
+    this.occurredAt,
+  });
+
+  final int tripId;
+  final int bookingId;
+  final String customerId;
+  final String driverId;
+  final int? paymentId;
+  final String? paymentMethod;
+  final String paymentStatus;
+  final double amount;
+  final String currency;
+  final String tripStatus;
+  final String message;
+  final String eventName;
+  final DateTime? occurredAt;
+
+  bool get isSuccess => paymentStatus.toLowerCase() == 'success';
+
+  static TripPaymentUpdate? fromSignalRArgumentsForEvent(
+    List<Object?>? arguments,
+    String eventName,
+  ) {
+    if (arguments == null || arguments.isEmpty || arguments.first is! Map) {
+      return null;
+    }
+
+    final data = Map<String, dynamic>.from(arguments.first as Map);
+    final tripId = (_value(data, ApiKeys.tripId) as num?)?.toInt();
+    final bookingId = (_value(data, ApiKeys.bookingId) as num?)?.toInt();
+    final amount = (_value(data, ApiKeys.amount) as num?)?.toDouble();
+    final tripStatus = TripStatusUpdate._normalizeTripStatus(
+      _value(data, ApiKeys.tripStatus),
+    );
+    if (tripId == null ||
+        bookingId == null ||
+        amount == null ||
+        tripStatus == null) {
+      return null;
+    }
+
+    final occurredAtRaw =
+        _value(data, 'paidAt') ??
+        _value(data, 'createdAt') ??
+        _value(data, 'updatedAt');
+
+    return TripPaymentUpdate(
+      tripId: tripId,
+      bookingId: bookingId,
+      customerId: _value(data, 'customerId')?.toString() ?? '',
+      driverId: _value(data, ApiKeys.driverId)?.toString() ?? '',
+      paymentId: (_value(data, ApiKeys.paymentId) as num?)?.toInt(),
+      paymentMethod: _value(data, ApiKeys.paymentMethod)?.toString(),
+      paymentStatus:
+          _value(data, ApiKeys.paymentStatus)?.toString() ?? 'Pending',
+      amount: amount,
+      currency: _value(data, ApiKeys.currency)?.toString() ?? 'VND',
+      tripStatus: tripStatus,
+      message: _value(data, ApiKeys.message)?.toString() ?? '',
+      eventName: eventName,
+      occurredAt: occurredAtRaw == null
+          ? null
+          : DateTime.tryParse(occurredAtRaw.toString()),
+    );
+  }
+
+  static Object? _value(Map<String, dynamic> data, String key) {
+    final pascalKey = key.isEmpty
+        ? key
+        : '${key[0].toUpperCase()}${key.substring(1)}';
+    return data[key] ?? data[pascalKey];
   }
 }
 
@@ -310,8 +407,11 @@ class BookingUpdate {
         1 => 'DRIVER_ARRIVING',
         2 => 'ARRIVED',
         3 => 'IN_PROGRESS',
-        4 => 'COMPLETED',
-        5 => 'CANCELLED',
+        4 => 'WAITING_RETURN_CONFIRM',
+        5 => 'RETURN_CONFIRMED',
+        6 => 'WAITING_PAYMENT',
+        7 => 'COMPLETED',
+        8 => 'CANCELLED',
         _ => value.toString(),
       };
     }
@@ -322,29 +422,46 @@ class BookingUpdate {
       '1' => 'DRIVER_ARRIVING',
       '2' => 'ARRIVED',
       '3' => 'IN_PROGRESS',
-      '4' => 'COMPLETED',
-      '5' => 'CANCELLED',
+      '4' => 'WAITING_RETURN_CONFIRM',
+      '5' => 'RETURN_CONFIRMED',
+      '6' => 'WAITING_PAYMENT',
+      '7' => 'COMPLETED',
+      '8' => 'CANCELLED',
       _ => text,
     };
   }
 }
 
 class SocketService {
-  SocketService({MobileConfigService? mobileConfigService})
-    : _mobileConfigService = mobileConfigService ?? MobileConfigService();
+  SocketService({
+    MobileConfigService? mobileConfigService,
+    SessionManager? sessionManager,
+  })  : _mobileConfigService = mobileConfigService ?? MobileConfigService(),
+        _sessionManager = sessionManager {
+    _sessionExpiredSubscription = _sessionManager?.sessionExpiredStream.listen((
+      _,
+    ) {
+      disconnect();
+    });
+  }
 
   final MobileConfigService _mobileConfigService;
+  final SessionManager? _sessionManager;
+  StreamSubscription<void>? _sessionExpiredSubscription;
   HubConnection? _connection;
-  String? _accessToken;
   bool _driverLocationListenerAttached = false;
   bool _tripStatusListenerAttached = false;
+  bool _tripPaymentListenerAttached = false;
   bool _driverOfferReceivedListenerAttached = false;
   bool _driverOfferClosedListenerAttached = false;
   bool _bookingListenerAttached = false;
+  final List<void Function()> _connectionLostHandlers = [];
   final Map<String, void Function(DriverLocationUpdate update)>
   _driverLocationHandlers = {};
   final Map<String, void Function(TripStatusUpdate update)>
   _tripStatusHandlers = {};
+  final Map<String, void Function(TripPaymentUpdate update)>
+  _tripPaymentHandlers = {};
   final Map<String, void Function(DriverOfferUpdate update)>
   _driverOfferReceivedHandlers = {};
   final Map<String, void Function(int offerId)> _driverOfferClosedHandlers = {};
@@ -360,14 +477,26 @@ class SocketService {
 
   MobileConfigService get _configService => _mobileConfigService;
 
-  Future<void> connect(String accessToken) async {
-    if (accessToken.isEmpty) {
+  /// Register a callback that fires when SignalR connection is permanently lost
+  /// (i.e. automatic reconnect exhausted all retries and gave up).
+  void addConnectionLostHandler(void Function() handler) {
+    _connectionLostHandlers.add(handler);
+  }
+
+  void removeConnectionLostHandler(void Function() handler) {
+    _connectionLostHandlers.remove(handler);
+  }
+
+  Future<void> connect([String? legacyAccessToken]) async {
+    final accessToken =
+        await _sessionManager?.getValidAccessToken() ?? legacyAccessToken;
+    if (accessToken == null || accessToken.isEmpty) {
       return;
     }
 
     final currentState = _connection?.state;
 
-    if (_connection != null && _accessToken == accessToken) {
+    if (_connection != null) {
       if (currentState == HubConnectionState.Connected) return;
       if (currentState == HubConnectionState.Connecting ||
           currentState == HubConnectionState.Reconnecting) {
@@ -380,15 +509,9 @@ class SocketService {
       }
     }
 
-    if (_connection != null && _accessToken != accessToken) {
-      debugPrint('SOCKET: New token, disconnecting old session');
-      await disconnect();
-    }
-
-    _accessToken = accessToken;
-
     final options = HttpConnectionOptions(
-      accessTokenFactory: () async => accessToken,
+      accessTokenFactory: () async =>
+          await _sessionManager?.getValidAccessToken() ?? accessToken,
       requestTimeout: 30000,
       skipNegotiation: AppConfig.forceWebSockets,
       transport: AppConfig.forceWebSockets
@@ -411,9 +534,27 @@ class SocketService {
       _rejoinGroups();
     });
 
+    // When automatic reconnect is exhausted, SignalR fires onclose. We null out
+    // the connection object so the next connect() call rebuilds it from scratch.
+    _connection!.onclose(({error}) {
+      debugPrint('SOCKET: Connection permanently closed. error=$error');
+      _connection = null;
+      _driverLocationListenerAttached = false;
+      _tripStatusListenerAttached = false;
+      _tripPaymentListenerAttached = false;
+      _driverOfferReceivedListenerAttached = false;
+      _driverOfferClosedListenerAttached = false;
+      _bookingListenerAttached = false;
+      _joinedTripGroups.clear();
+      _joinedBookingGroups.clear();
+      for (final h in List.of(_connectionLostHandlers)) {
+        h();
+      }
+    });
+
     if (_connection!.state == HubConnectionState.Disconnected) {
       try {
-        debugPrint('SOCKET: Starting connection...');
+        debugPrint('SOCKET: Starting connection to $_hubUrl ...');
         await _connection!.start();
         debugPrint('SOCKET: Connected successfully');
       } catch (e) {
@@ -429,6 +570,9 @@ class SocketService {
     }
     if (_tripStatusHandlers.isNotEmpty && !_tripStatusListenerAttached) {
       _attachTripStatusListener();
+    }
+    if (_tripPaymentHandlers.isNotEmpty && !_tripPaymentListenerAttached) {
+      _attachTripPaymentListeners();
     }
     if (_driverOfferReceivedHandlers.isNotEmpty &&
         !_driverOfferReceivedListenerAttached) {
@@ -573,6 +717,47 @@ class SocketService {
     _tripStatusHandlers.remove(key);
   }
 
+  void onTripPaymentUpdated(
+    void Function(TripPaymentUpdate update) handler, {
+    String key = 'default',
+  }) {
+    _tripPaymentHandlers[key] = handler;
+    _attachTripPaymentListeners();
+  }
+
+  void _attachTripPaymentListeners() {
+    if (_connection == null || _tripPaymentListenerAttached) {
+      return;
+    }
+
+    _tripPaymentListenerAttached = true;
+    final events = _configService.config.realtime.events;
+    void handle(String eventName, List<Object?>? arguments) {
+      final update = TripPaymentUpdate.fromSignalRArgumentsForEvent(
+        arguments,
+        eventName,
+      );
+      if (update != null) {
+        for (final handler in List.of(_tripPaymentHandlers.values)) {
+          handler(update);
+        }
+      }
+    }
+
+    _connection!.on(
+      events.tripPaymentPending,
+      (arguments) => handle(events.tripPaymentPending, arguments),
+    );
+    _connection!.on(
+      events.tripPaymentSucceeded,
+      (arguments) => handle(events.tripPaymentSucceeded, arguments),
+    );
+  }
+
+  void removeTripPaymentUpdatedHandler(String key) {
+    _tripPaymentHandlers.remove(key);
+  }
+
   void onBookingUpdated(
     void Function(BookingUpdate update) handler, {
     String key = 'default',
@@ -646,8 +831,42 @@ class SocketService {
     await _invokeSafely('SetDriverOnline', [latitude, longitude]);
   }
 
-  Future<void> updateDriverLocation(double latitude, double longitude) async {
-    await _invokeSafely('UpdateDriverLocation', [latitude, longitude]);
+  Future<void> updateDriverLocation(
+    double latitude,
+    double longitude, {
+    DateTime? clientTimestampUtc,
+    int? sequence,
+    double? accuracyMeters,
+    double? speedMetersPerSecond,
+  }) async {
+    final hasDetailedPayload =
+        clientTimestampUtc != null ||
+        sequence != null ||
+        accuracyMeters != null ||
+        speedMetersPerSecond != null;
+    if (!hasDetailedPayload) {
+      await _invokeSafely('UpdateDriverLocation', [latitude, longitude]);
+      return;
+    }
+
+    final payload = <String, dynamic>{
+      ApiKeys.latitude: latitude,
+      ApiKeys.longitude: longitude,
+    };
+    if (clientTimestampUtc != null) {
+      payload[ApiKeys.clientTimestampUtc] = clientTimestampUtc
+          .toUtc()
+          .toIso8601String();
+    }
+    if (sequence != null) payload[ApiKeys.sequence] = sequence;
+    if (accuracyMeters != null) {
+      payload[ApiKeys.accuracyMeters] = accuracyMeters;
+    }
+    if (speedMetersPerSecond != null) {
+      payload[ApiKeys.speedMetersPerSecond] = speedMetersPerSecond;
+    }
+
+    await _invokeSafely('UpdateDriverLocationDetailed', [payload]);
   }
 
   Future<void> setDriverOffline() async {
@@ -708,14 +927,15 @@ class SocketService {
       await _connection!.stop();
     }
     _connection = null;
-    _accessToken = null;
     _driverLocationListenerAttached = false;
     _tripStatusListenerAttached = false;
+    _tripPaymentListenerAttached = false;
     _driverOfferReceivedListenerAttached = false;
     _driverOfferClosedListenerAttached = false;
     _bookingListenerAttached = false;
     _driverLocationHandlers.clear();
     _tripStatusHandlers.clear();
+    _tripPaymentHandlers.clear();
     _driverOfferReceivedHandlers.clear();
     _driverOfferClosedHandlers.clear();
     _bookingHandlers.clear();
@@ -723,6 +943,12 @@ class SocketService {
     _joinedTripGroups.clear();
     _desiredBookingGroups.clear();
     _joinedBookingGroups.clear();
+  }
+
+  Future<void> dispose() async {
+    await _sessionExpiredSubscription?.cancel();
+    _sessionExpiredSubscription = null;
+    await disconnect();
   }
 
   String get _hubUrl {

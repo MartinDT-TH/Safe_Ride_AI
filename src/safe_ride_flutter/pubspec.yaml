@@ -60,9 +60,12 @@ dependencies:
   vietmap_flutter_gl: ^4.1.0
   widget_to_marker: ^1.0.6
   geocoding: ^4.0.0
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+  integration_test:
     sdk: flutter
 
   # The "flutter_lints" package below contains a set of recommended lints to

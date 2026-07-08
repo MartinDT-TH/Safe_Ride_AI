@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Common.Models;
 using SafeRide.Application.Common.Realtime;
 using SafeRide.Domain.Enums;
 using SafeRide.Infrastructure.Persistence;
@@ -17,19 +19,25 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IRealtimeNotificationService _realtimeNotificationService;
     private readonly IOptionsMonitor<DriverRealtimeOptions> _options;
+    private readonly IOptionsMonitor<TripTrackingOptions> _tripTrackingOptions;
+    private readonly ILogger<DriverRealtimeService> _logger;
 
     public DriverRealtimeService(
         ApplicationDbContext dbContext,
         IRedisService redisService,
         IDateTimeProvider dateTimeProvider,
         IRealtimeNotificationService realtimeNotificationService,
-        IOptionsMonitor<DriverRealtimeOptions> options)
+        IOptionsMonitor<DriverRealtimeOptions> options,
+        IOptionsMonitor<TripTrackingOptions> tripTrackingOptions,
+        ILogger<DriverRealtimeService> logger)
     {
         _dbContext = dbContext;
         _redisService = redisService;
         _dateTimeProvider = dateTimeProvider;
         _realtimeNotificationService = realtimeNotificationService;
         _options = options;
+        _tripTrackingOptions = tripTrackingOptions;
+        _logger = logger;
     }
 
     public async Task UpdateDriverLocationAsync(
@@ -38,7 +46,18 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
         double longitude,
         CancellationToken cancellationToken = default)
     {
-        ValidateCoordinate(latitude, longitude);
+        await UpdateDriverLocationAsync(
+            driverId,
+            new DriverLocationUpdateInput(latitude, longitude),
+            cancellationToken);
+    }
+
+    public async Task UpdateDriverLocationAsync(
+        Guid driverId,
+        DriverLocationUpdateInput location,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateCoordinate(location.Latitude, location.Longitude);
 
         var utcNow = _dateTimeProvider.UtcNow;
         var activeTrip = await GetActiveTripForLocationAsync(
@@ -54,20 +73,25 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
 
         await CacheDriverLocationAsync(
             driverId,
-            latitude,
-            longitude,
+            location.Latitude,
+            location.Longitude,
             utcNow,
             activeTrip is null ? DriverWorkStatus.Online : DriverWorkStatus.Busy);
 
         await RefreshDriverHeartbeatAsync(driverId, utcNow, cancellationToken);
+        await RecordTripTrackingPointIfEligibleAsync(
+            location,
+            activeTrip,
+            utcNow,
+            cancellationToken);
 
         await _realtimeNotificationService.PublishDriverLocationUpdatedAsync(
             new DriverLocationUpdatedEvent(
                 driverId,
                 activeTrip?.CustomerId,
                 activeTrip?.TripId,
-                latitude,
-                longitude,
+                location.Latitude,
+                location.Longitude,
                 utcNow),
             cancellationToken);
     }
@@ -116,15 +140,15 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        await _redisService.RemoveAsync(RedisKeys.DriverOnline(driverId));
-        await _redisService.RemoveAsync(RedisKeys.DriverStatus(driverId));
-        await _redisService.RemoveAsync(RedisKeys.DriverLocation(driverId));
+        await TryRemoveRedisKeyAsync(RedisKeys.DriverOnline(driverId));
+        await TryRemoveRedisKeyAsync(RedisKeys.DriverStatus(driverId));
+        await TryRemoveRedisKeyAsync(RedisKeys.DriverLocation(driverId));
         if (profile?.WorkStatus != DriverWorkStatus.Busy)
         {
-            await _redisService.RemoveAsync(RedisKeys.DriverActiveTrip(driverId));
+            await TryRemoveRedisKeyAsync(RedisKeys.DriverActiveTrip(driverId));
         }
-        await _redisService.RemoveAsync(RedisKeys.DriverHeartbeatThrottle(driverId));
-        await RemoveDriverFromOnlineGeoAsync(driverId, cancellationToken);
+        await TryRemoveRedisKeyAsync(RedisKeys.DriverHeartbeatThrottle(driverId));
+        await TryRemoveDriverFromOnlineGeoAsync(driverId, cancellationToken);
     }
 
     public Task RemoveDriverFromOnlineGeoAsync(
@@ -200,6 +224,57 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
+    private async Task RecordTripTrackingPointIfEligibleAsync(
+        DriverLocationUpdateInput location,
+        ActiveDriverTripSnapshot? activeTrip,
+        DateTime utcNow,
+        CancellationToken cancellationToken)
+    {
+        if (activeTrip is null || activeTrip.TripStatus != TripStatus.IN_PROGRESS)
+        {
+            return;
+        }
+
+        var clientTimestampUtc = NormalizeClientTimestamp(location.ClientTimestampUtc);
+        var effectiveTimestampUtc = clientTimestampUtc ?? utcNow;
+        var point = new TripTrackingPoint(
+            activeTrip.TripId,
+            location.Latitude,
+            location.Longitude,
+            new DateTimeOffset(utcNow).ToUnixTimeMilliseconds(),
+            new DateTimeOffset(effectiveTimestampUtc).ToUnixTimeMilliseconds(),
+            utcNow,
+            clientTimestampUtc,
+            location.Sequence,
+            location.AccuracyMeters,
+            location.SpeedMetersPerSecond);
+
+        var options = _tripTrackingOptions.CurrentValue;
+        var writeOptions = new TripTrackingWriteOptions(
+            TimeSpan.FromHours(options.TrackingTtlHours),
+            options.MaxPathPoints,
+            options.AccumulatorJitterThresholdMeters,
+            options.PathSampleDistanceMeters,
+            options.PathSampleIntervalSeconds,
+            options.MaxInferredSpeedKmh,
+            options.MaxAccuracyMeters);
+
+        try
+        {
+            await _redisService.RecordTripTrackingPointAsync(
+                point,
+                writeOptions,
+                cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Failed to record trip tracking point for trip {TripId}. Realtime location publish will continue.",
+                activeTrip.TripId);
+        }
+    }
+
     private async Task<ActiveDriverTripSnapshot?> GetActiveTripForLocationAsync(
         Guid driverId,
         CancellationToken cancellationToken)
@@ -229,10 +304,8 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
         var activeTrip = await _dbContext.Trips
             .AsNoTracking()
             .Where(x => x.DriverId == driverId
-                && (x.TripStatus == TripStatus.ACCEPTED
-                    || x.TripStatus == TripStatus.DRIVER_ARRIVING
-                    || x.TripStatus == TripStatus.ARRIVED
-                    || x.TripStatus == TripStatus.IN_PROGRESS))
+                && x.TripStatus != TripStatus.COMPLETED
+                && x.TripStatus != TripStatus.CANCELLED)
             .Select(x => new ActiveDriverTripSnapshot(
                 x.Id,
                 x.BookingId,
@@ -261,10 +334,39 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
 
     private static bool IsActiveTripStatus(TripStatus status)
     {
-        return status is TripStatus.ACCEPTED
-            or TripStatus.DRIVER_ARRIVING
-            or TripStatus.ARRIVED
-            or TripStatus.IN_PROGRESS;
+        return status is not TripStatus.COMPLETED and not TripStatus.CANCELLED;
+    }
+
+    private async Task TryRemoveRedisKeyAsync(string key)
+    {
+        try
+        {
+            await _redisService.RemoveAsync(key);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Redis cleanup failed for key {RedisKey} while setting driver offline.",
+                key);
+        }
+    }
+
+    private async Task TryRemoveDriverFromOnlineGeoAsync(
+        Guid driverId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await RemoveDriverFromOnlineGeoAsync(driverId, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Redis GEO cleanup failed while setting driver {DriverId} offline.",
+                driverId);
+        }
     }
 
     private static void ValidateCoordinate(double latitude, double longitude)
@@ -278,6 +380,21 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
                 nameof(latitude),
                 "Driver location coordinates are invalid.");
         }
+    }
+
+    private static DateTime? NormalizeClientTimestamp(DateTime? timestamp)
+    {
+        if (!timestamp.HasValue)
+        {
+            return null;
+        }
+
+        return timestamp.Value.Kind switch
+        {
+            DateTimeKind.Utc => timestamp.Value,
+            DateTimeKind.Local => timestamp.Value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(timestamp.Value, DateTimeKind.Utc)
+        };
     }
 
     private sealed record ActiveDriverTripSnapshot(

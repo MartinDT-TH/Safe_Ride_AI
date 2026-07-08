@@ -29,6 +29,32 @@ public sealed record BookingVehicleSummaryResponse(
     string Color,
     bool IsMotorbike);
 
+public sealed record TripReturnEvidenceSummaryResponse(
+    long Id,
+    string ImageUrl,
+    string? ContentType,
+    int DisplayOrder);
+
+public sealed record TripReturnConfirmationSummaryResponse(
+    long Id,
+    HandoverStatus HandoverStatus,
+    Guid DriverId,
+    Guid ConfirmedByUserId,
+    DateTime ConfirmedAt,
+    decimal? DriverLatitude,
+    decimal? DriverLongitude,
+    string? Note,
+    IReadOnlyList<TripReturnEvidenceSummaryResponse> Evidence);
+
+public sealed record TripPaymentSummaryResponse(
+    long? PaymentId,
+    PaymentMethod? PaymentMethod,
+    PaymentStatus PaymentStatus,
+    decimal Amount,
+    string Currency,
+    DateTime? PaidAt,
+    string Message);
+
 public sealed record BookingResponse(
     long BookingId,
     BookingType BookingType,
@@ -53,4 +79,10 @@ public sealed record BookingResponse(
     double? CurrentSearchRadiusKm = null,
     DateTime? ExpiresAt = null,
     int? EstimatedRemainingSeconds = null,
-    string? MatchingMessage = null);
+    string? MatchingMessage = null,
+    TripReturnConfirmationSummaryResponse? ReturnConfirmation = null,
+    TripPaymentSummaryResponse? Payment = null,
+    double? ActualDistanceKm = null,
+    int? ActualDurationMinutes = null,
+    string? ActualEncodedPolyline = null,
+    DateTime? TripEndedAt = null);

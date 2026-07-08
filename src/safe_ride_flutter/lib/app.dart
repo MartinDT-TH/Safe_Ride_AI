@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'core/constants/app_strings.dart';
 import 'core/theme/app_theme.dart';
 import 'core/services/connectivity_service.dart';
+import 'core/session/session_coordinator.dart';
 import 'dependency_injection/injection.dart';
 
 import 'features/shared/onboarding/presentation/pages/splash_page.dart';
@@ -22,6 +23,7 @@ class _MyAppState extends State<MyApp> {
     super.initState();
     _connectivityService = getIt<ConnectivityService>();
     _connectivityService.initialize();
+    getIt<SessionCoordinator>().start();
   }
 
   @override
@@ -36,6 +38,7 @@ class _MyAppState extends State<MyApp> {
       debugShowCheckedModeBanner: false,
       title: AppStrings.appName,
       theme: AppTheme.lightTheme,
+      navigatorKey: SessionCoordinator.navigatorKey,
       scaffoldMessengerKey: _connectivityService.messengerKey,
       home: const SplashPage(),
     );

@@ -33,6 +33,10 @@ public interface IPaymentService
         long tripId,
         CancellationToken cancellationToken);
 
+    Task<PaymentStatusResult> ConfirmDemoQrPaymentAsync(
+        DemoQrPaymentWebhookRequest request,
+        CancellationToken cancellationToken);
+
     Task HandlePayOsWebhookAsync(
         PayOsWebhookRequest request,
         CancellationToken cancellationToken);
@@ -45,9 +49,11 @@ public sealed record QrPaymentResult(
     decimal Amount,
     string Currency,
     PaymentStatus PaymentStatus,
+    TripStatus TripStatus,
     string? QrCode,
     string? CheckoutUrl,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string Message);
 
 public sealed record PaymentStatusResult(
     long TripId,
@@ -60,7 +66,14 @@ public sealed record PaymentStatusResult(
     decimal DriverShare,
     decimal PlatformShare,
     string Currency,
-    DateTime? PaidAt);
+    DateTime? PaidAt,
+    TripStatus TripStatus,
+    string Message);
+
+public sealed record DemoQrPaymentWebhookRequest(
+    long TripId,
+    string? OrderCode,
+    decimal? Amount);
 
 public sealed record PayOsWebhookRequest(
     string Code,

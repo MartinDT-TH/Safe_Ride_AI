@@ -1,5 +1,6 @@
-﻿using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using SafeRide.Application.Features.Auth;
 using SafeRide.Application.Features.Auth.Services;
 using SafeRide.Domain.Entities;
 using SafeRide.Infrastructure.Persistence;
@@ -25,34 +26,77 @@ public sealed class JwtTokenService : IJwtTokenService
 
     public Task<(string Token, string JwtId, int ExpiresIn)> GenerateAccessTokenAsync(
         AspNetUser user,
-        IList<string> roles)
+        IList<string> roles,
+        AccessTokenContext? context = null)
     {
+        context ??= AccessTokenContext.Normal;
         var jwtId = Guid.NewGuid().ToString("N");
         var claims = new List<Claim>
         {
+            new(JwtRegisteredClaimNames.Iss, _options.Issuer),
+            new(JwtRegisteredClaimNames.Aud, _options.Audience),
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new(JwtRegisteredClaimNames.Jti, jwtId),
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.MobilePhone, user.PhoneNumber ?? string.Empty),
             new(ClaimTypes.Email, user.Email ?? string.Empty),
-            new(ClaimTypes.Name, user.FullName ?? user.UserName ?? user.Id.ToString())
+            new(ClaimTypes.Name, user.FullName ?? user.UserName ?? user.Id.ToString()),
+            new(AuthClaimTypes.SessionMode, context.SessionMode)
         };
+
+        if (string.Equals(
+                context.SessionMode,
+                AuthSessionModes.TripContinuation,
+                StringComparison.Ordinal))
+        {
+            if (context.ContinuationTripId.HasValue)
+            {
+                claims.Add(new Claim(
+                    AuthClaimTypes.ContinuationTripId,
+                    context.ContinuationTripId.Value.ToString()));
+            }
+
+            claims.Add(new Claim(
+                AuthClaimTypes.ReloginRequiredAfterTrip,
+                context.ReloginRequiredAfterTrip ? "true" : "false"));
+
+            if (context.ContinuationAbsoluteExpiresAt.HasValue)
+            {
+                claims.Add(new Claim(
+                    AuthClaimTypes.ContinuationAbsoluteExpiresAt,
+                    DateTime.SpecifyKind(
+                            context.ContinuationAbsoluteExpiresAt.Value,
+                            DateTimeKind.Utc)
+                        .ToString("O")));
+            }
+        }
 
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.SecretKey));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+        var accessTokenMinutes = context.AccessTokenMinutes ?? _options.AccessTokenMinutes;
         var token = new JwtSecurityToken(
-            issuer: _options.Issuer,
-            audience: _options.Audience,
-            claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(_options.AccessTokenMinutes),
-            signingCredentials: credentials);
+            new JwtHeader(credentials),
+            new JwtPayload(
+                _options.Issuer,
+                _options.Audience,
+                claims,
+                notBefore: null,
+                expires: DateTime.UtcNow.AddMinutes(accessTokenMinutes)));
+        if (roles.Count > 0)
+        {
+            object rolePayload = roles.Count == 1
+                ? roles[0]
+                : roles.ToArray();
+            token.Payload["role"] = rolePayload;
+            token.Payload[ClaimTypes.Role] = rolePayload;
+        }
 
         return Task.FromResult((
             new JwtSecurityTokenHandler().WriteToken(token),
             jwtId,
-            _options.AccessTokenMinutes * 60));
+            accessTokenMinutes * 60));
     }
 
     public string GenerateRawRefreshToken()

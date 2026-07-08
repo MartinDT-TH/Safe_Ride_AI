@@ -2,6 +2,9 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Common.Models;
+using SafeRide.Application.Features.Auth;
+using SafeRide.Contracts.Requests.Drivers;
 
 namespace SafeRide.Realtime;
 
@@ -9,10 +12,14 @@ namespace SafeRide.Realtime;
 public sealed class SafeRideHub : Hub
 {
     private readonly IDriverRealtimeService _driverRealtimeService;
+    private readonly ITripContinuationAccessService _tripContinuationAccessService;
 
-    public SafeRideHub(IDriverRealtimeService driverRealtimeService)
+    public SafeRideHub(
+        IDriverRealtimeService driverRealtimeService,
+        ITripContinuationAccessService tripContinuationAccessService)
     {
         _driverRealtimeService = driverRealtimeService;
+        _tripContinuationAccessService = tripContinuationAccessService;
     }
 
     public override async Task OnConnectedAsync()
@@ -33,9 +40,13 @@ public sealed class SafeRideHub : Hub
         await base.OnConnectedAsync();
     }
 
-    public Task JoinBooking(long bookingId)
+    public async Task JoinBooking(long bookingId)
     {
-        return Groups.AddToGroupAsync(
+        await EnsureContinuationAllowedAsync(
+            TripContinuationOperation.SignalRJoinBooking,
+            bookingId: bookingId);
+
+        await Groups.AddToGroupAsync(
             Context.ConnectionId,
             RealtimeGroups.Booking(bookingId));
     }
@@ -47,9 +58,13 @@ public sealed class SafeRideHub : Hub
             RealtimeGroups.Booking(bookingId));
     }
 
-    public Task JoinTrip(long tripId)
+    public async Task JoinTrip(long tripId)
     {
-        return Groups.AddToGroupAsync(
+        await EnsureContinuationAllowedAsync(
+            TripContinuationOperation.SignalRJoinTrip,
+            tripId: tripId);
+
+        await Groups.AddToGroupAsync(
             Context.ConnectionId,
             RealtimeGroups.Trip(tripId));
     }
@@ -71,10 +86,38 @@ public sealed class SafeRideHub : Hub
             throw new HubException("Cannot resolve authenticated driver id.");
         }
 
+        await EnsureContinuationAllowedAsync(
+            TripContinuationOperation.DriverLocation);
+
         await _driverRealtimeService.UpdateDriverLocationAsync(
             driverId,
             latitude,
             longitude,
+            Context.ConnectionAborted);
+    }
+
+    [Authorize(Roles = "Driver")]
+    public async Task UpdateDriverLocationDetailed(UpdateDriverLocationRequest request)
+    {
+        ValidateCoordinate(request.Latitude, request.Longitude);
+
+        if (!TryGetUserId(out var driverId))
+        {
+            throw new HubException("Cannot resolve authenticated driver id.");
+        }
+
+        await EnsureContinuationAllowedAsync(
+            TripContinuationOperation.DriverLocation);
+
+        await _driverRealtimeService.UpdateDriverLocationAsync(
+            driverId,
+            new DriverLocationUpdateInput(
+                request.Latitude,
+                request.Longitude,
+                request.ClientTimestampUtc,
+                request.Sequence,
+                request.AccuracyMeters,
+                request.SpeedMetersPerSecond),
             Context.ConnectionAborted);
     }
 
@@ -87,6 +130,8 @@ public sealed class SafeRideHub : Hub
         {
             throw new HubException("Cannot resolve authenticated driver id.");
         }
+
+        EnsureNormalSession();
 
         await _driverRealtimeService.SetDriverOnlineAsync(
             driverId,
@@ -103,9 +148,44 @@ public sealed class SafeRideHub : Hub
             throw new HubException("Cannot resolve authenticated driver id.");
         }
 
+        EnsureNormalSession();
+
         await _driverRealtimeService.SetDriverOfflineAsync(
             driverId,
             Context.ConnectionAborted);
+    }
+
+    private async Task EnsureContinuationAllowedAsync(
+        TripContinuationOperation operation,
+        long? tripId = null,
+        long? bookingId = null)
+    {
+        if (Context.User is null)
+        {
+            throw new HubException("Cannot resolve authenticated user.");
+        }
+
+        var allowed = await _tripContinuationAccessService.IsAllowedAsync(
+            Context.User,
+            operation,
+            tripId,
+            bookingId,
+            Context.ConnectionAborted);
+        if (!allowed)
+        {
+            throw new HubException("Trip continuation session cannot access this resource.");
+        }
+    }
+
+    private void EnsureNormalSession()
+    {
+        if (string.Equals(
+                Context.User?.FindFirstValue(AuthClaimTypes.SessionMode),
+                AuthSessionModes.TripContinuation,
+                StringComparison.Ordinal))
+        {
+            throw new HubException("Trip continuation session cannot change driver presence.");
+        }
     }
 
     private bool TryGetUserId(out Guid userId)

@@ -1,7 +1,14 @@
+using SafeRide.Application.Common.Models;
+
 namespace SafeRide.Application.Common.Interfaces;
 
 public interface IDriverRealtimeService
 {
+    Task UpdateDriverLocationAsync(
+        Guid driverId,
+        DriverLocationUpdateInput location,
+        CancellationToken cancellationToken = default);
+
     Task UpdateDriverLocationAsync(
         Guid driverId,
         double latitude,

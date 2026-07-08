@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,12 +15,14 @@ namespace SafeRide.IntegrationTests;
 
 public sealed class AuthApiFactory : WebApplicationFactory<Program>
 {
-    private readonly string _databaseName = $"saferide-auth-{Guid.NewGuid():N}";
-    private SqliteConnection? _keeperConnection;
+    private readonly string _databasePath = Path.Combine(
+        Path.GetTempPath(),
+        $"saferide-auth-{Guid.NewGuid():N}.db");
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+        builder.UseSetting("BackgroundJobs:Enabled", "false");
         builder.ConfigureLogging(logging => { /* logging.ClearProviders(); */ });
         builder.ConfigureAppConfiguration((_, configuration) =>
         {
@@ -29,6 +30,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
             {
                 ["ConnectionStrings:DefaultConnection"] = "Server=unused",
                 ["ConnectionStrings:Redis"] = string.Empty,
+                ["BackgroundJobs:Enabled"] = "false",
                 ["Jwt:Issuer"] = "SafeRide.Tests",
                 ["Jwt:Audience"] = "SafeRide.Tests.Client",
                 ["Jwt:SecretKey"] = "integration-test-secret-key-that-is-long-enough-123456",
@@ -50,10 +52,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
             services.RemoveAll<ISpeedSmsService>();
             services.RemoveAll<IGoogleTokenVerifier>();
 
-            var connectionString =
-                $"Data Source={_databaseName};Mode=Memory;Cache=Shared;Default Timeout=30";
-            _keeperConnection = new SqliteConnection(connectionString);
-            _keeperConnection.Open();
+            var connectionString = $"Data Source={_databasePath};Default Timeout=30";
 
             services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseSqlite(connectionString, sqlite => sqlite.UseNetTopologySuite()));
@@ -158,6 +157,36 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
                 RejectionReason TEXT NULL
             );
             CREATE INDEX IX_DriverKyc_DriverId ON DriverKyc (DriverId);
+            CREATE TABLE Bookings (
+                Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                CustomerId TEXT NOT NULL,
+                BookingStatus TEXT NOT NULL DEFAULT 'Searching',
+                BookingType TEXT NOT NULL DEFAULT 'Now',
+                PickupAddress TEXT NOT NULL DEFAULT '',
+                PickupLocation BLOB NULL,
+                DestinationAddress TEXT NULL,
+                DestinationLocation BLOB NULL,
+                EstimatedDistanceKm REAL NOT NULL DEFAULT 0,
+                EstimatedDurationMinutes INTEGER NOT NULL DEFAULT 0,
+                EstimatedFare TEXT NOT NULL DEFAULT '0',
+                OriginalFare TEXT NOT NULL DEFAULT '0',
+                DiscountAmount TEXT NOT NULL DEFAULT '0',
+                FinalFare TEXT NOT NULL DEFAULT '0',
+                CreatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IX_Bookings_CustomerId ON Bookings (CustomerId);
+            CREATE TABLE Trips (
+                Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                BookingId INTEGER NOT NULL,
+                DriverId TEXT NOT NULL,
+                TripStatus TEXT NOT NULL DEFAULT 'ACCEPTED',
+                CreatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                DriverAssignedAt TEXT NULL,
+                StartedAt TEXT NULL,
+                CompletedAt TEXT NULL
+            );
+            CREATE INDEX IX_Trips_BookingId ON Trips (BookingId);
+            CREATE INDEX IX_Trips_DriverId ON Trips (DriverId);
             CREATE TABLE Vehicles (
                 Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
                 OwnerUserId TEXT NOT NULL,
@@ -224,7 +253,23 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
         base.Dispose(disposing);
         if (disposing)
         {
-            _keeperConnection?.Dispose();
+            DeleteDatabaseFile(_databasePath);
+            DeleteDatabaseFile($"{_databasePath}-wal");
+            DeleteDatabaseFile($"{_databasePath}-shm");
+        }
+    }
+
+    private static void DeleteDatabaseFile(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
         }
     }
 }
@@ -332,6 +377,22 @@ public sealed class FakeRedisService : IRedisService
         _counters.TryRemove(attemptsKey, out _);
         return Task.FromResult(OtpVerificationResult.Success);
     }
+
+    public Task<TripTrackingUpdateResult> RecordTripTrackingPointAsync(
+        TripTrackingPoint point,
+        TripTrackingWriteOptions options,
+        CancellationToken cancellationToken = default) =>
+        _geoStorage.RecordTripTrackingPointAsync(point, options, cancellationToken);
+
+    public Task<TripTrackingSnapshot> GetTripTrackingSnapshotAsync(
+        long tripId,
+        CancellationToken cancellationToken = default) =>
+        _geoStorage.GetTripTrackingSnapshotAsync(tripId, cancellationToken);
+
+    public Task RemoveTripTrackingAsync(
+        long tripId,
+        CancellationToken cancellationToken = default) =>
+        _geoStorage.RemoveTripTrackingAsync(tripId, cancellationToken);
 }
 
 public sealed class FakeSmsService : ISpeedSmsService

@@ -188,7 +188,7 @@ class BookingRemoteDatasource {
         }
       }
       throw const BookingApiException(
-        'KhÃ´ng thá»ƒ láº¥y chuyáº¿n Ä‘ang hoáº¡t Ä‘á»™ng. Vui lÃ²ng thá»­ láº¡i.',
+        'Không thể lấy chuyến đang hoạt động. Vui lòng thử lại.',
       );
     }
   }
@@ -337,7 +337,36 @@ class BookingRemoteDatasource {
         }
       }
       throw const BookingApiException(
-        'KhÃ´ng thá»ƒ káº¿t thÃºc chuyáº¿n. Vui lÃ²ng thá»­ láº¡i.',
+        'Không thể kết thúc chuyến. Vui lòng thử lại.',
+      );
+    }
+  }
+
+  Future<void> confirmCustomerReturn(
+    String accessToken, {
+    required int tripId,
+  }) async {
+    try {
+      await _dio.post(
+        ApiEndpoints.customerReturnConfirmation(tripId),
+        data: {ApiKeys.vehicleReturnedConfirmed: true},
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+        ),
+      );
+    } on DioException catch (exception) {
+      final statusCode = exception.response?.statusCode;
+      final data = exception.response?.data;
+      if (data is Map) {
+        final detail = data[ApiKeys.detail]?.toString();
+        final code = data[ApiKeys.code]?.toString();
+        if (detail != null) {
+          throw BookingApiException(detail, code: code, statusCode: statusCode);
+        }
+      }
+      throw BookingApiException(
+        'Không thể xác nhận trả xe. Vui lòng thử lại.',
+        statusCode: statusCode,
       );
     }
   }

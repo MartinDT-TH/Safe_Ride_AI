@@ -303,6 +303,73 @@ public sealed class ResilientRedisService : IRedisService
         }
     }
 
+    public async Task<TripTrackingUpdateResult> RecordTripTrackingPointAsync(
+        TripTrackingPoint point,
+        TripTrackingWriteOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        var fallbackResult = await _fallback.RecordTripTrackingPointAsync(
+            point,
+            options,
+            cancellationToken);
+        if (!CanTryPrimary())
+        {
+            return fallbackResult;
+        }
+
+        try
+        {
+            var primaryResult = await _primary.RecordTripTrackingPointAsync(
+                point,
+                options,
+                cancellationToken);
+            MarkPrimaryAvailable();
+            return primaryResult;
+        }
+        catch (Exception exception)
+        {
+            MarkPrimaryUnavailable(exception);
+            return fallbackResult;
+        }
+    }
+
+    public async Task<TripTrackingSnapshot> GetTripTrackingSnapshotAsync(
+        long tripId,
+        CancellationToken cancellationToken = default)
+    {
+        if (CanTryPrimary())
+        {
+            try
+            {
+                var primarySnapshot = await _primary.GetTripTrackingSnapshotAsync(
+                    tripId,
+                    cancellationToken);
+                MarkPrimaryAvailable();
+                if (HasSnapshot(primarySnapshot))
+                {
+                    return primarySnapshot;
+                }
+            }
+            catch (Exception exception)
+            {
+                MarkPrimaryUnavailable(exception);
+            }
+        }
+
+        return await _fallback.GetTripTrackingSnapshotAsync(
+            tripId,
+            cancellationToken);
+    }
+
+    public async Task RemoveTripTrackingAsync(
+        long tripId,
+        CancellationToken cancellationToken = default)
+    {
+        await _fallback.RemoveTripTrackingAsync(tripId, cancellationToken);
+        await TryPrimaryAsync(
+            () => _primary.RemoveTripTrackingAsync(tripId, cancellationToken));
+    }
+
     private async Task TryPrimaryAsync(Func<Task> operation)
     {
         if (!CanTryPrimary())
@@ -345,5 +412,13 @@ public sealed class ResilientRedisService : IRedisService
                 "Redis unavailable; using in-memory fallback for {DurationSeconds} seconds.",
                 _circuitBreakDuration.TotalSeconds);
         }
+    }
+
+    private static bool HasSnapshot(TripTrackingSnapshot snapshot)
+    {
+        return snapshot.DistanceMeters > 0
+            || snapshot.PathPoints.Count > 0
+            || snapshot.FirstAcceptedPoint is not null
+            || snapshot.LastAcceptedPoint is not null;
     }
 }

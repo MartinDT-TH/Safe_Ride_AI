@@ -66,6 +66,15 @@ public static class DependencyInjection
             .AddOptions<GoogleAuthOptions>()
             .Bind(configuration.GetSection(GoogleAuthOptions.SectionName));
         services
+            .AddOptions<TripContinuationOptions>()
+            .Bind(configuration.GetSection(TripContinuationOptions.SectionName))
+            .Validate(options => options.ExpiredRefreshGraceMinutes > 0, "Authentication:TripContinuation:ExpiredRefreshGraceMinutes must be greater than zero.")
+            .Validate(options => options.AccessTokenMinutes > 0, "Authentication:TripContinuation:AccessTokenMinutes must be greater than zero.")
+            .Validate(options => options.RefreshTokenMinutes > 0, "Authentication:TripContinuation:RefreshTokenMinutes must be greater than zero.")
+            .Validate(options => options.AbsoluteMaxHoursFromTripStart > 0, "Authentication:TripContinuation:AbsoluteMaxHoursFromTripStart must be greater than zero.")
+            .Validate(options => options.PostCompletionRatingGraceMinutes > 0, "Authentication:TripContinuation:PostCompletionRatingGraceMinutes must be greater than zero.")
+            .ValidateOnStart();
+        services
             .AddOptions<CloudinaryOptions>()
             .Bind(configuration.GetSection(CloudinaryOptions.SectionName));
         services
@@ -147,6 +156,14 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(TripTrackingOptions.SectionName))
             .Validate(options => options.TripLiveTtlHours > 0, "TripTracking:TripLiveTtlHours must be greater than zero.")
             .Validate(options => options.DriverStatusTtlMinutes > 0, "TripTracking:DriverStatusTtlMinutes must be greater than zero.")
+            .Validate(options => options.TrackingTtlHours > 0, "TripTracking:TrackingTtlHours must be greater than zero.")
+            .Validate(options => options.MaxPathPoints > 0, "TripTracking:MaxPathPoints must be greater than zero.")
+            .Validate(options => options.AccumulatorJitterThresholdMeters >= 0, "TripTracking:AccumulatorJitterThresholdMeters must be greater than or equal to zero.")
+            .Validate(options => options.PathSampleDistanceMeters >= 0, "TripTracking:PathSampleDistanceMeters must be greater than or equal to zero.")
+            .Validate(options => options.PathSampleIntervalSeconds > 0, "TripTracking:PathSampleIntervalSeconds must be greater than zero.")
+            .Validate(options => options.MaxInferredSpeedKmh > 0, "TripTracking:MaxInferredSpeedKmh must be greater than zero.")
+            .Validate(options => options.MaxAccuracyMeters > 0, "TripTracking:MaxAccuracyMeters must be greater than zero.")
+            .Validate(options => options.FinalizeLockSeconds > 0, "TripTracking:FinalizeLockSeconds must be greater than zero.")
             .ValidateOnStart();
 
         // ── Hangfire ───────────────────────────────────────────────────────────────
@@ -184,10 +201,13 @@ public static class DependencyInjection
                 provider.GetRequiredService<ILogger<ResilientRedisService>>()));
         services.AddSingleton<ICloudinaryImageService, CloudinaryImageService>();
         services.AddSingleton<IIdentityDocumentStorage, CloudinaryIdentityDocumentStorage>();
+        services.AddSingleton<ITripReturnEvidenceStorage, CloudinaryTripReturnEvidenceStorage>();
         services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IGoogleTokenVerifier, GoogleTokenVerifier>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<ITripSessionQueryService, TripSessionQueryService>();
+        services.AddScoped<ITripContinuationAccessService, TripContinuationAccessService>();
         services.AddScoped<IBookingRepository, BookingRepository>();
         services.AddScoped<IPromotionRepository, PromotionRepository>();
         services.AddScoped<IRatingRepository, RatingRepository>();
@@ -197,6 +217,7 @@ public static class DependencyInjection
         services.AddScoped<IBookingAssignmentService, BookingAssignmentService>();
         services.AddScoped<IDriverQueryService, DriverQueryService>();
         services.AddScoped<IDriverRealtimeService, DriverRealtimeService>();
+        services.AddScoped<TripFareFinalizationService>();
         services.AddScoped<ITripStatusService, TripStatusService>();
         services.AddHttpClient<ISpeedSmsService, InfobipSmsService>();
         services.AddHttpClient<IPaymentService, PayOsPaymentService>((provider, client) =>
@@ -363,8 +384,16 @@ public static class DependencyInjection
                             Detail = "Bạn không có quyền truy cập tài nguyên này.",
                             Instance = context.Request.Path
                         };
-                        problem.Extensions["code"] = "auth.forbidden";
+                        problem.Extensions["code"] = context.HttpContext.Items.TryGetValue("AuthErrorCode", out var code)
+                            ? code
+                            : "auth.forbidden";
                         problem.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
+                        if (context.HttpContext.Items.TryGetValue("AuthErrorDetail", out var detail)
+                            && detail is string detailText
+                            && !string.IsNullOrWhiteSpace(detailText))
+                        {
+                            problem.Detail = detailText;
+                        }
                         await context.Response.WriteAsJsonAsync(problem);
                     }
                 };
@@ -385,7 +414,7 @@ public static class DependencyInjection
                     IssuerSigningKey = new SymmetricSecurityKey(
                         Encoding.UTF8.GetBytes(jwt.SecretKey)),
                     ValidateLifetime = true,
-                    ClockSkew = TimeSpan.Zero
+                    ClockSkew = TimeSpan.FromSeconds(30)
                 };
             });
 

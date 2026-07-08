@@ -31,19 +31,22 @@ class CustomerHomePage extends StatefulWidget {
 class _CustomerHomePageState extends State<CustomerHomePage> {
   bool _handledAuthGate = false;
 
+  AuthProvider? _authProvider;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      context.read<AuthProvider>().addListener(_handleAuthGate);
+      _authProvider = context.read<AuthProvider>();
+      _authProvider?.addListener(_handleAuthGate);
       _handleAuthGate();
     });
   }
 
   @override
   void dispose() {
-    context.read<AuthProvider>().removeListener(_handleAuthGate);
+    _authProvider?.removeListener(_handleAuthGate);
     super.dispose();
   }
 
@@ -559,6 +562,9 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
   TripTrackingState _trackingState(BookingResponse booking) {
     return booking.tripStatus == 'IN_PROGRESS' ||
+            booking.tripStatus == 'WAITING_RETURN_CONFIRM' ||
+            booking.tripStatus == 'RETURN_CONFIRMED' ||
+            booking.tripStatus == 'WAITING_PAYMENT' ||
             booking.tripStatus == 'COMPLETED'
         ? TripTrackingState.inProgress
         : TripTrackingState.arriving;

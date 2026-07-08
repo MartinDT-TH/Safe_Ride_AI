@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NetTopologySuite.Geometries;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Common.Models;
 using SafeRide.Application.Common.Realtime;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
@@ -134,6 +136,95 @@ public sealed class DriverRealtimeServiceTests
         Assert.Null(notification.CustomerId);
     }
 
+    [Fact]
+    public async Task UpdateDriverLocation_WhenTripInProgress_RecordsTripTrackingDistance()
+    {
+        await using var dbContext = CreateDbContext();
+        var redis = new InMemoryRedisService();
+        var realtime = new RealtimeNotificationServiceFake();
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        await redis.SetAsync(
+            RedisKeys.DriverActiveTrip(driverId),
+            System.Text.Json.JsonSerializer.Serialize(new DriverActiveTripCache(
+                42,
+                84,
+                driverId,
+                customerId,
+                TripStatus.IN_PROGRESS,
+                UtcNow.AddMinutes(-10))),
+            TimeSpan.FromMinutes(30));
+        await redis.SetIfNotExistsAsync(
+            RedisKeys.DriverHeartbeatThrottle(driverId),
+            "1",
+            TimeSpan.FromMinutes(1));
+        var service = CreateService(dbContext, redis, realtime);
+
+        await service.UpdateDriverLocationAsync(
+            driverId,
+            new DriverLocationUpdateInput(
+                10.762622,
+                106.660172,
+                UtcNow,
+                1,
+                5,
+                8),
+            CancellationToken.None);
+        await service.UpdateDriverLocationAsync(
+            driverId,
+            new DriverLocationUpdateInput(
+                10.763622,
+                106.660172,
+                UtcNow.AddSeconds(10),
+                2,
+                5,
+                8),
+            CancellationToken.None);
+
+        var snapshot = await redis.GetTripTrackingSnapshotAsync(42);
+        Assert.True(snapshot.DistanceMeters > 0);
+        Assert.NotNull(snapshot.FirstAcceptedPoint);
+        Assert.NotNull(snapshot.LastAcceptedPoint);
+        Assert.Equal(2, snapshot.PathPoints.Count);
+    }
+
+    [Fact]
+    public async Task UpdateDriverLocation_WhenTripNotInProgress_DoesNotRecordTripTracking()
+    {
+        await using var dbContext = CreateDbContext();
+        var redis = new InMemoryRedisService();
+        var realtime = new RealtimeNotificationServiceFake();
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        await redis.SetAsync(
+            RedisKeys.DriverActiveTrip(driverId),
+            System.Text.Json.JsonSerializer.Serialize(new DriverActiveTripCache(
+                42,
+                84,
+                driverId,
+                customerId,
+                TripStatus.ACCEPTED,
+                UtcNow.AddMinutes(-10))),
+            TimeSpan.FromMinutes(30));
+        var service = CreateService(dbContext, redis, realtime);
+
+        await service.UpdateDriverLocationAsync(
+            driverId,
+            new DriverLocationUpdateInput(
+                10.762622,
+                106.660172,
+                UtcNow,
+                1,
+                5,
+                8),
+            CancellationToken.None);
+
+        var snapshot = await redis.GetTripTrackingSnapshotAsync(42);
+        Assert.Empty(snapshot.PathPoints);
+        Assert.Equal(0, snapshot.DistanceMeters);
+        Assert.Equal(42, Assert.Single(realtime.DriverLocationNotifications).TripId);
+    }
+
     private static DriverRealtimeService CreateService(
         CountingApplicationDbContext dbContext,
         IRedisService redis,
@@ -150,7 +241,16 @@ public sealed class DriverRealtimeServiceTests
                     DriverHeartbeatDbUpdateIntervalSeconds = 60,
                     DriverLocationTtlMinutes = 60,
                     DriverOnlineTtlMinutes = 60
-                }));
+                }),
+            new OptionsMonitorFake<TripTrackingOptions>(
+                new TripTrackingOptions
+                {
+                    AccumulatorJitterThresholdMeters = 5,
+                    PathSampleDistanceMeters = 0,
+                    PathSampleIntervalSeconds = 1,
+                    MaxInferredSpeedKmh = 130
+                }),
+            NullLogger<DriverRealtimeService>.Instance);
     }
 
     private static CountingApplicationDbContext CreateDbContext()
@@ -319,6 +419,16 @@ public sealed class DriverRealtimeServiceTests
 
         public Task PublishTripStatusChangedAsync(
             TripStatusChangedEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task PublishTripPaymentPendingAsync(
+            TripPaymentPendingEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task PublishTripPaymentSucceededAsync(
+            TripPaymentSucceededEvent notification,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 

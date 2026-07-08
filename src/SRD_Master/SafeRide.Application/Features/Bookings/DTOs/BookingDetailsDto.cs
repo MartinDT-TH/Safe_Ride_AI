@@ -1,3 +1,4 @@
+using SafeRide.Application.Features.Trips.DTOs;
 using SafeRide.Domain.Enums;
 
 namespace SafeRide.Application.Features.Bookings.DTOs;
@@ -13,6 +14,15 @@ public sealed record BookingVehicleSummaryDto(
     string PlateNumber,
     string Color,
     bool IsMotorbike);
+
+public sealed record TripPaymentSummaryDto(
+    long? PaymentId,
+    PaymentMethod? PaymentMethod,
+    PaymentStatus PaymentStatus,
+    decimal Amount,
+    string Currency,
+    DateTime? PaidAt,
+    string Message);
 
 public sealed record BookingDetailsDto(
     long BookingId,
@@ -35,7 +45,13 @@ public sealed record BookingDetailsDto(
     BookingVehicleSummaryDto Vehicle,
     long? TripId,
     TripStatus? TripStatus,
+    TripReturnConfirmationSummaryDto? ReturnConfirmation,
     double? CurrentSearchRadiusKm = null,
     DateTime? ExpiresAt = null,
     int? EstimatedRemainingSeconds = null,
-    string? MatchingMessage = null);
+    string? MatchingMessage = null,
+    TripPaymentSummaryDto? Payment = null,
+    double? ActualDistanceKm = null,
+    int? ActualDurationMinutes = null,
+    string? ActualEncodedPolyline = null,
+    DateTime? TripEndedAt = null);

@@ -89,6 +89,19 @@ public sealed class AuthRateLimitMiddlewareTests
             string expectedHash,
             int maxAttempts) =>
             Task.FromResult(OtpVerificationResult.Missing);
+        public Task<TripTrackingUpdateResult> RecordTripTrackingPointAsync(
+            TripTrackingPoint point,
+            TripTrackingWriteOptions options,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new TripTrackingUpdateResult(false, false, 0, 0, "not_supported"));
+        public Task<TripTrackingSnapshot> GetTripTrackingSnapshotAsync(
+            long tripId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new TripTrackingSnapshot([], 0, null, null, null, null));
+        public Task RemoveTripTrackingAsync(
+            long tripId,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     private sealed class DummyHostEnvironment : Microsoft.Extensions.Hosting.IHostEnvironment

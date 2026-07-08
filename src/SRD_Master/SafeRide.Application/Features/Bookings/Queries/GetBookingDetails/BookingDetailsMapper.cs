@@ -1,6 +1,7 @@
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
 using SafeRide.Application.Features.Bookings.DTOs;
+using SafeRide.Application.Features.Trips.DTOs;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
 
@@ -65,10 +66,84 @@ internal static class BookingDetailsMapper
                 booking.Vehicle.VehicleType == VehicleType.Motorbike),
             booking.Trip?.Id,
             booking.Trip?.TripStatus,
+            MapReturnConfirmation(booking.Trip),
             matchingSnapshot.CurrentSearchRadiusKm,
             matchingSnapshot.ExpiresAt,
             matchingSnapshot.EstimatedRemainingSeconds,
-            matchingMessage);
+            matchingMessage,
+            MapPayment(booking.Trip, price.FinalFare),
+            ActualDistanceKm: booking.Trip?.ActualDistanceKm is null
+                ? null
+                : (double)booking.Trip.ActualDistanceKm.Value,
+            ActualDurationMinutes: booking.Trip?.ActualDurationMinutes,
+            ActualEncodedPolyline: booking.Trip?.RoutePolyline,
+            TripEndedAt: booking.Trip?.EndedAt);
+    }
+
+    private static TripPaymentSummaryDto? MapPayment(Trip? trip, decimal finalFare)
+    {
+        if (trip is null
+            || trip.TripStatus is not (TripStatus.WAITING_PAYMENT or TripStatus.COMPLETED))
+        {
+            return null;
+        }
+
+        var payment = trip.Payments
+            .OrderByDescending(x => x.PaymentStatus == PaymentStatus.Success)
+            .ThenByDescending(x => x.CreatedAt)
+            .FirstOrDefault();
+        var status = payment?.PaymentStatus ?? PaymentStatus.Pending;
+
+        return new TripPaymentSummaryDto(
+            payment?.Id,
+            payment?.PaymentMethod,
+            status,
+            payment?.Amount ?? finalFare,
+            payment?.Currency ?? "VND",
+            payment?.PaidAt,
+            BuildPaymentMessage(trip.TripStatus, status));
+    }
+
+    private static string BuildPaymentMessage(
+        TripStatus tripStatus,
+        PaymentStatus paymentStatus)
+    {
+        if (paymentStatus == PaymentStatus.Success || tripStatus == TripStatus.COMPLETED)
+        {
+            return "Thanh toán đã hoàn tất.";
+        }
+
+        return "Vui lòng thanh toán cho tài xế để hoàn tất chuyến đi.";
+    }
+
+    private static TripReturnConfirmationSummaryDto? MapReturnConfirmation(Trip? trip)
+    {
+        var confirmation = trip?.ReturnConfirmations
+            .OrderByDescending(returnConfirmation => returnConfirmation.ConfirmedAt)
+            .ThenByDescending(returnConfirmation => returnConfirmation.Id)
+            .FirstOrDefault();
+        if (confirmation is null)
+        {
+            return null;
+        }
+
+        return new TripReturnConfirmationSummaryDto(
+            confirmation.Id,
+            confirmation.HandoverStatus,
+            confirmation.DriverId,
+            confirmation.ConfirmedByUserId,
+            confirmation.ConfirmedAt,
+            confirmation.DriverLatitude,
+            confirmation.DriverLongitude,
+            confirmation.Note,
+            confirmation.Evidence
+                .OrderBy(evidence => evidence.DisplayOrder)
+                .Select(evidence => new TripReturnEvidenceSummaryDto(
+                    evidence.Id,
+                    evidence.ImageUrl,
+                    evidence.ContentType,
+                    evidence.DisplayOrder))
+                .ToList());
     }
 
     private static async Task<string?> GetArrivalPolylineAsync(

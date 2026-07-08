@@ -23,6 +23,7 @@ import '../../../../shared/onboarding/presentation/providers/role_provider.dart'
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../shared/profile/presentation/pages/profile_page.dart';
 import 'driver_trip_payment_page.dart';
+import 'driver_return_evidence_page.dart';
 
 class DriverDashboardPage extends StatefulWidget {
   const DriverDashboardPage({super.key});
@@ -53,6 +54,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
   AppLatLng? _driverPosition;
   AppLatLng? _lastReportedPosition;
   DateTime? _lastReportedTime;
+  int _locationSequence = 0;
   double _driverHeading = 0;
   final List<AppLatLng> _arrivalRoutePoints = [];
   final List<AppLatLng> _tripRoutePoints = [];
@@ -101,30 +103,36 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
   }
 
   late DriverDashboardProvider _provider;
+  bool _providerAttached = false;
   DateTime? _lastCameraFitAt;
   static const _cameraFitInterval = Duration(seconds: 3);
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
       final token = context.read<AuthProvider>().token;
       _provider = context.read<DriverDashboardProvider>();
+      _provider.addListener(_onProviderUpdated);
+      _providerAttached = true;
+      _onProviderUpdated();
+      final switchedToCustomer = await _checkActiveCustomerBooking(token);
+      if (switchedToCustomer || !mounted) {
+        return;
+      }
       if (token != null) {
         _provider.initializeRealtime(token);
       }
-      _checkActiveCustomerBooking();
-      _provider.addListener(_onProviderUpdated);
-      _onProviderUpdated();
     });
   }
 
   void _onProviderUpdated() {
     if (!mounted) return;
 
-    final completedTripId = _provider.takeCompletedTripAwaitingPayment();
-    if (completedTripId != null) {
-      _openTripPayment(completedTripId);
+    final tripAwaitingPaymentId = _provider.takeTripAwaitingPayment();
+    if (tripAwaitingPaymentId != null) {
+      _openTripPayment(tripAwaitingPaymentId);
     }
 
     final activeTrip = _provider.activeTrip;
@@ -249,7 +257,9 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
 
   @override
   void dispose() {
-    _provider.removeListener(_onProviderUpdated);
+    if (_providerAttached) {
+      _provider.removeListener(_onProviderUpdated);
+    }
     _stopLocationUpdates();
     super.dispose();
   }
@@ -300,7 +310,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
           ),
         ),
       );
-      throw e;
+      rethrow;
     }
   }
 
@@ -345,9 +355,16 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     if (shouldReport) {
       _lastReportedPosition = newPos;
       _lastReportedTime = now;
+      final sequence = ++_locationSequence;
       context.read<DriverDashboardProvider>().updateLocation(
         position.latitude,
         position.longitude,
+        clientTimestampUtc: position.timestamp,
+        sequence: sequence,
+        accuracyMeters: position.accuracy.isFinite ? position.accuracy : null,
+        speedMetersPerSecond: position.speed.isFinite && position.speed >= 0
+            ? position.speed
+            : null,
       );
     }
 
@@ -494,7 +511,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     return (brng * 180 / math.pi + 360) % 360;
   }
 
-  void _checkActiveCustomerBooking() {
+  Future<bool> _checkActiveCustomerBooking(String? accessToken) async {
     final bookingProvider = context.read<BookingProvider>();
     final roleProvider = context.read<RoleProvider>();
 
@@ -502,12 +519,19 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
       debugPrint(
         'DRIVER_DASHBOARD: Active customer booking detected. Forcing switch to customer mode.',
       );
+      await _provider.goOffline(accessToken: accessToken);
+      if (!mounted) {
+        return true;
+      }
       roleProvider.setRole(AppValues.roleCustomer);
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const CustomerHomePage()),
         (route) => false,
       );
+      return true;
     }
+
+    return false;
   }
 
   void _openTripPayment(int tripId) {
@@ -519,11 +543,17 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
       }
 
       Navigator.of(context)
-          .push(
+          .push<bool>(
             MaterialPageRoute(
               builder: (_) => DriverTripPaymentPage(tripId: tripId),
             ),
           )
+          .then((completed) async {
+            if (mounted && completed == true) {
+              _provider.markTripPaymentCompleted(tripId);
+              await _provider.loadActiveTrip();
+            }
+          })
           .whenComplete(() {
             if (mounted && _openingPaymentTripId == tripId) {
               _openingPaymentTripId = null;
@@ -716,6 +746,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                   bool isLoadingActiveTrip,
                   bool isResponding,
                   bool isUpdatingTrip,
+                  bool isWaitingForCustomerConfirmation,
                 })
               >(
                 selector: (_, provider) => (
@@ -726,6 +757,8 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                   isLoadingActiveTrip: provider.isLoadingActiveTrip,
                   isResponding: provider.isResponding,
                   isUpdatingTrip: provider.isUpdatingTrip,
+                  isWaitingForCustomerConfirmation:
+                      provider.isWaitingForCustomerConfirmation,
                 ),
                 builder: (context, state, child) {
                   if (state.isLoadingActiveTrip) {
@@ -759,6 +792,9 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                       request: state.currentRequest!,
                       isResponding: state.isResponding,
                     );
+                  }
+                  if (state.isWaitingForCustomerConfirmation) {
+                    return const _WaitingCustomerConfirmationCard();
                   }
                   return _StatusToggle(
                     onGoOnline: _publishInitialLocation,
@@ -800,7 +836,7 @@ class _ErrorLoadingActiveTripCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.16),
+              color: Colors.black.withValues(alpha: 0.16),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
@@ -866,10 +902,9 @@ class _ActiveTripCard extends StatelessWidget {
         status == 'ACCEPTED' ||
         status == 'DRIVER_ARRIVING' ||
         status == 'ARRIVED';
-    final canStartArriving = status == 'ACCEPTED';
-    final canMarkArrived = status == 'DRIVER_ARRIVING';
-    final canStartTrip = status == 'ARRIVED';
-    final canComplete = status == 'IN_PROGRESS';
+    final isWaitingReturn = status == 'WAITING_RETURN_CONFIRM';
+    final isReturnConfirmed = status == 'RETURN_CONFIRMED';
+    final isWaitingPayment = status == 'WAITING_PAYMENT';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -880,7 +915,7 @@ class _ActiveTripCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.16),
+              color: Colors.black.withValues(alpha: 0.16),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
@@ -932,7 +967,7 @@ class _ActiveTripCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 20),
-            if (canStartArriving)
+            if (status == 'ACCEPTED')
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -949,7 +984,7 @@ class _ActiveTripCard extends StatelessWidget {
                   style: _primaryButtonStyle(),
                 ),
               )
-            else if (canCancel || canMarkArrived)
+            else if (status == 'DRIVER_ARRIVING')
               Row(
                 children: [
                   if (canCancel) ...[
@@ -977,25 +1012,24 @@ class _ActiveTripCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 12),
                   ],
-                  if (canMarkArrived)
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: isUpdating
-                            ? null
-                            : () => _runTripAction(
-                                context,
-                                () => context
-                                    .read<DriverDashboardProvider>()
-                                    .markArrived(),
-                              ),
-                        icon: const Icon(Icons.flag_rounded),
-                        label: const Text('Đã tới đón'),
-                        style: _primaryButtonStyle(),
-                      ),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: isUpdating
+                          ? null
+                          : () => _runTripAction(
+                              context,
+                              () => context
+                                  .read<DriverDashboardProvider>()
+                                  .markArrived(),
+                            ),
+                      icon: const Icon(Icons.flag_rounded),
+                      label: const Text('Đã tới đón'),
+                      style: _primaryButtonStyle(),
                     ),
+                  ),
                 ],
               )
-            else if (canStartTrip)
+            else if (status == 'ARRIVED')
               Row(
                 children: [
                   if (canCancel) ...[
@@ -1040,7 +1074,7 @@ class _ActiveTripCard extends StatelessWidget {
                   ),
                 ],
               )
-            else if (canComplete)
+            else if (status == 'IN_PROGRESS')
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -1050,15 +1084,23 @@ class _ActiveTripCard extends StatelessWidget {
                           context,
                           () => context
                               .read<DriverDashboardProvider>()
-                              .completeActiveTrip(),
+                              .endTripAsync(),
                         ),
-                  icon: const Icon(Icons.check_circle_rounded),
+                  icon: const Icon(Icons.flag_rounded),
                   label: Text(
-                    isUpdating ? 'Đang xử lý...' : 'Kết thúc chuyến đi',
+                    isUpdating
+                        ? 'Đang xử lý...'
+                        : DriverReturnEvidenceStrings.endTripButton,
                   ),
                   style: _primaryButtonStyle(),
                 ),
-              ),
+              )
+            else if (isWaitingReturn)
+              _buildWaitingReturnSection(context, trip.tripId, isUpdating)
+            else if (isReturnConfirmed)
+              _buildReturnConfirmedBanner()
+            else if (isWaitingPayment)
+              _buildWaitingPaymentSection(context, trip.tripId),
           ],
         ),
       ),
@@ -1074,12 +1116,177 @@ class _ActiveTripCard extends StatelessWidget {
     );
   }
 
+  // ─────────── WAITING_RETURN_CONFIRM section ──────────────────────────
+
+  static Widget _buildWaitingReturnSection(
+    BuildContext context,
+    int tripId,
+    bool isUpdating,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Status banner
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF8E1),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: const Color(0xFFFFCC02).withValues(alpha: 0.5),
+            ),
+          ),
+          child: const Row(
+            children: [
+              Icon(
+                Icons.hourglass_top_rounded,
+                color: Color(0xFFF9A825),
+                size: 20,
+              ),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Đang chờ khách xác nhận trả xe.\nNếu khách không phản hồi, bạn có thể xác nhận thay.',
+                  style: TextStyle(
+                    color: Color(0xFF7B5800),
+                    fontSize: 13,
+                    height: 1.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // Driver substitute confirm button
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: isUpdating
+                ? null
+                : () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            DriverReturnEvidencePage(tripId: tripId),
+                      ),
+                    );
+                  },
+            icon: const Icon(Icons.add_photo_alternate_rounded),
+            label: const Text('Xác nhận thay bằng ảnh bằng chứng'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF006B70),
+              side: const BorderSide(color: Color(0xFF006B70), width: 1.5),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─────────── RETURN_CONFIRMED banner ─────────────────────────────────
+
+  static Widget _buildReturnConfirmedBanner() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE8F7F0),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: const Color(0xFF0A8F62).withValues(alpha: 0.3),
+        ),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.check_circle_rounded, color: Color(0xFF0A8F62), size: 22),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Đã xác nhận trả xe. Đang hoàn tất chuyến đi...',
+              style: TextStyle(
+                color: Color(0xFF0A5C3E),
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _buildWaitingPaymentSection(BuildContext context, int tripId) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFE8F2F2),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: const Color(0xFF006B70).withValues(alpha: 0.3),
+            ),
+          ),
+          child: const Row(
+            children: [
+              Icon(Icons.payments_rounded, color: Color(0xFF006B70), size: 22),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Đã xác nhận trả xe. Vui lòng xác nhận thanh toán để hoàn tất chuyến đi.',
+                  style: TextStyle(
+                    color: Color(0xFF00545A),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () async {
+              final completed = await Navigator.of(context).push<bool>(
+                MaterialPageRoute(
+                  builder: (_) => DriverTripPaymentPage(tripId: tripId),
+                ),
+              );
+              if (!context.mounted || completed != true) {
+                return;
+              }
+              final provider = context.read<DriverDashboardProvider>();
+              provider.markTripPaymentCompleted(tripId);
+              await provider.loadActiveTrip();
+            },
+            icon: const Icon(Icons.receipt_long_rounded),
+            label: const Text('Xác nhận thanh toán'),
+            style: _primaryButtonStyle(),
+          ),
+        ),
+      ],
+    );
+  }
+
   static String _statusLabel(String status) {
     return switch (status) {
       'ACCEPTED' => 'Đã nhận chuyến',
       'DRIVER_ARRIVING' => 'Đang đến điểm đón',
       'ARRIVED' => 'Đã tới điểm đón',
       'IN_PROGRESS' => 'Đang thực hiện chuyến',
+      'WAITING_RETURN_CONFIRM' =>
+        DriverReturnEvidenceStrings.waitingReturnLabel,
+      'RETURN_CONFIRMED' => DriverReturnEvidenceStrings.returnConfirmedLabel,
+      'WAITING_PAYMENT' => 'Chờ thanh toán',
       _ => status,
     };
   }
@@ -1116,14 +1323,12 @@ class _ActiveTripCard extends StatelessWidget {
 }
 
 class _CircleIconButton extends StatelessWidget {
-  final IconData? icon;
-  final Widget? child;
+  final IconData icon;
   final VoidCallback onPressed;
   final bool hasBadge;
 
   const _CircleIconButton({
-    this.icon,
-    this.child,
+    required this.icon,
     required this.onPressed,
     this.hasBadge = false,
   });
@@ -1136,7 +1341,7 @@ class _CircleIconButton extends StatelessWidget {
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -1145,7 +1350,7 @@ class _CircleIconButton extends StatelessWidget {
       child: Stack(
         children: [
           IconButton(
-            icon: child ?? Icon(icon, color: Colors.black87),
+            icon: Icon(icon, color: Colors.black87),
             onPressed: onPressed,
           ),
           if (hasBadge)
@@ -1184,7 +1389,7 @@ class _IncomeHeader extends StatelessWidget {
             borderRadius: BorderRadius.circular(30),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.1),
+                color: Colors.black.withValues(alpha: 0.1),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -1284,7 +1489,7 @@ class _StatusToggleState extends State<_StatusToggle> {
               borderRadius: BorderRadius.circular(35),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
+                  color: Colors.black.withValues(alpha: 0.1),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -1370,6 +1575,63 @@ class _StatusToggleState extends State<_StatusToggle> {
   }
 }
 
+class _WaitingCustomerConfirmationCard extends StatelessWidget {
+  const _WaitingCustomerConfirmationCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 40,
+              height: 40,
+              child: CircularProgressIndicator(
+                color: Color(0xFF006B70),
+                strokeWidth: 3,
+              ),
+            ),
+            SizedBox(height: 24),
+            Text(
+              'Đang đợi xác nhận',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1D2939),
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Đang đợi khách hàng xác nhận tài xế. Vui lòng không tắt ứng dụng.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Color(0xFF667085),
+                height: 1.5,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _NewRequestCard extends StatelessWidget {
   final TripRequest request;
   final bool isResponding;
@@ -1387,7 +1649,7 @@ class _NewRequestCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.2),
+              color: Colors.black.withValues(alpha: 0.2),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),

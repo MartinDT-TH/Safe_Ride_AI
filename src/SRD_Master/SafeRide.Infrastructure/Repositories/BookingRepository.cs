@@ -78,6 +78,10 @@ public sealed class BookingRepository : IBookingRepository
             .AsNoTracking()
             .Include(booking => booking.Vehicle)
             .Include(booking => booking.Trip)
+                .ThenInclude(trip => trip!.ReturnConfirmations)
+                    .ThenInclude(returnConfirmation => returnConfirmation.Evidence)
+            .Include(booking => booking.Trip)
+                .ThenInclude(trip => trip!.Payments)
             .Include(booking => booking.BookingPromotions)
                 .ThenInclude(bookingPromotion => bookingPromotion.Promotion)
             .FirstOrDefaultAsync(
@@ -94,6 +98,10 @@ public sealed class BookingRepository : IBookingRepository
             .AsNoTracking()
             .Include(booking => booking.Vehicle)
             .Include(booking => booking.Trip)
+                .ThenInclude(trip => trip!.ReturnConfirmations)
+                    .ThenInclude(returnConfirmation => returnConfirmation.Evidence)
+            .Include(booking => booking.Trip)
+                .ThenInclude(trip => trip!.Payments)
             .Include(booking => booking.BookingPromotions)
                 .ThenInclude(bookingPromotion => bookingPromotion.Promotion)
             .Where(booking => booking.CustomerId == customerId
@@ -458,12 +466,12 @@ public sealed class BookingRepository : IBookingRepository
             .Distinct()
             .ToListAsync(cancellationToken);
 
+        var activeRules = await GetActivePricingRulesAsync(cancellationToken);
+
         if (customerVehicleClasses.Count == 0)
         {
-            return [];
+            return activeRules;
         }
-
-        var activeRules = await GetActivePricingRulesAsync(cancellationToken);
 
         return activeRules
             .Where(rule => customerVehicleClasses.Contains(rule.VehicleClass))

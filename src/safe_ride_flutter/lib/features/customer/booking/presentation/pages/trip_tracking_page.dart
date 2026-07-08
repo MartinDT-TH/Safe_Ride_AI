@@ -74,6 +74,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
 
   TripTrackingState get _trackingState {
     return _currentTripStatus == 'IN_PROGRESS' ||
+            _currentTripStatus == 'WAITING_PAYMENT' ||
             _currentTripStatus == 'COMPLETED'
         ? TripTrackingState.inProgress
         : TripTrackingState.arriving;
@@ -94,7 +95,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     _initializeRoutes();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _openSummaryIfCompleted(widget.booking.tripStatus);
+      _openSummaryIfPostTrip(widget.booking.tripStatus);
+      _socketService.addConnectionLostHandler(_onSocketConnectionLost);
       unawaited(_connectTripSocket());
       unawaited(_refreshTrackingSnapshot());
       _startTripStatusPolling();
@@ -108,7 +110,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       _currentTripStatus = widget.booking.tripStatus ?? _currentTripStatus;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        _openSummaryIfCompleted(widget.booking.tripStatus);
+        _openSummaryIfPostTrip(widget.booking.tripStatus);
       });
     }
 
@@ -130,6 +132,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     _tripSocketRetryTimer?.cancel();
     _tripStatusPollingTimer?.cancel();
     _pulseController.dispose();
+    _socketService.removeConnectionLostHandler(_onSocketConnectionLost);
     final joinedTripId = _joinedTripId;
     if (joinedTripId != null) {
       _cleanupSocketHandlers(joinedTripId);
@@ -148,6 +151,23 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       await _socketService.leaveTrip(tripId);
     } catch (e) {
       debugPrint('Tracking: Error during socket cleanup: $e');
+    }
+  }
+
+  /// Called by SocketService when the SignalR connection is permanently closed
+  /// (auto-reconnect exhausted). We clear _joinedTripId so that the retry
+  /// timer can call _connectTripSocket() again and go through a full reconnect.
+  void _onSocketConnectionLost() {
+    if (!mounted) return;
+    debugPrint('Tracking: Socket connection lost — will retry reconnect');
+    _joinedTripId = null;
+    _tripSocketConnecting = false;
+    if (mounted) {
+      _showMessage('Mất kết nối tới máy chủ. Đang thử kết nối lại...');
+      _tripSocketRetryTimer?.cancel();
+      _tripSocketRetryTimer = Timer(const Duration(seconds: 3), () {
+        if (mounted) unawaited(_connectTripSocket());
+      });
     }
   }
 
@@ -185,8 +205,6 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         _driverPosition = AppLatLng(driverLat, driverLng);
       } else if (_arrivalRoutePoints.isNotEmpty) {
         _driverPosition = _arrivalRoutePoints.first;
-      } else if (_tripRoutePoints.isNotEmpty) {
-        _driverPosition = _tripRoutePoints.first;
       }
     }
   }
@@ -217,7 +235,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         _currentTripStatus = booking.tripStatus ?? _currentTripStatus;
         _initializeRoutes(booking);
       });
-      _openSummaryIfCompleted(booking.tripStatus);
+      _openSummaryIfPostTrip(booking.tripStatus);
       _fitMapToVisibleRoute();
     } finally {
       _trackingSnapshotRefreshInProgress = false;
@@ -236,7 +254,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
 
     _tripSocketConnecting = true;
     try {
-      await _socketService.connect(accessToken);
+      await _socketService.connect();
       if (!mounted) return;
       debugPrint('Tracking: Connected to Socket for Trip $tripId');
 
@@ -277,7 +295,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
           _currentTripStatus = update.tripStatus;
         });
 
-        if (_isCompletedStatus(update.tripStatus)) {
+        if (_shouldOpenTripSummary(update.tripStatus)) {
           _openSummaryPage();
         } else if (update.tripStatus == 'CANCELLED') {
           _showMessage('Chuyến đi đã được hủy.');
@@ -290,6 +308,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       _joinedTripId = tripId;
       _tripSocketRetryTimer?.cancel();
       _tripSocketRetryTimer = null;
+      // Refresh snapshot after reconnect to restore driver position immediately
+      unawaited(_refreshTrackingSnapshot());
     } catch (e) {
       debugPrint('Tracking Error: $e');
       if (mounted) {
@@ -720,6 +740,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                           child: Text(
                             _currentTripStatus == 'ARRIVED'
                                 ? 'Tài xế đã đến điểm đón'
+                                : _currentTripStatus == 'WAITING_PAYMENT'
+                                ? 'Chờ thanh toán cho tài xế'
                                 : isArriving
                                 ? 'Tài xế đang đến • ${_getArrivalDurationMinutes()} phút'
                                 : 'Đang di chuyển • ${_getTripDurationMinutes()} phút',
@@ -1072,6 +1094,42 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                 ],
               ),
             ] else ...[
+              if (_currentTripStatus == 'WAITING_PAYMENT') ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE8F2F2),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: const Color(0xFF006B70).withValues(alpha: 0.28),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.payments_rounded,
+                        color: _tealColor,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          widget.booking.payment?.message ??
+                              'Vui lòng thanh toán cho tài xế để hoàn tất chuyến đi.',
+                          style: const TextStyle(
+                            color: Color(0xFF00545A),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
               Row(
                 children: [
                   Expanded(
@@ -1170,7 +1228,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         );
     if (!mounted || booking == null) return;
 
-    if (_isCompletedStatus(booking.tripStatus)) {
+    if (_shouldOpenTripSummary(booking.tripStatus)) {
       await _openSummaryPage(booking);
     } else if (booking.tripStatus == 'CANCELLED' ||
         booking.bookingStatus == 'Cancelled') {
@@ -1210,8 +1268,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     await _refreshTripStatus();
   }
 
-  void _openSummaryIfCompleted(String? tripStatus) {
-    if (_isCompletedStatus(tripStatus)) {
+  void _openSummaryIfPostTrip(String? tripStatus) {
+    if (_shouldOpenTripSummary(tripStatus)) {
       unawaited(_openSummaryPage());
     }
   }
@@ -1222,8 +1280,26 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     _tripStatusPollingTimer?.cancel();
 
     final bookingProvider = context.read<BookingProvider>();
+    final token = context.read<AuthProvider>().token;
+    BookingResponse? finalBooking = completedBooking;
+
+    if (finalBooking == null && token != null && token.isNotEmpty) {
+      try {
+        final refreshed = await bookingProvider.refreshActiveBookingDetails(
+          token,
+          bookingId: widget.booking.bookingId,
+        );
+        if (refreshed != null) {
+          finalBooking = refreshed;
+        }
+      } catch (e) {
+        debugPrint('Failed to refresh latest booking before summary: $e');
+      }
+    }
+
+    if (!mounted) return;
     final booking =
-        completedBooking ?? bookingProvider.activeBooking ?? widget.booking;
+        finalBooking ?? bookingProvider.activeBooking ?? widget.booking;
 
     await Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => TripSummaryPage(booking: booking)),
@@ -1234,8 +1310,18 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   static String _tripStatusHandlerKey(int tripId) => 'tripTracking:$tripId';
   static String _driverLocationHandlerKey(int tripId) =>
       'tripTrackingLocation:$tripId';
-  static bool _isCompletedStatus(String? status) =>
-      status == 'COMPLETED' || status == '4';
+  static bool _shouldOpenTripSummary(String? status) {
+    if (status == null) return false;
+    final s = status.toUpperCase();
+    return s == 'WAITING_RETURN_CONFIRM' ||
+        s == 'RETURN_CONFIRMED' ||
+        s == 'WAITING_PAYMENT' ||
+        s == 'COMPLETED' ||
+        s == '4' ||
+        s == '5' ||
+        s == '6' ||
+        s == '7';
+  }
 }
 
 class _RouteProgress {

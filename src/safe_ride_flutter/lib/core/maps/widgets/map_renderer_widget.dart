@@ -421,8 +421,8 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
         width: p.width,
         zIndex: p.zIndex,
         patterns: p.isDashed
-            ? [gmap.PatternItem.dash(12), gmap.PatternItem.gap(8)]
-            : [],
+            ? <gmap.PatternItem>[gmap.PatternItem.dash(12), gmap.PatternItem.gap(8)]
+            : const <gmap.PatternItem>[],
         startCap: p.endCapRound ? gmap.Cap.roundCap : gmap.Cap.buttCap,
         endCap: p.endCapRound ? gmap.Cap.roundCap : gmap.Cap.buttCap,
         jointType: gmap.JointType.round,
@@ -485,7 +485,7 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
               widget.onMapCreated!(_VietMapControllerWrapper(controller));
             }
           },
-          myLocationEnabled: false,
+          myLocationEnabled: widget.myLocationButtonEnabled,
           myLocationRenderMode: widget.myLocationButtonEnabled
               ? vmap.MyLocationRenderMode.compass
               : vmap.MyLocationRenderMode.normal,
@@ -498,8 +498,18 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
             ignorePointer: true,
             mapController: _vmapController!,
             markers: widget.markers.map((m) {
+              final alignment = m.markerType == AppMarkerType.driver
+                  ? Alignment.center
+                  : Alignment.bottomCenter;
+                  
+              final double width = m.markerType == AppMarkerType.driver ? 40.0 : 32.0;
+              final double height = m.markerType == AppMarkerType.driver ? 40.0 : 44.0;
+
               return vmap.Marker(
+                width: width,
+                height: height,
                 latLng: vmap.LatLng(m.position.latitude, m.position.longitude),
+                alignment: alignment,
                 child: _buildMarkerWidget(m),
               );
             }).toList(),

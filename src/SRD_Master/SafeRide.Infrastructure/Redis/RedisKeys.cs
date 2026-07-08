@@ -61,6 +61,33 @@ public static class RedisKeys
     public static string TripLive(long tripId) =>
         $"sr:trip:live:{tripId}";
 
+    public static string TripTrackingPath(long tripId) =>
+        $"sr:trip:path:{tripId}";
+
+    public static string TripTrackingLastAcceptedPoint(long tripId) =>
+        $"sr:trip:last-accepted-point:{tripId}";
+
+    public static string TripTrackingLastPathPoint(long tripId) =>
+        $"sr:trip:last-path-point:{tripId}";
+
+    public static string TripTrackingDistanceMeters(long tripId) =>
+        $"sr:trip:distance-meters:{tripId}";
+
+    public static string TripTrackingMetadata(long tripId) =>
+        $"sr:trip:tracking-metadata:{tripId}";
+
+    public static string TripTrackingFinalizeLock(long tripId) =>
+        $"sr:trip:finalize-lock:{tripId}";
+
+    public static IReadOnlyList<string> TripTrackingKeys(long tripId) =>
+    [
+        TripTrackingPath(tripId),
+        TripTrackingLastAcceptedPoint(tripId),
+        TripTrackingLastPathPoint(tripId),
+        TripTrackingDistanceMeters(tripId),
+        TripTrackingMetadata(tripId)
+    ];
+
     public const string ActivePricingRules = "sr:pricing:rules:active";
 
     public const string ActiveSurgePricingRules = "sr:pricing:surge-rules:active";

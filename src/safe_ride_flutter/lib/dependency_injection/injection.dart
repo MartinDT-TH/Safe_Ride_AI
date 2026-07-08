@@ -4,6 +4,8 @@ import '../core/services/connectivity_service.dart';
 import '../core/services/device_identity_service.dart';
 import '../core/services/location_service.dart';
 import '../core/services/mobile_config_service.dart';
+import '../core/session/session_manager.dart';
+import '../core/session/session_coordinator.dart';
 import '../core/services/socket_service.dart';
 import '../core/storage/secure_storage_service.dart';
 import '../features/auth/data/datasources/auth_remote_datasource.dart';
@@ -48,8 +50,17 @@ Future<void> setupDependencies() async {
   );
   getIt.registerLazySingleton<LocationService>(() => LocationService());
   getIt.registerLazySingleton<MobileConfigService>(() => MobileConfigService());
+  getIt.registerLazySingleton<SessionManager>(
+    () => SessionManager(storage: getIt<SecureStorageService>()),
+  );
+  getIt.registerLazySingleton<SessionCoordinator>(
+    () => SessionCoordinator(getIt<SessionManager>()),
+  );
   getIt.registerLazySingleton<SocketService>(
-    () => SocketService(mobileConfigService: getIt<MobileConfigService>()),
+    () => SocketService(
+      mobileConfigService: getIt<MobileConfigService>(),
+      sessionManager: getIt<SessionManager>(),
+    ),
   );
   getIt.registerLazySingleton<ConnectivityService>(() => ConnectivityService());
 
@@ -66,6 +77,7 @@ Future<void> setupDependencies() async {
       getIt<AuthRepository>(),
       getIt<SecureStorageService>(),
       getIt<DeviceIdentityService>(),
+      getIt<SessionManager>(),
     ),
   );
 
@@ -141,7 +153,10 @@ Future<void> setupDependencies() async {
   );
 
   getIt.registerFactory<DriverDashboardProvider>(
-    () => DriverDashboardProvider(socketService: getIt<SocketService>()),
+    () => DriverDashboardProvider(
+      socketService: getIt<SocketService>(),
+      sessionManager: getIt<SessionManager>(),
+    ),
   );
 
   getIt.registerLazySingleton<IdentityVerificationRemoteDatasource>(

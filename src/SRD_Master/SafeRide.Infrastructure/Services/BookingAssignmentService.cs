@@ -177,7 +177,6 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             DriverId = offer.DriverId,
             TripStatus = TripStatus.ACCEPTED,
             DriverAssignedAt = utcNow,
-            RoutePolyline = booking.RoutePolyline,
             CreatedAt = utcNow
         };
 
@@ -588,10 +587,8 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         var hasActiveTrip = await _dbContext.Trips
             .AnyAsync(
                 x => x.DriverId == driverId
-                    && (x.TripStatus == TripStatus.ACCEPTED
-                        || x.TripStatus == TripStatus.DRIVER_ARRIVING
-                        || x.TripStatus == TripStatus.ARRIVED
-                        || x.TripStatus == TripStatus.IN_PROGRESS),
+                    && x.TripStatus != TripStatus.COMPLETED
+                    && x.TripStatus != TripStatus.CANCELLED,
                 cancellationToken);
         if (hasActiveTrip)
         {

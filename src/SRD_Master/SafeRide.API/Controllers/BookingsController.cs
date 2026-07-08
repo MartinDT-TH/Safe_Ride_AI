@@ -2,6 +2,8 @@ using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SafeRide.API.Authorization;
+using SafeRide.Application.Features.Auth;
 using SafeRide.Application.Features.Bookings.Commands.CancelBooking;
 using SafeRide.Application.Features.Bookings.Commands.ConfirmDriver;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
@@ -207,6 +209,7 @@ public sealed class BookingsController : ControllerBase
     }
 
     [HttpGet("active")]
+    [AllowTripContinuation(TripContinuationOperation.ActiveTripRead)]
     [ProducesResponseType<BookingResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -228,6 +231,7 @@ public sealed class BookingsController : ControllerBase
     }
 
     [HttpGet("{bookingId:long}")]
+    [AllowTripContinuation(TripContinuationOperation.BookingRead)]
     [ProducesResponseType<BookingResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
@@ -386,6 +390,7 @@ public sealed class BookingsController : ControllerBase
     }
 
     [HttpPost("{bookingId:long}/cancel")]
+    [AllowTripContinuation(TripContinuationOperation.BookingCancel)]
     [ProducesResponseType<BookingResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -605,7 +610,39 @@ public sealed class BookingsController : ControllerBase
             CurrentSearchRadiusKm: result.CurrentSearchRadiusKm,
             ExpiresAt: result.ExpiresAt,
             EstimatedRemainingSeconds: result.EstimatedRemainingSeconds,
-            MatchingMessage: result.MatchingMessage);
+            MatchingMessage: result.MatchingMessage,
+            ReturnConfirmation: result.ReturnConfirmation is null
+                ? null
+                : new TripReturnConfirmationSummaryResponse(
+                    result.ReturnConfirmation.Id,
+                    result.ReturnConfirmation.HandoverStatus,
+                    result.ReturnConfirmation.DriverId,
+                    result.ReturnConfirmation.ConfirmedByUserId,
+                    result.ReturnConfirmation.ConfirmedAt,
+                    result.ReturnConfirmation.DriverLatitude,
+                    result.ReturnConfirmation.DriverLongitude,
+                    result.ReturnConfirmation.Note,
+                    result.ReturnConfirmation.Evidence
+                        .Select(evidence => new TripReturnEvidenceSummaryResponse(
+                            evidence.Id,
+                            evidence.ImageUrl,
+                            evidence.ContentType,
+                            evidence.DisplayOrder))
+                        .ToList()),
+            Payment: result.Payment is null
+                ? null
+                : new TripPaymentSummaryResponse(
+                    result.Payment.PaymentId,
+                    result.Payment.PaymentMethod,
+                    result.Payment.PaymentStatus,
+                    result.Payment.Amount,
+                    result.Payment.Currency,
+                    result.Payment.PaidAt,
+                    result.Payment.Message),
+            ActualDistanceKm: result.ActualDistanceKm,
+            ActualDurationMinutes: result.ActualDurationMinutes,
+            ActualEncodedPolyline: result.ActualEncodedPolyline,
+            TripEndedAt: result.TripEndedAt);
     }
 
     private bool TryGetCustomerId(out Guid customerId)

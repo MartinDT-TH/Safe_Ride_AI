@@ -13,6 +13,10 @@ class BookingResponse {
     required this.encodedPolyline,
     required this.message,
     this.arrivalPolyline,
+    this.actualDistanceKm,
+    this.actualDurationMinutes,
+    this.actualEncodedPolyline,
+    this.tripEndedAt,
     this.scheduledAt,
     this.driverOffer,
     this.pickup,
@@ -28,6 +32,7 @@ class BookingResponse {
     this.expiresAt,
     this.estimatedRemainingSeconds,
     this.matchingMessage,
+    this.payment,
   });
 
   final int bookingId;
@@ -39,6 +44,10 @@ class BookingResponse {
   final double estimatedFare;
   final String encodedPolyline;
   final String? arrivalPolyline;
+  final double? actualDistanceKm;
+  final int? actualDurationMinutes;
+  final String? actualEncodedPolyline;
+  final DateTime? tripEndedAt;
   final String message;
   final BookingDriverOffer? driverOffer;
   final BookingLocation? pickup;
@@ -54,23 +63,26 @@ class BookingResponse {
   final DateTime? expiresAt;
   final int? estimatedRemainingSeconds;
   final String? matchingMessage;
+  final TripPaymentSummary? payment;
 
   factory BookingResponse.fromJson(Map<String, dynamic> json) {
     final estimatedFareValue =
         (_value(json, ApiKeys.estimatedFare) as num?)?.toDouble() ?? 0;
-    final originalFareFromApi =
-        (_value(json, ApiKeys.originalFare) as num?)?.toDouble();
+    final originalFareFromApi = (_value(json, ApiKeys.originalFare) as num?)
+        ?.toDouble();
     final discountAmountValue =
         (_value(json, ApiKeys.discountAmount) as num?)?.toDouble() ?? 0;
-    final finalFareFromApi =
-        (_value(json, ApiKeys.finalFare) as num?)?.toDouble();
+    final finalFareFromApi = (_value(json, ApiKeys.finalFare) as num?)
+        ?.toDouble();
     final driverOfferRaw = _value(json, ApiKeys.driverOffer);
     final pickupRaw = _value(json, ApiKeys.pickup);
     final destinationRaw = _value(json, ApiKeys.destination);
     final vehicleRaw = _value(json, ApiKeys.vehicle);
+    final paymentRaw = _value(json, ApiKeys.payment);
 
     // Fallback originalFare to estimatedFare if it's null or zero
-    final originalFareValue = (originalFareFromApi == null || originalFareFromApi == 0)
+    final originalFareValue =
+        (originalFareFromApi == null || originalFareFromApi == 0)
         ? estimatedFareValue
         : originalFareFromApi;
 
@@ -110,31 +122,37 @@ class BookingResponse {
           (_value(json, ApiKeys.estimatedDistanceKm) as num?)?.toDouble() ?? 0,
       estimatedDurationMinutes:
           (_value(json, ApiKeys.estimatedDurationMinutes) as num?)?.toInt() ??
-              0,
+          0,
       estimatedFare: estimatedFareValue,
       encodedPolyline: _value(json, ApiKeys.encodedPolyline)?.toString() ?? '',
       arrivalPolyline: _value(json, ApiKeys.arrivalPolyline)?.toString(),
+      actualDistanceKm: (_value(json, ApiKeys.actualDistanceKm) as num?)
+          ?.toDouble(),
+      actualDurationMinutes:
+          (_value(json, ApiKeys.actualDurationMinutes) as num?)?.toInt(),
+      actualEncodedPolyline: _value(
+        json,
+        ApiKeys.actualEncodedPolyline,
+      )?.toString(),
+      tripEndedAt: _value(json, ApiKeys.tripEndedAt) == null
+          ? null
+          : DateTime.tryParse(_value(json, ApiKeys.tripEndedAt).toString()),
       message:
-          _value(json, ApiKeys.message)?.toString() ?? BookingStrings.bookingSuccess,
+          _value(json, ApiKeys.message)?.toString() ??
+          BookingStrings.bookingSuccess,
       driverOffer: driverOfferRaw is Map
           ? BookingDriverOffer.fromJson(
               Map<String, dynamic>.from(driverOfferRaw),
             )
           : null,
       pickup: pickupRaw is Map
-          ? _locationFromJson(
-              Map<String, dynamic>.from(pickupRaw),
-            )
+          ? _locationFromJson(Map<String, dynamic>.from(pickupRaw))
           : null,
       destination: destinationRaw is Map
-          ? _locationFromJson(
-              Map<String, dynamic>.from(destinationRaw),
-            )
+          ? _locationFromJson(Map<String, dynamic>.from(destinationRaw))
           : null,
       vehicle: vehicleRaw is Map
-          ? BookingVehicleOption.fromJson(
-              Map<String, dynamic>.from(vehicleRaw),
-            )
+          ? BookingVehicleOption.fromJson(Map<String, dynamic>.from(vehicleRaw))
           : null,
       tripId: (_value(json, ApiKeys.tripId) as num?)?.toInt(),
       tripStatus: _normalizeTripStatus(_value(json, ApiKeys.tripStatus)),
@@ -150,6 +168,9 @@ class BookingResponse {
       estimatedRemainingSeconds:
           (_value(json, ApiKeys.estimatedRemainingSeconds) as num?)?.toInt(),
       matchingMessage: _value(json, ApiKeys.matchingMessage)?.toString(),
+      payment: paymentRaw is Map
+          ? TripPaymentSummary.fromJson(Map<String, dynamic>.from(paymentRaw))
+          : null,
     );
   }
 
@@ -163,6 +184,10 @@ class BookingResponse {
     double? estimatedFare,
     String? encodedPolyline,
     String? arrivalPolyline,
+    double? actualDistanceKm,
+    int? actualDurationMinutes,
+    String? actualEncodedPolyline,
+    DateTime? tripEndedAt,
     String? message,
     BookingDriverOffer? driverOffer,
     BookingLocation? pickup,
@@ -178,6 +203,7 @@ class BookingResponse {
     DateTime? expiresAt,
     int? estimatedRemainingSeconds,
     String? matchingMessage,
+    TripPaymentSummary? payment,
   }) {
     return BookingResponse(
       bookingId: bookingId ?? this.bookingId,
@@ -190,6 +216,12 @@ class BookingResponse {
       estimatedFare: estimatedFare ?? this.estimatedFare,
       encodedPolyline: encodedPolyline ?? this.encodedPolyline,
       arrivalPolyline: arrivalPolyline ?? this.arrivalPolyline,
+      actualDistanceKm: actualDistanceKm ?? this.actualDistanceKm,
+      actualDurationMinutes:
+          actualDurationMinutes ?? this.actualDurationMinutes,
+      actualEncodedPolyline:
+          actualEncodedPolyline ?? this.actualEncodedPolyline,
+      tripEndedAt: tripEndedAt ?? this.tripEndedAt,
       message: message ?? this.message,
       driverOffer: driverOffer ?? this.driverOffer,
       pickup: pickup ?? this.pickup,
@@ -207,16 +239,20 @@ class BookingResponse {
       estimatedRemainingSeconds:
           estimatedRemainingSeconds ?? this.estimatedRemainingSeconds,
       matchingMessage: matchingMessage ?? this.matchingMessage,
+      payment: payment ?? this.payment,
     );
   }
 
   BookingResponse mergeWithPreservedPromotion(BookingResponse newer) {
     // Determine if either version has promotion information
-    final bool oldHasPromo = (promotionCode != null && promotionCode!.trim().isNotEmpty) ||
-                             (discountAmount != null && discountAmount! > 0);
+    final bool oldHasPromo =
+        (promotionCode != null && promotionCode!.trim().isNotEmpty) ||
+        (discountAmount != null && discountAmount! > 0);
 
-    final bool newHasPromo = (newer.promotionCode != null && newer.promotionCode!.trim().isNotEmpty) ||
-                             (newer.discountAmount != null && newer.discountAmount! > 0);
+    final bool newHasPromo =
+        (newer.promotionCode != null &&
+            newer.promotionCode!.trim().isNotEmpty) ||
+        (newer.discountAmount != null && newer.discountAmount! > 0);
 
     // Preserve polylines if missing in newer response
     String? preservedEncodedPolyline = newer.encodedPolyline;
@@ -225,14 +261,23 @@ class BookingResponse {
     }
 
     String? preservedArrivalPolyline = newer.arrivalPolyline;
-    if ((preservedArrivalPolyline == null || preservedArrivalPolyline.isEmpty) &&
+    if ((preservedArrivalPolyline == null ||
+            preservedArrivalPolyline.isEmpty) &&
         (arrivalPolyline != null && arrivalPolyline!.isNotEmpty)) {
       preservedArrivalPolyline = arrivalPolyline;
     }
 
+    String? preservedActualEncodedPolyline = newer.actualEncodedPolyline;
+    if ((preservedActualEncodedPolyline == null ||
+            preservedActualEncodedPolyline.isEmpty) &&
+        (actualEncodedPolyline != null && actualEncodedPolyline!.isNotEmpty)) {
+      preservedActualEncodedPolyline = actualEncodedPolyline;
+    }
+
     // Case 1: Newer response is completely missing promotion info (typical polling)
     if (oldHasPromo && !newHasPromo) {
-      final double preservedOriginalFare = (newer.originalFare != null && newer.originalFare! > 0)
+      final double preservedOriginalFare =
+          (newer.originalFare != null && newer.originalFare! > 0)
           ? newer.originalFare!
           : (originalFare ?? newer.estimatedFare);
 
@@ -249,9 +294,15 @@ class BookingResponse {
         finalFare: calculatedFinalFare,
         encodedPolyline: preservedEncodedPolyline,
         arrivalPolyline: preservedArrivalPolyline,
+        actualDistanceKm: newer.actualDistanceKm ?? actualDistanceKm,
+        actualDurationMinutes:
+            newer.actualDurationMinutes ?? actualDurationMinutes,
+        actualEncodedPolyline: preservedActualEncodedPolyline,
+        tripEndedAt: newer.tripEndedAt ?? tripEndedAt,
         pickup: newer.pickup ?? pickup,
         destination: newer.destination ?? destination,
         vehicle: newer.vehicle ?? vehicle,
+        payment: newer.payment ?? payment,
       );
     }
 
@@ -265,8 +316,8 @@ class BookingResponse {
       // If newerFinal is suspiciously equal to original price despite having a discount
       if (newerDiscount > 0 &&
           (newerFinal == 0 ||
-           (newerFinal - newerOriginal).abs() < 1.0 ||
-           (newerFinal - newer.estimatedFare).abs() < 1.0)) {
+              (newerFinal - newerOriginal).abs() < 1.0 ||
+              (newerFinal - newer.estimatedFare).abs() < 1.0)) {
         newerFinal = newerOriginal - newerDiscount;
       }
 
@@ -276,9 +327,15 @@ class BookingResponse {
         finalFare: newerFinal,
         encodedPolyline: preservedEncodedPolyline,
         arrivalPolyline: preservedArrivalPolyline,
+        actualDistanceKm: newer.actualDistanceKm ?? actualDistanceKm,
+        actualDurationMinutes:
+            newer.actualDurationMinutes ?? actualDurationMinutes,
+        actualEncodedPolyline: preservedActualEncodedPolyline,
+        tripEndedAt: newer.tripEndedAt ?? tripEndedAt,
         pickup: newer.pickup ?? pickup,
         destination: newer.destination ?? destination,
         vehicle: newer.vehicle ?? vehicle,
+        payment: newer.payment ?? payment,
       );
     }
 
@@ -286,9 +343,15 @@ class BookingResponse {
     return newer.copyWith(
       encodedPolyline: preservedEncodedPolyline,
       arrivalPolyline: preservedArrivalPolyline,
+      actualDistanceKm: newer.actualDistanceKm ?? actualDistanceKm,
+      actualDurationMinutes:
+          newer.actualDurationMinutes ?? actualDurationMinutes,
+      actualEncodedPolyline: preservedActualEncodedPolyline,
+      tripEndedAt: newer.tripEndedAt ?? tripEndedAt,
       pickup: newer.pickup ?? pickup,
       destination: newer.destination ?? destination,
       vehicle: newer.vehicle ?? vehicle,
+      payment: newer.payment ?? payment,
     );
   }
 
@@ -301,8 +364,9 @@ class BookingResponse {
   }
 
   static Object? _value(Map<String, dynamic> data, String key) {
-    final pascalKey =
-        key.isEmpty ? key : '${key[0].toUpperCase()}${key.substring(1)}';
+    final pascalKey = key.isEmpty
+        ? key
+        : '${key[0].toUpperCase()}${key.substring(1)}';
     return data[key] ?? data[pascalKey];
   }
 
@@ -340,8 +404,11 @@ class BookingResponse {
         1 => 'DRIVER_ARRIVING',
         2 => 'ARRIVED',
         3 => 'IN_PROGRESS',
-        4 => 'COMPLETED',
-        5 => 'CANCELLED',
+        4 => 'WAITING_RETURN_CONFIRM',
+        5 => 'RETURN_CONFIRMED',
+        6 => 'WAITING_PAYMENT',
+        7 => 'COMPLETED',
+        8 => 'CANCELLED',
         _ => value.toString(),
       };
     }
@@ -352,10 +419,59 @@ class BookingResponse {
       '1' => 'DRIVER_ARRIVING',
       '2' => 'ARRIVED',
       '3' => 'IN_PROGRESS',
-      '4' => 'COMPLETED',
-      '5' => 'CANCELLED',
+      '4' => 'WAITING_RETURN_CONFIRM',
+      '5' => 'RETURN_CONFIRMED',
+      '6' => 'WAITING_PAYMENT',
+      '7' => 'COMPLETED',
+      '8' => 'CANCELLED',
       _ => text,
     };
+  }
+}
+
+class TripPaymentSummary {
+  const TripPaymentSummary({
+    required this.paymentStatus,
+    required this.amount,
+    required this.currency,
+    required this.message,
+    this.paymentId,
+    this.paymentMethod,
+    this.paidAt,
+  });
+
+  final int? paymentId;
+  final String? paymentMethod;
+  final String paymentStatus;
+  final double amount;
+  final String currency;
+  final DateTime? paidAt;
+  final String message;
+
+  bool get isSuccess => paymentStatus.toLowerCase() == 'success';
+
+  factory TripPaymentSummary.fromJson(Map<String, dynamic> json) {
+    return TripPaymentSummary(
+      paymentId: (_value(json, ApiKeys.paymentId) as num?)?.toInt(),
+      paymentMethod: _value(json, ApiKeys.paymentMethod)?.toString(),
+      paymentStatus:
+          _value(json, ApiKeys.paymentStatus)?.toString() ?? 'Pending',
+      amount: (_value(json, ApiKeys.amount) as num?)?.toDouble() ?? 0,
+      currency: _value(json, ApiKeys.currency)?.toString() ?? 'VND',
+      paidAt: _value(json, ApiKeys.paidAt) == null
+          ? null
+          : DateTime.tryParse(_value(json, ApiKeys.paidAt).toString()),
+      message:
+          _value(json, ApiKeys.message)?.toString() ??
+          'Vui lòng thanh toán cho tài xế để hoàn tất chuyến đi.',
+    );
+  }
+
+  static Object? _value(Map<String, dynamic> data, String key) {
+    final pascalKey = key.isEmpty
+        ? key
+        : '${key[0].toUpperCase()}${key.substring(1)}';
+    return data[key] ?? data[pascalKey];
   }
 }
 
@@ -394,7 +510,8 @@ class BookingDriverOffer {
     return BookingDriverOffer(
       offerId: (_value(json, ApiKeys.offerId) as num?)?.toInt() ?? 0,
       driverId: _value(json, ApiKeys.driverId)?.toString() ?? '',
-      driverName: _value(json, ApiKeys.driverName)?.toString() ?? 'Tai xe SafeRide',
+      driverName:
+          _value(json, ApiKeys.driverName)?.toString() ?? 'Tai xe SafeRide',
       driverAvatarUrl: _value(json, ApiKeys.driverAvatarUrl)?.toString(),
       rating: (_value(json, ApiKeys.rating) as num?)?.toDouble() ?? 0,
       tripCount: (_value(json, ApiKeys.tripCount) as num?)?.toInt() ?? 0,
@@ -405,8 +522,10 @@ class BookingDriverOffer {
           ? null
           : DateTime.tryParse(_value(json, ApiKeys.expiresAt).toString()),
       offerStatus: _normalizeOfferStatus(_value(json, ApiKeys.offerStatus)),
-      driverLatitude: (_value(json, ApiKeys.driverLatitude) as num?)?.toDouble(),
-      driverLongitude: (_value(json, ApiKeys.driverLongitude) as num?)?.toDouble(),
+      driverLatitude: (_value(json, ApiKeys.driverLatitude) as num?)
+          ?.toDouble(),
+      driverLongitude: (_value(json, ApiKeys.driverLongitude) as num?)
+          ?.toDouble(),
       customerConfirmRemainingSeconds:
           (_value(json, ApiKeys.customerConfirmRemainingSeconds) as num?)
               ?.toInt(),
@@ -440,8 +559,9 @@ class BookingDriverOffer {
   }
 
   static Object? _value(Map<String, dynamic> data, String key) {
-    final pascalKey =
-        key.isEmpty ? key : '${key[0].toUpperCase()}${key.substring(1)}';
+    final pascalKey = key.isEmpty
+        ? key
+        : '${key[0].toUpperCase()}${key.substring(1)}';
     return data[key] ?? data[pascalKey];
   }
 }

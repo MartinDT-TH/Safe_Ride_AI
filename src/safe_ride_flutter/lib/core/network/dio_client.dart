@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../constants/app_strings.dart';
 import 'auth_token_refresh_interceptor.dart';
 import '../../dependency_injection/injection.dart';
+import '../session/session_manager.dart';
 import '../services/connectivity_service.dart';
 import '../widgets/app_snackbar.dart';
 
@@ -36,7 +37,10 @@ class DioClient {
     );
 
     dio.interceptors.add(
-      AuthTokenRefreshInterceptor(refreshClient: _refreshDio),
+      AuthTokenRefreshInterceptor(
+        retryClient: _refreshDio,
+        sessionManager: getIt<SessionManager>(),
+      ),
     );
 
     dio.interceptors.add(DioErrorInterceptor());

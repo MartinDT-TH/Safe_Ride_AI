@@ -55,7 +55,9 @@ public sealed class MobileConfigController : ControllerBase
                     "DriverOfferCancelled",
                     "CustomerConfirmedDriverOffer",
                     "TripCreated",
-                    "TripStatusChanged")),
+                    "TripStatusChanged",
+                    "TripPaymentPending",
+                    "TripPaymentSucceeded")),
             new MobileStatusGroupResponse(
             [
                 Status(BookingStatus.PendingSchedule, "Đã đặt lịch"),
@@ -71,6 +73,9 @@ public sealed class MobileConfigController : ControllerBase
                 Status(TripStatus.DRIVER_ARRIVING, "Tài xế đang đến"),
                 Status(TripStatus.ARRIVED, "Tài xế đã đến"),
                 Status(TripStatus.IN_PROGRESS, "Đang di chuyển"),
+                Status(TripStatus.WAITING_RETURN_CONFIRM, "Chờ xác nhận nhận lại xe"),
+                Status(TripStatus.RETURN_CONFIRMED, "Đã xác nhận nhận lại xe"),
+                Status(TripStatus.WAITING_PAYMENT, "Chờ thanh toán"),
                 Status(TripStatus.COMPLETED, "Hoàn thành"),
                 Status(TripStatus.CANCELLED, "Đã hủy")
             ]),
@@ -96,7 +101,7 @@ public sealed class MobileConfigController : ControllerBase
                 TripStatusPollIntervalSeconds,
                 DriverLocationUpdateIntervalSeconds),
             new MobileFeatureConfigResponse(
-                primaryMapProvider,
+                "GoogleMaps", // primaryMapProvider
                 EnableMapProvider("GoogleMaps"),
                 EnableMapProvider("VietMap"))));
     }

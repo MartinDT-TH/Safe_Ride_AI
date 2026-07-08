@@ -1,7 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MediatR;
+using SafeRide.API.Authorization;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Common.Models;
+using SafeRide.Application.Features.Auth;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
 using SafeRide.Application.Features.Bookings.DTOs;
 using SafeRide.Application.Features.Drivers.Commands.SetDriverOffline;
@@ -52,6 +55,7 @@ public sealed class DriversController : ControllerBase
 
     [Authorize(Roles = "Driver")]
     [HttpGet("trips/active")]
+    [AllowTripContinuation(TripContinuationOperation.ActiveTripRead)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -121,6 +125,7 @@ public sealed class DriversController : ControllerBase
 
     [Authorize(Roles = "Driver")]
     [HttpPatch("location")]
+    [AllowTripContinuation(TripContinuationOperation.DriverLocation)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -135,8 +140,13 @@ public sealed class DriversController : ControllerBase
 
         await _driverRealtimeService.UpdateDriverLocationAsync(
             driverId,
-            request.Latitude,
-            request.Longitude,
+            new DriverLocationUpdateInput(
+                request.Latitude,
+                request.Longitude,
+                request.ClientTimestampUtc,
+                request.Sequence,
+                request.AccuracyMeters,
+                request.SpeedMetersPerSecond),
             cancellationToken);
 
         return NoContent();
