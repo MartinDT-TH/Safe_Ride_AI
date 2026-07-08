@@ -694,7 +694,22 @@ class DriverDashboardProvider extends ChangeNotifier {
   }
 
   void _handleBookingUpdate(dynamic update) {
-    if (update.status == 'DriverAssigned' || update.tripId != null) {
+    if (update.status == 'Cancelled' || update.status == 'Expired') {
+      var changed = false;
+      if (_activeTrip?.bookingId == update.bookingId) {
+        _clearActiveTrip();
+        changed = true;
+      }
+      if (_currentRequest?.bookingId == update.bookingId) {
+        _hasNewRequest = false;
+        _currentRequest = null;
+        _isWaitingForCustomerConfirmation = false;
+        changed = true;
+      }
+      if (changed) {
+        notifyListeners();
+      }
+    } else if (update.status == 'DriverAssigned' || update.tripId != null) {
       if (update.tripId != null) {
         _hasNewRequest = false;
         _currentRequest = null;
@@ -720,11 +735,6 @@ class DriverDashboardProvider extends ChangeNotifier {
         if (!_hasActiveTripDetails(update.tripId!)) {
           _fetchActiveTripDetails(update.bookingId, update.tripId!);
         }
-      }
-    } else if (update.status == 'Cancelled' || update.status == 'Expired') {
-      if (_activeTrip?.bookingId == update.bookingId) {
-        _clearActiveTrip();
-        notifyListeners();
       }
     }
   }

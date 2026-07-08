@@ -29,6 +29,7 @@ class TripSummaryPage extends StatefulWidget {
 }
 
 class _TripSummaryPageState extends State<TripSummaryPage> {
+  late BookingResponse _booking;
   bool _vehicleReturned = false;
   bool _returnConfirmed = false;
   int _rating = 5;
@@ -43,7 +44,11 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
   @override
   void initState() {
     super.initState();
-    _returnConfirmed = _isReturnConfirmedStatus(widget.booking.tripStatus);
+    _booking = widget.booking;
+    _returnConfirmed = _isReturnConfirmedStatus(_booking.tripStatus);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_refreshBookingSnapshot());
+    });
   }
 
   @override
@@ -75,7 +80,7 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
     if (!_vehicleReturned || _isSubmittingRating) return;
 
     final token = context.read<AuthProvider>().token;
-    final tripId = widget.booking.tripId;
+    final tripId = _booking.tripId;
     if (token == null || token.isEmpty || tripId == null) {
       _showSnack('Không thể xác định thông tin chuyến đi. Vui lòng thử lại.');
       return;
@@ -117,7 +122,13 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
     String token,
     int tripId,
   ) async {
-    if (_returnConfirmed) return true;
+    if (_returnConfirmed) {
+      await _refreshBookingSnapshot(
+        bookingProvider: bookingProvider,
+        token: token,
+      );
+      return true;
+    }
 
     final ok = await bookingProvider.confirmCustomerReturn(
       token,
@@ -125,21 +136,51 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
     );
     if (ok) {
       _returnConfirmed = true;
+      await _refreshBookingSnapshot(
+        bookingProvider: bookingProvider,
+        token: token,
+      );
       return true;
     }
 
     if (bookingProvider.errorStatusCode == 409) {
       final latest = await bookingProvider.refreshActiveBookingDetails(
         token,
-        bookingId: widget.booking.bookingId,
+        bookingId: _booking.bookingId,
       );
       if (_isReturnConfirmedStatus(latest?.tripStatus)) {
         _returnConfirmed = true;
+        if (mounted && latest != null) {
+          setState(() {
+            _booking = latest;
+          });
+        }
         return true;
       }
     }
 
     return false;
+  }
+
+  Future<void> _refreshBookingSnapshot({
+    BookingProvider? bookingProvider,
+    String? token,
+  }) async {
+    if (!mounted) return;
+
+    final accessToken = token ?? context.read<AuthProvider>().token;
+    if (accessToken == null || accessToken.isEmpty) return;
+
+    final provider = bookingProvider ?? context.read<BookingProvider>();
+    final latest = await provider.refreshActiveBookingDetails(
+      accessToken,
+      bookingId: _booking.bookingId,
+    );
+    if (!mounted || latest == null) return;
+
+    setState(() {
+      _booking = latest;
+    });
   }
 
   void _showSnack(String message) {
@@ -168,7 +209,7 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
 
   Future<bool> _pollPaymentStatusOnce() async {
     final token = context.read<AuthProvider>().token;
-    final tripId = widget.booking.tripId;
+    final tripId = _booking.tripId;
     if (token == null || tripId == null || !mounted) {
       return true;
     }
@@ -237,10 +278,9 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final originalFare =
-        widget.booking.originalFare ?? widget.booking.estimatedFare;
-    final discount = widget.booking.discountAmount ?? 0;
-    final finalFare = widget.booking.finalFare ?? (originalFare - discount);
+    final originalFare = _booking.originalFare ?? _booking.estimatedFare;
+    final discount = _booking.discountAmount ?? 0;
+    final finalFare = _booking.finalFare ?? (originalFare - discount);
 
     return PopScope(
       canPop: false,
@@ -321,7 +361,7 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
                                 icon: Icons.route_outlined,
                                 label: 'QUÃNG ĐƯỜNG',
                                 value:
-                                    '${widget.booking.estimatedDistanceKm.toStringAsFixed(1)} km',
+                                    '${(_booking.actualDistanceKm ?? _booking.estimatedDistanceKm).toStringAsFixed(1)} km',
                               ),
                             ),
                             const SizedBox(width: 16),
@@ -330,7 +370,7 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
                                 icon: Icons.access_time,
                                 label: 'THỜI GIAN',
                                 value:
-                                    '${widget.booking.estimatedDurationMinutes} phút',
+                                    '${_booking.actualDurationMinutes ?? _booking.estimatedDurationMinutes} phút',
                               ),
                             ),
                           ],
@@ -475,7 +515,7 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
                                 borderRadius: BorderRadius.circular(14),
                               ),
                             ),
-                            child: const Text(
+                          child: const Text(
                               'Xác nhận chuyến & đánh giá sau',
                               style: TextStyle(fontWeight: FontWeight.w800),
                             ),
@@ -492,40 +532,7 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
             Positioned.fill(
               child: Container(
                 color: Colors.black.withValues(alpha: 0.6),
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(24),
-                    margin: const EdgeInsets.symmetric(horizontal: 40),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: const Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircularProgressIndicator(color: AppColors.primary),
-                        SizedBox(height: 16),
-                        Text(
-                          'Đang chờ thanh toán...',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1D2939),
-                          ),
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          'Vui lòng chờ tài xế xác nhận thanh toán hoặc quét mã QR.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Color(0xFF667085),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                child: const _WaitingPaymentPopup(),
               ),
             ),
         ],
@@ -847,3 +854,114 @@ class _PriceRow extends StatelessWidget {
     );
   }
 }
+
+class _WaitingPaymentPopup extends StatefulWidget {
+  const _WaitingPaymentPopup();
+
+  @override
+  State<_WaitingPaymentPopup> createState() => _WaitingPaymentPopupState();
+}
+
+class _WaitingPaymentPopupState extends State<_WaitingPaymentPopup>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+        margin: const EdgeInsets.symmetric(horizontal: 32),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(32),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.15),
+              blurRadius: 40,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedBuilder(
+              animation: _controller,
+              builder: (context, child) {
+                return Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.primary.withValues(alpha: 0.08),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(
+                          alpha: 0.25 * _controller.value,
+                        ),
+                        blurRadius: 30 * _controller.value,
+                        spreadRadius: 15 * _controller.value,
+                      ),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.qr_code_scanner_rounded,
+                      color: AppColors.primary,
+                      size: 48,
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 32),
+            const Text(
+              'Đang chờ thanh toán',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF1D2939),
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Vui lòng quét mã QR từ điện thoại của tài xế hoặc chờ tài xế xác nhận nếu trả tiền mặt.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 15,
+                height: 1.5,
+                color: Color(0xFF667085),
+              ),
+            ),
+            const SizedBox(height: 32),
+            const SizedBox(
+              width: 40,
+              height: 40,
+              child: CircularProgressIndicator(
+                color: AppColors.primary,
+                strokeWidth: 3,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+

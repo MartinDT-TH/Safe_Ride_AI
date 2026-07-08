@@ -188,7 +188,7 @@ class BookingRemoteDatasource {
         }
       }
       throw const BookingApiException(
-        'KhÃ´ng thá»ƒ láº¥y chuyáº¿n Ä‘ang hoáº¡t Ä‘á»™ng. Vui lÃ²ng thá»­ láº¡i.',
+        'Không thể lấy chuyến đang hoạt động. Vui lòng thử lại.',
       );
     }
   }
@@ -337,7 +337,7 @@ class BookingRemoteDatasource {
         }
       }
       throw const BookingApiException(
-        'KhÃ´ng thá»ƒ káº¿t thÃºc chuyáº¿n. Vui lÃ²ng thá»­ láº¡i.',
+        'Không thể kết thúc chuyến. Vui lòng thử lại.',
       );
     }
   }

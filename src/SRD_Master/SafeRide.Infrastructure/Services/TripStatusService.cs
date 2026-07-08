@@ -112,14 +112,6 @@ public sealed class TripStatusService : ITripStatusService
                 409);
         }
 
-        if (!trip.Payments.Any(payment => payment.PaymentStatus == PaymentStatus.Success))
-        {
-            throw new BookingException(
-                "payment.required",
-                "Chi co the hoan tat chuyen sau khi thanh toan thanh cong.",
-                409);
-        }
-
         await ApplyTripStatusAsync(
             trip,
             TripStatus.COMPLETED,
@@ -622,7 +614,7 @@ public sealed class TripStatusService : ITripStatusService
         }
 
         return decimal.Round(
-            trip.Booking.EstimatedDistanceKm ?? 0m,
+            (decimal)(snapshot.DistanceMeters / 1000d),
             2,
             MidpointRounding.AwayFromZero);
     }

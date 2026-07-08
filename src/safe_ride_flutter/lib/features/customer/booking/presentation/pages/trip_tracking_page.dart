@@ -205,8 +205,6 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         _driverPosition = AppLatLng(driverLat, driverLng);
       } else if (_arrivalRoutePoints.isNotEmpty) {
         _driverPosition = _arrivalRoutePoints.first;
-      } else if (_tripRoutePoints.isNotEmpty) {
-        _driverPosition = _tripRoutePoints.first;
       }
     }
   }

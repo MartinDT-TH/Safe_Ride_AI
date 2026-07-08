@@ -6,6 +6,7 @@ using SafeRide.Contracts.Responses.Drivers;
 using SafeRide.Domain.Enums;
 using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
+using SafeRide.Application.Common.Models;
 using System.Text.Json;
 
 namespace SafeRide.Infrastructure.Services;
@@ -14,13 +15,16 @@ public sealed class DriverQueryService : IDriverQueryService
 {
     private readonly ApplicationDbContext _dbContext;
     private readonly IRedisService _redisService;
+    private readonly IMapRoutingService _mapRoutingService;
 
     public DriverQueryService(
         ApplicationDbContext dbContext,
-        IRedisService redisService)
+        IRedisService redisService,
+        IMapRoutingService mapRoutingService)
     {
         _dbContext = dbContext;
         _redisService = redisService;
+        _mapRoutingService = mapRoutingService;
     }
 
     public async Task<IReadOnlyList<NearbyDriverResponse>> GetNearbyDriversAsync(
@@ -90,6 +94,38 @@ public sealed class DriverQueryService : IDriverQueryService
             .ThenByDescending(returnConfirmation => returnConfirmation.Id)
             .FirstOrDefault();
 
+        string? arrivalPolyline = null;
+        if (trip.TripStatus is TripStatus.ACCEPTED or TripStatus.DRIVER_ARRIVING)
+        {
+            var locationJson = await _redisService.GetAsync(RedisKeys.DriverLocation(driverId));
+            if (!string.IsNullOrEmpty(locationJson))
+            {
+                var cache = JsonSerializer.Deserialize<DriverLocationCache>(locationJson);
+                if (cache is not null)
+                {
+                    try
+                    {
+                        var route = await _mapRoutingService.GetRouteEstimateAsync(
+                            new RouteEstimateRequest
+                            {
+                                Origin = new LocationPoint(cache.Latitude, cache.Longitude),
+                                Destination = new LocationPoint(trip.Booking.PickupLocation.Y, trip.Booking.PickupLocation.X),
+                                Provider = MapProvider.Auto,
+                                TravelMode = MapTravelMode.Car,
+                                IncludePolyline = true,
+                                RequestSource = "DriverArrival"
+                            },
+                            cancellationToken);
+                        arrivalPolyline = route.EncodedPolyline;
+                    }
+                    catch
+                    {
+                        // Ignore routing errors
+                    }
+                }
+            }
+        }
+
         return new ActiveDriverTripDto(
             trip.BookingId,
             trip.Id,
@@ -121,7 +157,8 @@ public sealed class DriverQueryService : IDriverQueryService
                             evidence.ImageUrl,
                             evidence.ContentType,
                             evidence.DisplayOrder))
-                        .ToList()));
+                        .ToList()),
+            arrivalPolyline);
     }
 
     public async Task<bool> HasActiveTripOrBusyStatusAsync(
