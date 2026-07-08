@@ -140,15 +140,15 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        await _redisService.RemoveAsync(RedisKeys.DriverOnline(driverId));
-        await _redisService.RemoveAsync(RedisKeys.DriverStatus(driverId));
-        await _redisService.RemoveAsync(RedisKeys.DriverLocation(driverId));
+        await TryRemoveRedisKeyAsync(RedisKeys.DriverOnline(driverId));
+        await TryRemoveRedisKeyAsync(RedisKeys.DriverStatus(driverId));
+        await TryRemoveRedisKeyAsync(RedisKeys.DriverLocation(driverId));
         if (profile?.WorkStatus != DriverWorkStatus.Busy)
         {
-            await _redisService.RemoveAsync(RedisKeys.DriverActiveTrip(driverId));
+            await TryRemoveRedisKeyAsync(RedisKeys.DriverActiveTrip(driverId));
         }
-        await _redisService.RemoveAsync(RedisKeys.DriverHeartbeatThrottle(driverId));
-        await RemoveDriverFromOnlineGeoAsync(driverId, cancellationToken);
+        await TryRemoveRedisKeyAsync(RedisKeys.DriverHeartbeatThrottle(driverId));
+        await TryRemoveDriverFromOnlineGeoAsync(driverId, cancellationToken);
     }
 
     public Task RemoveDriverFromOnlineGeoAsync(
@@ -304,10 +304,8 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
         var activeTrip = await _dbContext.Trips
             .AsNoTracking()
             .Where(x => x.DriverId == driverId
-                && (x.TripStatus == TripStatus.ACCEPTED
-                    || x.TripStatus == TripStatus.DRIVER_ARRIVING
-                    || x.TripStatus == TripStatus.ARRIVED
-                    || x.TripStatus == TripStatus.IN_PROGRESS))
+                && x.TripStatus != TripStatus.COMPLETED
+                && x.TripStatus != TripStatus.CANCELLED)
             .Select(x => new ActiveDriverTripSnapshot(
                 x.Id,
                 x.BookingId,
@@ -336,10 +334,39 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
 
     private static bool IsActiveTripStatus(TripStatus status)
     {
-        return status is TripStatus.ACCEPTED
-            or TripStatus.DRIVER_ARRIVING
-            or TripStatus.ARRIVED
-            or TripStatus.IN_PROGRESS;
+        return status is not TripStatus.COMPLETED and not TripStatus.CANCELLED;
+    }
+
+    private async Task TryRemoveRedisKeyAsync(string key)
+    {
+        try
+        {
+            await _redisService.RemoveAsync(key);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Redis cleanup failed for key {RedisKey} while setting driver offline.",
+                key);
+        }
+    }
+
+    private async Task TryRemoveDriverFromOnlineGeoAsync(
+        Guid driverId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await RemoveDriverFromOnlineGeoAsync(driverId, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Redis GEO cleanup failed while setting driver {DriverId} offline.",
+                driverId);
+        }
     }
 
     private static void ValidateCoordinate(double latitude, double longitude)

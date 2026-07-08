@@ -103,21 +103,27 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
   }
 
   late DriverDashboardProvider _provider;
+  bool _providerAttached = false;
   DateTime? _lastCameraFitAt;
   static const _cameraFitInterval = Duration(seconds: 3);
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
       final token = context.read<AuthProvider>().token;
       _provider = context.read<DriverDashboardProvider>();
+      _provider.addListener(_onProviderUpdated);
+      _providerAttached = true;
+      _onProviderUpdated();
+      final switchedToCustomer = await _checkActiveCustomerBooking(token);
+      if (switchedToCustomer || !mounted) {
+        return;
+      }
       if (token != null) {
         _provider.initializeRealtime(token);
       }
-      _checkActiveCustomerBooking();
-      _provider.addListener(_onProviderUpdated);
-      _onProviderUpdated();
     });
   }
 
@@ -251,7 +257,9 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
 
   @override
   void dispose() {
-    _provider.removeListener(_onProviderUpdated);
+    if (_providerAttached) {
+      _provider.removeListener(_onProviderUpdated);
+    }
     _stopLocationUpdates();
     super.dispose();
   }
@@ -503,7 +511,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     return (brng * 180 / math.pi + 360) % 360;
   }
 
-  void _checkActiveCustomerBooking() {
+  Future<bool> _checkActiveCustomerBooking(String? accessToken) async {
     final bookingProvider = context.read<BookingProvider>();
     final roleProvider = context.read<RoleProvider>();
 
@@ -511,12 +519,19 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
       debugPrint(
         'DRIVER_DASHBOARD: Active customer booking detected. Forcing switch to customer mode.',
       );
+      await _provider.goOffline(accessToken: accessToken);
+      if (!mounted) {
+        return true;
+      }
       roleProvider.setRole(AppValues.roleCustomer);
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const CustomerHomePage()),
         (route) => false,
       );
+      return true;
     }
+
+    return false;
   }
 
   void _openTripPayment(int tripId) {

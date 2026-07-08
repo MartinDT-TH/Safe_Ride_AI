@@ -18,6 +18,55 @@ class SecureStorageService {
     ]);
   }
 
+  Future<void> saveSessionMetadata({
+    required String sessionMode,
+    required bool reloginRequired,
+    int? continuationTripId,
+    DateTime? continuationAbsoluteExpiresAt,
+  }) async {
+    await Future.wait([
+      _storage.write(key: StorageKeys.sessionMode, value: sessionMode),
+      _storage.write(
+        key: StorageKeys.reloginRequired,
+        value: reloginRequired.toString(),
+      ),
+      if (continuationTripId == null)
+        _storage.delete(key: StorageKeys.continuationTripId)
+      else
+        _storage.write(
+          key: StorageKeys.continuationTripId,
+          value: continuationTripId.toString(),
+        ),
+      if (continuationAbsoluteExpiresAt == null)
+        _storage.delete(key: StorageKeys.continuationAbsoluteExpiresAt)
+      else
+        _storage.write(
+          key: StorageKeys.continuationAbsoluteExpiresAt,
+          value: continuationAbsoluteExpiresAt.toUtc().toIso8601String(),
+        ),
+    ]);
+  }
+
+  Future<String?> readSessionMode() {
+    return _storage.read(key: StorageKeys.sessionMode);
+  }
+
+  Future<bool> readReloginRequired() async {
+    return (await _storage.read(key: StorageKeys.reloginRequired)) == 'true';
+  }
+
+  Future<int?> readContinuationTripId() async {
+    final raw = await _storage.read(key: StorageKeys.continuationTripId);
+    return int.tryParse(raw ?? '');
+  }
+
+  Future<DateTime?> readContinuationAbsoluteExpiresAt() async {
+    final raw = await _storage.read(
+      key: StorageKeys.continuationAbsoluteExpiresAt,
+    );
+    return raw == null ? null : DateTime.tryParse(raw)?.toUtc();
+  }
+
   Future<void> saveUserProfile(String profileJson) {
     return _storage.write(key: StorageKeys.userProfile, value: profileJson);
   }
@@ -51,6 +100,10 @@ class SecureStorageService {
       _storage.delete(key: StorageKeys.accessToken),
       _storage.delete(key: StorageKeys.refreshToken),
       _storage.delete(key: StorageKeys.userProfile),
+      _storage.delete(key: StorageKeys.sessionMode),
+      _storage.delete(key: StorageKeys.reloginRequired),
+      _storage.delete(key: StorageKeys.continuationTripId),
+      _storage.delete(key: StorageKeys.continuationAbsoluteExpiresAt),
     ]);
   }
 }

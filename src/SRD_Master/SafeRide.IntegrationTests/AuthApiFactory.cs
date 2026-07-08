@@ -157,6 +157,36 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
                 RejectionReason TEXT NULL
             );
             CREATE INDEX IX_DriverKyc_DriverId ON DriverKyc (DriverId);
+            CREATE TABLE Bookings (
+                Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                CustomerId TEXT NOT NULL,
+                BookingStatus TEXT NOT NULL DEFAULT 'Searching',
+                BookingType TEXT NOT NULL DEFAULT 'Now',
+                PickupAddress TEXT NOT NULL DEFAULT '',
+                PickupLocation BLOB NULL,
+                DestinationAddress TEXT NULL,
+                DestinationLocation BLOB NULL,
+                EstimatedDistanceKm REAL NOT NULL DEFAULT 0,
+                EstimatedDurationMinutes INTEGER NOT NULL DEFAULT 0,
+                EstimatedFare TEXT NOT NULL DEFAULT '0',
+                OriginalFare TEXT NOT NULL DEFAULT '0',
+                DiscountAmount TEXT NOT NULL DEFAULT '0',
+                FinalFare TEXT NOT NULL DEFAULT '0',
+                CreatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IX_Bookings_CustomerId ON Bookings (CustomerId);
+            CREATE TABLE Trips (
+                Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                BookingId INTEGER NOT NULL,
+                DriverId TEXT NOT NULL,
+                TripStatus TEXT NOT NULL DEFAULT 'ACCEPTED',
+                CreatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                DriverAssignedAt TEXT NULL,
+                StartedAt TEXT NULL,
+                CompletedAt TEXT NULL
+            );
+            CREATE INDEX IX_Trips_BookingId ON Trips (BookingId);
+            CREATE INDEX IX_Trips_DriverId ON Trips (DriverId);
             CREATE TABLE Vehicles (
                 Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
                 OwnerUserId TEXT NOT NULL,

@@ -66,6 +66,15 @@ public static class DependencyInjection
             .AddOptions<GoogleAuthOptions>()
             .Bind(configuration.GetSection(GoogleAuthOptions.SectionName));
         services
+            .AddOptions<TripContinuationOptions>()
+            .Bind(configuration.GetSection(TripContinuationOptions.SectionName))
+            .Validate(options => options.ExpiredRefreshGraceMinutes > 0, "Authentication:TripContinuation:ExpiredRefreshGraceMinutes must be greater than zero.")
+            .Validate(options => options.AccessTokenMinutes > 0, "Authentication:TripContinuation:AccessTokenMinutes must be greater than zero.")
+            .Validate(options => options.RefreshTokenMinutes > 0, "Authentication:TripContinuation:RefreshTokenMinutes must be greater than zero.")
+            .Validate(options => options.AbsoluteMaxHoursFromTripStart > 0, "Authentication:TripContinuation:AbsoluteMaxHoursFromTripStart must be greater than zero.")
+            .Validate(options => options.PostCompletionRatingGraceMinutes > 0, "Authentication:TripContinuation:PostCompletionRatingGraceMinutes must be greater than zero.")
+            .ValidateOnStart();
+        services
             .AddOptions<CloudinaryOptions>()
             .Bind(configuration.GetSection(CloudinaryOptions.SectionName));
         services
@@ -197,6 +206,8 @@ public static class DependencyInjection
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IGoogleTokenVerifier, GoogleTokenVerifier>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<ITripSessionQueryService, TripSessionQueryService>();
+        services.AddScoped<ITripContinuationAccessService, TripContinuationAccessService>();
         services.AddScoped<IBookingRepository, BookingRepository>();
         services.AddScoped<IPromotionRepository, PromotionRepository>();
         services.AddScoped<IRatingRepository, RatingRepository>();
@@ -373,8 +384,16 @@ public static class DependencyInjection
                             Detail = "Bạn không có quyền truy cập tài nguyên này.",
                             Instance = context.Request.Path
                         };
-                        problem.Extensions["code"] = "auth.forbidden";
+                        problem.Extensions["code"] = context.HttpContext.Items.TryGetValue("AuthErrorCode", out var code)
+                            ? code
+                            : "auth.forbidden";
                         problem.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
+                        if (context.HttpContext.Items.TryGetValue("AuthErrorDetail", out var detail)
+                            && detail is string detailText
+                            && !string.IsNullOrWhiteSpace(detailText))
+                        {
+                            problem.Detail = detailText;
+                        }
                         await context.Response.WriteAsJsonAsync(problem);
                     }
                 };
@@ -395,7 +414,7 @@ public static class DependencyInjection
                     IssuerSigningKey = new SymmetricSecurityKey(
                         Encoding.UTF8.GetBytes(jwt.SecretKey)),
                     ValidateLifetime = true,
-                    ClockSkew = TimeSpan.Zero
+                    ClockSkew = TimeSpan.FromSeconds(30)
                 };
             });
 

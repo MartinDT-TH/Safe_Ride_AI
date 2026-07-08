@@ -314,6 +314,10 @@ abstract final class ApiKeys {
   static const lastSelectedRole = 'lastSelectedRole';
   static const message = 'message';
   static const nextStep = 'nextStep';
+  static const sessionMode = 'sessionMode';
+  static const reloginRequiredAfterTrip = 'reloginRequiredAfterTrip';
+  static const continuationTripId = 'continuationTripId';
+  static const continuationAbsoluteExpiresAt = 'continuationAbsoluteExpiresAt';
   static const detail = 'detail';
   static const code = 'code';
   static const retryAfterSeconds = 'retryAfterSeconds';
@@ -415,6 +419,11 @@ abstract final class StorageKeys {
   static const accessToken = 'auth.access_token';
   static const refreshToken = 'auth.refresh_token';
   static const userProfile = 'auth.user_profile';
+  static const reloginRequired = 'auth.relogin_required';
+  static const sessionMode = 'auth.session_mode';
+  static const continuationTripId = 'auth.continuation_trip_id';
+  static const continuationAbsoluteExpiresAt =
+      'auth.continuation_absolute_expires_at';
   static const deviceId = 'device.id';
 }
 

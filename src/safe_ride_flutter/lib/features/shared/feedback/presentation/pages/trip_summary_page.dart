@@ -7,6 +7,8 @@ import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/network/auth_header.dart';
 import '../../../../../core/network/dio_client.dart';
+import '../../../../../core/session/session_manager.dart';
+import '../../../../../dependency_injection/injection.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../customer/home/presentation/pages/customer_home_page.dart';
 import '../../../../customer/home/presentation/providers/home_provider.dart';
@@ -58,7 +60,7 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
     super.dispose();
   }
 
-  void _finishAndGoHome() {
+  Future<void> _finishAndGoHome() async {
     widget.onConfirmedVehicleReturned?.call();
     context.read<BookingProvider>().clearActiveBooking();
     context.read<HomeProvider>().setSelectedIndex(0);
@@ -70,6 +72,13 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
       ),
     );
 
+    final sessionManager = getIt<SessionManager>();
+    if (await sessionManager.isTripContinuationSession()) {
+      await sessionManager.completeDeferredRelogin();
+      return;
+    }
+
+    if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const CustomerHomePage()),
       (route) => false,
@@ -251,7 +260,7 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
 
     _isSubmittingFinalRating = false;
     if (ok || _isAlreadyRated(bookingProvider)) {
-      _finishAndGoHome();
+      await _finishAndGoHome();
       return true;
     }
 

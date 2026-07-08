@@ -21,11 +21,11 @@ public sealed class SetDriverOfflineCommandHandler
         SetDriverOfflineCommand request,
         CancellationToken cancellationToken)
     {
-        var isBusy = await _driverQueryService.HasActiveTripOrBusyStatusAsync(
+        var hasActiveTrip = await _driverQueryService.HasActiveTripAsync(
             request.DriverId,
             cancellationToken);
 
-        if (isBusy)
+        if (hasActiveTrip)
         {
             return new SetDriverOfflineResult(CanSetOffline: false);
         }

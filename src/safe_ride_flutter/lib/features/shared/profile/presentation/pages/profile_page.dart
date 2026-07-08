@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/widgets/app_dialog.dart';
-import '../../../../auth/presentation/pages/login_page.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../driver/registration/presentation/pages/identity_verification_page.dart';
 import 'edit_profile_page.dart';
@@ -13,6 +12,7 @@ import '../../../../driver/dashboard/presentation/pages/driver_dashboard_page.da
 import '../../../../customer/booking/presentation/providers/booking_provider.dart';
 import '../../../../customer/home/presentation/pages/customer_home_page.dart';
 import '../../../../shared/onboarding/presentation/providers/role_provider.dart';
+import '../../../../driver/dashboard/presentation/providers/driver_dashboard_provider.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -41,7 +41,9 @@ class _ProfilePageState extends State<ProfilePage> {
     final hasActiveBooking = bookingProvider.activeBooking != null;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFCF9F9), //0xFFFDFBFA), // Light warm background as seen in image
+      backgroundColor: const Color(
+        0xFFFCF9F9,
+      ), //0xFFFDFBFA), // Light warm background as seen in image
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0.5, //0
@@ -113,20 +115,41 @@ class _ProfilePageState extends State<ProfilePage> {
                       Switch(
                         value: roleProvider.isDriver,
                         onChanged: (val) async {
-                          // Allow switching BACK to customer regardless of active booking 
+                          final driverProvider = context
+                              .read<DriverDashboardProvider>();
+                          // Allow switching BACK to customer regardless of active booking
                           // (since they are ALREADY in customer mode conceptually if hasActiveBooking is true)
                           if (val && hasActiveBooking) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('Bạn không thể chuyển sang chế độ Tài xế khi đang có chuyến đi hoạt động.'),
+                                content: Text(
+                                  'Bạn không thể chuyển sang chế độ Tài xế khi đang có chuyến đi hoạt động.',
+                                ),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                            return;
+                          }
+                          if (!val && driverProvider.activeTrip != null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Bạn không thể chuyển sang chế độ Khách hàng khi đang có chuyến đi hoạt động.',
+                                ),
                                 behavior: SnackBarBehavior.floating,
                               ),
                             );
                             return;
                           }
 
-                          final role = val ? AppValues.roleDriver : AppValues.roleCustomer;
+                          final role = val
+                              ? AppValues.roleDriver
+                              : AppValues.roleCustomer;
                           final navigator = Navigator.of(context);
+                          await driverProvider.goOffline(
+                            accessToken: auth.token,
+                          );
+                          if (!mounted) return;
                           await roleProvider.selectRole(role);
 
                           if (!mounted) return;
@@ -148,9 +171,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
 
-              const SizedBox(height: 24),
-
-
+            const SizedBox(height: 24),
 
             // 3. Section: TÀI KHOẢN
             _buildSectionLabel(ProfileStrings.accountSection),
@@ -164,7 +185,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 icon: Icons.link_rounded,
                 title: ProfileStrings.linkedAccounts,
                 trailingWidget: _buildLinkedAccountStatus(auth),
-                onTap: auth.isLoading ? null : () => _handleLinkedAccounts(auth),
+                onTap: auth.isLoading
+                    ? null
+                    : () => _handleLinkedAccounts(auth),
               ),
               ProfileMenuTile(
                 icon: Icons.badge_outlined,
@@ -219,7 +242,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 title: ProfileStrings.helpCenter,
               ),
               const ProfileMenuTile(
-                icon: Icons.security_outlined, 
+                icon: Icons.security_outlined,
                 title: AuthStrings.privacyPolicy,
               ),
               const ProfileMenuTile(
@@ -274,14 +297,23 @@ class _ProfilePageState extends State<ProfilePage> {
                 padding: const EdgeInsets.all(3),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFF007A87), width: 1.5),
+                  border: Border.all(
+                    color: const Color(0xFF007A87),
+                    width: 1.5,
+                  ),
                 ),
                 child: CircleAvatar(
                   radius: 40,
                   backgroundColor: const Color(0xFFF5F5F5),
-                  backgroundImage: auth.avatarUrl != null ? NetworkImage(auth.avatarUrl!) : null,
+                  backgroundImage: auth.avatarUrl != null
+                      ? NetworkImage(auth.avatarUrl!)
+                      : null,
                   child: auth.avatarUrl == null
-                      ? const Icon(Icons.person, size: 40, color: Color(0xFFBDBDBD))
+                      ? const Icon(
+                          Icons.person,
+                          size: 40,
+                          color: Color(0xFFBDBDBD),
+                        )
                       : null,
                 ),
               ),
@@ -303,7 +335,7 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ],
           ),
-          const SizedBox(width: 16), 
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -346,7 +378,7 @@ class _ProfilePageState extends State<ProfilePage> {
     return Padding(
       padding: const EdgeInsets.only(left: 24, bottom: 10),
       child: Align(
-      alignment: Alignment.centerLeft,
+        alignment: Alignment.centerLeft,
         child: Text(
           label,
           style: const TextStyle(
@@ -389,7 +421,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-   void _navigateToEditProfile(AuthProvider auth) {
+  void _navigateToEditProfile(AuthProvider auth) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => EditProfilePage(phoneNumber: auth.phoneNumber),
@@ -431,7 +463,6 @@ class _ProfilePageState extends State<ProfilePage> {
       },
     );
   }
-
 
   //  Widget _buildMenuContainer(List<Widget> children) {
   //   return Container(
@@ -476,9 +507,6 @@ class _ProfilePageState extends State<ProfilePage> {
   //   return value.isEmpty ? null : NetworkImage(value);
   // }
 
-
-
-
   // String _displayName(String? fullName) {
   //   final value = fullName?.trim() ?? '';
   //   return value.isEmpty || value == HomeStrings.defaultUser
@@ -497,8 +525,6 @@ class _ProfilePageState extends State<ProfilePage> {
   //   final value = avatarUrl?.trim() ?? '';
   //   return value.isEmpty ? null : NetworkImage(value);
   // }
-
-
 
   Widget _buildLogoutButton(BuildContext context) {
     return Padding(
@@ -540,12 +566,15 @@ class _ProfilePageState extends State<ProfilePage> {
       cancelText: AppStrings.cancel,
       onConfirm: () async {
         Navigator.pop(context);
+        final messenger = ScaffoldMessenger.of(context);
         final success = await context.read<AuthProvider>().logout();
         if (!mounted) return;
-        if (success) {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => const LoginPage()),
-            (route) => false,
+        if (!success) {
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Text(ProfileStrings.logoutFailed),
+              behavior: SnackBarBehavior.floating,
+            ),
           );
         }
       },

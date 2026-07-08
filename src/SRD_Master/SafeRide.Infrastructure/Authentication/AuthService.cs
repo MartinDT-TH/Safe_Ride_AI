@@ -1,5 +1,8 @@
 ﻿using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using MediatR;
+using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Features.Drivers.Commands.SetDriverOffline;
 using SafeRide.Application.Features.Auth.DTOs;
 using SafeRide.Application.Features.Auth.Services;
 using SafeRide.Domain.Entities;
@@ -21,6 +24,8 @@ public sealed class AuthService : IAuthService
     private const string PhoneLoginProvider = "InfobipOtp";
     private const string GoogleLoginProvider = "Google";
     private const string CustomerRole = "Customer";
+    private const string DriverRole = "Driver";
+    private const string ContinuationRefreshTokenPrefix = "tc.";
     private static readonly TimeSpan OtpLifetime = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan OtpSendCooldown = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan OtpAttemptStreakLifetime = TimeSpan.FromDays(30);
@@ -29,28 +34,37 @@ public sealed class AuthService : IAuthService
     private readonly ApplicationDbContext _dbContext;
     private readonly IGoogleTokenVerifier _googleTokenVerifier;
     private readonly IJwtTokenService _jwtTokenService;
+    private readonly ITripSessionQueryService _tripSessionQueryService;
     private readonly IRedisService _redisService;
     private readonly ISpeedSmsService _smsService;
+    private readonly ISender _sender;
     private readonly JwtOptions _jwtOptions;
+    private readonly TripContinuationOptions _tripContinuationOptions;
     private readonly ILogger<AuthService> _logger;
 
     public AuthService(
         UserManager<AspNetUser> userManager,
         ApplicationDbContext dbContext,
         IJwtTokenService jwtTokenService,
+        ITripSessionQueryService tripSessionQueryService,
         IRedisService redisService,
         ISpeedSmsService smsService,
+        ISender sender,
         IGoogleTokenVerifier googleTokenVerifier,
         IOptions<JwtOptions> jwtOptions,
+        IOptions<TripContinuationOptions> tripContinuationOptions,
         ILogger<AuthService> logger)
     {
         _userManager = userManager;
         _dbContext = dbContext;
         _jwtTokenService = jwtTokenService;
+        _tripSessionQueryService = tripSessionQueryService;
         _redisService = redisService;
         _smsService = smsService;
+        _sender = sender;
         _googleTokenVerifier = googleTokenVerifier;
         _jwtOptions = jwtOptions.Value;
+        _tripContinuationOptions = tripContinuationOptions.Value;
         _logger = logger;
     }
 
@@ -289,6 +303,8 @@ public sealed class AuthService : IAuthService
     {
         var tokenHash = _jwtTokenService.HashToken(request.RefreshToken);
         var oldCacheKey = RedisKeys.RefreshToken(Convert.ToHexString(tokenHash));
+        var utcNow = DateTime.UtcNow;
+        var isContinuationRefreshToken = IsContinuationRefreshToken(request.RefreshToken);
 
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(
             IsolationLevel.Serializable);
@@ -316,9 +332,44 @@ public sealed class AuthService : IAuthService
                 StatusCodes.Status401Unauthorized);
         }
 
-        if (refreshToken.ExpiresAt <= DateTime.UtcNow)
+        if (!refreshToken.User.IsActive)
         {
-            refreshToken.RevokedAt = DateTime.UtcNow;
+            await RevokeSessionTokensAsync(refreshToken.SessionId);
+            await transaction.CommitAsync();
+            await TryRemoveCacheAsync(oldCacheKey);
+            throw CreateInactiveAccountException();
+        }
+
+        if (await _userManager.IsLockedOutAsync(refreshToken.User))
+        {
+            await RevokeSessionTokensAsync(refreshToken.SessionId);
+            await transaction.CommitAsync();
+            await TryRemoveCacheAsync(oldCacheKey);
+            throw new AuthException(
+                AuthErrorCodes.AccountLocked,
+                "Tài khoản đang bị khóa tạm thời.",
+                StatusCodes.Status403Forbidden);
+        }
+
+        if (refreshToken.ExpiresAt <= utcNow || isContinuationRefreshToken)
+        {
+            var continuation = await TryRotateContinuationRefreshTokenAsync(
+                refreshToken,
+                request,
+                isContinuationRefreshToken,
+                utcNow);
+            if (continuation is not null)
+            {
+                await transaction.CommitAsync();
+                await TryRemoveCacheAsync(oldCacheKey);
+                await TryCacheRefreshTokenAsync(continuation.RefreshToken);
+                return continuation.Response;
+            }
+        }
+
+        if (refreshToken.ExpiresAt <= utcNow)
+        {
+            refreshToken.RevokedAt = utcNow;
             await _dbContext.SaveChangesAsync();
             await transaction.CommitAsync();
             await TryRemoveCacheAsync(oldCacheKey);
@@ -326,14 +377,6 @@ public sealed class AuthService : IAuthService
                 AuthErrorCodes.RefreshTokenExpired,
                 "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
                 StatusCodes.Status401Unauthorized);
-        }
-
-        if (!refreshToken.User.IsActive)
-        {
-            await RevokeSessionTokensAsync(refreshToken.SessionId);
-            await transaction.CommitAsync();
-            await TryRemoveCacheAsync(oldCacheKey);
-            throw CreateInactiveAccountException();
         }
 
         var roles = await _userManager.GetRolesAsync(refreshToken.User);
@@ -355,8 +398,8 @@ public sealed class AuthService : IAuthService
             JwtId = accessToken.JwtId,
             DeviceId = NormalizeDeviceMetadata(request.DeviceId) ?? refreshToken.DeviceId,
             DeviceName = refreshToken.DeviceName,
-            CreatedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddDays(_jwtOptions.RefreshTokenDays)
+            CreatedAt = utcNow,
+            ExpiresAt = utcNow.AddDays(_jwtOptions.RefreshTokenDays)
         };
 
         _dbContext.RefreshTokens.Add(newRefreshToken);
@@ -372,16 +415,195 @@ public sealed class AuthService : IAuthService
     {
         var tokenHash = _jwtTokenService.HashToken(request.RefreshToken);
         var refreshToken = await _dbContext.RefreshTokens
+            .Include(x => x.User)
             .FirstOrDefaultAsync(x => x.TokenHash == tokenHash);
 
-        if (refreshToken == null)
+        if (refreshToken == null || refreshToken.RevokedAt != null)
         {
             return;
         }
 
+        var hasActiveTrip = await _tripSessionQueryService.HasActiveTripForUserAsync(
+            refreshToken.UserId);
+        if (hasActiveTrip)
+        {
+            throw new AuthException(
+                AuthErrorCodes.ActiveTripLogoutBlocked,
+                "Không thể đăng xuất khi chuyến đi đang diễn ra.",
+                StatusCodes.Status409Conflict);
+        }
+
+        var roles = refreshToken.User is null
+            ? Array.Empty<string>()
+            : await _userManager.GetRolesAsync(refreshToken.User);
+
         await RevokeSessionTokensAsync(refreshToken.SessionId);
         await TryRemoveCacheAsync(
             RedisKeys.RefreshToken(Convert.ToHexString(tokenHash)));
+
+        if (roles.Any(role => role.Equals(DriverRole, StringComparison.OrdinalIgnoreCase)))
+        {
+            try
+            {
+                await _sender.Send(new SetDriverOfflineCommand(refreshToken.UserId));
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "Driver offline cleanup failed after logout for user {UserId}.",
+                    refreshToken.UserId);
+            }
+        }
+    }
+
+    private async Task<ContinuationRefreshResult?> TryRotateContinuationRefreshTokenAsync(
+        RefreshToken refreshToken,
+        RefreshTokenRequest request,
+        bool isContinuationRefreshToken,
+        DateTime utcNow)
+    {
+        if (!_tripContinuationOptions.Enabled)
+        {
+            return isContinuationRefreshToken
+                ? throw CreateTripContinuationExpiredException()
+                : null;
+        }
+
+        if (refreshToken.ExpiresAt <= utcNow
+            && refreshToken.ExpiresAt.AddMinutes(
+                _tripContinuationOptions.ExpiredRefreshGraceMinutes) < utcNow)
+        {
+            return isContinuationRefreshToken
+                ? throw CreateTripContinuationExpiredException()
+                : null;
+        }
+
+        var existedBefore = isContinuationRefreshToken
+            ? (DateTime?)null
+            : refreshToken.ExpiresAt;
+        var trip = await _tripSessionQueryService.GetActiveTripForUserAsync(
+            refreshToken.UserId,
+            existedBefore);
+        if (trip is null)
+        {
+            return isContinuationRefreshToken
+                ? throw CreateTripContinuationExpiredException()
+                : null;
+        }
+
+        EnsureContinuationDeviceMatches(refreshToken, request);
+
+        var absoluteExpiresAt = GetContinuationAbsoluteExpiresAt(trip);
+        if (absoluteExpiresAt <= utcNow)
+        {
+            throw CreateTripContinuationExpiredException();
+        }
+
+        var refreshExpiresAt = MinUtc(
+            utcNow.AddMinutes(_tripContinuationOptions.RefreshTokenMinutes),
+            absoluteExpiresAt);
+        if (refreshExpiresAt <= utcNow)
+        {
+            throw CreateTripContinuationExpiredException();
+        }
+
+        var roles = await _userManager.GetRolesAsync(refreshToken.User);
+        var accessToken = await _jwtTokenService.GenerateAccessTokenAsync(
+            refreshToken.User,
+            roles,
+            new AccessTokenContext
+            {
+                SessionMode = AuthSessionModes.TripContinuation,
+                ContinuationTripId = trip.TripId,
+                ReloginRequiredAfterTrip = true,
+                ContinuationAbsoluteExpiresAt = absoluteExpiresAt,
+                AccessTokenMinutes = _tripContinuationOptions.AccessTokenMinutes
+            });
+
+        var newRawRefreshToken = GenerateContinuationRawRefreshToken();
+        var newRefreshTokenHash = _jwtTokenService.HashToken(newRawRefreshToken);
+
+        refreshToken.RevokedAt = utcNow;
+        refreshToken.ReplacedByTokenHash = newRefreshTokenHash;
+
+        var newRefreshToken = new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = refreshToken.UserId,
+            SessionId = refreshToken.SessionId,
+            TokenHash = newRefreshTokenHash,
+            JwtId = accessToken.JwtId,
+            DeviceId = NormalizeDeviceMetadata(request.DeviceId) ?? refreshToken.DeviceId,
+            DeviceName = refreshToken.DeviceName,
+            CreatedAt = utcNow,
+            ExpiresAt = refreshExpiresAt
+        };
+
+        _dbContext.RefreshTokens.Add(newRefreshToken);
+        await _dbContext.SaveChangesAsync();
+
+        return new ContinuationRefreshResult(
+            CreateResponse(
+                refreshToken.User,
+                roles,
+                accessToken,
+                newRawRefreshToken,
+                sessionMode: AuthSessionModes.TripContinuation,
+                reloginRequiredAfterTrip: true,
+                continuationTripId: trip.TripId,
+                continuationAbsoluteExpiresAt: absoluteExpiresAt),
+            newRefreshToken);
+    }
+
+    private void EnsureContinuationDeviceMatches(
+        RefreshToken refreshToken,
+        RefreshTokenRequest request)
+    {
+        var requestDeviceId = NormalizeDeviceMetadata(request.DeviceId);
+        if (!string.IsNullOrWhiteSpace(refreshToken.DeviceId)
+            && !string.IsNullOrWhiteSpace(requestDeviceId)
+            && !string.Equals(
+                refreshToken.DeviceId,
+                requestDeviceId,
+                StringComparison.Ordinal))
+        {
+            throw new AuthException(
+                AuthErrorCodes.TripContinuationNotAllowed,
+                "Phiên tiếp tục chuyến đi không hợp lệ cho thiết bị này.",
+                StatusCodes.Status401Unauthorized);
+        }
+    }
+
+    private DateTime GetContinuationAbsoluteExpiresAt(TripSessionInfo trip)
+    {
+        var anchor = trip.StartedAt ?? trip.DriverAssignedAt ?? trip.CreatedAt;
+        return anchor.AddHours(_tripContinuationOptions.AbsoluteMaxHoursFromTripStart);
+    }
+
+    private string GenerateContinuationRawRefreshToken()
+    {
+        return ContinuationRefreshTokenPrefix + _jwtTokenService.GenerateRawRefreshToken();
+    }
+
+    private static bool IsContinuationRefreshToken(string token)
+    {
+        return token.StartsWith(
+            ContinuationRefreshTokenPrefix,
+            StringComparison.Ordinal);
+    }
+
+    private static DateTime MinUtc(DateTime left, DateTime right)
+    {
+        return left <= right ? left : right;
+    }
+
+    private static AuthException CreateTripContinuationExpiredException()
+    {
+        return new AuthException(
+            AuthErrorCodes.TripContinuationExpired,
+            "Phiên tiếp tục chuyến đi đã hết hạn. Vui lòng đăng nhập lại.",
+            StatusCodes.Status401Unauthorized);
     }
 
     private async Task<(AspNetUser User, bool IsNewUser)> FindOrCreatePhoneUserAsync(
@@ -933,7 +1155,11 @@ public sealed class AuthService : IAuthService
         IList<string> roles,
         (string Token, string JwtId, int ExpiresIn) accessToken,
         string refreshToken,
-        string nextStep = AuthNextSteps.CustomerHome)
+        string nextStep = AuthNextSteps.CustomerHome,
+        string sessionMode = AuthSessionModes.Normal,
+        bool reloginRequiredAfterTrip = false,
+        long? continuationTripId = null,
+        DateTime? continuationAbsoluteExpiresAt = null)
     {
         return new AuthResponse
         {
@@ -947,7 +1173,15 @@ public sealed class AuthService : IAuthService
             Email = user.Email,
             AvatarUrl = user.AvatarUrl,
             Roles = roles,
-            NextStep = nextStep
+            NextStep = nextStep,
+            SessionMode = sessionMode,
+            ReloginRequiredAfterTrip = reloginRequiredAfterTrip,
+            ContinuationTripId = continuationTripId,
+            ContinuationAbsoluteExpiresAt = continuationAbsoluteExpiresAt
         };
     }
+
+    private sealed record ContinuationRefreshResult(
+        AuthResponse Response,
+        RefreshToken RefreshToken);
 }
