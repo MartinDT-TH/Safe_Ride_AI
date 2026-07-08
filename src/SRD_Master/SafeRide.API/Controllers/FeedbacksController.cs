@@ -2,6 +2,8 @@ using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SafeRide.API.Authorization;
+using SafeRide.Application.Features.Auth;
 using SafeRide.Application.Features.Ratings.Commands.SubmitTripRating;
 using SafeRide.Contracts.Requests.Trips;
 
@@ -21,6 +23,7 @@ public sealed class FeedbacksController : ControllerBase
 
     [HttpPost("trips/{tripId:long}/rating")]
     [Authorize(Roles = "Customer")]
+    [AllowTripContinuation(TripContinuationOperation.TripRating)]
     [ProducesResponseType<SubmitTripRatingResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]

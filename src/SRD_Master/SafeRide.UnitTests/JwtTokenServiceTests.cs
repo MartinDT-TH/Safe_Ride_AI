@@ -2,7 +2,8 @@ using Microsoft.Extensions.Options;
 using SafeRide.Domain.Entities;
 using SafeRide.Infrastructure.Authentication;
 using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
+using System.Text.Json;
+using Microsoft.IdentityModel.Tokens;
 
 namespace SafeRide.UnitTests;
 
@@ -37,7 +38,9 @@ public sealed class JwtTokenServiceTests
 
         Assert.Equal(Options.Issuer, token.Issuer);
         Assert.Equal(user.Id.ToString(), token.Subject);
-        Assert.Contains(token.Claims, x => x.Type == ClaimTypes.Role && x.Value == "Customer");
+        var payloadJson = Base64UrlEncoder.Decode(result.Token.Split('.')[1]);
+        using var payload = JsonDocument.Parse(payloadJson);
+        Assert.Equal("Customer", payload.RootElement.GetProperty("role").GetString());
         Assert.Equal(Options.AccessTokenMinutes * 60, result.ExpiresIn);
     }
 

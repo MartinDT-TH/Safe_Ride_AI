@@ -2,7 +2,9 @@ using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SafeRide.API.Authorization;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Features.Auth;
 using SafeRide.Application.Features.Ratings.Commands.SubmitTripRating;
 using SafeRide.Application.Features.Trips.DTOs;
 using SafeRide.Contracts.Requests.Trips;
@@ -26,6 +28,7 @@ public sealed class TripsController : ControllerBase
     }
 
     [HttpPatch("{tripId:long}/status")]
+    [AllowTripContinuation(TripContinuationOperation.TripStatusUpdate)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -57,6 +60,7 @@ public sealed class TripsController : ControllerBase
     }
 
     [HttpPost("{tripId:long}/end")]
+    [AllowTripContinuation(TripContinuationOperation.TripStatusUpdate)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
@@ -85,6 +89,7 @@ public sealed class TripsController : ControllerBase
 
     [HttpPost("{tripId:long}/return-confirmation/customer")]
     [Authorize(Roles = "Customer")]
+    [AllowTripContinuation(TripContinuationOperation.TripReturnConfirmation)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -123,6 +128,7 @@ public sealed class TripsController : ControllerBase
     /// </summary>
     [HttpPost("{tripId:long}/return-confirmation/driver")]
     [Authorize(Roles = "Driver")]
+    [AllowTripContinuation(TripContinuationOperation.TripReturnConfirmation)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -187,6 +193,7 @@ public sealed class TripsController : ControllerBase
     }
 
     [HttpPost("{tripId:long}/complete")]
+    [AllowTripContinuation(TripContinuationOperation.TripStatusUpdate)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
@@ -216,6 +223,7 @@ public sealed class TripsController : ControllerBase
 
     [HttpPost("{tripId:long}/rating")]
     [Authorize(Roles = "Customer")]
+    [AllowTripContinuation(TripContinuationOperation.TripRating)]
     [ProducesResponseType<SubmitTripRatingResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]

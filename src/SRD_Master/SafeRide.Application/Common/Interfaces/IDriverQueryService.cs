@@ -16,7 +16,7 @@ public interface IDriverQueryService
         Guid driverId,
         CancellationToken cancellationToken);
 
-    Task<bool> HasActiveTripOrBusyStatusAsync(
+    Task<bool> HasActiveTripAsync(
         Guid driverId,
         CancellationToken cancellationToken);
 }

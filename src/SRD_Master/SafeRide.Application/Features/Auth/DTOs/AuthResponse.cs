@@ -1,4 +1,6 @@
-﻿namespace SafeRide.Application.Features.Auth.DTOs;
+using SafeRide.Application.Features.Auth;
+
+namespace SafeRide.Application.Features.Auth.DTOs;
 
 public class AuthResponse
 {
@@ -16,6 +18,10 @@ public class AuthResponse
 
     public IList<string> Roles { get; set; } = new List<string>();
     public string NextStep { get; set; } = AuthNextSteps.CustomerHome;
+    public bool ReloginRequiredAfterTrip { get; set; }
+    public string SessionMode { get; set; } = AuthSessionModes.Normal;
+    public long? ContinuationTripId { get; set; }
+    public DateTime? ContinuationAbsoluteExpiresAt { get; set; }
 }
 
 public static class AuthNextSteps

@@ -74,13 +74,8 @@ public sealed class DriverQueryService : IDriverQueryService
             .ThenInclude(returnConfirmation => returnConfirmation.Evidence)
 
             .Where(trip => trip.DriverId == driverId
-                && (trip.TripStatus == TripStatus.ACCEPTED
-                    || trip.TripStatus == TripStatus.DRIVER_ARRIVING
-                    || trip.TripStatus == TripStatus.ARRIVED
-                    || trip.TripStatus == TripStatus.IN_PROGRESS
-                    || trip.TripStatus == TripStatus.WAITING_RETURN_CONFIRM
-                    || trip.TripStatus == TripStatus.RETURN_CONFIRMED
-                    || trip.TripStatus == TripStatus.WAITING_PAYMENT))
+                && trip.TripStatus != TripStatus.COMPLETED
+                && trip.TripStatus != TripStatus.CANCELLED)
             .OrderByDescending(trip => trip.DriverAssignedAt ?? trip.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -161,26 +156,14 @@ public sealed class DriverQueryService : IDriverQueryService
             arrivalPolyline);
     }
 
-    public async Task<bool> HasActiveTripOrBusyStatusAsync(
+    public async Task<bool> HasActiveTripAsync(
         Guid driverId,
         CancellationToken cancellationToken)
     {
-        var isBusy = await _dbContext.DriverProfiles
-            .Where(p => p.DriverId == driverId)
-            .Select(p => p.WorkStatus == DriverWorkStatus.Busy)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (isBusy)
-        {
-            return true;
-        }
-
         return await _dbContext.Trips
             .AnyAsync(trip => trip.DriverId == driverId
-                && (trip.TripStatus == TripStatus.ACCEPTED
-                    || trip.TripStatus == TripStatus.DRIVER_ARRIVING
-                    || trip.TripStatus == TripStatus.ARRIVED
-                    || trip.TripStatus == TripStatus.IN_PROGRESS),
+                && trip.TripStatus != TripStatus.COMPLETED
+                && trip.TripStatus != TripStatus.CANCELLED,
                 cancellationToken);
     }
 }

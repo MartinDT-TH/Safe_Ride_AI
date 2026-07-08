@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.OpenApi.Models;
 using SafeRide.API;
+using SafeRide.API.Authorization;
 using SafeRide.Application;
 using SafeRide.API.Filters;
 using SafeRide.API.Middlewares;
@@ -53,6 +54,7 @@ builder.Services
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
+builder.Services.AddSafeRideContinuationAuthorization();
 if (backgroundJobsEnabled)
 {
     builder.Services.AddSafeRideApiJobs(builder.Configuration);

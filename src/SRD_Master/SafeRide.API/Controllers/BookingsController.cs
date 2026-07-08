@@ -2,6 +2,8 @@ using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SafeRide.API.Authorization;
+using SafeRide.Application.Features.Auth;
 using SafeRide.Application.Features.Bookings.Commands.CancelBooking;
 using SafeRide.Application.Features.Bookings.Commands.ConfirmDriver;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
@@ -207,6 +209,7 @@ public sealed class BookingsController : ControllerBase
     }
 
     [HttpGet("active")]
+    [AllowTripContinuation(TripContinuationOperation.ActiveTripRead)]
     [ProducesResponseType<BookingResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -228,6 +231,7 @@ public sealed class BookingsController : ControllerBase
     }
 
     [HttpGet("{bookingId:long}")]
+    [AllowTripContinuation(TripContinuationOperation.BookingRead)]
     [ProducesResponseType<BookingResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
@@ -386,6 +390,7 @@ public sealed class BookingsController : ControllerBase
     }
 
     [HttpPost("{bookingId:long}/cancel")]
+    [AllowTripContinuation(TripContinuationOperation.BookingCancel)]
     [ProducesResponseType<BookingResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
