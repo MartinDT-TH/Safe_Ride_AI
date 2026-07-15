@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'app.dart';
 
@@ -18,6 +19,7 @@ import 'features/driver/dashboard/presentation/providers/driver_dashboard_provid
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  WakelockPlus.enable();
 
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
