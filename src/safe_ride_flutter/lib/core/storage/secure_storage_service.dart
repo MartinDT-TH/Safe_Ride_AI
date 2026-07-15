@@ -95,6 +95,18 @@ class SecureStorageService {
     return _storage.write(key: StorageKeys.deviceId, value: deviceId);
   }
 
+  Future<void> savePendingTripShareToken(String token) {
+    return _storage.write(key: StorageKeys.pendingTripShareToken, value: token);
+  }
+
+  Future<String?> readPendingTripShareToken() {
+    return _storage.read(key: StorageKeys.pendingTripShareToken);
+  }
+
+  Future<void> deletePendingTripShareToken() {
+    return _storage.delete(key: StorageKeys.pendingTripShareToken);
+  }
+
   Future<void> clearTokens() async {
     await Future.wait([
       _storage.delete(key: StorageKeys.accessToken),
@@ -107,4 +119,3 @@ class SecureStorageService {
     ]);
   }
 }
-

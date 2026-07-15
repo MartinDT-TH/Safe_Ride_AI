@@ -166,6 +166,17 @@ public static class DependencyInjection
             .Validate(options => options.FinalizeLockSeconds > 0, "TripTracking:FinalizeLockSeconds must be greater than zero.")
             .ValidateOnStart();
 
+        services
+            .AddOptions<TripSharingOptions>()
+            .Bind(configuration.GetSection(TripSharingOptions.SectionName))
+            .Validate(options => Uri.TryCreate(options.AppLinkBaseUrl, UriKind.Absolute, out var uri)
+                && uri.Scheme == Uri.UriSchemeHttps,
+                "TripSharing:AppLinkBaseUrl must be an absolute HTTPS URL.")
+            .Validate(options => options.DefaultExpirationHours > 0, "TripSharing:DefaultExpirationHours must be greater than zero.")
+            .Validate(options => options.CompletedGraceMinutes > 0, "TripSharing:CompletedGraceMinutes must be greater than zero.")
+            .Validate(options => options.CancelledGraceMinutes > 0, "TripSharing:CancelledGraceMinutes must be greater than zero.")
+            .ValidateOnStart();
+
         // ── Hangfire ───────────────────────────────────────────────────────────────
         if (backgroundJobsEnabled)
         {
@@ -185,10 +196,12 @@ public static class DependencyInjection
                     }));
             services.AddHangfireServer();
             services.AddScoped<IBookingLifecycleJobScheduler, HangfireBookingLifecycleJobScheduler>();
+            services.AddScoped<ITripShareExpiryScheduler, HangfireTripShareExpiryScheduler>();
         }
         else
         {
             services.AddScoped<IBookingLifecycleJobScheduler, NoOpBookingLifecycleJobScheduler>();
+            services.AddScoped<ITripShareExpiryScheduler, NoOpTripShareExpiryScheduler>();
         }
         // ──────────────────────────────────────────────────────────────────────────
 
@@ -219,6 +232,7 @@ public static class DependencyInjection
         services.AddScoped<IDriverRealtimeService, DriverRealtimeService>();
         services.AddScoped<TripFareFinalizationService>();
         services.AddScoped<ITripStatusService, TripStatusService>();
+        services.AddScoped<ITripSharingService, TripSharingService>();
         services.AddHttpClient<ISpeedSmsService, InfobipSmsService>();
         services.AddHttpClient<IPaymentService, PayOsPaymentService>((provider, client) =>
         {

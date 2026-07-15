@@ -13,13 +13,16 @@ public sealed class SafeRideHub : Hub
 {
     private readonly IDriverRealtimeService _driverRealtimeService;
     private readonly ITripContinuationAccessService _tripContinuationAccessService;
+    private readonly ITripSharingService _tripSharingService;
 
     public SafeRideHub(
         IDriverRealtimeService driverRealtimeService,
-        ITripContinuationAccessService tripContinuationAccessService)
+        ITripContinuationAccessService tripContinuationAccessService,
+        ITripSharingService tripSharingService)
     {
         _driverRealtimeService = driverRealtimeService;
         _tripContinuationAccessService = tripContinuationAccessService;
+        _tripSharingService = tripSharingService;
     }
 
     public override async Task OnConnectedAsync()
@@ -74,6 +77,29 @@ public sealed class SafeRideHub : Hub
         return Groups.RemoveFromGroupAsync(
             Context.ConnectionId,
             RealtimeGroups.Trip(tripId));
+    }
+
+    public async Task SubscribeSharedTrip(long tripShareId)
+    {
+        if (!TryGetUserId(out var userId)
+            || !await _tripSharingService.CanSubscribeAsync(
+                tripShareId,
+                userId,
+                Context.ConnectionAborted))
+        {
+            throw new HubException("Bạn không có quyền theo dõi chuyến đi được chia sẻ này.");
+        }
+
+        await Groups.AddToGroupAsync(
+            Context.ConnectionId,
+            RealtimeGroups.TripShare(tripShareId));
+    }
+
+    public Task UnsubscribeSharedTrip(long tripShareId)
+    {
+        return Groups.RemoveFromGroupAsync(
+            Context.ConnectionId,
+            RealtimeGroups.TripShare(tripShareId));
     }
 
     [Authorize(Roles = "Driver")]

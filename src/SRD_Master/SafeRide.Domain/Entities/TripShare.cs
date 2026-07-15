@@ -14,9 +14,11 @@ public partial class TripShare
     public Guid SharedByUserId { get; set; }
     public Guid RecipientUserId { get; set; }
 
-    public string ShareToken { get; set; } = null!;
+    public string TokenHash { get; set; } = null!;
 
     public DateTime ExpiresAt { get; set; }
+    public DateTime? OpenedAt { get; set; }
+    public DateTime? RevokedAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public virtual AspNetUser RecipientUser { get; set; } = null!;

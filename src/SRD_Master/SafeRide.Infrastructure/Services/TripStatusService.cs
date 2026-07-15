@@ -20,6 +20,7 @@ public sealed class TripStatusService : ITripStatusService
     private readonly IRedisService _redisService;
     private readonly IRealtimeNotificationService _realtimeNotificationService;
     private readonly ITripReturnEvidenceStorage _tripReturnEvidenceStorage;
+    private readonly ITripSharingService _tripSharingService;
     private readonly IOptionsMonitor<TripTrackingOptions> _options;
     private readonly IMapRoutingService _mapRoutingService;
     private readonly TripFareFinalizationService _tripFareFinalizationService;
@@ -31,6 +32,7 @@ public sealed class TripStatusService : ITripStatusService
         IRedisService redisService,
         IRealtimeNotificationService realtimeNotificationService,
         ITripReturnEvidenceStorage tripReturnEvidenceStorage,
+        ITripSharingService tripSharingService,
         IOptionsMonitor<TripTrackingOptions> options,
         IMapRoutingService mapRoutingService,
         TripFareFinalizationService tripFareFinalizationService,
@@ -41,6 +43,7 @@ public sealed class TripStatusService : ITripStatusService
         _redisService = redisService;
         _realtimeNotificationService = realtimeNotificationService;
         _tripReturnEvidenceStorage = tripReturnEvidenceStorage;
+        _tripSharingService = tripSharingService;
         _options = options;
         _mapRoutingService = mapRoutingService;
         _tripFareFinalizationService = tripFareFinalizationService;
@@ -423,6 +426,11 @@ public sealed class TripStatusService : ITripStatusService
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await _tripSharingService.HandleTripLifecycleAsync(
+            trip.Id,
+            tripStatus,
+            utcNow,
+            cancellationToken);
         // Flow: keep live trip cache only for active trips; terminal trips publish final booking status too.
         if (tripStatus is TripStatus.COMPLETED or TripStatus.CANCELLED)
         {

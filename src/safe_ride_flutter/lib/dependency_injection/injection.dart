@@ -37,6 +37,9 @@ import '../features/shared/history/domain/repositories/history_repository.dart';
 import '../features/shared/history/presentation/providers/history_provider.dart';
 import '../features/driver/dashboard/presentation/providers/driver_dashboard_provider.dart';
 import '../features/driver/registration/data/datasources/identity_verification_remote_datasource.dart';
+import '../features/trip_sharing/data/datasources/trip_sharing_remote_datasource.dart';
+import '../features/trip_sharing/presentation/providers/trip_sharing_provider.dart';
+import '../features/trip_sharing/trip_share_deep_link_coordinator.dart';
 
 final getIt = GetIt.instance;
 
@@ -161,5 +164,18 @@ Future<void> setupDependencies() async {
 
   getIt.registerLazySingleton<IdentityVerificationRemoteDatasource>(
     () => IdentityVerificationRemoteDatasource(),
+  );
+  getIt.registerLazySingleton<TripSharingRemoteDatasource>(
+    () => TripSharingRemoteDatasource(),
+  );
+  getIt.registerFactory<TripSharingProvider>(
+    () => TripSharingProvider(getIt<TripSharingRemoteDatasource>()),
+  );
+  getIt.registerLazySingleton<TripShareDeepLinkCoordinator>(
+    () => TripShareDeepLinkCoordinator(
+      getIt<SecureStorageService>(),
+      getIt<SessionManager>(),
+      getIt<TripSharingRemoteDatasource>(),
+    ),
   );
 }

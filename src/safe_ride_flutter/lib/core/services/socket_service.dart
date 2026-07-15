@@ -436,8 +436,8 @@ class SocketService {
   SocketService({
     MobileConfigService? mobileConfigService,
     SessionManager? sessionManager,
-  })  : _mobileConfigService = mobileConfigService ?? MobileConfigService(),
-        _sessionManager = sessionManager {
+  }) : _mobileConfigService = mobileConfigService ?? MobileConfigService(),
+       _sessionManager = sessionManager {
     _sessionExpiredSubscription = _sessionManager?.sessionExpiredStream.listen((
       _,
     ) {
@@ -455,6 +455,7 @@ class SocketService {
   bool _driverOfferReceivedListenerAttached = false;
   bool _driverOfferClosedListenerAttached = false;
   bool _bookingListenerAttached = false;
+  bool _sharedTripListenersAttached = false;
   final List<void Function()> _connectionLostHandlers = [];
   final Map<String, void Function(DriverLocationUpdate update)>
   _driverLocationHandlers = {};
@@ -467,11 +468,17 @@ class SocketService {
   final Map<String, void Function(int offerId)> _driverOfferClosedHandlers = {};
 
   final Map<String, void Function(BookingUpdate update)> _bookingHandlers = {};
+  final Map<String, void Function(Map<String, dynamic> update)>
+  _sharedTripLocationHandlers = {};
+  final Map<String, void Function(String event, Map<String, dynamic> update)>
+  _sharedTripStatusHandlers = {};
 
   final Set<int> _desiredTripGroups = {};
   final Set<int> _joinedTripGroups = {};
   final Set<int> _desiredBookingGroups = {};
   final Set<int> _joinedBookingGroups = {};
+  final Set<int> _desiredSharedTripGroups = {};
+  final Set<int> _joinedSharedTripGroups = {};
 
   bool get isConnected => _connection?.state == HubConnectionState.Connected;
 
@@ -545,8 +552,10 @@ class SocketService {
       _driverOfferReceivedListenerAttached = false;
       _driverOfferClosedListenerAttached = false;
       _bookingListenerAttached = false;
+      _sharedTripListenersAttached = false;
       _joinedTripGroups.clear();
       _joinedBookingGroups.clear();
+      _joinedSharedTripGroups.clear();
       for (final h in List.of(_connectionLostHandlers)) {
         h();
       }
@@ -585,7 +594,14 @@ class SocketService {
     if (_bookingHandlers.isNotEmpty && !_bookingListenerAttached) {
       _attachBookingListeners();
     }
-    if (_desiredTripGroups.isNotEmpty || _desiredBookingGroups.isNotEmpty) {
+    if ((_sharedTripLocationHandlers.isNotEmpty ||
+            _sharedTripStatusHandlers.isNotEmpty) &&
+        !_sharedTripListenersAttached) {
+      _attachSharedTripListeners();
+    }
+    if (_desiredTripGroups.isNotEmpty ||
+        _desiredBookingGroups.isNotEmpty ||
+        _desiredSharedTripGroups.isNotEmpty) {
       _rejoinGroups();
     }
   }
@@ -797,6 +813,63 @@ class SocketService {
     _bookingHandlers.remove(key);
   }
 
+  void onSharedTripLocationUpdated(
+    void Function(Map<String, dynamic> update) handler, {
+    String key = 'default',
+  }) {
+    _sharedTripLocationHandlers[key] = handler;
+    _attachSharedTripListeners();
+  }
+
+  void onSharedTripStatusUpdated(
+    void Function(String event, Map<String, dynamic> update) handler, {
+    String key = 'default',
+  }) {
+    _sharedTripStatusHandlers[key] = handler;
+    _attachSharedTripListeners();
+  }
+
+  void removeSharedTripHandlers(String key) {
+    _sharedTripLocationHandlers.remove(key);
+    _sharedTripStatusHandlers.remove(key);
+  }
+
+  void _attachSharedTripListeners() {
+    if (_connection == null || _sharedTripListenersAttached) return;
+    _sharedTripListenersAttached = true;
+
+    Map<String, dynamic>? payload(List<Object?>? arguments) {
+      if (arguments == null || arguments.isEmpty || arguments.first is! Map) {
+        return null;
+      }
+      return Map<String, dynamic>.from(arguments.first as Map);
+    }
+
+    _connection!.on('SharedTripLocationUpdated', (arguments) {
+      final update = payload(arguments);
+      if (update == null) return;
+      for (final handler in List.of(_sharedTripLocationHandlers.values)) {
+        handler(update);
+      }
+    });
+
+    for (final event in const [
+      'SharedTripStatusUpdated',
+      'SharedTripCompleted',
+      'SharedTripCancelled',
+      'TripShareRevoked',
+      'TripShareExpired',
+    ]) {
+      _connection!.on(event, (arguments) {
+        final update = payload(arguments);
+        if (update == null) return;
+        for (final handler in List.of(_sharedTripStatusHandlers.values)) {
+          handler(event, update);
+        }
+      });
+    }
+  }
+
   Future<void> joinTrip(int tripId) async {
     final firstRequest = _desiredTripGroups.add(tripId);
     if (!firstRequest && _joinedTripGroups.contains(tripId)) {
@@ -825,6 +898,21 @@ class SocketService {
     _desiredBookingGroups.remove(bookingId);
     _joinedBookingGroups.remove(bookingId);
     await _invokeSafely('LeaveBooking', [bookingId]);
+  }
+
+  Future<void> subscribeSharedTrip(int tripShareId) async {
+    final firstRequest = _desiredSharedTripGroups.add(tripShareId);
+    if (!firstRequest && _joinedSharedTripGroups.contains(tripShareId)) return;
+    final joined = await _invokeSafely('SubscribeSharedTrip', [tripShareId]);
+    if (joined && _desiredSharedTripGroups.contains(tripShareId)) {
+      _joinedSharedTripGroups.add(tripShareId);
+    }
+  }
+
+  Future<void> unsubscribeSharedTrip(int tripShareId) async {
+    _desiredSharedTripGroups.remove(tripShareId);
+    _joinedSharedTripGroups.remove(tripShareId);
+    await _invokeSafely('UnsubscribeSharedTrip', [tripShareId]);
   }
 
   Future<void> setDriverOnline(double latitude, double longitude) async {
@@ -876,11 +964,22 @@ class SocketService {
   void _rejoinGroups() {
     _joinedTripGroups.clear();
     _joinedBookingGroups.clear();
+    _joinedSharedTripGroups.clear();
     for (final tripId in List.of(_desiredTripGroups)) {
       _joinTripGroup(tripId, force: true);
     }
     for (final bookingId in List.of(_desiredBookingGroups)) {
       _joinBookingGroup(bookingId, force: true);
+    }
+    for (final tripShareId in List.of(_desiredSharedTripGroups)) {
+      _subscribeSharedTripGroup(tripShareId);
+    }
+  }
+
+  Future<void> _subscribeSharedTripGroup(int tripShareId) async {
+    final joined = await _invokeSafely('SubscribeSharedTrip', [tripShareId]);
+    if (joined && _desiredSharedTripGroups.contains(tripShareId)) {
+      _joinedSharedTripGroups.add(tripShareId);
     }
   }
 
@@ -933,16 +1032,21 @@ class SocketService {
     _driverOfferReceivedListenerAttached = false;
     _driverOfferClosedListenerAttached = false;
     _bookingListenerAttached = false;
+    _sharedTripListenersAttached = false;
     _driverLocationHandlers.clear();
     _tripStatusHandlers.clear();
     _tripPaymentHandlers.clear();
     _driverOfferReceivedHandlers.clear();
     _driverOfferClosedHandlers.clear();
     _bookingHandlers.clear();
+    _sharedTripLocationHandlers.clear();
+    _sharedTripStatusHandlers.clear();
     _desiredTripGroups.clear();
     _joinedTripGroups.clear();
     _desiredBookingGroups.clear();
     _joinedBookingGroups.clear();
+    _desiredSharedTripGroups.clear();
+    _joinedSharedTripGroups.clear();
   }
 
   Future<void> dispose() async {

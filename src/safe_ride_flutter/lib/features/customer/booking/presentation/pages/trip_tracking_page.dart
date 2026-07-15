@@ -4,14 +4,18 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
 import '../../../../../core/maps/models/map_models.dart';
 import '../../../../../core/maps/widgets/live_trip_map_widget.dart';
 import '../../../../../core/services/map_api_service.dart';
 import '../../../../../core/services/mobile_config_service.dart';
 import '../../../../../core/services/socket_service.dart';
+import '../../../../../core/utils/validators.dart';
 import '../../../../../dependency_injection/injection.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
+import '../../../../trip_sharing/data/models/trip_share_models.dart';
+import '../../../../trip_sharing/presentation/providers/trip_sharing_provider.dart';
 import '../../data/models/booking_catalog.dart';
 import '../../data/models/booking_location.dart';
 import '../../data/models/booking_response.dart';
@@ -1186,9 +1190,14 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   }
 
   void _showShareModal() {
+    final tripId = widget.booking.tripId;
+    if (tripId == null) {
+      _showMessage('Chuyến đi chưa sẵn sàng để chia sẻ.');
+      return;
+    }
     showDialog(
       context: context,
-      builder: (context) => const Center(child: ShareTripModal()),
+      builder: (context) => Center(child: ShareTripModal(tripId: tripId)),
     );
   }
 
@@ -1473,111 +1482,191 @@ class _SosButton extends StatelessWidget {
   }
 }
 
-class ShareTripModal extends StatelessWidget {
-  const ShareTripModal({super.key});
+class ShareTripModal extends StatefulWidget {
+  const ShareTripModal({super.key, required this.tripId});
+  final int tripId;
+
+  @override
+  State<ShareTripModal> createState() => _ShareTripModalState();
+}
+
+class _ShareTripModalState extends State<ShareTripModal> {
+  final _phoneController = TextEditingController();
+  String? _validationError;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadShares());
+  }
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadShares() async {
+    final token = context.read<AuthProvider>().token;
+    if (token != null) {
+      await context.read<TripSharingProvider>().load(token, widget.tripId);
+    }
+  }
+
+  Future<void> _createShare() async {
+    final token = context.read<AuthProvider>().token;
+    final phone = PhoneNumberValidator.normalizePhone(_phoneController.text);
+    if (phone.isEmpty) {
+      setState(() => _validationError = 'Số điện thoại không hợp lệ.');
+      return;
+    }
+    if (token == null) return;
+    setState(() => _validationError = null);
+    final created = await context.read<TripSharingProvider>().create(
+      token,
+      tripId: widget.tripId,
+      phoneNumber: phone,
+    );
+    if (!mounted || created == null) return;
+
+    // The share was created successfully. Close this app dialog before opening
+    // Android's native share sheet so the customer is never left behind a modal.
+    Navigator.of(context).pop();
+    
+    // Add a short delay to allow the dialog pop animation to complete.
+    await Future.delayed(const Duration(milliseconds: 300));
+    
+    // WORKAROUND: Thay vì gọi Share.share gây crash trên một số máy ảo (Lỗi isAdsApp của OS),
+    // chúng ta sẽ copy link vào clipboard và hiển thị SnackBar.
+    await Clipboard.setData(ClipboardData(
+      text: 'Theo dõi chuyến đi SafeRide của tôi: ${created.shareUrl}',
+    ));
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Đã sao chép liên kết chia sẻ vào khay nhớ tạm!'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _revoke(TripShareListItem item) async {
+    final token = context.read<AuthProvider>().token;
+    if (token == null) return;
+    await context.read<TripSharingProvider>().revoke(
+      token,
+      widget.tripId,
+      item.tripShareId,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Material(
       color: Colors.transparent,
       child: Container(
-        margin: const EdgeInsets.all(28),
-        padding: const EdgeInsets.all(28),
+        constraints: const BoxConstraints(maxHeight: 650),
+        margin: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.15),
-              blurRadius: 30,
-              offset: const Offset(0, 10),
-            ),
-          ],
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Chia sẻ lộ trình',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w900,
-                color: Color(0xFF1A1A1A),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Gửi link bên dưới cho người thân để theo dõi chuyến đi của bạn theo thời gian thực.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Color(0xFF667085),
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 28),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF2F4F7),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0xFFEAECF0)),
-              ),
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'saferide.vn/track/SR94210',
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: Color(0xFF1D2939),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+        child: Consumer<TripSharingProvider>(
+          builder: (context, provider, _) => SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Chia sẻ chuyến đi',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Nhập đúng số điện thoại đã đăng ký SafeRide. Người nhận chỉ có quyền theo dõi.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Color(0xFF667085), height: 1.4),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  onChanged: (_) {
+                    if (_validationError != null) {
+                      setState(() => _validationError = null);
+                    }
+                  },
+                  decoration: const InputDecoration(
+                    labelText: 'Số điện thoại người nhận',
+                    hintText: '0905123456',
+                    border: OutlineInputBorder(),
                   ),
-                  const SizedBox(width: 8),
-                  InkWell(
-                    onTap: () {
-                      Clipboard.setData(
-                        const ClipboardData(text: 'saferide.vn/track/SR94210'),
-                      );
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Đã sao chép liên kết'),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    },
-                    child: const Icon(
-                      Icons.copy_rounded,
-                      size: 20,
-                      color: Color(0xFF006B70),
-                    ),
+                ),
+                if (_validationError != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    _validationError!,
+                    style: const TextStyle(color: Colors.red),
                   ),
                 ],
-              ),
-            ),
-            const SizedBox(height: 28),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF006B70),
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
+                if (provider.errorMessage != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    provider.errorMessage!,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ],
+                if (provider.shares.any((item) => item.isActive)) ...[
+                  const Divider(height: 28),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Đang chia sẻ',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  ...provider.shares
+                      .where((item) => item.isActive)
+                      .map(
+                        (item) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(item.recipient.fullName),
+                          subtitle: Text(item.recipient.maskedPhoneNumber),
+                          trailing: TextButton(
+                            onPressed: provider.isLoading
+                                ? null
+                                : () => _revoke(item),
+                            child: const Text('Thu hồi'),
+                          ),
+                        ),
+                      ),
+                ],
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: provider.isLoading ? null : _createShare,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF006B70),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: Text(
+                      provider.isLoading
+                          ? 'Đang xử lý...'
+                          : 'Tạo và chia sẻ liên kết',
+                    ),
                   ),
                 ),
-                child: const Text(
-                  'Đóng',
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Đóng'),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

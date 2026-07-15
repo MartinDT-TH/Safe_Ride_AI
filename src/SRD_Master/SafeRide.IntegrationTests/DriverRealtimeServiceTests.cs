@@ -235,6 +235,7 @@ public sealed class DriverRealtimeServiceTests
             redis,
             new DateTimeProviderFake(UtcNow),
             realtime,
+            new TripSharingServiceFake(),
             new OptionsMonitorFake<DriverRealtimeOptions>(
                 new DriverRealtimeOptions
                 {

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.SignalR;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Realtime;
+using SafeRide.Application.Features.TripSharing;
 
 namespace SafeRide.Realtime;
 
@@ -380,6 +381,28 @@ public sealed class SignalRRealtimeNotificationService
                 "BookingExpired",
                 notification,
                 cancellationToken));
+    }
+
+    public Task PublishSharedTripLocationUpdatedAsync(
+        SharedTripLocationUpdate notification,
+        CancellationToken cancellationToken = default)
+    {
+        return _hubContext.Clients
+            .Group(RealtimeGroups.TripShare(notification.TripShareId))
+            .SendAsync(
+                "SharedTripLocationUpdated",
+                notification,
+                cancellationToken);
+    }
+
+    public Task PublishSharedTripStatusAsync(
+        SharedTripStatusUpdate notification,
+        string eventName,
+        CancellationToken cancellationToken = default)
+    {
+        return _hubContext.Clients
+            .Group(RealtimeGroups.TripShare(notification.TripShareId))
+            .SendAsync(eventName, notification, cancellationToken);
     }
 
     private Task SendToUserAsync<T>(

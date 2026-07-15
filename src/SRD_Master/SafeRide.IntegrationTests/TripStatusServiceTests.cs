@@ -422,6 +422,7 @@ public sealed class TripStatusServiceTests
                 redis,
                 realtime,
                 new NoOpTripReturnEvidenceStorage(),
+                new TripSharingServiceFake(),
                 new OptionsMonitorFake<TripTrackingOptions>(new TripTrackingOptions()),
                 new NoOpMapRoutingService(),
                 new TripFareFinalizationService(new FareEstimationService()),

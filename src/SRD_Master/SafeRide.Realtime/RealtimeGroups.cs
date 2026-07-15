@@ -9,4 +9,6 @@ public static class RealtimeGroups
     public static string Booking(long bookingId) => $"booking:{bookingId}";
 
     public static string Trip(long tripId) => $"trip:{tripId}";
+
+    public static string TripShare(long tripShareId) => $"trip-share:{tripShareId}";
 }

@@ -7,6 +7,7 @@ using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Features.Auth;
 using SafeRide.Application.Features.Ratings.Commands.SubmitTripRating;
 using SafeRide.Application.Features.Trips.DTOs;
+using SafeRide.Application.Features.TripSharing;
 using SafeRide.Contracts.Requests.Trips;
 
 namespace SafeRide.API.Controllers;
@@ -18,13 +19,75 @@ public sealed class TripsController : ControllerBase
 {
     private readonly ITripStatusService _tripStatusService;
     private readonly ISender _sender;
+    private readonly ITripSharingService _tripSharingService;
 
     public TripsController(
         ITripStatusService tripStatusService,
-        ISender sender)
+        ISender sender,
+        ITripSharingService tripSharingService)
     {
         _tripStatusService = tripStatusService;
         _sender = sender;
+        _tripSharingService = tripSharingService;
+    }
+
+    [HttpPost("{tripId:long}/shares")]
+    [Authorize(Roles = "Customer")]
+    [ProducesResponseType<CreateTripShareResult>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<CreateTripShareResult>> CreateShare(
+        long tripId,
+        [FromBody] CreateTripShareRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var customerId))
+        {
+            return Unauthorized();
+        }
+
+        return Ok(await _tripSharingService.CreateAsync(
+            tripId,
+            customerId,
+            request.RecipientPhoneNumber,
+            cancellationToken));
+    }
+
+    [HttpGet("{tripId:long}/shares")]
+    [Authorize(Roles = "Customer")]
+    [ProducesResponseType<IReadOnlyList<TripShareListItemDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<TripShareListItemDto>>> ListShares(
+        long tripId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var customerId))
+        {
+            return Unauthorized();
+        }
+
+        return Ok(await _tripSharingService.ListAsync(
+            tripId,
+            customerId,
+            cancellationToken));
+    }
+
+    [HttpDelete("{tripId:long}/shares/{tripShareId:long}")]
+    [Authorize(Roles = "Customer")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> RevokeShare(
+        long tripId,
+        long tripShareId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var customerId))
+        {
+            return Unauthorized();
+        }
+
+        await _tripSharingService.RevokeAsync(
+            tripId,
+            tripShareId,
+            customerId,
+            cancellationToken);
+        return NoContent();
     }
 
     [HttpPatch("{tripId:long}/status")]

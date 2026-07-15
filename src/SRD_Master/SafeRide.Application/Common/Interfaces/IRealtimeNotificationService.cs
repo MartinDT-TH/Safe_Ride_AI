@@ -1,4 +1,5 @@
 using SafeRide.Application.Common.Realtime;
+using SafeRide.Application.Features.TripSharing;
 
 namespace SafeRide.Application.Common.Interfaces;
 
@@ -75,4 +76,13 @@ public interface IRealtimeNotificationService
     Task PublishBookingExpiredAsync(
         BookingExpiredEvent notification,
         CancellationToken cancellationToken = default);
+
+    Task PublishSharedTripLocationUpdatedAsync(
+        SharedTripLocationUpdate notification,
+        CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    Task PublishSharedTripStatusAsync(
+        SharedTripStatusUpdate notification,
+        string eventName,
+        CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
