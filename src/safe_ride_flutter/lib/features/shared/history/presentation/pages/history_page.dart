@@ -10,6 +10,7 @@ import '../../../../customer/booking/presentation/providers/booking_provider.dar
 import '../../../../shared/onboarding/presentation/providers/role_provider.dart';
 import '../../data/models/history_trip.dart';
 import '../providers/history_provider.dart';
+import 'trip_details_page.dart';
 import '../widgets/interactive_button.dart';
 import '../widgets/trip_history_card.dart';
 
@@ -77,6 +78,14 @@ class _HistoryPageState extends State<HistoryPage> {
 
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => RebookTripPage(oldBooking: details)),
+    );
+  }
+
+  Future<void> _openTripDetails(HistoryTrip trip, {required bool canRebook}) {
+    return Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TripDetailsPage(trip: trip, canRebook: canRebook),
+      ),
     );
   }
 
@@ -166,13 +175,20 @@ class _HistoryPageState extends State<HistoryPage> {
                           itemCount: provider.trips.length,
                           itemBuilder: (context, index) {
                             final trip = provider.trips[index];
-                            return TripHistoryCard(
-                              trip: trip,
-                              onRebook:
-                                  (isDriver ||
-                                      trip.status == HistoryTripStatus.booked)
-                                  ? null
-                                  : () => _handleRebook(trip),
+                            final canRebook =
+                                !isDriver &&
+                                trip.status != HistoryTripStatus.booked;
+
+                            return InteractiveButton(
+                              onTap: () =>
+                                  _openTripDetails(trip, canRebook: canRebook),
+                              borderRadius: BorderRadius.circular(24),
+                              child: TripHistoryCard(
+                                trip: trip,
+                                onRebook: canRebook
+                                    ? () => _handleRebook(trip)
+                                    : null,
+                              ),
                             );
                           },
                         ),
