@@ -1,6 +1,6 @@
 import { createSlice } from '@reduxjs/toolkit';
 const initialState = {
-    activeSidebarId: 'drivers',
+    activeSidebarId: 'revenue',
     sidebarCollapsed: false,
 };
 const uiSlice = createSlice({
