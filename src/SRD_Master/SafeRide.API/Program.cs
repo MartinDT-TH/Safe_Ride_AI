@@ -89,6 +89,8 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
+await app.Services.SeedAdminIdentityAsync();
+
 app.Use(async (context, next) =>
 {
     var logger = context.RequestServices
