@@ -156,6 +156,98 @@ public sealed class DriverQueryService : IDriverQueryService
             arrivalPolyline);
     }
 
+    public async Task<IReadOnlyList<DriverTripRequestDto>> GetOpenTripRequestsAsync(
+        Guid driverId,
+        CancellationToken cancellationToken)
+    {
+        var utcNow = DateTime.UtcNow;
+        var openOffers = await _dbContext.BookingDriverOffers
+            .AsNoTracking()
+            .Include(offer => offer.Booking)
+            .Where(offer => offer.DriverId == driverId
+                && (offer.OfferStatus == DriverOfferStatus.Sent
+                    || offer.OfferStatus == DriverOfferStatus.DriverAccepted)
+                && offer.ExpiresAt > utcNow
+                && offer.Booking.BookingStatus == BookingStatus.Searching)
+            .OrderByDescending(offer => offer.ConfirmedAt ?? offer.OfferedAt)
+            .ToListAsync(cancellationToken);
+
+        if (openOffers.Count == 0)
+        {
+            return [];
+        }
+
+        LocationPoint? driverLocation = null;
+        var locationJson = await _redisService.GetAsync(RedisKeys.DriverLocation(driverId));
+        if (!string.IsNullOrWhiteSpace(locationJson))
+        {
+            try
+            {
+                var cache = JsonSerializer.Deserialize<DriverLocationCache>(locationJson);
+                if (cache is not null)
+                {
+                    driverLocation = new LocationPoint(cache.Latitude, cache.Longitude);
+                }
+            }
+            catch (JsonException)
+            {
+                await _redisService.RemoveAsync(RedisKeys.DriverLocation(driverId));
+            }
+        }
+
+        var tripRequests = new List<DriverTripRequestDto>(openOffers.Count);
+        foreach (var offer in openOffers)
+        {
+            double? pickupDistanceKm = null;
+            int? pickupDurationMinutes = null;
+
+            if (driverLocation is not null)
+            {
+                try
+                {
+                    var route = await _mapRoutingService.GetRouteEstimateAsync(
+                        new RouteEstimateRequest
+                        {
+                            Origin = driverLocation,
+                            Destination = new LocationPoint(
+                                offer.Booking.PickupLocation.Y,
+                                offer.Booking.PickupLocation.X),
+                            Provider = MapProvider.Auto,
+                            TravelMode = MapTravelMode.Car,
+                            IncludePolyline = false,
+                            RequestSource = "DriverTripRequest"
+                        },
+                        cancellationToken);
+
+                    pickupDistanceKm = route.DistanceKm;
+                    pickupDurationMinutes = route.DurationMinutes;
+                }
+                catch
+                {
+                    // Ignore routing errors so the request list still loads.
+                }
+            }
+
+            tripRequests.Add(new DriverTripRequestDto(
+                offer.Id,
+                offer.BookingId,
+                offer.OfferStatus,
+                offer.ExpiresAt,
+                offer.Booking.EstimatedFare,
+                offer.Booking.PickupAddress,
+                offer.Booking.DestinationAddress,
+                pickupDistanceKm,
+                pickupDurationMinutes,
+                offer.OfferStatus == DriverOfferStatus.DriverAccepted
+                    ? Math.Max(
+                        0,
+                        (int)Math.Ceiling((offer.ExpiresAt - utcNow).TotalSeconds))
+                    : null));
+        }
+
+        return tripRequests;
+    }
+
     public async Task<bool> HasActiveTripAsync(
         Guid driverId,
         CancellationToken cancellationToken)

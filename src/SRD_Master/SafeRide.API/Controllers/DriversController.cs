@@ -10,6 +10,7 @@ using SafeRide.Application.Features.Bookings.DTOs;
 using SafeRide.Application.Features.Drivers.Commands.SetDriverOffline;
 using SafeRide.Application.Features.Drivers.Queries.GetActiveDriverTrip;
 using SafeRide.Application.Features.Drivers.Queries.GetNearbyDrivers;
+using SafeRide.Application.Features.Drivers.Queries.GetOpenDriverTripRequests;
 using SafeRide.Contracts.Requests.Drivers;
 using SafeRide.Contracts.Responses.Bookings;
 using SafeRide.Contracts.Responses.Drivers;
@@ -71,6 +72,37 @@ public sealed class DriversController : ControllerBase
             cancellationToken);
 
         return activeTrip is null ? NoContent() : Ok(activeTrip);
+    }
+
+    [Authorize(Roles = "Driver")]
+    [HttpGet("trip-requests")]
+    [ProducesResponseType<List<DriverTripRequestResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<List<DriverTripRequestResponse>>> GetOpenTripRequests(
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var driverId))
+        {
+            return Unauthorized();
+        }
+
+        var requests = await _sender.Send(
+            new GetOpenDriverTripRequestsQuery(driverId),
+            cancellationToken);
+
+        return Ok(requests
+            .Select(request => new DriverTripRequestResponse(
+                request.OfferId,
+                request.BookingId,
+                request.OfferStatus,
+                request.ExpiresAt,
+                request.ExpectedIncome,
+                request.PickupAddress,
+                request.DestinationAddress,
+                request.PickupDistanceKm,
+                request.PickupDurationMinutes,
+                request.CustomerConfirmRemainingSeconds))
+            .ToList());
     }
 
     [Authorize(Roles = "Driver")]
