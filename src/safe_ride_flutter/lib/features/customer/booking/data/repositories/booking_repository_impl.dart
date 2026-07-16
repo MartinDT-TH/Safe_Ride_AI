@@ -123,6 +123,21 @@ class BookingRepositoryImpl implements BookingRepository {
   }
 
   @override
+  Future<void> submitTripReport(
+    String accessToken, {
+    required int bookingId,
+    required String subject,
+    required String description,
+  }) {
+    return _remoteDatasource.submitTripReport(
+      accessToken,
+      bookingId: bookingId,
+      subject: subject,
+      description: description,
+    );
+  }
+
+  @override
   Future<BookingResponse> rejectDriver(
     String accessToken, {
     required int bookingId,

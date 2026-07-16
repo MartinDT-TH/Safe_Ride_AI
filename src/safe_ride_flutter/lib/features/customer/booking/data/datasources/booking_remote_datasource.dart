@@ -386,6 +386,49 @@ class BookingRemoteDatasource {
     }
   }
 
+  Future<void> submitTripReport(
+    String accessToken, {
+    required int bookingId,
+    required String subject,
+    required String description,
+  }) async {
+    try {
+      await _dio.post(
+        ApiEndpoints.submitTripReport(bookingId),
+        data: {
+          ApiKeys.subject: subject.trim(),
+          ApiKeys.description: description.trim(),
+        },
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+        ),
+      );
+    } on DioException catch (exception) {
+      final statusCode = exception.response?.statusCode;
+      final data = exception.response?.data;
+
+      if (data is Map) {
+        final detail = data[ApiKeys.detail]?.toString();
+        final code = data[ApiKeys.code]?.toString();
+        if (detail != null) {
+          throw BookingApiException(detail, code: code, statusCode: statusCode);
+        }
+      }
+
+      if (statusCode != null && statusCode >= 500) {
+        throw BookingApiException(
+          'Máy chủ đang gặp sự cố. Vui lòng thử lại sau.',
+          statusCode: statusCode,
+        );
+      }
+
+      throw BookingApiException(
+        'Không thể gửi báo cáo. Vui lòng thử lại.',
+        statusCode: statusCode,
+      );
+    }
+  }
+
   Future<BookingResponse> rejectDriver(
     String accessToken, {
     required int bookingId,
