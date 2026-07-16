@@ -123,9 +123,20 @@ public sealed class BookingRepository : IBookingRepository
                 .Distinct()
                 .ToList(),
             cancellationToken);
+        var reportedTripIds = await LoadReportedTripIdsAsync(
+            customerId,
+            bookings
+                .Where(booking => booking.Trip is not null)
+                .Select(booking => booking.Trip!.Id)
+                .Distinct()
+                .ToList(),
+            cancellationToken);
 
         return bookings
-            .Select(booking => ToCustomerHistoryItem(booking, driverRatings))
+            .Select(booking => ToCustomerHistoryItem(
+                booking,
+                driverRatings,
+                reportedTripIds))
             .ToList();
     }
 
@@ -319,13 +330,38 @@ public sealed class BookingRepository : IBookingRepository
                 cancellationToken);
     }
 
+    private async Task<HashSet<long>> LoadReportedTripIdsAsync(
+        Guid customerId,
+        IReadOnlyCollection<long> tripIds,
+        CancellationToken cancellationToken)
+    {
+        if (tripIds.Count == 0)
+        {
+            return [];
+        }
+
+        var reportedTripIds = await _dbContext.Reports
+            .AsNoTracking()
+            .Where(report => report.UserId == customerId
+                && report.TripId.HasValue
+                && tripIds.Contains(report.TripId.Value))
+            .Select(report => report.TripId!.Value)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        return reportedTripIds.ToHashSet();
+    }
+
     private static BookingHistoryItemDto ToCustomerHistoryItem(
         Booking booking,
-        IReadOnlyDictionary<Guid, double> driverRatings)
+        IReadOnlyDictionary<Guid, double> driverRatings,
+        IReadOnlySet<long> reportedTripIds)
     {
         var price = BookingPriceMapper.FromBooking(booking);
         var driverId = booking.Trip?.DriverId;
         var driverUser = booking.Trip?.Driver?.Driver;
+        var hasReported = booking.Trip is not null &&
+            reportedTripIds.Contains(booking.Trip.Id);
 
         double? driverRating = null;
         if (driverId.HasValue &&
@@ -347,7 +383,8 @@ public sealed class BookingRepository : IBookingRepository
             booking.Vehicle.VehicleType == VehicleType.Motorbike,
             driverUser?.FullName ?? driverUser?.UserName,
             driverRating,
-            driverUser?.AvatarUrl);
+            driverUser?.AvatarUrl,
+            hasReported);
     }
 
     private static BookingHistoryItemDto ToDriverHistoryItem(Booking booking)
@@ -367,7 +404,8 @@ public sealed class BookingRepository : IBookingRepository
             booking.Vehicle.VehicleType == VehicleType.Motorbike,
             null,
             null,
-            null);
+            null,
+            false);
     }
 
     private static DateTime ResolveOccurredAt(Booking booking)

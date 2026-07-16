@@ -15,4 +15,5 @@ public sealed record BookingHistoryItemDto(
     bool IsMotorbike,
     string? DriverName,
     double? DriverRating,
-    string? DriverAvatarUrl);
+    string? DriverAvatarUrl,
+    bool HasReported);
