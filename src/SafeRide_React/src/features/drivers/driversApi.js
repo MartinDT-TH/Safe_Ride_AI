@@ -56,7 +56,7 @@ function mapDriver(driver) {
             fullName: driver.name.toLocaleUpperCase('vi-VN'),
             dateOfBirth: driver.dateOfBirth ? formatShortDate(driver.dateOfBirth) : 'Chưa cập nhật',
             gender: mapGender(driver.gender),
-            address: driver.address ?? 'Chưa cập nhật',
+        address: driver.address ?? 'Chưa cập nhật',
         },
     };
 }
