@@ -257,6 +257,7 @@ abstract final class ApiEndpoints {
   static const driverOffline = '/drivers/offline';
   static const driverLocation = '/drivers/location';
   static const driverActiveTrip = '/drivers/trips/active';
+  static const driverTripRequests = '/drivers/trip-requests';
   static const nearbyDrivers = '/drivers/nearby';
   static String acceptDriverOffer(int offerId) =>
       '/drivers/offers/$offerId/accept';
