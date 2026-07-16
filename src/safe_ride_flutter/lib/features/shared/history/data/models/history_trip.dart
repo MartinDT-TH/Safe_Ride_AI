@@ -13,6 +13,7 @@ class HistoryTrip {
   final String? driverAvatar;
   final String vehicleName;
   final bool isMotorbike;
+  final bool hasReported;
 
   HistoryTrip({
     required this.id,
@@ -24,6 +25,7 @@ class HistoryTrip {
     required this.status,
     required this.vehicleName,
     this.isMotorbike = false,
+    this.hasReported = false,
     this.driverName,
     this.driverRating,
     this.driverAvatar,
@@ -56,6 +58,7 @@ class HistoryTrip {
       status: status,
       vehicleName: json['vehicleName'] ?? 'SafeRide',
       isMotorbike: json['isMotorbike'] ?? false,
+      hasReported: json['hasReported'] == true,
       driverName: json['driverName'],
       driverRating: (json['driverRating'] as num?)?.toDouble(),
       driverAvatar: json['driverAvatarUrl'] ?? json['driverAvatar'],

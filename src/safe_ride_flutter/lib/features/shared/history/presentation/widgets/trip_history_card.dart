@@ -7,10 +7,16 @@ import '../../data/models/history_trip.dart';
 import './interactive_button.dart';
 
 class TripHistoryCard extends StatelessWidget {
-  const TripHistoryCard({super.key, required this.trip, this.onRebook});
+  const TripHistoryCard({
+    super.key,
+    required this.trip,
+    this.onRebook,
+    this.onReport,
+  });
 
   final HistoryTrip trip;
   final VoidCallback? onRebook;
+  final VoidCallback? onReport;
 
   @override
   Widget build(BuildContext context) {
@@ -154,7 +160,57 @@ class TripHistoryCard extends StatelessWidget {
                       ),
                     ),
                   ],
-                  if (onRebook != null)
+                  if (onReport != null) ...[
+                    const SizedBox(width: 8),
+                    InteractiveButton(
+                      onTap: trip.hasReported ? () {} : onReport!,
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: trip.hasReported
+                              ? const Color(0xFFF2F4F7)
+                              : Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: trip.hasReported
+                                ? Colors.transparent
+                                : const Color(0xFFE0E0E0),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              trip.hasReported
+                                  ? Icons.check_circle_outline
+                                  : Icons.report_outlined,
+                              size: 16,
+                              color: trip.hasReported
+                                  ? const Color(0xFF98A2B3)
+                                  : const Color(0xFF626A6C),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              trip.hasReported
+                                  ? HistoryStrings.reported
+                                  : HistoryStrings.report,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: trip.hasReported
+                                    ? const Color(0xFF98A2B3)
+                                    : const Color(0xFF626A6C),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (onRebook != null) ...[
+                    const SizedBox(width: 8),
                     InteractiveButton(
                       onTap: onRebook!,
                       borderRadius: BorderRadius.circular(12),
@@ -176,6 +232,7 @@ class TripHistoryCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                  ],
                 ],
               ),
             ],
