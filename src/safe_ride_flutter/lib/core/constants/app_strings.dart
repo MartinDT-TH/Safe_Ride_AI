@@ -278,7 +278,6 @@ abstract final class ApiEndpoints {
       '/payments/driver/trips/$tripId/cash';
   static String submitTripRating(int tripId) =>
       '/feedbacks/trips/$tripId/rating';
-  static String submitTripRating(int tripId) => '/feedbacks/trips/$tripId/rating';
   static String submitTripReport(int bookingId) =>
       '/feedbacks/bookings/$bookingId/reports';
   static const identityVerificationDocuments =

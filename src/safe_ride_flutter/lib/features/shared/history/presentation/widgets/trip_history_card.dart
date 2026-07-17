@@ -106,131 +106,150 @@ class TripHistoryCard extends StatelessWidget {
               const SizedBox(height: 16),
               const Divider(height: 1, color: Color(0xFFF0F0F0)),
               const SizedBox(height: 16),
-              Row(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (isCancelled) ...[
-                    Expanded(
-                      child: Text(
-                        HistoryStrings.cancelledByCustomer,
-                        style: const TextStyle(color: Colors.red, fontSize: 14),
+                  if (isCancelled)
+                    Text(
+                      HistoryStrings.cancelledByCustomer,
+                      style: const TextStyle(
+                        color: Colors.red,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
                       ),
-                    ),
-                  ] else if (trip.driverName != null) ...[
-                    CircleAvatar(
-                      radius: 20,
-                      backgroundImage: trip.driverAvatar != null
-                          ? NetworkImage(trip.driverAvatar!)
-                          : null,
-                      backgroundColor: const Color(0xFFE0E0E0),
-                      child: trip.driverAvatar == null
-                          ? const Icon(Icons.person, color: Colors.white)
-                          : null,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            trip.driverName!,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                          if (trip.driverRating != null)
-                            Row(
-                              children: [
-                                const Icon(
-                                  Icons.star,
-                                  color: Colors.orange,
-                                  size: 14,
-                                ),
-                                const SizedBox(width: 2),
-                                Text(
-                                  trip.driverRating!.toString(),
-                                  style: const TextStyle(
-                                    color: Colors.grey,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  if (onReport != null) ...[
-                    const SizedBox(width: 8),
-                    InteractiveButton(
-                      onTap: trip.hasReported ? () {} : onReport!,
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
+                    )
+                  else if (trip.driverName != null)
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 20,
+                          backgroundImage: trip.driverAvatar != null
+                              ? NetworkImage(trip.driverAvatar!)
+                              : null,
+                          backgroundColor: const Color(0xFFE0E0E0),
+                          child: trip.driverAvatar == null
+                              ? const Icon(Icons.person, color: Colors.white)
+                              : null,
                         ),
-                        decoration: BoxDecoration(
-                          color: trip.hasReported
-                              ? const Color(0xFFF2F4F7)
-                              : Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: trip.hasReported
-                                ? Colors.transparent
-                                : const Color(0xFFE0E0E0),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                trip.driverName!,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (trip.driverRating != null)
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.star,
+                                      color: Colors.orange,
+                                      size: 14,
+                                    ),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      trip.driverRating!.toString(),
+                                      style: const TextStyle(
+                                        color: Colors.grey,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                            ],
                           ),
                         ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              trip.hasReported
-                                  ? Icons.check_circle_outline
-                                  : Icons.report_outlined,
-                              size: 16,
-                              color: trip.hasReported
-                                  ? const Color(0xFF98A2B3)
-                                  : const Color(0xFF626A6C),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              trip.hasReported
-                                  ? HistoryStrings.reported
-                                  : HistoryStrings.report,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
+                      ],
+                    ),
+                  if (onReport != null || onRebook != null) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        if (onReport != null)
+                          InteractiveButton(
+                            onTap: trip.hasReported ? () {} : onReport!,
+                            borderRadius: BorderRadius.circular(10),
+                            child: Container(
+                              height: 38,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
+                              decoration: BoxDecoration(
                                 color: trip.hasReported
-                                    ? const Color(0xFF98A2B3)
-                                    : const Color(0xFF626A6C),
+                                    ? const Color(0xFFF2F4F7)
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: trip.hasReported
+                                      ? Colors.transparent
+                                      : const Color(0xFFE0E0E0),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    trip.hasReported
+                                        ? Icons.check_circle_outline
+                                        : Icons.report_outlined,
+                                    size: 16,
+                                    color: trip.hasReported
+                                        ? const Color(0xFF98A2B3)
+                                        : const Color(0xFF626A6C),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    trip.hasReported
+                                        ? HistoryStrings.reported
+                                        : HistoryStrings.report,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: trip.hasReported
+                                          ? const Color(0xFF98A2B3)
+                                          : const Color(0xFF626A6C),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                  if (onRebook != null) ...[
-                    const SizedBox(width: 8),
-                    InteractiveButton(
-                      onTap: onRebook!,
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE8ECEF),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Text(
-                          HistoryStrings.rebook,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF626A6C),
                           ),
-                        ),
-                      ),
+                        if (onRebook != null) ...[
+                          const SizedBox(width: 8),
+                          InteractiveButton(
+                            onTap: onRebook!,
+                            borderRadius: BorderRadius.circular(10),
+                            child: Container(
+                              height: 38,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE8ECEF),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  HistoryStrings.rebook,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF626A6C),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ],
