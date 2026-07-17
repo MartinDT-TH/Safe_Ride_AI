@@ -96,6 +96,8 @@ abstract final class HistoryStrings {
   static const completed = 'Hoàn thành';
   static const cancelled = 'Đã hủy';
   static const rebook = 'Đặt lại';
+  static const report = 'Báo cáo';
+  static const reported = 'Đã báo cáo';
   static const cancelledByCustomer = 'Đã hủy bởi khách hàng';
   static const driverRating = '★';
   static const booked = 'Đã đặt';
@@ -276,6 +278,8 @@ abstract final class ApiEndpoints {
       '/payments/driver/trips/$tripId/cash';
   static String submitTripRating(int tripId) =>
       '/feedbacks/trips/$tripId/rating';
+  static String submitTripReport(int bookingId) =>
+      '/feedbacks/bookings/$bookingId/reports';
   static const identityVerificationDocuments =
       '/identity-verification/documents';
   static String endTrip(int tripId) => '/trips/$tripId/end';
@@ -365,6 +369,8 @@ abstract final class ApiKeys {
   static const rating = 'rating';
   static const ratingScore = 'ratingScore';
   static const comment = 'comment';
+  static const subject = 'subject';
+  static const description = 'description';
   static const tripCount = 'tripCount';
   static const experienceYears = 'experienceYears';
   static const licenseClass = 'licenseClass';

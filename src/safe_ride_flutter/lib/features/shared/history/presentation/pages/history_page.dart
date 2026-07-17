@@ -12,6 +12,7 @@ import '../../data/models/history_trip.dart';
 import '../providers/history_provider.dart';
 import '../widgets/interactive_button.dart';
 import '../widgets/trip_history_card.dart';
+import 'package:safe_ride/features/shared/feedback/presentation/pages/report_trip_page.dart';
 
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
@@ -78,6 +79,16 @@ class _HistoryPageState extends State<HistoryPage> {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => RebookTripPage(oldBooking: details)),
     );
+  }
+
+  Future<void> _handleReport(HistoryTrip trip) async {
+    final result = await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => ReportTripPage(trip: trip)),
+    );
+
+    if (result == true) {
+      _loadHistory();
+    }
   }
 
   void _showMessage(String message) {
@@ -168,6 +179,12 @@ class _HistoryPageState extends State<HistoryPage> {
                             final trip = provider.trips[index];
                             return TripHistoryCard(
                               trip: trip,
+                              onReport:
+                                  (isDriver ||
+                                          trip.status ==
+                                              HistoryTripStatus.booked)
+                                      ? null
+                                      : () => _handleReport(trip),
                               onRebook:
                                   (isDriver ||
                                       trip.status == HistoryTripStatus.booked)

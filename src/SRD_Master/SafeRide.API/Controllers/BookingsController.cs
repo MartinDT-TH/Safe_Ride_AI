@@ -204,7 +204,8 @@ public sealed class BookingsController : ControllerBase
                 item.IsMotorbike,
                 item.DriverName,
                 item.DriverRating,
-                item.DriverAvatarUrl))
+                item.DriverAvatarUrl,
+                item.HasReported))
             .ToList());
     }
 
