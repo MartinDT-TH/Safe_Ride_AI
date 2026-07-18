@@ -11,13 +11,16 @@ namespace SafeRide.Infrastructure.BackgroundJobs;
 public sealed class BookingMatchingBackgroundService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IMatchingPolicyProvider _matchingPolicyProvider;
     private readonly ILogger<BookingMatchingBackgroundService> _logger;
 
     public BookingMatchingBackgroundService(
         IServiceScopeFactory scopeFactory,
+        IMatchingPolicyProvider matchingPolicyProvider,
         ILogger<BookingMatchingBackgroundService> logger)
     {
         _scopeFactory = scopeFactory;
+        _matchingPolicyProvider = matchingPolicyProvider;
         _logger = logger;
     }
 
@@ -37,13 +40,17 @@ public sealed class BookingMatchingBackgroundService : BackgroundService
                 {
                     break;
                 }
+                catch (ObjectDisposedException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error occurred executing booking matching logic.");
                 }
 
                 // Wait for next cycle based on config
-                var delay = await GetDelayAsync(stoppingToken);
+                var delay = GetDelay();
                 await Task.Delay(delay, stoppingToken);
             }
         }
@@ -51,16 +58,17 @@ public sealed class BookingMatchingBackgroundService : BackgroundService
         {
             // Expected on shutdown, ignore.
         }
+        catch (ObjectDisposedException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Expected if the host is disposing services during shutdown.
+        }
 
         _logger.LogInformation("BookingMatchingBackgroundService stopped");
     }
 
-    private async Task<TimeSpan> GetDelayAsync(CancellationToken cancellationToken)
-    {
-        await using var scope = _scopeFactory.CreateAsyncScope();
-        var policyProvider = scope.ServiceProvider.GetRequiredService<IMatchingPolicyProvider>();
-        return TimeSpan.FromSeconds(Math.Max(1, policyProvider.Current.MatchingTickSeconds));
-    }
+    private TimeSpan GetDelay() =>
+        TimeSpan.FromSeconds(
+            Math.Max(1, _matchingPolicyProvider.Current.MatchingTickSeconds));
 
     private async Task ProcessMatchingAsync(CancellationToken cancellationToken)
     {
