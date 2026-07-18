@@ -216,6 +216,7 @@ public static class DependencyInjection
         services.AddScoped<IBookingMatchingService, BookingMatchingService>();
         services.AddScoped<IBookingAssignmentService, BookingAssignmentService>();
         services.AddScoped<IDriverQueryService, DriverQueryService>();
+        services.AddScoped<IDriverWalletService, DriverWalletService>();
         services.AddScoped<IDriverRealtimeService, DriverRealtimeService>();
         services.AddScoped<TripFareFinalizationService>();
         services.AddScoped<ITripStatusService, TripStatusService>();
