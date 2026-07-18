@@ -26,6 +26,7 @@ import '../../../../shared/call/presentation/pages/in_app_voice_call_page.dart';
 import '../../../../shared/profile/presentation/pages/profile_page.dart';
 import 'driver_trip_payment_page.dart';
 import 'driver_return_evidence_page.dart';
+import '../../../wallet/presentation/pages/driver_wallet_page.dart';
 
 class DriverDashboardPage extends StatefulWidget {
   const DriverDashboardPage({super.key});
@@ -668,7 +669,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     final List<Widget> pages = [
       _buildHomeContent(),
       const HistoryPage(),
-      const Center(child: Text('Wallet Page')),
+      _selectedIndex == 2 ? const DriverWalletPage() : const SizedBox.shrink(),
       const ProfilePage(),
     ];
 

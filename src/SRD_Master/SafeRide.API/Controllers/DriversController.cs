@@ -8,8 +8,12 @@ using SafeRide.Application.Features.Auth;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
 using SafeRide.Application.Features.Bookings.DTOs;
 using SafeRide.Application.Features.Drivers.Commands.SetDriverOffline;
+using SafeRide.Application.Features.Drivers.Commands.RequestWithdrawal;
+using SafeRide.Application.Features.Drivers;
 using SafeRide.Application.Features.Drivers.Queries.GetActiveDriverTrip;
+using SafeRide.Application.Features.Drivers.Queries.GetDriverWallet;
 using SafeRide.Application.Features.Drivers.Queries.GetNearbyDrivers;
+using SafeRide.Application.Features.Drivers.DTOs;
 using SafeRide.Contracts.Requests.Drivers;
 using SafeRide.Contracts.Responses.Bookings;
 using SafeRide.Contracts.Responses.Drivers;
@@ -71,6 +75,69 @@ public sealed class DriversController : ControllerBase
             cancellationToken);
 
         return activeTrip is null ? NoContent() : Ok(activeTrip);
+    }
+
+    [Authorize(Roles = "Driver")]
+    [HttpGet("wallet")]
+    [ProducesResponseType<DriverWalletDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<DriverWalletDto>> GetWallet(
+        [FromQuery] WalletPeriod period = WalletPeriod.Week,
+        [FromQuery] int utcOffsetMinutes = 420,
+        [FromQuery] int recentLimit = 10,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetUserId(out var driverId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await _sender.Send(
+            new GetDriverWalletQuery(
+                driverId,
+                period,
+                Math.Clamp(utcOffsetMinutes, -720, 840),
+                Math.Clamp(recentLimit, 1, 50)),
+            cancellationToken);
+
+        return Ok(result);
+    }
+
+    [Authorize(Roles = "Driver")]
+    [HttpPost("wallet/withdrawals")]
+    [ProducesResponseType<WithdrawalRequestDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<WithdrawalRequestDto>> RequestWithdrawal(
+        [FromBody] CreateWithdrawalRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var driverId))
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            var result = await _sender.Send(
+                new RequestWithdrawalCommand(
+                    driverId,
+                    request.Amount,
+                    request.BankName,
+                    request.BankAccountNumber,
+                    request.BankAccountName),
+                cancellationToken);
+
+            return StatusCode(StatusCodes.Status201Created, result);
+        }
+        catch (DriverWalletException exception)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Không thể tạo yêu cầu rút tiền",
+                Detail = exception.Message
+            });
+        }
     }
 
     [Authorize(Roles = "Driver")]
