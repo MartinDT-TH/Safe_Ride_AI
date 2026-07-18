@@ -1,6 +1,9 @@
 import { defineConfig } from 'vite';
 import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 import babel from '@rolldown/plugin-babel';
+
+const apiTarget = 'http://127.0.0.1:5026';
+
 // https://vite.dev/config/
 export default defineConfig({
     plugins: [
@@ -9,8 +12,8 @@ export default defineConfig({
     ],
     server: {
         proxy: {
-            '/api': 'http://192.168.1.36:5026',
-            '/uploads': 'http://192.168.1.36:5026',
+            '/api': apiTarget,
+            '/uploads': apiTarget,
         },
     },
 });
