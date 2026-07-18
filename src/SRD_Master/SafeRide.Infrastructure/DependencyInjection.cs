@@ -211,6 +211,8 @@ public static class DependencyInjection
         services.AddScoped<IBookingRepository, BookingRepository>();
         services.AddScoped<IPromotionRepository, PromotionRepository>();
         services.AddScoped<IRatingRepository, RatingRepository>();
+        services.AddScoped<IAdminCustomerAccountService, AdminCustomerAccountService>();
+        services.AddScoped<IAdminDriverAccountService, AdminDriverAccountService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddSingleton<IMatchingPolicyProvider, MatchingPolicyProvider>();
         services.AddScoped<IBookingMatchingService, BookingMatchingService>();
