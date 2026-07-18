@@ -5,6 +5,7 @@ import DriversPage from './pages/DriversPage';
 import './App.css';
 
 const RevenuePage = lazy(() => import('./pages/RevenuePage'));
+const CustomersPage = lazy(() => import('./pages/CustomersPage'));
 /**
  * Root component — reads auth state from Redux to decide
  * which page to show. Will be replaced by React Router later.
@@ -13,6 +14,9 @@ function App() {
     const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
     const activeSidebarId = useAppSelector((state) => state.ui.activeSidebarId);
     if (!isAuthenticated) return <LoginPage />;
+    if (activeSidebarId === 'customers') {
+        return <Suspense fallback={<div className="app-loading">Đang tải trang khách hàng...</div>}><CustomersPage /></Suspense>;
+    }
     return activeSidebarId === 'revenue'
         ? <Suspense fallback={<div className="app-loading">Đang tải trang doanh thu...</div>}><RevenuePage /></Suspense>
         : <DriversPage />;
