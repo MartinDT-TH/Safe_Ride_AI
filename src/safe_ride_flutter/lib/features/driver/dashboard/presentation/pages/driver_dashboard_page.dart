@@ -845,9 +845,11 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                   String? errorMessage,
                   bool hasNewRequest,
                   bool isLoadingActiveTrip,
+                  bool isLoadingTripRequests,
                   bool isResponding,
                   bool isUpdatingTrip,
                   bool isWaitingForCustomerConfirmation,
+                  String? tripRequestsErrorMessage,
                 })
               >(
                 selector: (_, provider) => (
@@ -856,13 +858,19 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                   errorMessage: provider.errorMessage,
                   hasNewRequest: provider.hasNewRequest,
                   isLoadingActiveTrip: provider.isLoadingActiveTrip,
+                  isLoadingTripRequests: provider.isLoadingTripRequests,
                   isResponding: provider.isResponding,
                   isUpdatingTrip: provider.isUpdatingTrip,
                   isWaitingForCustomerConfirmation:
                       provider.isWaitingForCustomerConfirmation,
+                  tripRequestsErrorMessage: provider.tripRequestsErrorMessage,
                 ),
                 builder: (context, state, child) {
-                  if (state.isLoadingActiveTrip) {
+                  if (state.isLoadingActiveTrip ||
+                      (state.isLoadingTripRequests &&
+                          state.activeTrip == null &&
+                          !state.hasNewRequest &&
+                          !state.isWaitingForCustomerConfirmation)) {
                     return const Padding(
                       padding: EdgeInsets.only(bottom: 24),
                       child: Center(
@@ -879,6 +887,18 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                       onRetry: context
                           .read<DriverDashboardProvider>()
                           .loadActiveTrip,
+                    );
+                  }
+
+                  if (state.tripRequestsErrorMessage != null &&
+                      state.activeTrip == null &&
+                      !state.hasNewRequest &&
+                      !state.isWaitingForCustomerConfirmation) {
+                    return _ErrorLoadingActiveTripCard(
+                      errorMessage: state.tripRequestsErrorMessage!,
+                      onRetry: context
+                          .read<DriverDashboardProvider>()
+                          .loadOpenTripRequests,
                     );
                   }
 

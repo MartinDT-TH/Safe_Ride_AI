@@ -16,6 +16,10 @@ public interface IDriverQueryService
         Guid driverId,
         CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<DriverTripRequestDto>> GetOpenTripRequestsAsync(
+        Guid driverId,
+        CancellationToken cancellationToken);
+
     Task<bool> HasActiveTripAsync(
         Guid driverId,
         CancellationToken cancellationToken);
