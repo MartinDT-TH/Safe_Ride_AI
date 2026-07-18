@@ -90,6 +90,8 @@ builder.Services.AddSwaggerGen(options =>
 var app = builder.Build();
 
 await app.Services.SeedAdminIdentityAsync();
+await app.Services.SeedIdentityAsync();
+await app.Services.SeedCustomerIdentityAsync();
 
 app.Use(async (context, next) =>
 {
