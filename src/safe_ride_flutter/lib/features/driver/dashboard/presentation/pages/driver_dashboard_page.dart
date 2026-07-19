@@ -24,6 +24,7 @@ import '../../../../shared/onboarding/presentation/providers/role_provider.dart'
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../shared/call/presentation/pages/in_app_voice_call_page.dart';
 import '../../../../shared/profile/presentation/pages/profile_page.dart';
+import '../../../../shared/chat/presentation/pages/trip_chat_page.dart';
 import 'driver_trip_payment_page.dart';
 import 'driver_return_evidence_page.dart';
 import '../../../wallet/presentation/pages/driver_wallet_page.dart';
@@ -664,6 +665,30 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     });
   }
 
+  void _openChat(ActiveDriverTrip trip) {
+    final auth = context.read<AuthProvider>();
+    final currentUserId = auth.userId;
+
+    if (currentUserId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Không thể mở trò chuyện lúc này.')),
+      );
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TripChatPage(
+          tripId: trip.tripId,
+          currentUserId: currentUserId,
+          receiverName: 'Khách hàng',
+          canSendMessage:
+              trip.tripStatus != 'COMPLETED' && trip.tripStatus != 'CANCELLED',
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final List<Widget> pages = [
@@ -908,6 +933,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                       trip: state.activeTrip!,
                       isUpdating: state.isUpdatingTrip,
                       onCall: () => _startInAppCall(state.activeTrip!),
+                      onChat: () => _openChat(state.activeTrip!),
                     );
                   }
                   if (state.hasNewRequest && state.currentRequest != null) {
@@ -1017,11 +1043,13 @@ class _ActiveTripCard extends StatelessWidget {
     required this.trip,
     required this.isUpdating,
     required this.onCall,
+    required this.onChat,
   });
 
   final ActiveDriverTrip trip;
   final bool isUpdating;
   final VoidCallback onCall;
+  final VoidCallback onChat;
 
   @override
   Widget build(BuildContext context) {
@@ -1095,21 +1123,42 @@ class _ActiveTripCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: onCall,
-                icon: const Icon(Icons.phone_in_talk_rounded),
-                label: const Text('Gọi khách'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF006B70),
-                  side: const BorderSide(color: Color(0xFF006B70), width: 1.5),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onChat,
+                    icon: const Icon(Icons.chat_bubble_outline_rounded),
+                    label: const Text('Nhắn tin'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF006B70),
+                      side:
+                          const BorderSide(color: Color(0xFF006B70), width: 1.5),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onCall,
+                    icon: const Icon(Icons.phone_in_talk_rounded),
+                    label: const Text('Gọi khách'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF006B70),
+                      side:
+                          const BorderSide(color: Color(0xFF006B70), width: 1.5),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             if (status == 'ACCEPTED')
