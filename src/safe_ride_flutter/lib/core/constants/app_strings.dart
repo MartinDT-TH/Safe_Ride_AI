@@ -295,6 +295,7 @@ abstract final class ApiEndpoints {
 abstract final class ApiKeys {
   static const authorization = 'Authorization';
   static const bearer = 'Bearer';
+  static const userId = 'userId';
   static const phoneNumber = 'phoneNumber';
   static const otpCode = 'otpCode';
   static const deviceId = 'deviceId';

@@ -80,6 +80,9 @@ class AuthProvider extends ChangeNotifier {
   String? _token;
   String? get token => _token;
 
+  String? _userId;
+  String? get userId => _userId;
+
   String? _lastPhone;
   String? get lastPhone => _lastPhone;
 
@@ -526,6 +529,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   void _readAuthState(Map<String, dynamic> response) {
+    _userId = _readResponseValue(response, ApiKeys.userId)?.toString();
     _fullName = _readResponseValue(response, ApiKeys.fullName)?.toString();
     _phoneNumber = _readResponseValue(
       response,
@@ -585,6 +589,7 @@ class AuthProvider extends ChangeNotifier {
 
   void _clearAuthState() {
     _nextStep = AuthNextStep.customerHome;
+    _userId = null;
     _fullName = null;
     _phoneNumber = null;
     _phoneNumberConfirmed = false;

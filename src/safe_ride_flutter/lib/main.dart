@@ -15,6 +15,7 @@ import 'features/customer/booking/presentation/providers/booking_provider.dart';
 import 'features/shared/profile/presentation/providers/vehicle_provider.dart';
 import 'features/shared/history/presentation/providers/history_provider.dart';
 import 'features/driver/dashboard/presentation/providers/driver_dashboard_provider.dart';
+import 'features/shared/chat/presentation/providers/trip_chat_provider.dart';
 import 'features/driver/wallet/presentation/providers/driver_wallet_provider.dart';
 
 void main() async {
@@ -36,6 +37,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => getIt<VehicleProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<HistoryProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<DriverDashboardProvider>()),
+        ChangeNotifierProvider(create: (_) => getIt<TripChatProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<DriverWalletProvider>()),
       ],
       child: const MyApp(),
