@@ -173,6 +173,7 @@ app.UseAuthorization();
 app.MapControllers();
 app.UseWebSockets();
 app.MapHub<SafeRideHub>("/hubs/saferide");
+app.MapHub<TripChatHub>("/hubs/trip-chat");
 
 if (backgroundJobsEnabled)
 {

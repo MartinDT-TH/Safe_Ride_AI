@@ -17,13 +17,16 @@ namespace SafeRide.API.Controllers;
 public sealed class TripsController : ControllerBase
 {
     private readonly ITripStatusService _tripStatusService;
+    private readonly ITripChatService _tripChatService;
     private readonly ISender _sender;
 
     public TripsController(
         ITripStatusService tripStatusService,
+        ITripChatService tripChatService,
         ISender sender)
     {
         _tripStatusService = tripStatusService;
+        _tripChatService = tripChatService;
         _sender = sender;
     }
 
@@ -254,6 +257,32 @@ public sealed class TripsController : ControllerBase
             cancellationToken);
 
         return Ok(response);
+    }
+
+    [HttpGet("{tripId:long}/chat/messages")]
+    [ProducesResponseType<IReadOnlyList<TripChatMessageDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<IReadOnlyList<TripChatMessageDto>>> GetChatMessages(
+        long tripId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Unauthorized",
+                Detail = "Không xác định được tài khoản."
+            });
+        }
+
+        var messages = await _tripChatService.GetMessagesAsync(
+            userId,
+            tripId,
+            cancellationToken);
+
+        return Ok(messages);
     }
 
     private bool TryGetDriverId(out Guid driverId)
