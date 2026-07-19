@@ -272,10 +272,7 @@ public sealed class DriverQueryService : IDriverQueryService
             .Select(x => new
             {
                 x.Id,
-                x.CurrentBalance,
-                PendingWithdrawal = x.WithdrawalRequests
-                    .Where(request => request.Status == WithdrawalRequestStatus.Pending)
-                    .Sum(request => (decimal?)request.Amount) ?? 0m
+                x.CurrentBalance
             })
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -351,7 +348,7 @@ public sealed class DriverQueryService : IDriverQueryService
             .FirstOrDefaultAsync(cancellationToken);
 
         return new DriverWalletDto(
-            Math.Max(0m, wallet.CurrentBalance - wallet.PendingWithdrawal),
+            wallet.CurrentBalance,
             BuildIncomeSummary(
                 period,
                 currentStartLocal,
