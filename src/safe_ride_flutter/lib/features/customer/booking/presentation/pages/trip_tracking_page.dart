@@ -20,6 +20,7 @@ import '../widgets/booking_cancel_flow.dart';
 
 import '../../../../shared/call/presentation/pages/in_app_voice_call_page.dart';
 import '../../../../shared/feedback/presentation/pages/trip_summary_page.dart';
+import '../../../../shared/chat/presentation/pages/trip_chat_page.dart';
 
 enum TripTrackingState { arriving, inProgress }
 
@@ -1027,8 +1028,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                     child: _ActionButton(
                       icon: Icons.chat_bubble_rounded,
                       label: 'Nhắn tin',
-                      onPressed: () =>
-                          _showMessage('Chức năng nhắn tin đang phát triển'),
+                      onPressed: _openChat,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -1144,6 +1144,14 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                 children: [
                   Expanded(
                     child: _CircleActionButton(
+                      icon: Icons.chat_bubble_rounded,
+                      onPressed: _openChat,
+                      label: 'Nhắn tin',
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _CircleActionButton(
                       icon: Icons.share_rounded,
                       onPressed: _showShareModal,
                       label: 'Chia sẻ',
@@ -1199,6 +1207,30 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     showDialog(
       context: context,
       builder: (context) => const Center(child: ShareTripModal()),
+    );
+  }
+
+  void _openChat() {
+    final tripId = widget.booking.tripId;
+    final auth = context.read<AuthProvider>();
+    final currentUserId = auth.userId;
+    final driverName = widget.booking.driverOffer?.driverName;
+
+    if (tripId == null || currentUserId == null) {
+      _showMessage('Không thể mở trò chuyện lúc này.');
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TripChatPage(
+          tripId: tripId,
+          currentUserId: currentUserId,
+          receiverName: driverName,
+          canSendMessage: _currentTripStatus != 'COMPLETED' &&
+              _currentTripStatus != 'CANCELLED',
+        ),
+      ),
     );
   }
 

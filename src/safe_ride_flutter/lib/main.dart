@@ -15,6 +15,7 @@ import 'features/customer/booking/presentation/providers/booking_provider.dart';
 import 'features/shared/profile/presentation/providers/vehicle_provider.dart';
 import 'features/shared/history/presentation/providers/history_provider.dart';
 import 'features/driver/dashboard/presentation/providers/driver_dashboard_provider.dart';
+import 'features/shared/chat/presentation/providers/trip_chat_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,6 +36,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => getIt<VehicleProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<HistoryProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<DriverDashboardProvider>()),
+        ChangeNotifierProvider(create: (_) => getIt<TripChatProvider>()),
       ],
       child: const MyApp(),
     ),

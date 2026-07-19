@@ -37,6 +37,7 @@ import '../features/shared/history/domain/repositories/history_repository.dart';
 import '../features/shared/history/presentation/providers/history_provider.dart';
 import '../features/driver/dashboard/presentation/providers/driver_dashboard_provider.dart';
 import '../features/driver/registration/data/datasources/identity_verification_remote_datasource.dart';
+import '../features/shared/chat/presentation/providers/trip_chat_provider.dart';
 
 final getIt = GetIt.instance;
 
@@ -162,4 +163,6 @@ Future<void> setupDependencies() async {
   getIt.registerLazySingleton<IdentityVerificationRemoteDatasource>(
     () => IdentityVerificationRemoteDatasource(),
   );
+
+  getIt.registerFactory<TripChatProvider>(() => TripChatProvider());
 }
