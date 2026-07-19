@@ -81,7 +81,7 @@ class AuthProvider extends ChangeNotifier {
   String? get token => _token;
 
   String? _userId;
-  String? get userId => _userId;
+  String? get userId => _userId ?? _readUserIdFromAccessToken(_token);
 
   String? _lastPhone;
   String? get lastPhone => _lastPhone;
@@ -573,6 +573,32 @@ class AuthProvider extends ChangeNotifier {
 
     final pascalKey = key[0].toUpperCase() + key.substring(1);
     return response[pascalKey];
+  }
+
+  String? _readUserIdFromAccessToken(String? accessToken) {
+    if (accessToken == null || accessToken.trim().isEmpty) {
+      return null;
+    }
+
+    try {
+      final parts = accessToken.split('.');
+      if (parts.length < 2) return null;
+
+      final normalizedPayload = base64Url.normalize(parts[1]);
+      final decodedPayload = utf8.decode(base64Url.decode(normalizedPayload));
+      final payload = jsonDecode(decodedPayload);
+      if (payload is! Map<String, dynamic>) return null;
+
+      final value = payload['sub'] ??
+          payload[
+              'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'];
+      final normalizedUserId = value?.toString().trim();
+      return normalizedUserId == null || normalizedUserId.isEmpty
+          ? null
+          : normalizedUserId;
+    } catch (_) {
+      return null;
+    }
   }
 
   String? _normalizeRole(Object? role) {

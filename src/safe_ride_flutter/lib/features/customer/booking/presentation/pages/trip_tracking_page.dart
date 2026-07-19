@@ -1213,11 +1213,20 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   void _openChat() {
     final tripId = widget.booking.tripId;
     final auth = context.read<AuthProvider>();
+    final accessToken = auth.token;
     final currentUserId = auth.userId;
     final driverName = widget.booking.driverOffer?.driverName;
 
-    if (tripId == null || currentUserId == null) {
-      _showMessage('Không thể mở trò chuyện lúc này.');
+    if (tripId == null) {
+      _showMessage('Chuyến đi chưa sẵn sàng để trò chuyện.');
+      return;
+    }
+    if (accessToken == null || accessToken.isEmpty) {
+      _showMessage('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      return;
+    }
+    if (currentUserId == null) {
+      _showMessage('Không thể xác định tài khoản để mở trò chuyện.');
       return;
     }
 
