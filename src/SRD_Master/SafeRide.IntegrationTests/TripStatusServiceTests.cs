@@ -626,6 +626,27 @@ public sealed class TripStatusServiceTests
             return Task.CompletedTask;
         }
 
+        public Task ExpireAsync(
+            string key,
+            TimeSpan expiration,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task ListRightPushTrimAndExpireAsync(
+            string key,
+            string value,
+            int maxLength,
+            TimeSpan expiration,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task<IReadOnlyList<string>> ListRangeAsync(
+            string key,
+            long start = 0,
+            long stop = -1,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<string>>([]);
+
         public Task<long> IncrementAsync(
             string key,
             TimeSpan expiration) =>

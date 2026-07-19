@@ -172,6 +172,75 @@ public sealed class ResilientRedisService : IRedisService
         await TryPrimaryAsync(() => _primary.RemoveAsync(key));
     }
 
+    public async Task ExpireAsync(
+        string key,
+        TimeSpan expiration,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await _fallback.ExpireAsync(key, expiration, cancellationToken);
+        await TryPrimaryAsync(
+            () => _primary.ExpireAsync(key, expiration, cancellationToken));
+    }
+
+    public async Task ListRightPushTrimAndExpireAsync(
+        string key,
+        string value,
+        int maxLength,
+        TimeSpan expiration,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await _fallback.ListRightPushTrimAndExpireAsync(
+            key,
+            value,
+            maxLength,
+            expiration,
+            cancellationToken);
+        await TryPrimaryAsync(
+            () => _primary.ListRightPushTrimAndExpireAsync(
+                key,
+                value,
+                maxLength,
+                expiration,
+                cancellationToken));
+    }
+
+    public async Task<IReadOnlyList<string>> ListRangeAsync(
+        string key,
+        long start = 0,
+        long stop = -1,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (CanTryPrimary())
+        {
+            try
+            {
+                var primaryValues = await _primary.ListRangeAsync(
+                    key,
+                    start,
+                    stop,
+                    cancellationToken);
+                MarkPrimaryAvailable();
+                if (primaryValues.Count > 0)
+                {
+                    return primaryValues;
+                }
+            }
+            catch (Exception exception)
+            {
+                MarkPrimaryUnavailable(exception);
+            }
+        }
+
+        return await _fallback.ListRangeAsync(
+            key,
+            start,
+            stop,
+            cancellationToken);
+    }
+
     public async Task<long> IncrementAsync(
         string key,
         TimeSpan expiration)

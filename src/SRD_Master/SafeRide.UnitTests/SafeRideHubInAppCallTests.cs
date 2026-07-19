@@ -102,7 +102,9 @@ public sealed class SafeRideHubInAppCallTests
 
     private static SafeRideHub CreateHub(RecordingHubCallerClients clients)
     {
-        return new SafeRideHub(new DriverRealtimeServiceFake())
+        return new SafeRideHub(
+            new DriverRealtimeServiceFake(),
+            new TripContinuationAccessServiceFake())
         {
             Clients = clients,
             Context = new HubCallerContextFake()
@@ -228,5 +230,17 @@ public sealed class SafeRideHubInAppCallTests
             Guid driverId,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
+    }
+
+    private sealed class TripContinuationAccessServiceFake
+        : ITripContinuationAccessService
+    {
+        public Task<bool> IsAllowedAsync(
+            ClaimsPrincipal user,
+            SafeRide.Application.Features.Auth.TripContinuationOperation operation,
+            long? tripId = null,
+            long? bookingId = null,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
     }
 }
