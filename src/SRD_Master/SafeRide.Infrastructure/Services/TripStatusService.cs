@@ -428,6 +428,10 @@ public sealed class TripStatusService : ITripStatusService
         {
             await _redisService.RemoveAsync(RedisKeys.TripLive(trip.Id));
             await _redisService.RemoveAsync(RedisKeys.DriverActiveTrip(trip.DriverId));
+            await _redisService.ExpireAsync(
+                RedisKeys.TripChatMessages(trip.Id),
+                TimeSpan.FromHours(2),
+                cancellationToken);
         }
         else
         {
