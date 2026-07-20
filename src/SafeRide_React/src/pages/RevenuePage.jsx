@@ -1,26 +1,25 @@
-import { forwardRef, useState } from 'react';
+import { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faCalendarDays, faChevronDown, faDownload, faFilter } from '@fortawesome/free-solid-svg-icons';
-import DatePicker, { registerLocale } from 'react-datepicker';
-import { vi } from 'date-fns/locale/vi';
-import 'react-datepicker/dist/react-datepicker.css';
+import { faCalendarDays, faDownload, faFilter } from '@fortawesome/free-solid-svg-icons';
 import { AdminLayout } from '../shared/layouts/AdminLayout';
 import { RevenueBarChart, RevenueDonut, RevenueStats } from '../features/revenue/components';
+import RevenueExportPage from '../features/revenue/components/RevenueExportPage';
+import RevenueDatePicker from '../features/revenue/components/RevenueDatePicker';
 import { getRevenuePath, mapRevenue } from '../features/revenue/revenueApi';
 import useFetch from '../shared/hooks/useFetch';
 import useAdminSearch from '../shared/hooks/useAdminSearch';
 import './RevenuePage.css';
-
-registerLocale('vi', vi);
 
 function RevenuePage() {
   const [range, setRange] = useState(() => createPresetRange(30));
   const [showFilters, setShowFilters] = useState(false);
   const [mode, setMode] = useState('range');
   const [draft, setDraft] = useState(() => ({ ...createPresetRange(30), month: toLocalDate(new Date()).slice(0, 7), year: String(new Date().getFullYear()) }));
+  const [showExport, setShowExport] = useState(false);
   useAdminSearch({ placeholder: 'Tìm kiếm tài xế, chuyến đi hoặc người dùng...' });
   const { data, isLoading, error, refetch } = useFetch(getRevenuePath(range.from, range.to), { select: mapRevenue });
   const revenue = data ?? { totalRevenue: 0, successfulTrips: 0, platformFee: 0, timeline: [], services: [] };
+  if (showExport) return <RevenueExportPage initialRange={range} onBack={() => setShowExport(false)} />;
   return (
     <AdminLayout>
       <div className="revenue-page">
@@ -31,7 +30,7 @@ function RevenuePage() {
               <button type="button" onClick={() => setShowFilters((current) => !current)}><FontAwesomeIcon icon={faCalendarDays} />{formatRange(range.from, range.to)}</button>
               <button type="button" onClick={() => setShowFilters((current) => !current)} aria-expanded={showFilters}><FontAwesomeIcon icon={faFilter} />Lọc nâng cao</button>
             </div>
-            <button className="export-button" type="button"><FontAwesomeIcon icon={faDownload} />Xuất Excel</button>
+            <button className="export-button" type="button" onClick={() => setShowExport(true)}><FontAwesomeIcon icon={faDownload} />Xuất Excel</button>
           </div>
         </div>
         {showFilters && <RevenueFilters mode={mode} setMode={setMode} draft={draft} setDraft={setDraft} onApply={(nextRange) => { setRange(nextRange); setShowFilters(false); }} />}
@@ -67,17 +66,13 @@ function RevenueFilters({ mode, setMode, draft, setDraft, onApply }) {
       {[['range', 'Theo ngày'], ['month', 'Theo tháng'], ['year', 'Theo năm']].map(([value, label]) => <button className={mode === value ? 'active' : ''} key={value} type="button" onClick={() => setMode(value)}>{label}</button>)}
     </div>
     <div className="filter-fields">
-      {mode === 'range' && <><label>Từ ngày<DatePicker locale="vi" selected={parseLocalDate(draft.from)} onChange={(date) => setDraft({ ...draft, from: toLocalDate(date) })} selectsStart startDate={parseLocalDate(draft.from)} endDate={parseLocalDate(draft.to)} maxDate={parseLocalDate(draft.to)} dateFormat="dd/MM/yyyy" customInput={<PickerButton />} /></label><label>Đến ngày<DatePicker locale="vi" selected={parseLocalDate(draft.to)} onChange={(date) => setDraft({ ...draft, to: toLocalDate(date) })} selectsEnd startDate={parseLocalDate(draft.from)} endDate={parseLocalDate(draft.to)} minDate={parseLocalDate(draft.from)} dateFormat="dd/MM/yyyy" customInput={<PickerButton />} /></label></>}
-      {mode === 'month' && <label>Chọn tháng<DatePicker locale="vi" selected={parseLocalDate(`${draft.month}-01`)} onChange={(date) => setDraft({ ...draft, month: toLocalDate(date).slice(0, 7) })} showMonthYearPicker dateFormat="MM/yyyy" customInput={<PickerButton />} /></label>}
-      {mode === 'year' && <label>Chọn năm<DatePicker locale="vi" selected={new Date(Number(draft.year), 0, 1)} onChange={(date) => setDraft({ ...draft, year: String(date.getFullYear()) })} showYearPicker dateFormat="yyyy" minDate={new Date(2020, 0, 1)} maxDate={new Date(2100, 11, 31)} customInput={<PickerButton />} /></label>}
+      {mode === 'range' && <><label>Từ ngày<RevenueDatePicker selected={parseLocalDate(draft.from)} onChange={(date) => setDraft({ ...draft, from: toLocalDate(date) })} selectsStart startDate={parseLocalDate(draft.from)} endDate={parseLocalDate(draft.to)} maxDate={parseLocalDate(draft.to)} /></label><label>Đến ngày<RevenueDatePicker selected={parseLocalDate(draft.to)} onChange={(date) => setDraft({ ...draft, to: toLocalDate(date) })} selectsEnd startDate={parseLocalDate(draft.from)} endDate={parseLocalDate(draft.to)} minDate={parseLocalDate(draft.from)} /></label></>}
+      {mode === 'month' && <label>Chọn tháng<RevenueDatePicker selected={parseLocalDate(`${draft.month}-01`)} onChange={(date) => setDraft({ ...draft, month: toLocalDate(date).slice(0, 7) })} showMonthYearPicker dateFormat="MM/yyyy" /></label>}
+      {mode === 'year' && <label>Chọn năm<RevenueDatePicker selected={new Date(Number(draft.year), 0, 1)} onChange={(date) => setDraft({ ...draft, year: String(date.getFullYear()) })} showYearPicker dateFormat="yyyy" minDate={new Date(2020, 0, 1)} maxDate={new Date(2100, 11, 31)} /></label>}
       <button className="apply-filter" type="button" onClick={apply}>Áp dụng</button>
     </div>
   </section>;
 }
-
-const PickerButton = forwardRef(function PickerButton({ value, onClick }, ref) {
-  return <button className="picker-button" type="button" onClick={onClick} ref={ref}><FontAwesomeIcon icon={faCalendarDays} /><span>{value}</span><FontAwesomeIcon icon={faChevronDown} /></button>;
-});
 
 function createPresetRange(days) {
   const to = new Date();
