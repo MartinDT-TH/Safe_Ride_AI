@@ -8,6 +8,7 @@ import { AdminLayout } from '../shared/layouts/AdminLayout';
 import { RevenueBarChart, RevenueDonut, RevenueStats } from '../features/revenue/components';
 import { getRevenuePath, mapRevenue } from '../features/revenue/revenueApi';
 import useFetch from '../shared/hooks/useFetch';
+import useAdminSearch from '../shared/hooks/useAdminSearch';
 import './RevenuePage.css';
 
 registerLocale('vi', vi);
@@ -17,6 +18,7 @@ function RevenuePage() {
   const [showFilters, setShowFilters] = useState(false);
   const [mode, setMode] = useState('range');
   const [draft, setDraft] = useState(() => ({ ...createPresetRange(30), month: toLocalDate(new Date()).slice(0, 7), year: String(new Date().getFullYear()) }));
+  useAdminSearch({ placeholder: 'Tìm kiếm tài xế, chuyến đi hoặc người dùng...' });
   const { data, isLoading, error, refetch } = useFetch(getRevenuePath(range.from, range.to), { select: mapRevenue });
   const revenue = data ?? { totalRevenue: 0, successfulTrips: 0, platformFee: 0, timeline: [], services: [] };
   return (
