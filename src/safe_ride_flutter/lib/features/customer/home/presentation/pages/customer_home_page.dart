@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -20,6 +22,10 @@ import '../../../../customer/booking/presentation/pages/promotion_page.dart';
 import '../../../../customer/booking/presentation/pages/trip_tracking_page.dart';
 import '../../../../customer/booking/presentation/providers/booking_provider.dart';
 import '../../../../shared/history/presentation/pages/history_page.dart';
+import '../../../../trip_sharing/trip_share_deep_link_coordinator.dart';
+import '../../../../trip_sharing/presentation/pages/shared_trip_tracking_page.dart';
+import '../../../../trip_sharing/presentation/providers/received_trip_shares_provider.dart';
+import '../../../../../dependency_injection/injection.dart';
 
 class CustomerHomePage extends StatefulWidget {
   const CustomerHomePage({super.key});
@@ -75,11 +81,21 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
     context.read<HomeProvider>().loadHomeData();
     _loadActiveBooking(auth.token);
+    context.read<ReceivedTripSharesProvider>().load(auth.token);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        unawaited(
+          getIt<TripShareDeepLinkCoordinator>().processPendingAfterNavigation(),
+        );
+      }
+    });
   }
 
   Future<void> _loadActiveBooking(String? token) async {
     if (token == null || token.isEmpty) return;
-    final booking = await context.read<BookingProvider>().loadActiveBooking(token);
+    final booking = await context.read<BookingProvider>().loadActiveBooking(
+      token,
+    );
     if (booking != null && mounted) {
       context.read<HomeProvider>().setSelectedIndex(1);
     }
@@ -93,8 +109,10 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
     final activeBooking = bookingProvider.activeBooking;
     final activePickup = bookingProvider.activePickup ?? activeBooking?.pickup;
-    final activeDestination = bookingProvider.activeDestination ?? activeBooking?.destination;
-    final activeVehicle = bookingProvider.activeVehicle ?? activeBooking?.vehicle;
+    final activeDestination =
+        bookingProvider.activeDestination ?? activeBooking?.destination;
+    final activeVehicle =
+        bookingProvider.activeVehicle ?? activeBooking?.vehicle;
 
     final List<Widget> pages = [
       _buildHomeContent(auth, bookingProvider),
@@ -124,13 +142,20 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
           final shouldExit = await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               title: const Text('Thoát ứng dụng?'),
-              content: const Text('Bạn có chắc chắn muốn thoát khỏi SafeRide không?'),
+              content: const Text(
+                'Bạn có chắc chắn muốn thoát khỏi SafeRide không?',
+              ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
+                  child: const Text(
+                    'Hủy',
+                    style: TextStyle(color: Colors.grey),
+                  ),
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(context, true),
@@ -210,19 +235,19 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                 ],
               )
             : (selectedIndex == 1 && activeBooking == null
-                ? AppBar(
-                    backgroundColor: Colors.white,
-                    elevation: 0,
-                    title: const Text(
-                      'Hoạt động',
-                      style: TextStyle(
-                        color: Color(0xFF1A1A1A),
-                        fontWeight: FontWeight.bold,
+                  ? AppBar(
+                      backgroundColor: Colors.white,
+                      elevation: 0,
+                      title: const Text(
+                        'Hoạt động',
+                        style: TextStyle(
+                          color: Color(0xFF1A1A1A),
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    centerTitle: true,
-                  )
-                : null),
+                      centerTitle: true,
+                    )
+                  : null),
         body: IndexedStack(index: selectedIndex, children: pages),
         bottomNavigationBar: CustomerBottomNavBar(
           currentIndex: selectedIndex,
@@ -241,19 +266,27 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     return Consumer<HomeProvider>(
       builder: (_, provider, child) {
         if (provider.isLoading && provider.recentTrips.isEmpty) {
-          return const Center(child: CircularProgressIndicator(color: Color(0xFF006B70)));
+          return const Center(
+            child: CircularProgressIndicator(color: Color(0xFF006B70)),
+          );
         }
 
         if (provider.errorMessage != null && provider.recentTrips.isEmpty) {
           return RefreshIndicator(
-            onRefresh: () => provider.loadHomeData(),
+            onRefresh: () async {
+              final receivedShares = context.read<ReceivedTripSharesProvider>();
+              await provider.loadHomeData();
+              await receivedShares.refresh();
+            },
             color: const Color(0xFF006B70),
             child: LayoutBuilder(
               builder: (context, constraints) {
                 return SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight,
+                    ),
                     child: Center(
                       child: Padding(
                         padding: const EdgeInsets.all(24.0),
@@ -278,7 +311,10 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                             Text(
                               provider.errorMessage!,
                               textAlign: TextAlign.center,
-                              style: const TextStyle(fontSize: 15, color: Colors.black54),
+                              style: const TextStyle(
+                                fontSize: 15,
+                                color: Colors.black54,
+                              ),
                             ),
                             const SizedBox(height: 32),
                             ElevatedButton.icon(
@@ -286,13 +322,18 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                               icon: const Icon(Icons.refresh_rounded),
                               label: const Text(
                                 'Thử lại',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF006B70),
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 32, vertical: 14),
+                                  horizontal: 32,
+                                  vertical: 14,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(16),
                                 ),
@@ -311,7 +352,11 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
         }
 
         return RefreshIndicator(
-          onRefresh: () => provider.loadHomeData(),
+          onRefresh: () async {
+            final receivedShares = context.read<ReceivedTripSharesProvider>();
+            await provider.loadHomeData();
+            await receivedShares.refresh();
+          },
           color: const Color(0xFF006B70),
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -332,6 +377,8 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                   style: TextStyle(fontSize: 16, color: Color(0xFF666666)),
                 ),
                 const SizedBox(height: 24),
+
+                _buildReceivedShares(),
 
                 InkWell(
                   onTap: hasActiveBooking
@@ -523,6 +570,51 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                 ),
               ],
             ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildReceivedShares() {
+    return Consumer<ReceivedTripSharesProvider>(
+      builder: (context, provider, _) {
+        if (provider.shares.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Chuyến đi được chia sẻ với bạn',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+              ),
+              const SizedBox(height: 8),
+              ...provider.shares.map(
+                (share) => Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.share_location_outlined),
+                    title: Text(share.sharedByName),
+                    subtitle: Text('Trạng thái: ${share.tripStatus}'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => SharedTripTrackingPage(
+                            tripShareId: share.tripShareId,
+                          ),
+                        ),
+                      );
+                      if (context.mounted) {
+                        await context.read<ReceivedTripSharesProvider>().load(
+                          context.read<AuthProvider>().token,
+                        );
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       },

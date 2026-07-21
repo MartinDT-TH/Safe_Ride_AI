@@ -39,6 +39,7 @@ import '../features/driver/dashboard/presentation/providers/driver_dashboard_pro
 import '../features/driver/registration/data/datasources/identity_verification_remote_datasource.dart';
 import '../features/trip_sharing/data/datasources/trip_sharing_remote_datasource.dart';
 import '../features/trip_sharing/presentation/providers/trip_sharing_provider.dart';
+import '../features/trip_sharing/presentation/providers/received_trip_shares_provider.dart';
 import '../features/trip_sharing/trip_share_deep_link_coordinator.dart';
 
 final getIt = GetIt.instance;
@@ -176,6 +177,10 @@ Future<void> setupDependencies() async {
       getIt<SecureStorageService>(),
       getIt<SessionManager>(),
       getIt<TripSharingRemoteDatasource>(),
+      () => getIt<MobileConfigService>().config.tripSharing.appLinkBaseUrl,
     ),
+  );
+  getIt.registerFactory<ReceivedTripSharesProvider>(
+    () => ReceivedTripSharesProvider(getIt<TripSharingRemoteDatasource>()),
   );
 }

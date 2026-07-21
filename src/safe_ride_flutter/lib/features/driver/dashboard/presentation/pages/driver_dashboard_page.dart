@@ -21,6 +21,7 @@ import '../../../../customer/home/presentation/pages/customer_home_page.dart';
 import '../../../../shared/history/presentation/pages/history_page.dart';
 import '../../../../shared/onboarding/presentation/providers/role_provider.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
+import '../../../../trip_sharing/trip_share_deep_link_coordinator.dart';
 import '../../../../shared/profile/presentation/pages/profile_page.dart';
 import 'driver_trip_payment_page.dart';
 import 'driver_return_evidence_page.dart';
@@ -124,6 +125,9 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
       if (token != null) {
         _provider.initializeRealtime(token);
       }
+      unawaited(
+        getIt<TripShareDeepLinkCoordinator>().processPendingAfterNavigation(),
+      );
     });
   }
 

@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using SafeRide.Contracts.Responses.MobileConfig;
 using SafeRide.Domain.Enums;
+using SafeRide.Infrastructure.Services;
 
 namespace SafeRide.API.Controllers;
 
@@ -10,7 +12,7 @@ namespace SafeRide.API.Controllers;
 [Route("api/mobile-config")]
 public sealed class MobileConfigController : ControllerBase
 {
-    private const string ConfigVersion = "2026.06.30";
+    private const string ConfigVersion = "2026.07.15";
     private const string RealtimeHubPath = "/hubs/saferide";
     private const int DriverLocationUpdateIntervalSeconds = 3;
     private const int SearchingBookingPollIntervalSeconds = 3;
@@ -18,10 +20,14 @@ public sealed class MobileConfigController : ControllerBase
     private const int TripStatusPollIntervalSeconds = 4;
 
     private readonly IConfiguration _configuration;
+    private readonly IOptions<TripSharingOptions> _tripSharingOptions;
 
-    public MobileConfigController(IConfiguration configuration)
+    public MobileConfigController(
+        IConfiguration configuration,
+        IOptions<TripSharingOptions> tripSharingOptions)
     {
         _configuration = configuration;
+        _tripSharingOptions = tripSharingOptions;
     }
 
     [HttpGet]
@@ -103,7 +109,9 @@ public sealed class MobileConfigController : ControllerBase
             new MobileFeatureConfigResponse(
                 "GoogleMaps", // primaryMapProvider
                 EnableMapProvider("GoogleMaps"),
-                EnableMapProvider("VietMap"))));
+                EnableMapProvider("VietMap")),
+            new MobileTripSharingConfigResponse(
+                _tripSharingOptions.Value.AppLinkBaseUrl)));
     }
 
     private static MobileStatusOptionResponse Status<TEnum>(TEnum value, string label)

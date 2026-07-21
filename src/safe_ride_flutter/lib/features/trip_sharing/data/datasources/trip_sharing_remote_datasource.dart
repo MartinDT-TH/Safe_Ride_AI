@@ -58,6 +58,22 @@ class TripSharingRemoteDatasource {
     return SharedTripTracking.fromJson(_map(response.data));
   }
 
+  Future<List<ReceivedTripShare>> received(
+    String token, {
+    bool activeOnly = true,
+  }) async {
+    final response = await _request(
+      () => _dio.get(
+        '/trip-shares/received',
+        queryParameters: {'activeOnly': activeOnly},
+        options: _auth(token),
+      ),
+    );
+    return (response.data as List)
+        .map((item) => ReceivedTripShare.fromJson(_map(item)))
+        .toList();
+  }
+
   Options _auth(String token) =>
       Options(headers: {'Authorization': AuthHeader.bearer(token)});
 

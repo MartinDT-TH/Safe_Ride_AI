@@ -8,6 +8,7 @@ class MobileConfig {
     required this.driver,
     required this.matching,
     required this.features,
+    required this.tripSharing,
   });
 
   final String version;
@@ -18,6 +19,7 @@ class MobileConfig {
   final MobileDriverConfig driver;
   final MobileMatchingConfig matching;
   final MobileFeatureConfig features;
+  final MobileTripSharingConfig tripSharing;
 
   factory MobileConfig.fromJson(Map<String, dynamic> json) {
     final booking = MobileStatusGroup.fromJson(_map(json['booking']));
@@ -34,6 +36,7 @@ class MobileConfig {
       driver: driver.statuses.isEmpty ? fallback.driver : driver,
       matching: MobileMatchingConfig.fromJson(_map(json['matching'])),
       features: MobileFeatureConfig.fromJson(_map(json['features'])),
+      tripSharing: MobileTripSharingConfig.fromJson(_map(json['tripSharing'])),
     );
   }
 
@@ -101,11 +104,31 @@ class MobileConfig {
       enableGoogleMap: true,
       enableVietMap: true,
     ),
+    tripSharing: MobileTripSharingConfig.fallback,
   );
 
   static Map<String, dynamic> _map(Object? value) {
     return value is Map ? Map<String, dynamic>.from(value) : const {};
   }
+}
+
+class MobileTripSharingConfig {
+  const MobileTripSharingConfig({required this.appLinkBaseUrl});
+
+  final String appLinkBaseUrl;
+
+  factory MobileTripSharingConfig.fromJson(Map<String, dynamic> json) {
+    final appLinkBaseUrl = json['appLinkBaseUrl']?.toString().trim() ?? '';
+    return MobileTripSharingConfig(
+      appLinkBaseUrl: appLinkBaseUrl.isEmpty
+          ? fallback.appLinkBaseUrl
+          : appLinkBaseUrl,
+    );
+  }
+
+  static const fallback = MobileTripSharingConfig(
+    appLinkBaseUrl: String.fromEnvironment('TRIP_SHARE_APP_LINK_BASE_URL'),
+  );
 }
 
 class MobileRealtimeConfig {

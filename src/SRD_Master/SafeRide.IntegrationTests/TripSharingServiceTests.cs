@@ -151,6 +151,25 @@ public sealed class TripSharingServiceTests
     }
 
     [Fact]
+    public async Task ListReceived_OnlyReturnsActiveSharesForAnActiveRecipient()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var created = await fixture.Service.CreateAsync(
+            fixture.Trip.Id,
+            fixture.Owner.Id,
+            fixture.Recipient.PhoneNumber!);
+
+        var received = await fixture.Service.ListReceivedAsync(fixture.Recipient.Id, activeOnly: true);
+        var share = Assert.Single(received);
+        Assert.Equal(created.TripShareId, share.TripShareId);
+        Assert.Equal(TripStatus.IN_PROGRESS.ToString(), share.TripStatus);
+
+        fixture.Recipient.IsActive = false;
+        await fixture.Db.SaveChangesAsync();
+        Assert.Empty(await fixture.Service.ListReceivedAsync(fixture.Recipient.Id, activeOnly: true));
+    }
+
+    [Fact]
     public async Task Tracking_RevalidatesRecipientAndExpiration()
     {
         await using var fixture = await Fixture.CreateAsync();

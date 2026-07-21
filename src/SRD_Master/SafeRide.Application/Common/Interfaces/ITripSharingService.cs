@@ -16,6 +16,11 @@ public interface ITripSharingService
         Guid sharedByUserId,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<ReceivedTripShareListItemDto>> ListReceivedAsync(
+        Guid recipientUserId,
+        bool activeOnly,
+        CancellationToken cancellationToken = default);
+
     Task<ResolveTripShareResult> ResolveAsync(
         string rawToken,
         Guid recipientUserId,

@@ -27,6 +27,8 @@ class _SharedTripTrackingPageState extends State<SharedTripTrackingPage> {
   String? _terminalMessage;
   String? _error;
   bool _loading = true;
+  bool _trackingStopped = false;
+  bool _freezeLocation = false;
 
   String get _handlerKey => 'sharedTrip:${widget.tripShareId}';
 
@@ -38,7 +40,7 @@ class _SharedTripTrackingPageState extends State<SharedTripTrackingPage> {
 
   Future<void> _initialize() async {
     await _refresh();
-    if (!mounted || _terminalMessage != null) return;
+    if (!mounted || _terminalMessage != null || _trackingStopped) return;
     _socket.onSharedTripLocationUpdated(_onLocation, key: _handlerKey);
     _socket.onSharedTripStatusUpdated(_onStatus, key: _handlerKey);
     try {
@@ -62,8 +64,16 @@ class _SharedTripTrackingPageState extends State<SharedTripTrackingPage> {
     try {
       final tracking = await _datasource.tracking(token, widget.tripShareId);
       if (!mounted) return;
+      if (const {
+        'COMPLETED',
+        'CANCELLED',
+      }.contains(tracking.tripStatus.toUpperCase())) {
+        _freezeLocation = true;
+      }
       setState(() {
-        _tracking = tracking;
+        _tracking = _freezeLocation && _tracking != null
+            ? _tracking!.copyWith(tripStatus: tracking.tripStatus)
+            : tracking;
         _error = null;
         _loading = false;
       });
@@ -82,7 +92,10 @@ class _SharedTripTrackingPageState extends State<SharedTripTrackingPage> {
 
   void _onLocation(Map<String, dynamic> payload) {
     final id = (payload['tripShareId'] as num?)?.toInt();
-    if (!mounted || id != widget.tripShareId || _terminalMessage != null) {
+    if (!mounted ||
+        id != widget.tripShareId ||
+        _terminalMessage != null ||
+        _freezeLocation) {
       return;
     }
     final latitude = (payload['latitude'] as num?)?.toDouble();
@@ -114,14 +127,15 @@ class _SharedTripTrackingPageState extends State<SharedTripTrackingPage> {
     }
     final status = payload['tripStatus']?.toString();
     if (status != null && _tracking != null) {
+      if (const {'COMPLETED', 'CANCELLED'}.contains(status.toUpperCase())) {
+        _freezeLocation = true;
+      }
       setState(() => _tracking = _tracking!.copyWith(tripStatus: status));
     }
   }
 
   Future<void> _stopTracking(String message) async {
-    _pollTimer?.cancel();
-    _socket.removeSharedTripHandlers(_handlerKey);
-    await _socket.unsubscribeSharedTrip(widget.tripShareId);
+    await _cleanupTracking();
     if (!mounted) return;
     setState(() {
       _terminalMessage = message;
@@ -129,11 +143,26 @@ class _SharedTripTrackingPageState extends State<SharedTripTrackingPage> {
     });
   }
 
-  @override
-  void dispose() {
+  Future<void> _cleanupTracking() async {
+    if (_trackingStopped) return;
+    _trackingStopped = true;
     _pollTimer?.cancel();
     _socket.removeSharedTripHandlers(_handlerKey);
-    unawaited(_socket.unsubscribeSharedTrip(widget.tripShareId));
+    try {
+      await _socket.unsubscribeSharedTrip(widget.tripShareId);
+    } catch (_) {
+      // The desired shared-trip group has already been removed locally.
+    }
+  }
+
+  Future<void> _closeTracking() async {
+    await _cleanupTracking();
+    if (mounted) Navigator.of(context).maybePop();
+  }
+
+  @override
+  void dispose() {
+    unawaited(_cleanupTracking());
     super.dispose();
   }
 
@@ -144,7 +173,19 @@ class _SharedTripTrackingPageState extends State<SharedTripTrackingPage> {
     }
     if (_terminalMessage != null || _error != null || _tracking == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Chuyến đi được chia sẻ')),
+        appBar: AppBar(
+          title: const Text('Chuyến đi được chia sẻ'),
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: _closeTracking,
+          ),
+          actions: [
+            TextButton(
+              onPressed: _closeTracking,
+              child: const Text('Về trang chủ'),
+            ),
+          ],
+        ),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -169,7 +210,16 @@ class _SharedTripTrackingPageState extends State<SharedTripTrackingPage> {
     }.contains(tracking.tripStatus.toUpperCase());
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Chuyến đi được chia sẻ')),
+      appBar: AppBar(
+        title: const Text('Chuyến đi được chia sẻ'),
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: _closeTracking,
+        ),
+        actions: [
+          TextButton(onPressed: _closeTracking, child: const Text('Đóng')),
+        ],
+      ),
       body: Column(
         children: [
           Expanded(

@@ -24,6 +24,7 @@ internal sealed class TripSharingServiceFake : ITripSharingService
     public Task<bool> CanSubscribeAsync(long tripShareId, Guid recipientUserId, CancellationToken cancellationToken = default) => Task.FromResult(false);
     public Task<CreateTripShareResult> CreateAsync(long tripId, Guid sharedByUserId, string recipientPhoneNumber, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     public Task<IReadOnlyList<TripShareListItemDto>> ListAsync(long tripId, Guid sharedByUserId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    public Task<IReadOnlyList<ReceivedTripShareListItemDto>> ListReceivedAsync(Guid recipientUserId, bool activeOnly, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     public Task<ResolveTripShareResult> ResolveAsync(string rawToken, Guid recipientUserId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     public Task<SharedTripTrackingDto> GetTrackingAsync(long tripShareId, Guid recipientUserId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     public Task RevokeAsync(long tripId, long tripShareId, Guid sharedByUserId, CancellationToken cancellationToken = default) => throw new NotSupportedException();

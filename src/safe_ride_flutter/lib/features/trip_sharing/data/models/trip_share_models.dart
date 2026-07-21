@@ -93,6 +93,41 @@ class ResolvedTripShare {
       );
 }
 
+class ReceivedTripShare {
+  const ReceivedTripShare({
+    required this.tripShareId,
+    required this.tripStatus,
+    required this.sharedByName,
+    required this.expiresAt,
+    required this.isActive,
+    this.sharedByAvatarUrl,
+    this.openedAt,
+  });
+
+  final int tripShareId;
+  final String tripStatus;
+  final String sharedByName;
+  final String? sharedByAvatarUrl;
+  final DateTime? openedAt;
+  final DateTime expiresAt;
+  final bool isActive;
+
+  factory ReceivedTripShare.fromJson(Map<String, dynamic> json) {
+    final sharedBy = Map<String, dynamic>.from(
+      json['sharedBy'] as Map? ?? const {},
+    );
+    return ReceivedTripShare(
+      tripShareId: (json['tripShareId'] as num).toInt(),
+      tripStatus: json['tripStatus']?.toString() ?? '',
+      sharedByName: sharedBy['fullName']?.toString() ?? 'Người dùng SafeRide',
+      sharedByAvatarUrl: sharedBy['avatarUrl']?.toString(),
+      openedAt: _date(json['openedAt']),
+      expiresAt: DateTime.parse(json['expiresAt'] as String).toUtc(),
+      isActive: json['isActive'] == true,
+    );
+  }
+}
+
 class SharedTripPoint {
   const SharedTripPoint({
     required this.latitude,

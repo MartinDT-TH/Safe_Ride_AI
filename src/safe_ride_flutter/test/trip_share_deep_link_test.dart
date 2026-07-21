@@ -17,8 +17,12 @@ void main() {
     storage = SecureStorageService();
     coordinator = TripShareDeepLinkCoordinator(
       storage,
-      SessionManager(storage: storage),
+      SessionManager(
+        storage: storage,
+        refreshClient: Dio(BaseOptions(baseUrl: 'http://localhost')),
+      ),
       TripSharingRemoteDatasource(dio: Dio()),
+      () => 'https://app.saferide.vn',
     );
   });
 
@@ -41,5 +45,15 @@ void main() {
     );
 
     expect(await storage.readPendingTripShareToken(), isNull);
+  });
+
+  test('matches an explicitly configured development custom scheme', () {
+    expect(
+      TripShareDeepLinkCoordinator.matchesConfiguredAppLink(
+        Uri.parse('saferide-dev://share/trip-share?t=token'),
+        'saferide-dev://share',
+      ),
+      isTrue,
+    );
   });
 }

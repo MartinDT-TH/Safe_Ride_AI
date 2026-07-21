@@ -1532,17 +1532,13 @@ class _ShareTripModalState extends State<ShareTripModal> {
     // The share was created successfully. Close this app dialog before opening
     // Android's native share sheet so the customer is never left behind a modal.
     Navigator.of(context).pop();
-    
-    // Add a short delay to allow the dialog pop animation to complete.
-    await Future.delayed(const Duration(milliseconds: 300));
-    
-    // WORKAROUND: Thay vì gọi Share.share gây crash trên một số máy ảo (Lỗi isAdsApp của OS),
-    // chúng ta sẽ copy link vào clipboard và hiển thị SnackBar.
-    await Clipboard.setData(ClipboardData(
-      text: 'Theo dõi chuyến đi SafeRide của tôi: ${created.shareUrl}',
-    ));
-    
-    if (mounted) {
+
+    final message = 'Theo dõi chuyến đi SafeRide của tôi: ${created.shareUrl}';
+    try {
+      await Share.share(message);
+    } catch (_) {
+      await Clipboard.setData(ClipboardData(text: message));
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Đã sao chép liên kết chia sẻ vào khay nhớ tạm!'),

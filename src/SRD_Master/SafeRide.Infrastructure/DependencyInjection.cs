@@ -35,6 +35,23 @@ namespace SafeRide.Infrastructure;
 
 public static class DependencyInjection
 {
+    private static bool IsValidTripSharingAppLink(string value, bool isDevelopment)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || string.IsNullOrWhiteSpace(uri.Host))
+        {
+            return false;
+        }
+
+        if (string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return isDevelopment
+            && !string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+    }
+
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
         IConfiguration configuration,
@@ -169,9 +186,10 @@ public static class DependencyInjection
         services
             .AddOptions<TripSharingOptions>()
             .Bind(configuration.GetSection(TripSharingOptions.SectionName))
-            .Validate(options => Uri.TryCreate(options.AppLinkBaseUrl, UriKind.Absolute, out var uri)
-                && uri.Scheme == Uri.UriSchemeHttps,
-                "TripSharing:AppLinkBaseUrl must be an absolute HTTPS URL.")
+            .Validate(options => IsValidTripSharingAppLink(
+                    options.AppLinkBaseUrl,
+                    environment.IsDevelopment()),
+                "TripSharing:AppLinkBaseUrl must be an absolute HTTPS URL in production, or an explicitly configured custom scheme in development.")
             .Validate(options => options.DefaultExpirationHours > 0, "TripSharing:DefaultExpirationHours must be greater than zero.")
             .Validate(options => options.CompletedGraceMinutes > 0, "TripSharing:CompletedGraceMinutes must be greater than zero.")
             .Validate(options => options.CancelledGraceMinutes > 0, "TripSharing:CancelledGraceMinutes must be greater than zero.")

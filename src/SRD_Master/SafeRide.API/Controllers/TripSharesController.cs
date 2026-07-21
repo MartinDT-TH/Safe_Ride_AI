@@ -53,6 +53,23 @@ public sealed class TripSharesController : ControllerBase
             cancellationToken));
     }
 
+    [HttpGet("received")]
+    [ProducesResponseType<IReadOnlyList<ReceivedTripShareListItemDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<ReceivedTripShareListItemDto>>> GetReceived(
+        [FromQuery] bool activeOnly = true,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        return Ok(await _tripSharingService.ListReceivedAsync(
+            userId,
+            activeOnly,
+            cancellationToken));
+    }
+
     private bool TryGetUserId(out Guid userId)
     {
         return Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out userId);

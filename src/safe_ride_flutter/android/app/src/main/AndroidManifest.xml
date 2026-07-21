@@ -31,14 +31,14 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <intent-filter android:autoVerify="true">
+            <intent-filter android:autoVerify="${tripShareAutoVerify}">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data
-                    android:scheme="https"
-                    android:host="app.saferide.vn"
-                    android:pathPrefix="/trip-share"/>
+                    android:scheme="${tripShareScheme}"
+                    android:host="${tripShareHost}"
+                    android:pathPrefix="${tripSharePathPrefix}"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

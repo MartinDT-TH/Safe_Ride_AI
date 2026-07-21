@@ -133,6 +133,7 @@ public sealed class TripSharingService : ITripSharingService
             Title = "Chuyến đi được chia sẻ",
             Content = $"Một chuyến đi đã được chia sẻ với bạn (mã {share.Id}).",
             NotificationType = "TripShared",
+            ReferenceId = share.Id,
             SentAt = utcNow
         });
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -213,6 +214,56 @@ public sealed class TripSharingService : ITripSharingService
             share.Id,
             share.TripId,
             share.Trip.TripStatus.ToString());
+    }
+
+    public async Task<IReadOnlyList<ReceivedTripShareListItemDto>> ListReceivedAsync(
+        Guid recipientUserId,
+        bool activeOnly,
+        CancellationToken cancellationToken = default)
+    {
+        var utcNow = _dateTimeProvider.UtcNow;
+        var query = _dbContext.TripShares
+            .AsNoTracking()
+            .Where(x => x.RecipientUserId == recipientUserId);
+        if (activeOnly)
+        {
+            query = query.Where(x => x.RecipientUser.IsActive
+                && (x.RecipientUser.LockoutEnd == null || x.RecipientUser.LockoutEnd <= utcNow)
+                && x.RevokedAt == null
+                && x.ExpiresAt > utcNow);
+        }
+
+        var shares = await query
+            .OrderBy(x => x.Trip.TripStatus == TripStatus.IN_PROGRESS ? 0
+                : x.Trip.TripStatus == TripStatus.DRIVER_ARRIVING
+                    || x.Trip.TripStatus == TripStatus.ARRIVED
+                    || x.Trip.TripStatus == TripStatus.ACCEPTED ? 1
+                : x.Trip.TripStatus == TripStatus.COMPLETED
+                    || x.Trip.TripStatus == TripStatus.CANCELLED ? 2
+                : 3)
+            .ThenByDescending(x => x.CreatedAt)
+            .Select(x => new
+            {
+                x.Id,
+                x.Trip.TripStatus,
+                SharedByName = x.SharedByUser.FullName,
+                SharedByAvatarUrl = x.SharedByUser.AvatarUrl,
+                x.OpenedAt,
+                x.ExpiresAt,
+                x.RevokedAt
+            })
+            .ToListAsync(cancellationToken);
+
+        return shares.Select(x => new ReceivedTripShareListItemDto(
+            x.Id,
+            x.TripStatus.ToString(),
+            new TripShareSharedByDto(
+                x.SharedByName ?? "Người dùng SafeRide",
+                x.SharedByAvatarUrl),
+            x.OpenedAt,
+            x.ExpiresAt,
+            x.RevokedAt == null && x.ExpiresAt > utcNow))
+            .ToList();
     }
 
     public async Task<SharedTripTrackingDto> GetTrackingAsync(

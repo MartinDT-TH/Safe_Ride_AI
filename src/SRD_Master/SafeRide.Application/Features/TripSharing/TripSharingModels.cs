@@ -20,6 +20,18 @@ public sealed record TripShareListItemDto(
     DateTime? RevokedAt,
     bool IsActive);
 
+public sealed record TripShareSharedByDto(
+    string FullName,
+    string? AvatarUrl);
+
+public sealed record ReceivedTripShareListItemDto(
+    long TripShareId,
+    string TripStatus,
+    TripShareSharedByDto SharedBy,
+    DateTime? OpenedAt,
+    DateTime ExpiresAt,
+    bool IsActive);
+
 public sealed record ResolveTripShareResult(
     long TripShareId,
     long TripId,
