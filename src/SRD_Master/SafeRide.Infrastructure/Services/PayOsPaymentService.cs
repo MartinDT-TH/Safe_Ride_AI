@@ -53,6 +53,7 @@ public sealed class PayOsPaymentService : IPaymentService
         EnsurePayOsConfigured();
 
         var trip = await GetCustomerPayableTripAsync(customerId, tripId, cancellationToken);
+        EnsureCustomerCanCreateQr(trip);
         return await CreateQrPaymentForTripAsync(
             trip,
             returnUrl,
@@ -70,6 +71,8 @@ public sealed class PayOsPaymentService : IPaymentService
         EnsurePayOsConfigured();
 
         var trip = await GetDriverPayableTripAsync(driverId, tripId, cancellationToken);
+        EnsurePostTripPaymentStatus(trip);
+        await FinalizeSuccessfulPaymentIfTripEndedAsync(trip, cancellationToken);
         return await CreateQrPaymentForTripAsync(
             trip,
             returnUrl,
@@ -210,6 +213,7 @@ public sealed class PayOsPaymentService : IPaymentService
         CancellationToken cancellationToken)
     {
         var trip = await GetCustomerPayableTripAsync(customerId, tripId, cancellationToken);
+        await FinalizeSuccessfulPaymentIfTripEndedAsync(trip, cancellationToken);
         var pendingQr = trip.Payments
             .Where(x => x.PaymentMethod == PaymentMethod.QR
                 && x.PaymentStatus == PaymentStatus.Pending
@@ -232,6 +236,7 @@ public sealed class PayOsPaymentService : IPaymentService
         CancellationToken cancellationToken)
     {
         var trip = await GetDriverPayableTripAsync(driverId, tripId, cancellationToken);
+        await FinalizeSuccessfulPaymentIfTripEndedAsync(trip, cancellationToken);
         var pendingQr = trip.Payments
             .Where(x => x.PaymentMethod == PaymentMethod.QR
                 && x.PaymentStatus == PaymentStatus.Pending
@@ -254,9 +259,10 @@ public sealed class PayOsPaymentService : IPaymentService
         CancellationToken cancellationToken)
     {
         var trip = await GetDriverPayableTripAsync(driverId, tripId, cancellationToken);
+        EnsurePostTripPaymentStatus(trip);
         if (trip.Payments.Any(x => x.PaymentStatus == PaymentStatus.Success))
         {
-            await CompleteTripAfterPaymentAsync(trip, cancellationToken);
+            await FinalizeSuccessfulPaymentIfTripEndedAsync(trip, cancellationToken);
             return BuildStatusResult(trip);
         }
 
@@ -457,42 +463,20 @@ public sealed class PayOsPaymentService : IPaymentService
     {
         if (payment.PaymentStatus == PaymentStatus.Success)
         {
-            await CompleteTripAfterPaymentAsync(trip, cancellationToken);
+            await FinalizeSuccessfulPaymentIfTripEndedAsync(trip, cancellationToken);
             return;
         }
-
-        var amounts = GetPaymentAmounts(trip);
-        var driverShare = amounts.DriverShare;
-        var wallet = await GetDriverWalletAsync(trip.DriverId, cancellationToken);
-        var alreadyCredited = await _dbContext.WalletTransactions.AnyAsync(
-            x => x.TripId == trip.Id
-                && x.WalletId == wallet.Id
-                && x.TransactionType == WalletTransactionType.Income,
-            cancellationToken);
 
         payment.PaymentStatus = PaymentStatus.Success;
         payment.Amount = paidAmount > 0 ? ToVnd(paidAmount) : payment.Amount;
         payment.PaidAt = DateTime.UtcNow;
         payment.UpdatedAt = DateTime.UtcNow;
 
-        if (!alreadyCredited)
-        {
-            wallet.CurrentBalance += driverShare;
-            _dbContext.WalletTransactions.Add(new WalletTransaction
-            {
-                WalletId = wallet.Id,
-                TripId = trip.Id,
-                TransactionType = WalletTransactionType.Income,
-                Amount = driverShare,
-                Description = string.IsNullOrWhiteSpace(providerReference)
-                    ? "SafeRide QR trip payout"
-                    : $"SafeRide QR trip payout ({providerReference})",
-                CreatedAt = DateTime.UtcNow
-            });
-        }
-
         await _dbContext.SaveChangesAsync(cancellationToken);
-        await CompleteTripAfterPaymentAsync(trip, cancellationToken);
+        await FinalizeSuccessfulPaymentIfTripEndedAsync(
+            trip,
+            cancellationToken,
+            providerReference);
         await PublishTripPaymentSucceededAsync(trip, payment, cancellationToken);
     }
 
@@ -519,11 +503,11 @@ public sealed class PayOsPaymentService : IPaymentService
                 StatusCodes.Status404NotFound);
         }
 
-        if (!IsPaymentVisibleStatus(trip.TripStatus))
+        if (!IsCustomerPaymentVisibleStatus(trip.TripStatus))
         {
             throw new BookingException(
                 "payment.trip_not_waiting_payment",
-                "Vui lòng thanh toán cho tài xế sau khi đã xác nhận trả xe.",
+                "Chuyến đi chưa sẵn sàng để thanh toán.",
                 StatusCodes.Status409Conflict);
         }
 
@@ -553,11 +537,11 @@ public sealed class PayOsPaymentService : IPaymentService
                 StatusCodes.Status404NotFound);
         }
 
-        if (!IsPaymentVisibleStatus(trip.TripStatus))
+        if (!IsCustomerPaymentVisibleStatus(trip.TripStatus))
         {
             throw new BookingException(
                 "payment.trip_not_waiting_payment",
-                "Chỉ xác nhận thanh toán sau khi khách đã xác nhận trả xe.",
+                "Chuyến đi chưa sẵn sàng để kiểm tra thanh toán.",
                 StatusCodes.Status409Conflict);
         }
 
@@ -584,7 +568,7 @@ public sealed class PayOsPaymentService : IPaymentService
                 StatusCodes.Status404NotFound);
         }
 
-        if (!IsPaymentVisibleStatus(trip.TripStatus))
+        if (!IsPostTripPaymentStatus(trip.TripStatus))
         {
             throw new BookingException(
                 "payment.trip_not_waiting_payment",
@@ -649,6 +633,55 @@ public sealed class PayOsPaymentService : IPaymentService
             cancellationToken);
     }
 
+    private async Task FinalizeSuccessfulPaymentIfTripEndedAsync(
+        Trip trip,
+        CancellationToken cancellationToken,
+        string? providerReference = null)
+    {
+        if (trip.TripStatus != TripStatus.WAITING_PAYMENT)
+        {
+            return;
+        }
+
+        var payment = trip.Payments
+            .OrderByDescending(x => x.PaymentStatus == PaymentStatus.Success)
+            .ThenByDescending(x => x.CreatedAt)
+            .FirstOrDefault(x => x.PaymentStatus == PaymentStatus.Success);
+        if (payment is null)
+        {
+            return;
+        }
+
+        if (payment.PaymentMethod == PaymentMethod.QR)
+        {
+            var wallet = await GetDriverWalletAsync(trip.DriverId, cancellationToken);
+            var alreadyCredited = await _dbContext.WalletTransactions.AnyAsync(
+                x => x.TripId == trip.Id
+                    && x.WalletId == wallet.Id
+                    && x.TransactionType == WalletTransactionType.Income,
+                cancellationToken);
+            if (!alreadyCredited)
+            {
+                var driverShare = GetPaymentAmounts(trip).DriverShare;
+                wallet.CurrentBalance += driverShare;
+                _dbContext.WalletTransactions.Add(new WalletTransaction
+                {
+                    WalletId = wallet.Id,
+                    TripId = trip.Id,
+                    TransactionType = WalletTransactionType.Income,
+                    Amount = driverShare,
+                    Description = string.IsNullOrWhiteSpace(providerReference)
+                        ? "SafeRide QR trip payout"
+                        : $"SafeRide QR trip payout ({providerReference})",
+                    CreatedAt = DateTime.UtcNow
+                });
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
+        }
+
+        await CompleteTripAfterPaymentAsync(trip, cancellationToken);
+    }
+
     private Task PublishTripPaymentSucceededAsync(
         Trip trip,
         Payment payment,
@@ -710,8 +743,39 @@ public sealed class PayOsPaymentService : IPaymentService
                 payment?.PaymentStatus ?? PaymentStatus.Pending));
     }
 
-    private static bool IsPaymentVisibleStatus(TripStatus status)
+    private static bool IsCustomerPaymentVisibleStatus(TripStatus status)
+        => status is not TripStatus.CANCELLED;
+
+    private static void EnsureCustomerCanCreateQr(Trip trip)
+    {
+        if (trip.TripStatus is TripStatus.ACCEPTED
+            or TripStatus.DRIVER_ARRIVING
+            or TripStatus.ARRIVED
+            or TripStatus.WAITING_PAYMENT
+            or TripStatus.COMPLETED)
+        {
+            return;
+        }
+
+        throw new BookingException(
+            "payment.prepayment_window_closed",
+            "Chỉ có thể thanh toán trước khi chuyến bắt đầu hoặc sau khi chuyến kết thúc.",
+            StatusCodes.Status409Conflict);
+    }
+
+    private static bool IsPostTripPaymentStatus(TripStatus status)
         => status is TripStatus.WAITING_PAYMENT or TripStatus.COMPLETED;
+
+    private static void EnsurePostTripPaymentStatus(Trip trip)
+    {
+        if (!IsPostTripPaymentStatus(trip.TripStatus))
+        {
+            throw new BookingException(
+                "payment.trip_not_waiting_payment",
+                "Chỉ có thể thu tiền từ phía tài xế sau khi chuyến đi kết thúc.",
+                StatusCodes.Status409Conflict);
+        }
+    }
 
     private static string BuildPaymentMessage(
         TripStatus tripStatus,
@@ -720,6 +784,13 @@ public sealed class PayOsPaymentService : IPaymentService
         if (paymentStatus == PaymentStatus.Success || tripStatus == TripStatus.COMPLETED)
         {
             return "Thanh toán đã hoàn tất.";
+        }
+
+        if (tripStatus is TripStatus.ACCEPTED
+            or TripStatus.DRIVER_ARRIVING
+            or TripStatus.ARRIVED)
+        {
+            return "Bạn có thể thanh toán trước bằng PayOS hoặc thanh toán sau chuyến đi.";
         }
 
         return "Vui lòng thanh toán cho tài xế để hoàn tất chuyến đi.";
