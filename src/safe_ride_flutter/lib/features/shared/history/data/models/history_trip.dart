@@ -2,6 +2,7 @@ enum HistoryTripStatus { completed, cancelled, booked }
 
 class HistoryTrip {
   final int id;
+  final int? tripId;
   final String pickup;
   final String destination;
   final DateTime time;
@@ -17,6 +18,7 @@ class HistoryTrip {
 
   HistoryTrip({
     required this.id,
+    this.tripId,
     required this.pickup,
     required this.destination,
     required this.time,
@@ -50,6 +52,7 @@ class HistoryTrip {
 
     return HistoryTrip(
       id: (json['id'] as num?)?.toInt() ?? 0,
+      tripId: (json['tripId'] as num?)?.toInt(),
       pickup: json['pickupAddress'] ?? '',
       destination: json['destinationAddress'] ?? '',
       time: DateTime.tryParse(occurredAt ?? '') ?? DateTime.now(),

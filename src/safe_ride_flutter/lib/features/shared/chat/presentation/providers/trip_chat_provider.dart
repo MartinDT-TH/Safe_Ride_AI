@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../data/datasources/trip_chat_remote_datasource.dart';
 import '../../data/models/trip_chat_message_model.dart';
@@ -13,6 +14,7 @@ class TripChatProvider extends ChangeNotifier {
   String? _errorMessage;
   int? _activeTripId;
   String? _currentUserId;
+  String? _accessToken;
 
   List<TripChatMessageModel> get messages => _messages;
   bool get isLoading => _isLoading;
@@ -27,6 +29,7 @@ class TripChatProvider extends ChangeNotifier {
   }) async {
     _activeTripId = tripId;
     _currentUserId = currentUserId;
+    _accessToken = token;
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -93,6 +96,37 @@ class TripChatProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> sendImage(File imageFile) async {
+    if (_activeTripId == null || _accessToken == null || _currentUserId == null) {
+      return;
+    }
+
+    _isSending = true;
+    notifyListeners();
+
+    try {
+      final msg = await _remoteDatasource.sendTripChatImage(
+        token: _accessToken!,
+        tripId: _activeTripId!,
+        imageFile: imageFile,
+        currentUserId: _currentUserId!,
+      );
+
+      // Prevent duplicate if SignalR broadcast comes first or fast
+      if (!_messages.any((m) => m.id == msg.id)) {
+        _messages.add(msg);
+        _sortMessages();
+        notifyListeners();
+      }
+    } catch (e) {
+      _errorMessage = 'Không thể gửi ảnh.';
+      notifyListeners();
+    } finally {
+      _isSending = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> disposeChat() async {
     if (_activeTripId != null) {
       await _socketService.leaveTripChat(_activeTripId!);
@@ -101,6 +135,7 @@ class TripChatProvider extends ChangeNotifier {
     _messages = [];
     _activeTripId = null;
     _currentUserId = null;
+    _accessToken = null;
   }
 
   @override

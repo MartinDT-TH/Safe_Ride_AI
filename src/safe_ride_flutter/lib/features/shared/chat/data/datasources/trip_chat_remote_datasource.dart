@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:http_parser/http_parser.dart';
 import 'package:safe_ride/core/constants/app_strings.dart';
 import 'package:safe_ride/core/network/auth_header.dart';
 import 'package:safe_ride/core/network/dio_client.dart';
@@ -32,5 +34,41 @@ class TripChatRemoteDatasource {
     } catch (e) {
       return [];
     }
+  }
+
+  Future<TripChatMessageModel> sendTripChatImage({
+    required String token,
+    required int tripId,
+    required File imageFile,
+    required String currentUserId,
+  }) async {
+    final fileName = imageFile.path.split(Platform.pathSeparator).last;
+    final extension = fileName.split('.').last.toLowerCase();
+    final contentType = switch (extension) {
+      'png' => 'image/png',
+      'webp' => 'image/webp',
+      _ => 'image/jpeg',
+    };
+
+    final formData = FormData.fromMap({
+      'image': await MultipartFile.fromFile(
+        imageFile.path,
+        filename: fileName,
+        contentType: MediaType.parse(contentType),
+      ),
+    });
+
+    final response = await _dio.post(
+      '/trips/$tripId/chat/images',
+      data: formData,
+      options: Options(
+        headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+      ),
+    );
+
+    return TripChatMessageModel.fromJson(
+      Map<String, dynamic>.from(response.data as Map),
+      currentUserId,
+    );
   }
 }

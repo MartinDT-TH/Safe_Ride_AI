@@ -14,6 +14,7 @@ import 'trip_details_page.dart';
 import '../widgets/interactive_button.dart';
 import '../widgets/trip_history_card.dart';
 import 'package:safe_ride/features/shared/feedback/presentation/pages/report_trip_page.dart';
+import 'package:safe_ride/features/shared/chat/presentation/pages/trip_chat_page.dart';
 
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
@@ -79,6 +80,37 @@ class _HistoryPageState extends State<HistoryPage> {
 
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => RebookTripPage(oldBooking: details)),
+    );
+  }
+
+  Future<void> _handleReport(HistoryTrip trip) async {
+    final result = await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => ReportTripPage(trip: trip)),
+    );
+
+    if (result == true) {
+      _loadHistory();
+    }
+  }
+
+  void _handleChat(HistoryTrip trip) {
+    final auth = context.read<AuthProvider>();
+    final currentUserId = auth.userId;
+
+    if (trip.tripId == null || currentUserId == null) {
+      _showMessage('Không thể mở trò chuyện lúc này.');
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TripChatPage(
+          tripId: trip.tripId!,
+          currentUserId: currentUserId,
+          receiverName: trip.driverName ?? 'Tài xế SafeRide',
+          canSendMessage: false,
+        ),
+      ),
     );
   }
 
@@ -185,10 +217,18 @@ class _HistoryPageState extends State<HistoryPage> {
                                   _openTripDetails(trip, canRebook: canRebook),
                               borderRadius: BorderRadius.circular(24),
                               child: TripHistoryCard(
-                                trip: trip,
-                                onRebook: canRebook
-                                    ? () => _handleRebook(trip)
+                                onChat: trip.tripId != null
+                                    ? () => _handleChat(trip)
                                     : null,
+                                trip: trip,
+                                onReport:
+                                    (isDriver ||
+                                            trip.status ==
+                                                HistoryTripStatus.booked)
+                                        ? null
+                                        : () => _handleReport(trip),
+                                onRebook:
+                                    canRebook ? () => _handleRebook(trip) : null,
                               ),
                             );
                           },
