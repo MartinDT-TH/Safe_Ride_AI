@@ -214,6 +214,7 @@ public static class DependencyInjection
         services.AddScoped<IReportRepository, ReportRepository>();
         services.AddScoped<IAdminCustomerAccountService, AdminCustomerAccountService>();
         services.AddScoped<IAdminDriverAccountService, AdminDriverAccountService>();
+        services.AddScoped<IAdminBookingManagementService, AdminBookingManagementService>();
         services.AddScoped<IAdminNotificationManagementService, AdminNotificationManagementService>();
         services.AddScoped<IUserNotificationService, UserNotificationService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
