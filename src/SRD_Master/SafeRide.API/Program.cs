@@ -89,6 +89,10 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
+await app.Services.SeedAdminIdentityAsync();
+await app.Services.SeedIdentityAsync();
+await app.Services.SeedCustomerIdentityAsync();
+
 app.Use(async (context, next) =>
 {
     var logger = context.RequestServices
@@ -171,6 +175,7 @@ app.UseAuthorization();
 app.MapControllers();
 app.UseWebSockets();
 app.MapHub<SafeRideHub>("/hubs/saferide");
+app.MapHub<TripChatHub>("/hubs/trip-chat");
 
 if (backgroundJobsEnabled)
 {

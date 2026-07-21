@@ -76,6 +76,51 @@ public sealed class SafeRideHub : Hub
             RealtimeGroups.Trip(tripId));
     }
 
+    public Task SendInAppCallOffer(InAppCallSignal signal)
+    {
+        ValidateInAppCallSignal(signal);
+
+        return Clients
+            .OthersInGroup(RealtimeGroups.Trip(signal.TripId))
+            .SendAsync("InAppCallOffer", signal, Context.ConnectionAborted);
+    }
+
+    public Task SendInAppCallAnswer(InAppCallSignal signal)
+    {
+        ValidateInAppCallSignal(signal);
+
+        return Clients
+            .OthersInGroup(RealtimeGroups.Trip(signal.TripId))
+            .SendAsync("InAppCallAnswer", signal, Context.ConnectionAborted);
+    }
+
+    public Task SendInAppCallIceCandidate(InAppCallSignal signal)
+    {
+        ValidateInAppCallSignal(signal);
+
+        return Clients
+            .OthersInGroup(RealtimeGroups.Trip(signal.TripId))
+            .SendAsync("InAppCallIceCandidate", signal, Context.ConnectionAborted);
+    }
+
+    public Task RejectInAppCall(InAppCallSignal signal)
+    {
+        ValidateInAppCallSignal(signal);
+
+        return Clients
+            .OthersInGroup(RealtimeGroups.Trip(signal.TripId))
+            .SendAsync("InAppCallRejected", signal, Context.ConnectionAborted);
+    }
+
+    public Task EndInAppCall(InAppCallSignal signal)
+    {
+        ValidateInAppCallSignal(signal);
+
+        return Clients
+            .OthersInGroup(RealtimeGroups.Trip(signal.TripId))
+            .SendAsync("InAppCallEnded", signal, Context.ConnectionAborted);
+    }
+
     [Authorize(Roles = "Driver")]
     public async Task UpdateDriverLocation(double latitude, double longitude)
     {
@@ -205,4 +250,27 @@ public sealed class SafeRideHub : Hub
             throw new HubException("Driver location coordinates are invalid.");
         }
     }
+
+    private static void ValidateInAppCallSignal(InAppCallSignal signal)
+    {
+        if (signal.TripId <= 0)
+        {
+            throw new HubException("Trip id is required for in-app call signaling.");
+        }
+
+        if (string.IsNullOrWhiteSpace(signal.CallId))
+        {
+            throw new HubException("Call id is required for in-app call signaling.");
+        }
+    }
 }
+
+public sealed record InAppCallSignal(
+    long TripId,
+    long? BookingId,
+    string CallId,
+    string? Sdp,
+    string? SdpType,
+    string? Candidate,
+    string? SdpMid,
+    int? SdpMLineIndex);

@@ -36,7 +36,15 @@ import '../features/shared/history/data/repositories/history_repository_impl.dar
 import '../features/shared/history/domain/repositories/history_repository.dart';
 import '../features/shared/history/presentation/providers/history_provider.dart';
 import '../features/driver/dashboard/presentation/providers/driver_dashboard_provider.dart';
+import '../features/driver/wallet/data/datasources/driver_wallet_remote_datasource.dart';
+import '../features/driver/wallet/data/repositories/driver_wallet_repository_impl.dart';
+import '../features/driver/wallet/domain/repositories/driver_wallet_repository.dart';
+import '../features/driver/wallet/presentation/providers/driver_wallet_provider.dart';
+import '../features/driver/trip_requests/data/datasources/driver_trip_request_remote_datasource.dart';
+import '../features/driver/trip_requests/data/repositories/driver_trip_request_repository_impl.dart';
+import '../features/driver/trip_requests/domain/repositories/driver_trip_request_repository.dart';
 import '../features/driver/registration/data/datasources/identity_verification_remote_datasource.dart';
+import '../features/shared/chat/presentation/providers/trip_chat_provider.dart';
 
 final getIt = GetIt.instance;
 
@@ -152,14 +160,37 @@ Future<void> setupDependencies() async {
     () => HistoryProvider(getIt<HistoryRepository>()),
   );
 
+  getIt.registerLazySingleton<DriverTripRequestRemoteDatasource>(
+    () => DriverTripRequestRemoteDatasource(),
+  );
+
+  getIt.registerLazySingleton<DriverTripRequestRepository>(
+    () => DriverTripRequestRepositoryImpl(
+      getIt<DriverTripRequestRemoteDatasource>(),
+    ),
+  );
+
   getIt.registerFactory<DriverDashboardProvider>(
     () => DriverDashboardProvider(
       socketService: getIt<SocketService>(),
       sessionManager: getIt<SessionManager>(),
+      tripRequestRepository: getIt<DriverTripRequestRepository>(),
     ),
+  );
+
+  getIt.registerLazySingleton<DriverWalletRemoteDatasource>(
+    () => DriverWalletRemoteDatasource(),
+  );
+  getIt.registerLazySingleton<DriverWalletRepository>(
+    () => DriverWalletRepositoryImpl(getIt<DriverWalletRemoteDatasource>()),
+  );
+  getIt.registerFactory<DriverWalletProvider>(
+    () => DriverWalletProvider(getIt<DriverWalletRepository>()),
   );
 
   getIt.registerLazySingleton<IdentityVerificationRemoteDatasource>(
     () => IdentityVerificationRemoteDatasource(),
   );
+
+  getIt.registerFactory<TripChatProvider>(() => TripChatProvider());
 }

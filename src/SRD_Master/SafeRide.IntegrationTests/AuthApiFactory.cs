@@ -315,6 +315,33 @@ public sealed class FakeRedisService : IRedisService
         _values.TryRemove(key, out _);
         return Task.CompletedTask;
     }
+
+    public Task ExpireAsync(
+        string key,
+        TimeSpan expiration,
+        CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
+
+    public Task ListRightPushTrimAndExpireAsync(
+        string key,
+        string value,
+        int maxLength,
+        TimeSpan expiration,
+        CancellationToken cancellationToken = default) =>
+        _geoStorage.ListRightPushTrimAndExpireAsync(
+            key,
+            value,
+            maxLength,
+            expiration,
+            cancellationToken);
+
+    public Task<IReadOnlyList<string>> ListRangeAsync(
+        string key,
+        long start = 0,
+        long stop = -1,
+        CancellationToken cancellationToken = default) =>
+        _geoStorage.ListRangeAsync(key, start, stop, cancellationToken);
+
     public Task<long> IncrementAsync(string key, TimeSpan expiration) =>
         Task.FromResult(_counters.AddOrUpdate(key, 1, (_, count) => count + 1));
 

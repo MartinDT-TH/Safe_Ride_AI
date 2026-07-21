@@ -10,6 +10,7 @@ import '../../../../../core/maps/widgets/map_renderer_widget.dart';
 import '../../../../../core/maps/widgets/live_trip_map_widget.dart';
 import '../../../../../core/services/location_service.dart';
 import '../../../../../core/services/map_api_service.dart';
+import '../../../../../core/services/socket_service.dart';
 import '../../../../../core/widgets/current_location_button.dart';
 import '../../../../../dependency_injection/injection.dart';
 
@@ -21,9 +22,12 @@ import '../../../../customer/home/presentation/pages/customer_home_page.dart';
 import '../../../../shared/history/presentation/pages/history_page.dart';
 import '../../../../shared/onboarding/presentation/providers/role_provider.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
+import '../../../../shared/call/presentation/pages/in_app_voice_call_page.dart';
 import '../../../../shared/profile/presentation/pages/profile_page.dart';
+import '../../../../shared/chat/presentation/pages/trip_chat_page.dart';
 import 'driver_trip_payment_page.dart';
 import 'driver_return_evidence_page.dart';
+import '../../../wallet/presentation/pages/driver_wallet_page.dart';
 
 class DriverDashboardPage extends StatefulWidget {
   const DriverDashboardPage({super.key});
@@ -59,11 +63,14 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
   final List<AppLatLng> _arrivalRoutePoints = [];
   final List<AppLatLng> _tripRoutePoints = [];
   final MapApiService _mapApiService = MapApiService();
+  final SocketService _socketService = getIt<SocketService>();
   DateTime? _lastArrivalRouteRefreshAt;
   AppLatLng? _lastArrivalRouteRefreshOrigin;
   int? _renderedRouteTripId;
   int? _openingPaymentTripId;
+  int? _callSignalTripId;
   bool _arrivalRouteRefreshInProgress = false;
+  bool _incomingCallDialogOpen = false;
   static const double _arrivalRerouteThresholdMeters = 35;
   static const double _arrivalRerouteMinMoveMeters = 80;
   static const double _locationUiJitterThresholdMeters = 5;
@@ -141,7 +148,12 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
       _startLocationUpdates();
     }
 
+    if (activeTrip != null) {
+      _ensureTripCallHandler(activeTrip);
+    }
+
     if (activeTrip == null) {
+      _removeTripCallHandler();
       if (_arrivalRoutePoints.isNotEmpty ||
           _tripRoutePoints.isNotEmpty ||
           _renderedRouteTripId != null) {
@@ -257,12 +269,103 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
 
   @override
   void dispose() {
-    if (_providerAttached) {
-      _provider.removeListener(_onProviderUpdated);
-    }
+    _provider.removeListener(_onProviderUpdated);
+    _removeTripCallHandler();
     _stopLocationUpdates();
     super.dispose();
   }
+
+  void _ensureTripCallHandler(ActiveDriverTrip activeTrip) {
+    if (_callSignalTripId == activeTrip.tripId) return;
+    _removeTripCallHandler();
+    _callSignalTripId = activeTrip.tripId;
+    _socketService.onInAppCallOffer((signal) {
+      if (!mounted ||
+          signal.tripId != activeTrip.tripId ||
+          signal.sdp == null) {
+        return;
+      }
+      _showIncomingCallDialog(signal);
+    }, key: _callOfferHandlerKey(activeTrip.tripId));
+  }
+
+  void _removeTripCallHandler() {
+    final tripId = _callSignalTripId;
+    if (tripId == null) return;
+    _socketService.removeInAppCallOfferHandler(_callOfferHandlerKey(tripId));
+    _callSignalTripId = null;
+  }
+
+  Future<void> _startInAppCall(ActiveDriverTrip trip) async {
+    final accessToken = context.read<AuthProvider>().token;
+    if (accessToken == null || accessToken.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Chưa thể gọi khi phiên đã hết hạn.')),
+      );
+      return;
+    }
+
+    await _socketService.connect(accessToken);
+    await _socketService.joinTrip(trip.tripId);
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => InAppVoiceCallPage(
+          tripId: trip.tripId,
+          bookingId: trip.bookingId,
+          peerName: 'Khách hàng',
+          accessToken: accessToken,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showIncomingCallDialog(InAppCallSignal signal) async {
+    if (_incomingCallDialogOpen) return;
+    _incomingCallDialogOpen = true;
+    final accessToken = context.read<AuthProvider>().token;
+    final accepted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Cuộc gọi đến'),
+        content: const Text('Khách hàng đang gọi cho bạn.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Từ chối'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            icon: const Icon(Icons.call_rounded),
+            label: const Text('Nghe máy'),
+          ),
+        ],
+      ),
+    );
+    _incomingCallDialogOpen = false;
+
+    if (!mounted || accessToken == null || accessToken.isEmpty) return;
+    if (accepted != true) {
+      await _socketService.rejectInAppCall(signal);
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => InAppVoiceCallPage(
+          tripId: signal.tripId,
+          bookingId: signal.bookingId,
+          peerName: 'Khách hàng',
+          accessToken: accessToken,
+          initialOffer: signal,
+        ),
+      ),
+    );
+  }
+
+  static String _callOfferHandlerKey(int tripId) =>
+      'driverDashboardCall:$tripId';
 
   void _startLocationUpdates() {
     _stopLocationUpdates();
@@ -562,12 +665,36 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     });
   }
 
+  void _openChat(ActiveDriverTrip trip) {
+    final auth = context.read<AuthProvider>();
+    final currentUserId = auth.userId;
+
+    if (currentUserId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Không thể mở trò chuyện lúc này.')),
+      );
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TripChatPage(
+          tripId: trip.tripId,
+          currentUserId: currentUserId,
+          receiverName: 'Khách hàng',
+          canSendMessage:
+              trip.tripStatus != 'COMPLETED' && trip.tripStatus != 'CANCELLED',
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final List<Widget> pages = [
       _buildHomeContent(),
       const HistoryPage(),
-      const Center(child: Text('Wallet Page')),
+      _selectedIndex == 2 ? const DriverWalletPage() : const SizedBox.shrink(),
       const ProfilePage(),
     ];
 
@@ -744,9 +871,11 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                   String? errorMessage,
                   bool hasNewRequest,
                   bool isLoadingActiveTrip,
+                  bool isLoadingTripRequests,
                   bool isResponding,
                   bool isUpdatingTrip,
                   bool isWaitingForCustomerConfirmation,
+                  String? tripRequestsErrorMessage,
                 })
               >(
                 selector: (_, provider) => (
@@ -755,13 +884,19 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                   errorMessage: provider.errorMessage,
                   hasNewRequest: provider.hasNewRequest,
                   isLoadingActiveTrip: provider.isLoadingActiveTrip,
+                  isLoadingTripRequests: provider.isLoadingTripRequests,
                   isResponding: provider.isResponding,
                   isUpdatingTrip: provider.isUpdatingTrip,
                   isWaitingForCustomerConfirmation:
                       provider.isWaitingForCustomerConfirmation,
+                  tripRequestsErrorMessage: provider.tripRequestsErrorMessage,
                 ),
                 builder: (context, state, child) {
-                  if (state.isLoadingActiveTrip) {
+                  if (state.isLoadingActiveTrip ||
+                      (state.isLoadingTripRequests &&
+                          state.activeTrip == null &&
+                          !state.hasNewRequest &&
+                          !state.isWaitingForCustomerConfirmation)) {
                     return const Padding(
                       padding: EdgeInsets.only(bottom: 24),
                       child: Center(
@@ -781,10 +916,24 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                     );
                   }
 
+                  if (state.tripRequestsErrorMessage != null &&
+                      state.activeTrip == null &&
+                      !state.hasNewRequest &&
+                      !state.isWaitingForCustomerConfirmation) {
+                    return _ErrorLoadingActiveTripCard(
+                      errorMessage: state.tripRequestsErrorMessage!,
+                      onRetry: context
+                          .read<DriverDashboardProvider>()
+                          .loadOpenTripRequests,
+                    );
+                  }
+
                   if (state.activeTrip != null) {
                     return _ActiveTripCard(
                       trip: state.activeTrip!,
                       isUpdating: state.isUpdatingTrip,
+                      onCall: () => _startInAppCall(state.activeTrip!),
+                      onChat: () => _openChat(state.activeTrip!),
                     );
                   }
                   if (state.hasNewRequest && state.currentRequest != null) {
@@ -890,10 +1039,17 @@ class _ErrorLoadingActiveTripCard extends StatelessWidget {
 }
 
 class _ActiveTripCard extends StatelessWidget {
-  const _ActiveTripCard({required this.trip, required this.isUpdating});
+  const _ActiveTripCard({
+    required this.trip,
+    required this.isUpdating,
+    required this.onCall,
+    required this.onChat,
+  });
 
   final ActiveDriverTrip trip;
   final bool isUpdating;
+  final VoidCallback onCall;
+  final VoidCallback onChat;
 
   @override
   Widget build(BuildContext context) {
@@ -967,6 +1123,44 @@ class _ActiveTripCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onChat,
+                    icon: const Icon(Icons.chat_bubble_outline_rounded),
+                    label: const Text('Nhắn tin'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF006B70),
+                      side:
+                          const BorderSide(color: Color(0xFF006B70), width: 1.5),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onCall,
+                    icon: const Icon(Icons.phone_in_talk_rounded),
+                    label: const Text('Gọi khách'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF006B70),
+                      side:
+                          const BorderSide(color: Color(0xFF006B70), width: 1.5),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
             if (status == 'ACCEPTED')
               SizedBox(
                 width: double.infinity,

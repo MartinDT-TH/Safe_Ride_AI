@@ -211,14 +211,19 @@ public static class DependencyInjection
         services.AddScoped<IBookingRepository, BookingRepository>();
         services.AddScoped<IPromotionRepository, PromotionRepository>();
         services.AddScoped<IRatingRepository, RatingRepository>();
+        services.AddScoped<IReportRepository, ReportRepository>();
+        services.AddScoped<IAdminCustomerAccountService, AdminCustomerAccountService>();
+        services.AddScoped<IAdminDriverAccountService, AdminDriverAccountService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddSingleton<IMatchingPolicyProvider, MatchingPolicyProvider>();
         services.AddScoped<IBookingMatchingService, BookingMatchingService>();
         services.AddScoped<IBookingAssignmentService, BookingAssignmentService>();
         services.AddScoped<IDriverQueryService, DriverQueryService>();
+        services.AddScoped<IDriverWalletService, DriverWalletService>();
         services.AddScoped<IDriverRealtimeService, DriverRealtimeService>();
         services.AddScoped<TripFareFinalizationService>();
         services.AddScoped<ITripStatusService, TripStatusService>();
+        services.AddScoped<ITripChatService, TripChatService>();
         services.AddHttpClient<ISpeedSmsService, InfobipSmsService>();
         services.AddHttpClient<IPaymentService, PayOsPaymentService>((provider, client) =>
         {
