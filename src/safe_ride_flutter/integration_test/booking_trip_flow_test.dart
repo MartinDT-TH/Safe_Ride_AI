@@ -4,11 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:provider/provider.dart';
 import 'package:safe_ride/core/constants/app_strings.dart';
 import 'package:safe_ride/core/storage/secure_storage_service.dart';
-import 'package:safe_ride/dependency_injection/injection.dart';
-import 'package:safe_ride/features/auth/presentation/providers/auth_provider.dart';
 import 'package:safe_ride/main.dart' as app;
 
 void main() {
