@@ -1,9 +1,14 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../../core/constants/app_colors.dart';
+import '../../../../../core/constants/app_strings.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/trip_chat_provider.dart';
+import '../../data/models/trip_chat_message_model.dart';
 
 class TripChatPage extends StatefulWidget {
   const TripChatPage({
@@ -26,6 +31,7 @@ class TripChatPage extends StatefulWidget {
 class _TripChatPageState extends State<TripChatPage> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -59,6 +65,26 @@ class _TripChatPageState extends State<TripChatPage> {
     _messageController.clear();
     await context.read<TripChatProvider>().sendMessage(text);
     _scrollToBottom();
+  }
+
+  Future<void> _handlePickImage() async {
+    if (!widget.canSendMessage) return;
+
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 70,
+      );
+
+      if (image != null && mounted) {
+        await context.read<TripChatProvider>().sendImage(File(image.path));
+        _scrollToBottom();
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Không thể chọn ảnh.')),
+      );
+    }
   }
 
   @override
@@ -137,7 +163,7 @@ class _TripChatPageState extends State<TripChatPage> {
   Widget _buildInputArea() {
     return Container(
       padding: EdgeInsets.fromLTRB(
-        16,
+        8,
         12,
         16,
         MediaQuery.of(context).padding.bottom + 12,
@@ -154,6 +180,13 @@ class _TripChatPageState extends State<TripChatPage> {
       ),
       child: Row(
         children: [
+          IconButton(
+            onPressed: widget.canSendMessage ? _handlePickImage : null,
+            icon: Icon(
+              Icons.image_outlined,
+              color: widget.canSendMessage ? const Color(0xFF667085) : Colors.grey,
+            ),
+          ),
           Expanded(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -194,7 +227,28 @@ class _TripChatPageState extends State<TripChatPage> {
 class _MessageBubble extends StatelessWidget {
   const _MessageBubble({required this.message});
 
-  final dynamic message;
+  final TripChatMessageModel message;
+
+  String _getFullImageUrl(String url) {
+    if (url.startsWith('http')) return url;
+
+    // Extract base host from AppConfig.apiBaseUrl
+    // Typical apiBaseUrl: http://192.168.1.36:5026/api/
+    final apiBase = AppConfig.apiBaseUrl;
+    String root = apiBase;
+    if (apiBase.endsWith('/api/')) {
+      root = apiBase.substring(0, apiBase.length - 5);
+    } else if (apiBase.endsWith('/api')) {
+      root = apiBase.substring(0, apiBase.length - 4);
+    }
+
+    if (root.endsWith('/')) {
+      root = root.substring(0, root.length - 1);
+    }
+
+    final normalizedPath = url.startsWith('/') ? url : '/$url';
+    return '$root$normalizedPath';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -215,37 +269,63 @@ class _MessageBubble extends StatelessWidget {
                 style: const TextStyle(fontSize: 10, color: Color(0xFF667085)),
               ),
             ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.75,
-            ),
-            decoration: BoxDecoration(
-              color: isMine ? AppColors.primary : Colors.white,
-              borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(16),
-                topRight: const Radius.circular(16),
-                bottomLeft: Radius.circular(isMine ? 16 : 4),
-                bottomRight: Radius.circular(isMine ? 4 : 16),
+          if (message.isText)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: isMine ? AppColors.primary : Colors.white,
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(16),
+                  topRight: const Radius.circular(16),
+                  bottomLeft: Radius.circular(isMine ? 16 : 4),
+                  bottomRight: Radius.circular(isMine ? 4 : 16),
+                ),
+                boxShadow: [
+                  if (!isMine)
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                ],
               ),
-              boxShadow: [
-                if (!isMine)
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.03),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
+              child: Text(
+                message.message,
+                style: TextStyle(
+                  color: isMine ? Colors.white : const Color(0xFF1D2939),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            )
+          else if (message.isImage && message.imageUrl != null)
+            GestureDetector(
+              onTap: () {
+                // Potential full screen preview
+              },
+              child: Container(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.7,
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: CachedNetworkImage(
+                    imageUrl: _getFullImageUrl(message.imageUrl!),
+                    placeholder: (context, url) => Container(
+                      height: 200,
+                      color: Colors.grey[200],
+                      child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                    ),
+                    errorWidget: (context, url, error) => Container(
+                      height: 100,
+                      color: Colors.grey[200],
+                      child: const Icon(Icons.error_outline),
+                    ),
+                    fit: BoxFit.cover,
                   ),
-              ],
-            ),
-            child: Text(
-              message.message,
-              style: TextStyle(
-                color: isMine ? Colors.white : const Color(0xFF1D2939),
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
+                ),
               ),
             ),
-          ),
           Padding(
             padding: const EdgeInsets.only(top: 4, bottom: 12),
             child: Text(

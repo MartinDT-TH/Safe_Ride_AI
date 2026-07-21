@@ -12,11 +12,13 @@ class TripHistoryCard extends StatelessWidget {
     required this.trip,
     this.onRebook,
     this.onReport,
+    this.onChat,
   });
 
   final HistoryTrip trip;
   final VoidCallback? onRebook;
   final VoidCallback? onReport;
+  final VoidCallback? onChat;
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +31,12 @@ class TripHistoryCard extends StatelessWidget {
             decimalDigits: 0,
           ).format(trip.fare)
         : '0\u0111';
-    final showFooter = isCancelled || trip.driverName != null || onRebook != null;
+    final showFooter =
+        isCancelled ||
+        trip.driverName != null ||
+        onRebook != null ||
+        onReport != null ||
+        onChat != null;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -173,6 +180,46 @@ class TripHistoryCard extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
+                        if (onChat != null)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: InteractiveButton(
+                              onTap: onChat!,
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                height: 38,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: const Color(0xFFE0E0E0),
+                                  ),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.chat_bubble_outline_rounded,
+                                      size: 16,
+                                      color: Color(0xFF626A6C),
+                                    ),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      'Nhắn tin',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF626A6C),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                         if (onReport != null)
                           InteractiveButton(
                             onTap: trip.hasReported ? () {} : onReport!,
