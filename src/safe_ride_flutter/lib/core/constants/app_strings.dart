@@ -221,10 +221,10 @@ abstract final class LocationStrings {
 abstract final class AppConfig {
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://192.168.100.116:5026/api/',
+    defaultValue: 'http://192.168.1.19:5026/api/',
   );
   // https://safe-ride-ai.onrender.com
-  // http://192.168.100.116:5026
+  // http://192.168.1.19:5026
   static const forceWebSockets = bool.fromEnvironment(
     'FORCE_WEBSOCKETS',
     defaultValue: true, // Dev only or config-based
@@ -252,6 +252,7 @@ abstract final class ApiEndpoints {
   static const bookings = '/bookings';
   static const bookingHistory = '/bookings/history';
   static const activeBooking = '/bookings/active';
+  static const notifications = '/notifications';
   static const availablePromotions = '/promotions/available';
   static const bookingCatalog = '/bookings/catalog';
   static const bookingEstimate = '/bookings/estimate';
@@ -283,6 +284,8 @@ abstract final class ApiEndpoints {
       '/feedbacks/trips/$tripId/rating';
   static String submitTripReport(int bookingId) =>
       '/feedbacks/bookings/$bookingId/reports';
+  static String notificationRead(int notificationId) =>
+      '/notifications/$notificationId/read';
   static const identityVerificationDocuments =
       '/identity-verification/documents';
   static String endTrip(int tripId) => '/trips/$tripId/end';
