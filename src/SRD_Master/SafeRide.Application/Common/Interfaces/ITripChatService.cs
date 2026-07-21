@@ -15,6 +15,14 @@ public interface ITripChatService
         string message,
         CancellationToken cancellationToken = default);
 
+    Task<TripChatMessageDto> SendImageMessageAsync(
+        Guid senderUserId,
+        long tripId,
+        Stream image,
+        string contentType,
+        long fileSizeBytes,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<TripChatMessageDto>> GetMessagesAsync(
         Guid userId,
         long tripId,

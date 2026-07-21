@@ -390,6 +390,7 @@ public sealed class BookingRepository : IBookingRepository
 
         return new BookingHistoryItemDto(
             booking.BookingId,
+            booking.Trip?.Id,
             booking.PickupAddress,
             booking.DestinationAddress ?? string.Empty,
             ResolveOccurredAt(booking),
@@ -411,6 +412,7 @@ public sealed class BookingRepository : IBookingRepository
 
         return new BookingHistoryItemDto(
             booking.BookingId,
+            booking.Trip?.Id,
             booking.PickupAddress,
             booking.DestinationAddress ?? string.Empty,
             ResolveOccurredAt(booking),
