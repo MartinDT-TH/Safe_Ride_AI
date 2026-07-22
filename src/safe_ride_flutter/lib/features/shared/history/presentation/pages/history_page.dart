@@ -108,10 +108,16 @@ class _HistoryPageState extends State<HistoryPage> {
           tripId: trip.tripId!,
           currentUserId: currentUserId,
           receiverName: trip.driverName ?? 'Tài xế SafeRide',
-          canSendMessage: false,
+          canSendMessage: _canSendChat(trip.status.name),
         ),
       ),
     );
+  }
+
+  bool _canSendChat(String? status) {
+    if (status == null) return true;
+    final normalized = status.trim().toUpperCase();
+    return normalized != 'CANCELLED';
   }
 
   Future<void> _openTripDetails(HistoryTrip trip, {required bool canRebook}) {
