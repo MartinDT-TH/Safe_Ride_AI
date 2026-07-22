@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using SafeRide.API.Authorization;
 using SafeRide.Application.Features.Auth;
 using SafeRide.Application.Features.Ratings.Commands.SubmitTripRating;
+using SafeRide.Application.Features.Ratings.Queries.GetDriverRatings;
 using SafeRide.Application.Features.Reports.Commands.SubmitBookingReport;
 using SafeRide.Application.Features.Reports.Commands.SubmitTripReport;
 using SafeRide.Contracts.Requests.Feedbacks;
@@ -55,6 +56,21 @@ public sealed class FeedbacksController : ControllerBase
                 customerId,
                 request.RatingScore,
                 request.Comment),
+            cancellationToken);
+
+        return Ok(response);
+    }
+
+    [HttpGet("drivers/{driverId:guid}/ratings")]
+    [AllowAnonymous]
+    [ProducesResponseType<DriverRatingSummaryResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<DriverRatingSummaryResponse>> GetDriverRatings(
+        Guid driverId,
+        CancellationToken cancellationToken)
+    {
+        var response = await _sender.Send(
+            new GetDriverRatingsQuery(driverId),
             cancellationToken);
 
         return Ok(response);
