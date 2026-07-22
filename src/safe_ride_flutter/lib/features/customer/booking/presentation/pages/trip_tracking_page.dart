@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
 import '../../../../../core/maps/models/map_models.dart';
 import '../../../../../core/maps/widgets/live_trip_map_widget.dart';
@@ -20,6 +21,7 @@ import '../widgets/booking_cancel_flow.dart';
 
 import '../../../../shared/call/presentation/pages/in_app_voice_call_page.dart';
 import '../../../../shared/feedback/presentation/pages/trip_summary_page.dart';
+import '../../../../shared/feedback/presentation/pages/driver_reviews_page.dart';
 import '../../../../shared/chat/presentation/pages/trip_chat_page.dart';
 
 enum TripTrackingState { arriving, inProgress }
@@ -966,13 +968,65 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        offer?.driverName ?? 'Tài xế SafeRide',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFF1A1A1A),
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              offer?.driverName ?? 'Tài xế SafeRide',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF1A1A1A),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (offer != null) ...[
+                            const SizedBox(width: 4),
+                            InkWell(
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => DriverReviewsPage(
+                                      driverId: offer.driverId,
+                                      driverName: offer.driverName,
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.star_outline_rounded,
+                                      size: 16,
+                                      color: AppColors.primary,
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Xem đánh giá',
+                                      style: TextStyle(
+                                        color: AppColors.primary,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 4),
                       Text(

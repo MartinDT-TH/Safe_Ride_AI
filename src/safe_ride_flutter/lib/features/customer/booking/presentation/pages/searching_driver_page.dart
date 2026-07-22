@@ -478,6 +478,7 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
                               Navigator.of(context).push(
                                 MaterialPageRoute(
                                   builder: (_) => DriverProfilePage(
+                                    driverId: offer.driverId,
                                     name: offer.driverName,
                                     avatarUrl: offer.driverAvatarUrl,
                                     rating: offer.rating,
