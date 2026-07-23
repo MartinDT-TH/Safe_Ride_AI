@@ -284,6 +284,66 @@ class TripPaymentUpdate {
   }
 }
 
+class SystemNotificationUpdate {
+  const SystemNotificationUpdate({
+    required this.id,
+    required this.title,
+    required this.content,
+    required this.notificationType,
+    required this.sentAt,
+  });
+
+  final int id;
+  final String title;
+  final String content;
+  final String notificationType;
+  final DateTime sentAt;
+
+  static SystemNotificationUpdate? fromSignalRArguments(
+    List<Object?>? arguments,
+  ) {
+    if (arguments == null || arguments.isEmpty || arguments.first is! Map) {
+      return null;
+    }
+
+    final data = Map<String, dynamic>.from(arguments.first as Map);
+    final id = (_value(data, 'id') as num?)?.toInt();
+    final title = _value(data, 'title')?.toString();
+    final content = _value(data, 'content')?.toString();
+    final sentAtRaw = _value(data, 'sentAt');
+
+    if (id == null ||
+        title == null ||
+        title.isEmpty ||
+        content == null ||
+        content.isEmpty ||
+        sentAtRaw == null) {
+      return null;
+    }
+
+    final sentAt = DateTime.tryParse(sentAtRaw.toString());
+    if (sentAt == null) {
+      return null;
+    }
+
+    return SystemNotificationUpdate(
+      id: id,
+      title: title,
+      content: content,
+      notificationType:
+          _value(data, 'notificationType')?.toString() ?? 'System Update',
+      sentAt: sentAt,
+    );
+  }
+
+  static Object? _value(Map<String, dynamic> data, String key) {
+    final pascalKey = key.isEmpty
+        ? key
+        : '${key[0].toUpperCase()}${key.substring(1)}';
+    return data[key] ?? data[pascalKey];
+  }
+}
+
 class BookingUpdate {
   const BookingUpdate({
     required this.bookingId,
@@ -521,6 +581,7 @@ class SocketService {
   bool _driverOfferReceivedListenerAttached = false;
   bool _driverOfferClosedListenerAttached = false;
   bool _bookingListenerAttached = false;
+  bool _systemNotificationListenerAttached = false;
   bool _inAppCallListenerAttached = false;
   final List<void Function()> _connectionLostHandlers = [];
   final Map<String, void Function(DriverLocationUpdate update)>
@@ -534,6 +595,8 @@ class SocketService {
   final Map<String, void Function(int offerId)> _driverOfferClosedHandlers = {};
 
   final Map<String, void Function(BookingUpdate update)> _bookingHandlers = {};
+  final Map<String, void Function(SystemNotificationUpdate update)>
+  _systemNotificationHandlers = {};
   final Map<String, void Function(InAppCallSignal signal)>
   _inAppCallOfferHandlers = {};
   final Map<String, void Function(InAppCallSignal signal)>
@@ -622,6 +685,7 @@ class SocketService {
       _driverOfferReceivedListenerAttached = false;
       _driverOfferClosedListenerAttached = false;
       _bookingListenerAttached = false;
+      _systemNotificationListenerAttached = false;
       _inAppCallListenerAttached = false;
       _joinedTripGroups.clear();
       _joinedBookingGroups.clear();
@@ -662,6 +726,10 @@ class SocketService {
     }
     if (_bookingHandlers.isNotEmpty && !_bookingListenerAttached) {
       _attachBookingListeners();
+    }
+    if (_systemNotificationHandlers.isNotEmpty &&
+        !_systemNotificationListenerAttached) {
+      _attachSystemNotificationListener();
     }
     if (_hasInAppCallHandlers && !_inAppCallListenerAttached) {
       _attachInAppCallListeners();
@@ -876,6 +944,34 @@ class SocketService {
 
   void removeBookingUpdatedHandler(String key) {
     _bookingHandlers.remove(key);
+  }
+
+  void onSystemNotificationReceived(
+    void Function(SystemNotificationUpdate update) handler, {
+    String key = 'default',
+  }) {
+    _systemNotificationHandlers[key] = handler;
+    _attachSystemNotificationListener();
+  }
+
+  void _attachSystemNotificationListener() {
+    if (_connection == null || _systemNotificationListenerAttached) {
+      return;
+    }
+
+    _systemNotificationListenerAttached = true;
+    _connection!.on('SystemNotificationReceived', (arguments) {
+      final update = SystemNotificationUpdate.fromSignalRArguments(arguments);
+      if (update != null) {
+        for (final handler in List.of(_systemNotificationHandlers.values)) {
+          handler(update);
+        }
+      }
+    });
+  }
+
+  void removeSystemNotificationReceivedHandler(String key) {
+    _systemNotificationHandlers.remove(key);
   }
 
   void onInAppCallOffer(
@@ -1128,6 +1224,7 @@ class SocketService {
     _driverOfferReceivedListenerAttached = false;
     _driverOfferClosedListenerAttached = false;
     _bookingListenerAttached = false;
+    _systemNotificationListenerAttached = false;
     _inAppCallListenerAttached = false;
     _driverLocationHandlers.clear();
     _tripStatusHandlers.clear();
@@ -1135,6 +1232,7 @@ class SocketService {
     _driverOfferReceivedHandlers.clear();
     _driverOfferClosedHandlers.clear();
     _bookingHandlers.clear();
+    _systemNotificationHandlers.clear();
     _inAppCallOfferHandlers.clear();
     _inAppCallAnswerHandlers.clear();
     _inAppCallIceCandidateHandlers.clear();

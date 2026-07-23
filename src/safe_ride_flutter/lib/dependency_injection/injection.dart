@@ -35,6 +35,10 @@ import '../features/shared/history/data/datasources/history_remote_datasource.da
 import '../features/shared/history/data/repositories/history_repository_impl.dart';
 import '../features/shared/history/domain/repositories/history_repository.dart';
 import '../features/shared/history/presentation/providers/history_provider.dart';
+import '../features/shared/notifications/data/datasources/notification_remote_datasource.dart';
+import '../features/shared/notifications/data/repositories/notification_repository_impl.dart';
+import '../features/shared/notifications/domain/repositories/notification_repository.dart';
+import '../features/shared/notifications/presentation/providers/notification_provider.dart';
 import '../features/driver/dashboard/presentation/providers/driver_dashboard_provider.dart';
 import '../features/driver/wallet/data/datasources/driver_wallet_remote_datasource.dart';
 import '../features/driver/wallet/data/repositories/driver_wallet_repository_impl.dart';
@@ -162,6 +166,21 @@ Future<void> setupDependencies() async {
 
   getIt.registerFactory<HistoryProvider>(
     () => HistoryProvider(getIt<HistoryRepository>()),
+  );
+
+  getIt.registerLazySingleton<NotificationRemoteDatasource>(
+    () => NotificationRemoteDatasource(),
+  );
+
+  getIt.registerLazySingleton<NotificationRepository>(
+    () => NotificationRepositoryImpl(getIt<NotificationRemoteDatasource>()),
+  );
+
+  getIt.registerLazySingleton<NotificationProvider>(
+    () => NotificationProvider(
+      getIt<NotificationRepository>(),
+      getIt<SocketService>(),
+    ),
   );
 
   getIt.registerLazySingleton<DriverTripRequestRemoteDatasource>(

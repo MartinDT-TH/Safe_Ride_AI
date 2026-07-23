@@ -1,9 +1,11 @@
 using Hangfire;
+using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.OpenApi.Models;
 using SafeRide.API;
 using SafeRide.API.Authorization;
+using SafeRide.API.Swagger;
 using SafeRide.Application;
 using SafeRide.API.Filters;
 using SafeRide.API.Middlewares;
@@ -61,6 +63,7 @@ if (backgroundJobsEnabled)
 }
 builder.Services.AddSafeRideRealtime();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddTransient<IApiDescriptionProvider, HideSendChatImageApiDescriptionProvider>();
 builder.Services.AddSwaggerGen(options =>
 {
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
@@ -89,6 +92,7 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
+await app.Services.ApplyDevelopmentMigrationsAsync(app.Environment);
 await app.Services.SeedAdminIdentityAsync();
 await app.Services.SeedIdentityAsync();
 await app.Services.SeedCustomerIdentityAsync();

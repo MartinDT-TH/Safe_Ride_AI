@@ -26,6 +26,8 @@ import '../../../../shared/call/presentation/pages/in_app_voice_call_page.dart';
 import '../../../../shared/call/services/call_tone_player.dart';
 import '../../../../shared/profile/presentation/pages/profile_page.dart';
 import '../../../../shared/chat/presentation/pages/trip_chat_page.dart';
+import '../../../../shared/notifications/presentation/pages/notifications_page.dart';
+import '../../../../shared/notifications/presentation/providers/notification_provider.dart';
 import 'driver_trip_payment_page.dart';
 import 'driver_return_evidence_page.dart';
 import '../../../wallet/presentation/pages/driver_wallet_page.dart';
@@ -131,6 +133,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
       }
       if (token != null) {
         _provider.initializeRealtime(token);
+        await context.read<NotificationProvider>().initialize(token);
       }
     });
   }
@@ -872,8 +875,16 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                       ),
                     _CircleIconButton(
                       icon: Icons.notifications_none_rounded,
-                      hasBadge: true,
-                      onPressed: () {},
+                      hasBadge: context.select<NotificationProvider, bool>(
+                        (provider) => provider.unreadCount > 0,
+                      ),
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const NotificationsPage(),
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),

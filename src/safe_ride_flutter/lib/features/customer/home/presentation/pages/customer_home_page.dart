@@ -20,6 +20,8 @@ import '../../../../customer/booking/presentation/pages/promotion_page.dart';
 import '../../../../customer/booking/presentation/pages/trip_tracking_page.dart';
 import '../../../../customer/booking/presentation/providers/booking_provider.dart';
 import '../../../../shared/history/presentation/pages/history_page.dart';
+import '../../../../shared/notifications/presentation/pages/notifications_page.dart';
+import '../../../../shared/notifications/presentation/providers/notification_provider.dart';
 
 class CustomerHomePage extends StatefulWidget {
   const CustomerHomePage({super.key});
@@ -75,6 +77,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
     context.read<HomeProvider>().loadHomeData();
     context.read<BookingProvider>().loadAvailablePromotions(auth.token!);
+    context.read<NotificationProvider>().initialize(auth.token);
     _loadActiveBooking(auth.token);
   }
 
@@ -91,6 +94,9 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     final auth = context.watch<AuthProvider>();
     final bookingProvider = context.watch<BookingProvider>();
     final homeProvider = context.watch<HomeProvider>();
+    final hasUnreadNotifications = context.select<NotificationProvider, bool>(
+      (provider) => provider.unreadCount > 0,
+    );
 
     final activeBooking = bookingProvider.activeBooking;
     final activePickup = bookingProvider.activePickup ?? activeBooking?.pickup;
@@ -191,20 +197,27 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                           color: Color(0xFF006B70),
                           size: 28,
                         ),
-                        onPressed: () {},
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const NotificationsPage(),
+                            ),
+                          );
+                        },
                       ),
-                      Positioned(
-                        top: 14,
-                        right: 14,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
+                      if (hasUnreadNotifications)
+                        Positioned(
+                          top: 14,
+                          right: 14,
+                          child: Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
                           ),
                         ),
-                      ),
                     ],
                   ),
                   const SizedBox(width: 8),
