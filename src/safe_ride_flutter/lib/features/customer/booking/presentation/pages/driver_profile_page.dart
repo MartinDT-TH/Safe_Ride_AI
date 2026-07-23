@@ -13,6 +13,7 @@ import '../../../../shared/feedback/presentation/pages/driver_reviews_page.dart'
 class DriverProfilePage extends StatelessWidget {
   const DriverProfilePage({
     super.key,
+    required this.driverId,
     this.name = 'Nguyễn Văn An',
     this.avatarUrl =
         'https://img.freepik.com/free-photo/handsome-young-man-with-new-haircut_176420-19636.jpg',
@@ -27,6 +28,7 @@ class DriverProfilePage extends StatelessWidget {
     this.vehicle,
   });
 
+  final String driverId;
   final String name;
   final String? avatarUrl;
   final double rating;
@@ -173,9 +175,8 @@ class DriverProfilePage extends StatelessWidget {
                             Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (_) => DriverReviewsPage(
+                                  driverId: driverId,
                                   driverName: name,
-                                  rating: rating,
-                                  reviewCount: tripCount,
                                 ),
                               ),
                             );

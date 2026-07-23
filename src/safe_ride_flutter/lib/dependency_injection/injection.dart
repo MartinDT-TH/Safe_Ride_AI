@@ -45,6 +45,10 @@ import '../features/driver/trip_requests/data/repositories/driver_trip_request_r
 import '../features/driver/trip_requests/domain/repositories/driver_trip_request_repository.dart';
 import '../features/driver/registration/data/datasources/identity_verification_remote_datasource.dart';
 import '../features/shared/chat/presentation/providers/trip_chat_provider.dart';
+import '../features/shared/feedback/data/datasources/feedback_remote_datasource.dart';
+import '../features/shared/feedback/data/repositories/feedback_repository_impl.dart';
+import '../features/shared/feedback/domain/repositories/feedback_repository.dart';
+import '../features/shared/feedback/presentation/providers/feedback_provider.dart';
 
 final getIt = GetIt.instance;
 
@@ -190,6 +194,16 @@ Future<void> setupDependencies() async {
 
   getIt.registerLazySingleton<IdentityVerificationRemoteDatasource>(
     () => IdentityVerificationRemoteDatasource(),
+  );
+
+  getIt.registerLazySingleton<FeedbackRemoteDatasource>(
+    () => FeedbackRemoteDatasource(),
+  );
+  getIt.registerLazySingleton<FeedbackRepository>(
+    () => FeedbackRepositoryImpl(getIt<FeedbackRemoteDatasource>()),
+  );
+  getIt.registerFactory<FeedbackProvider>(
+    () => FeedbackProvider(getIt<FeedbackRepository>()),
   );
 
   getIt.registerFactory<TripChatProvider>(() => TripChatProvider());
