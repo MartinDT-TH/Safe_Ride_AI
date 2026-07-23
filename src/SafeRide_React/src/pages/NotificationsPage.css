@@ -1,0 +1,522 @@
+.notifications-page {
+  display: grid;
+  gap: 24px;
+}
+
+.notifications-page__header,
+.notification-subview__header,
+.notifications-page__header-actions,
+.notifications-panel__footer,
+.notification-send__preview-meta,
+.notification-review__meta,
+.notification-dialog__header,
+.notification-dialog__actions {
+  display: flex;
+  align-items: center;
+}
+
+.notifications-page__header,
+.notification-subview__header,
+.notifications-panel__footer,
+.notification-dialog__header,
+.notification-dialog__actions {
+  justify-content: space-between;
+}
+
+.notifications-page__header {
+  gap: 20px;
+}
+
+.notifications-page__header-actions,
+.notification-subview__header {
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.notifications-page__primary-btn,
+.notifications-page__ghost-btn,
+.notifications-page__inline-btn,
+.notification-review__approve,
+.notification-review__reject,
+.notification-dialog__close,
+.notification-dialog__actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform var(--sr-transition), box-shadow var(--sr-transition), background var(--sr-transition);
+}
+
+.notifications-page__primary-btn,
+.notifications-page__ghost-btn {
+  min-height: 48px;
+  padding: 0 18px;
+}
+
+.notifications-page__primary-btn {
+  background: linear-gradient(135deg, #028090, #006876);
+  color: white;
+  box-shadow: 0 10px 24px rgba(0, 104, 118, 0.18);
+}
+
+.notifications-page__primary-btn--full {
+  width: 100%;
+}
+
+.notifications-page__ghost-btn,
+.notification-dialog__close,
+.notification-dialog__actions button {
+  background: white;
+  border-color: #ccd8da;
+  color: var(--sr-gray-700);
+}
+
+.notifications-page__inline-btn {
+  margin-top: 10px;
+  min-height: 38px;
+  padding: 0 12px;
+  background: #f4f8f9;
+  border-color: #d4dfe1;
+  color: #056f7c;
+}
+
+.notifications-page__primary-btn:hover,
+.notifications-page__ghost-btn:hover,
+.notifications-page__inline-btn:hover,
+.notification-review__approve:hover,
+.notification-review__reject:hover,
+.notification-dialog__actions button:hover {
+  transform: translateY(-1px);
+}
+
+.notifications-feedback,
+.notifications-empty,
+.notifications-panel,
+.notification-send__card,
+.notification-send__preview,
+.notification-review__card,
+.notification-dialog {
+  background: white;
+  border: 1px solid #c9d7d9;
+  border-radius: 18px;
+  box-shadow: 0 2px 6px rgba(15, 39, 42, 0.05);
+}
+
+.notifications-feedback,
+.notifications-empty {
+  padding: 18px 20px;
+}
+
+.notifications-feedback--error {
+  border-color: #efb3b7;
+  background: #fff5f5;
+  color: #aa2020;
+}
+
+.notifications-feedback--error button {
+  margin-left: 12px;
+  background: none;
+  color: inherit;
+  font-weight: 700;
+}
+
+.notifications-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.notifications-summary__card {
+  min-height: 132px;
+  padding: 20px;
+  border-radius: 18px;
+  color: white;
+  display: grid;
+  gap: 12px;
+}
+
+.notifications-summary__card span {
+  font-size: 14px;
+  opacity: 0.88;
+}
+
+.notifications-summary__card strong {
+  font-size: 36px;
+  line-height: 1;
+}
+
+.notifications-summary__card--teal { background: linear-gradient(135deg, #0d7c88, #0a5760); }
+.notifications-summary__card--amber { background: linear-gradient(135deg, #c77712, #925000); }
+.notifications-summary__card--green { background: linear-gradient(135deg, #0f8c53, #0b653c); }
+.notifications-summary__card--red { background: linear-gradient(135deg, #d33e3e, #9f2525); }
+
+.notifications-panel {
+  overflow: hidden;
+}
+
+.notifications-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  padding: 20px;
+  background: #fbfafa;
+  border-bottom: 1px solid #c9d7d9;
+}
+
+.notifications-field,
+.notification-dialog__field {
+  display: grid;
+  gap: 8px;
+}
+
+.notifications-field span,
+.notification-send__label,
+.notification-dialog__field span {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--sr-gray-600);
+}
+
+.notifications-field select,
+.notification-send__select,
+.notification-send__input,
+.notification-send__textarea,
+.notification-dialog__field textarea {
+  width: 100%;
+  border: 1px solid #c8d4d6;
+  border-radius: 14px;
+  background: #f7f6f6;
+  color: var(--sr-gray-800);
+  font: 14px var(--sr-font);
+  outline: none;
+}
+
+.notifications-field select,
+.notification-send__select,
+.notification-send__input {
+  min-height: 48px;
+  padding: 0 14px;
+}
+
+.notification-send__textarea,
+.notification-dialog__field textarea {
+  padding: 14px;
+  resize: vertical;
+}
+
+.notifications-field select:focus,
+.notification-send__select:focus,
+.notification-send__input:focus,
+.notification-send__textarea:focus,
+.notification-dialog__field textarea:focus {
+  border-color: var(--sr-teal);
+  box-shadow: var(--sr-shadow-input-focus);
+}
+
+.notifications-table-scroll {
+  overflow-x: auto;
+}
+
+.notifications-table {
+  width: 100%;
+  min-width: 1080px;
+  border-collapse: collapse;
+}
+
+.notifications-table th {
+  padding: 14px 18px;
+  background: #f8f7f7;
+  border-bottom: 1px solid #c9d7d9;
+  color: var(--sr-gray-600);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.notifications-table td {
+  padding: 18px;
+  border-bottom: 1px solid #e4eaeb;
+  vertical-align: top;
+  color: var(--sr-gray-800);
+  font-size: 14px;
+}
+
+.notifications-table__message {
+  display: grid;
+  gap: 8px;
+}
+
+.notifications-table__message p,
+.notification-review__card p,
+.notification-send__preview-card p {
+  color: var(--sr-gray-600);
+  line-height: 1.5;
+}
+
+.notifications-table__resolution {
+  display: grid;
+  gap: 4px;
+}
+
+.notifications-table__resolution small {
+  color: var(--sr-gray-500);
+}
+
+.notifications-table__resolution p {
+  color: #8f2f2f;
+  line-height: 1.45;
+}
+
+.notifications-panel__footer {
+  gap: 18px;
+  padding: 16px 20px;
+  background: #fbfafa;
+}
+
+.notification-send__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.9fr);
+  gap: 20px;
+}
+
+.notification-send__card,
+.notification-send__preview {
+  padding: 24px;
+}
+
+.notification-send__card {
+  display: grid;
+  gap: 24px;
+}
+
+.notification-send__intro {
+  display: grid;
+  gap: 10px;
+}
+
+.notification-send__audience-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.notification-send__audience-card {
+  min-height: 134px;
+  padding: 18px;
+  border: 2px solid #d2dddf;
+  border-radius: 18px;
+  background: #fcfbfb;
+  text-align: left;
+  display: grid;
+  gap: 8px;
+  cursor: pointer;
+  transition: transform var(--sr-transition), border-color var(--sr-transition), background var(--sr-transition);
+}
+
+.notification-send__audience-card--active {
+  border-color: #028090;
+  background: rgba(2, 128, 144, 0.07);
+}
+
+.notification-send__audience-icon {
+  font-size: 24px;
+}
+
+.notification-send__audience-card small,
+.notification-send__preview-meta span {
+  color: var(--sr-gray-500);
+}
+
+.notification-send__fields {
+  display: grid;
+  gap: 12px;
+}
+
+.notification-send__count {
+  margin-top: -4px;
+  text-align: right;
+  color: var(--sr-gray-500);
+  font-size: 12px;
+}
+
+.notification-send__preview {
+  align-self: start;
+  display: grid;
+  gap: 18px;
+  position: sticky;
+  top: 0;
+}
+
+.notification-send__preview--empty {
+  min-height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.notification-send__preview-card {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fcfdfd, #f4f8f8);
+}
+
+.notification-send__preview-card strong {
+  font-size: 22px;
+  color: #163336;
+}
+
+.notification-send__preview-meta {
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.notification-review__list {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.notification-review__card {
+  padding: 20px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+}
+
+.notification-review__card-top,
+.notification-review__meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.notification-review__card-main {
+  display: grid;
+  gap: 12px;
+}
+
+.notification-review__actions {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 120px;
+}
+
+.notification-review__approve,
+.notification-review__reject {
+  min-height: 46px;
+  padding: 0 18px;
+}
+
+.notification-review__approve {
+  background: #067c64;
+  color: white;
+}
+
+.notification-review__reject,
+.notification-dialog__confirm {
+  background: #c72a2a;
+  color: white;
+}
+
+.notification-subview__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  background: none;
+  color: #007d8a;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.notification-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 22, 24, 0.45);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 1000;
+}
+
+.notification-dialog {
+  width: min(100%, 540px);
+  padding: 22px;
+  display: grid;
+  gap: 18px;
+}
+
+.notification-dialog__header {
+  gap: 16px;
+}
+
+.notification-dialog__header h3 {
+  margin-bottom: 6px;
+}
+
+.notification-dialog__header p,
+.notification-dialog__content p,
+.notification-dialog__error {
+  color: var(--sr-gray-600);
+}
+
+.notification-dialog__content {
+  display: grid;
+  gap: 10px;
+}
+
+.notification-dialog__error {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #fff4f4;
+  color: #ab2020;
+}
+
+.notification-dialog__confirm--approve {
+  background: #067c64;
+  color: white;
+}
+
+@media (max-width: 1120px) {
+  .notifications-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .notification-send__grid,
+  .notification-review__card {
+    grid-template-columns: 1fr;
+  }
+
+  .notification-send__preview {
+    position: static;
+  }
+}
+
+@media (max-width: 760px) {
+  .notifications-page__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .notifications-summary,
+  .notifications-filters,
+  .notification-send__audience-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .notifications-panel__footer,
+  .notification-dialog__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

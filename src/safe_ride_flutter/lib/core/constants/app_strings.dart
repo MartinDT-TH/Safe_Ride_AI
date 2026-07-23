@@ -224,7 +224,7 @@ abstract final class AppConfig {
     defaultValue: 'http://192.168.1.26:5026/api/',
   );
   // https://safe-ride-ai.onrender.com
-  // http://192.168.100.116:5026
+  // http://192.168.1.19:5026
   static const forceWebSockets = bool.fromEnvironment(
     'FORCE_WEBSOCKETS',
     defaultValue: true, // Dev only or config-based
@@ -252,6 +252,7 @@ abstract final class ApiEndpoints {
   static const bookings = '/bookings';
   static const bookingHistory = '/bookings/history';
   static const activeBooking = '/bookings/active';
+  static const notifications = '/notifications';
   static const availablePromotions = '/promotions/available';
   static const bookingCatalog = '/bookings/catalog';
   static const bookingEstimate = '/bookings/estimate';
@@ -283,8 +284,12 @@ abstract final class ApiEndpoints {
       '/payments/driver/trips/$tripId/cash';
   static String submitTripRating(int tripId) =>
       '/feedbacks/trips/$tripId/rating';
+  static String getDriverRatings(String driverId) =>
+      '/feedbacks/drivers/$driverId/ratings';
   static String submitTripReport(int bookingId) =>
       '/feedbacks/bookings/$bookingId/reports';
+  static String notificationRead(int notificationId) =>
+      '/notifications/$notificationId/read';
   static const identityVerificationDocuments =
       '/identity-verification/documents';
   static String endTrip(int tripId) => '/trips/$tripId/end';
