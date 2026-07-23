@@ -17,6 +17,7 @@ import '../../data/models/booking_location.dart';
 import '../../data/models/booking_response.dart';
 import '../providers/booking_provider.dart';
 import '../widgets/booking_cancel_flow.dart';
+import 'customer_trip_prepayment_page.dart';
 
 import '../../../../shared/call/presentation/pages/in_app_voice_call_page.dart';
 import '../../../../shared/feedback/presentation/pages/trip_summary_page.dart';
@@ -68,6 +69,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   bool _isCompletingTrip = false;
   bool _arrivalRouteRefreshInProgress = false;
   bool _incomingCallDialogOpen = false;
+  late bool _isPrepaid;
   late String? _currentTripStatus;
   static const _tealColor = Color(0xFF006B70);
   static const double _arrivalRerouteThresholdMeters = 35;
@@ -95,6 +97,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         (widget.state == TripTrackingState.inProgress
             ? 'IN_PROGRESS'
             : 'DRIVER_ARRIVING');
+    _isPrepaid = widget.booking.payment?.isSuccess == true;
     _initializeRoutes();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -237,6 +240,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
 
       setState(() {
         _currentTripStatus = booking.tripStatus ?? _currentTripStatus;
+        _isPrepaid = booking.payment?.isSuccess == true;
         _initializeRoutes(booking);
       });
       _openSummaryIfPostTrip(booking.tripStatus);
@@ -1022,6 +1026,52 @@ class _TripTrackingPageState extends State<TripTrackingPage>
             ),
             const SizedBox(height: 24),
             if (isArriving) ...[
+              SizedBox(
+                width: double.infinity,
+                child: _isPrepaid
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE5F5F0),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.check_circle_rounded,
+                              color: Color(0xFF0A8F62),
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'Đã thanh toán trước',
+                              style: TextStyle(
+                                color: Color(0xFF08734F),
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ElevatedButton.icon(
+                        onPressed: _openPrepayment,
+                        icon: const Icon(Icons.qr_code_2_rounded),
+                        label: const Text('Thanh toán trước bằng PayOS'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _tealColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 15),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+              ),
+              const SizedBox(height: 14),
               Row(
                 children: [
                   Expanded(
@@ -1208,6 +1258,25 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       context: context,
       builder: (context) => const Center(child: ShareTripModal()),
     );
+  }
+
+  Future<void> _openPrepayment() async {
+    final tripId = widget.booking.tripId;
+    if (tripId == null) {
+      _showMessage('Chuyến đi chưa sẵn sàng để thanh toán.');
+      return;
+    }
+
+    final paid = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => CustomerTripPrepaymentPage(tripId: tripId),
+      ),
+    );
+    if (!mounted) return;
+    if (paid == true) {
+      setState(() => _isPrepaid = true);
+      unawaited(_refreshTrackingSnapshot());
+    }
   }
 
   void _openChat() {
