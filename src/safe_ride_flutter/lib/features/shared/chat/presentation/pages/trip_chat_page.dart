@@ -59,6 +59,7 @@ class _TripChatPageState extends State<TripChatPage> {
   }
 
   Future<void> _handleSend() async {
+    if (!widget.canSendMessage) return;
     final text = _messageController.text;
     if (text.trim().isEmpty) return;
 
@@ -77,13 +78,16 @@ class _TripChatPageState extends State<TripChatPage> {
       );
 
       if (image != null && mounted) {
+        if (!widget.canSendMessage) return;
         await context.read<TripChatProvider>().sendImage(File(image.path));
         _scrollToBottom();
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Không thể chọn ảnh.')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Không thể chọn ảnh.')),
+        );
+      }
     }
   }
 
@@ -124,6 +128,28 @@ class _TripChatPageState extends State<TripChatPage> {
       ),
       body: Column(
         children: [
+          if (!widget.canSendMessage)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+              color: Colors.amber.shade50,
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, size: 18, color: Colors.amber.shade800),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Chuyến đi đã kết thúc, bạn chỉ có thể xem lại tin nhắn.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.amber.shade900,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Expanded(
             child: Consumer<TripChatProvider>(
               builder: (context, provider, child) {

@@ -682,11 +682,18 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
           tripId: trip.tripId,
           currentUserId: currentUserId,
           receiverName: 'Khách hàng',
-          canSendMessage:
-              trip.tripStatus != 'COMPLETED' && trip.tripStatus != 'CANCELLED',
+          canSendMessage: _canSendChat(trip.tripStatus),
         ),
       ),
     );
+  }
+
+  bool _canSendChat(String? status) {
+    if (status == null) return true;
+    final normalized = status.trim().toUpperCase();
+    return normalized != 'CANCELLED' &&
+        normalized != 'CANCELED' &&
+        normalized != 'EXPIRED';
   }
 
   @override

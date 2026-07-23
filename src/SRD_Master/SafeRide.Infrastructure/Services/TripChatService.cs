@@ -81,7 +81,7 @@ public sealed class TripChatService : ITripChatService
                 403);
         }
 
-        if (trip.TripStatus is TripStatus.COMPLETED or TripStatus.CANCELLED)
+        if (trip.TripStatus == TripStatus.CANCELLED)
         {
             throw new BookingException(
                 "trip_chat.trip_closed",
@@ -224,7 +224,7 @@ public sealed class TripChatService : ITripChatService
                 403);
         }
 
-        if (trip.TripStatus is TripStatus.COMPLETED or TripStatus.CANCELLED)
+        if (trip.TripStatus == TripStatus.CANCELLED)
         {
             throw new BookingException(
                 "trip_chat.trip_closed",

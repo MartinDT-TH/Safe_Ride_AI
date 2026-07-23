@@ -1236,11 +1236,18 @@ class _TripTrackingPageState extends State<TripTrackingPage>
           tripId: tripId,
           currentUserId: currentUserId,
           receiverName: driverName,
-          canSendMessage: _currentTripStatus != 'COMPLETED' &&
-              _currentTripStatus != 'CANCELLED',
+          canSendMessage: _canSendChat(_currentTripStatus),
         ),
       ),
     );
+  }
+
+  bool _canSendChat(String? status) {
+    if (status == null) return true;
+    final normalized = status.trim().toUpperCase();
+    return normalized != 'CANCELLED' &&
+        normalized != 'CANCELED' &&
+        normalized != 'EXPIRED';
   }
 
   Future<void> _startInAppCall() async {

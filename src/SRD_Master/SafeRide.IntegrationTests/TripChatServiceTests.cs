@@ -100,15 +100,34 @@ public sealed class TripChatServiceTests
         Assert.Equal("Bạn không có quyền truy cập cuộc trò chuyện này.", exception.Message);
     }
 
-    [Theory]
-    [InlineData(TripStatus.COMPLETED)]
-    [InlineData(TripStatus.CANCELLED)]
-    public async Task SendMessageAsync_WithClosedTrip_Throws(TripStatus tripStatus)
+    [Fact]
+    public async Task SendMessageAsync_WithCompletedTrip_StoresMessageInRedis()
+    {
+        await using var dbContext = CreateDbContext();
+        var redis = new InMemoryRedisService();
+        var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var trip = SeedTrip(dbContext, customerId, driverId, TripStatus.COMPLETED);
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext, redis);
+
+        var result = await service.SendMessageAsync(
+            customerId,
+            trip.Id,
+            "  Cảm ơn anh  ");
+
+        Assert.Equal("Text", result.MessageType);
+        Assert.Equal("Cảm ơn anh", result.Message);
+        Assert.Single(await redis.ListRangeAsync(RedisKeys.TripChatMessages(trip.Id)));
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_WithCancelledTrip_Throws()
     {
         await using var dbContext = CreateDbContext();
         var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
         var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
-        var trip = SeedTrip(dbContext, customerId, driverId, tripStatus);
+        var trip = SeedTrip(dbContext, customerId, driverId, TripStatus.CANCELLED);
         await dbContext.SaveChangesAsync();
         var service = CreateService(dbContext, new InMemoryRedisService());
 
@@ -238,15 +257,37 @@ public sealed class TripChatServiceTests
         Assert.Equal("Định dạng ảnh không được hỗ trợ.", exception.Message);
     }
 
-    [Theory]
-    [InlineData(TripStatus.COMPLETED)]
-    [InlineData(TripStatus.CANCELLED)]
-    public async Task SendImageMessageAsync_WithClosedTrip_Throws(TripStatus tripStatus)
+    [Fact]
+    public async Task SendImageMessageAsync_WithCompletedTrip_StoresImageMessageInRedis()
+    {
+        await using var dbContext = CreateDbContext();
+        var redis = new InMemoryRedisService();
+        var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var trip = SeedTrip(dbContext, customerId, driverId, TripStatus.COMPLETED);
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext, redis);
+        await using var image = new MemoryStream([1, 2, 3]);
+
+        var result = await service.SendImageMessageAsync(
+            customerId,
+            trip.Id,
+            image,
+            "image/png",
+            image.Length);
+
+        Assert.Equal("Image", result.MessageType);
+        Assert.NotNull(result.ImageUrl);
+        Assert.Single(await redis.ListRangeAsync(RedisKeys.TripChatMessages(trip.Id)));
+    }
+
+    [Fact]
+    public async Task SendImageMessageAsync_WithCancelledTrip_Throws()
     {
         await using var dbContext = CreateDbContext();
         var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
         var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
-        var trip = SeedTrip(dbContext, customerId, driverId, tripStatus);
+        var trip = SeedTrip(dbContext, customerId, driverId, TripStatus.CANCELLED);
         await dbContext.SaveChangesAsync();
         var service = CreateService(dbContext, new InMemoryRedisService());
         await using var image = new MemoryStream([1, 2, 3]);
