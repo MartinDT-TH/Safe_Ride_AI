@@ -137,6 +137,20 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
   void _onProviderUpdated() {
     if (!mounted) return;
 
+    final snackbarMessage = _provider.snackbarMessage;
+    if (snackbarMessage != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(snackbarMessage),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        _provider.clearSnackbarMessage();
+      });
+    }
+
     final tripAwaitingPaymentId = _provider.takeTripAwaitingPayment();
     if (tripAwaitingPaymentId != null) {
       _openTripPayment(tripAwaitingPaymentId);

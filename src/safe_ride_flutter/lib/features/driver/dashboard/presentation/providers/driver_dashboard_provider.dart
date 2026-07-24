@@ -113,6 +113,16 @@ class DriverDashboardProvider extends ChangeNotifier {
   bool _isDemoMode = false;
   bool get isDemoMode => _isDemoMode;
 
+  String? _snackbarMessage;
+  String? get snackbarMessage => _snackbarMessage;
+
+  void clearSnackbarMessage() {
+    if (_snackbarMessage != null) {
+      _snackbarMessage = null;
+      notifyListeners();
+    }
+  }
+
   ActiveDriverTrip? _activeTrip;
   ActiveDriverTrip? get activeTrip => _activeTrip;
   int? _tripAwaitingPaymentId;
@@ -193,11 +203,24 @@ class DriverDashboardProvider extends ChangeNotifier {
       notifyListeners();
       loadOpenTripRequests();
     }, key: 'driverDashboardOfferReceived');
-    _socketService.onDriverOfferClosed((offerId) {
-      if (_currentRequest?.offerId == offerId) {
+    _socketService.onDriverOfferClosed(({offerId, bookingId}) {
+      final currentOfferId = _currentRequest?.offerId;
+      final currentBookingId = _currentRequest?.bookingId;
+
+      bool isMatch = false;
+      if (offerId != null && currentOfferId == offerId) isMatch = true;
+      if (bookingId != null && currentBookingId == bookingId) isMatch = true;
+
+      // Robust check: if we are waiting for confirmation and get any closed offer event for this driver,
+      // it's likely the one we are waiting for.
+      if (isMatch || (offerId == null && bookingId == null && _isWaitingForCustomerConfirmation)) {
+        if (currentBookingId != null) {
+          _socketService.leaveBooking(currentBookingId);
+        }
         _hasNewRequest = false;
         _currentRequest = null;
         _isWaitingForCustomerConfirmation = false;
+        _snackbarMessage = 'Khách hàng đã hủy yêu cầu đặt tài xế.';
         notifyListeners();
       }
       if (_activeTrip == null) {
@@ -388,6 +411,9 @@ class DriverDashboardProvider extends ChangeNotifier {
           headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
         ),
       );
+      // Join booking group to receive updates (like cancellation)
+      await _socketService.joinBooking(request.bookingId);
+
       // Wait for SignalR 'BookingDriverAssigned' event.
       _errorMessage = null;
       loadOpenTripRequests();
@@ -801,13 +827,18 @@ class DriverDashboardProvider extends ChangeNotifier {
     if (update.status == 'Cancelled' || update.status == 'Expired') {
       var changed = false;
       if (_activeTrip?.bookingId == update.bookingId) {
+        _socketService.leaveBooking(update.bookingId);
         _clearActiveTrip();
         changed = true;
       }
       if (_currentRequest?.bookingId == update.bookingId) {
+        _socketService.leaveBooking(update.bookingId);
         _hasNewRequest = false;
         _currentRequest = null;
         _isWaitingForCustomerConfirmation = false;
+        if (update.status == 'Cancelled') {
+          _snackbarMessage = 'Khách hàng đã hủy yêu cầu đặt tài xế.';
+        }
         changed = true;
       }
       if (changed) {
@@ -816,6 +847,7 @@ class DriverDashboardProvider extends ChangeNotifier {
       loadOpenTripRequests();
     } else if (update.status == 'DriverAssigned' || update.tripId != null) {
       if (update.tripId != null) {
+        _socketService.leaveBooking(update.bookingId);
         _hasNewRequest = false;
         _currentRequest = null;
         _isWaitingForCustomerConfirmation = false;

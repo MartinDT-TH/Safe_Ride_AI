@@ -393,8 +393,8 @@ class BookingUpdate {
       'BookingDriverAssigned' ||
       'TripCreated' ||
       'CustomerConfirmedDriverOffer' => 'DriverAssigned',
-      'BookingExpired' => 'Expired',
-      'BookingCancelled' => 'Cancelled',
+      'BookingExpired' || 'DriverOfferExpired' => 'Expired',
+      'BookingCancelled' || 'DriverOfferCancelled' => 'Cancelled',
       _ => null,
     };
   }
@@ -531,7 +531,8 @@ class SocketService {
   _tripPaymentHandlers = {};
   final Map<String, void Function(DriverOfferUpdate update)>
   _driverOfferReceivedHandlers = {};
-  final Map<String, void Function(int offerId)> _driverOfferClosedHandlers = {};
+  final Map<String, void Function({int? offerId, int? bookingId})>
+  _driverOfferClosedHandlers = {};
 
   final Map<String, void Function(BookingUpdate update)> _bookingHandlers = {};
   final Map<String, void Function(InAppCallSignal signal)>
@@ -732,7 +733,7 @@ class SocketService {
   }
 
   void onDriverOfferClosed(
-    void Function(int offerId) handler, {
+    void Function({int? offerId, int? bookingId}) handler, {
     String key = 'default',
   }) {
     _driverOfferClosedHandlers[key] = handler;
@@ -752,9 +753,14 @@ class SocketService {
 
       final data = Map<String, dynamic>.from(arguments.first as Map);
       final offerId = (data[ApiKeys.offerId] ?? data['OfferId']) as num?;
-      if (offerId != null) {
+      final bookingId = (data[ApiKeys.bookingId] ?? data['BookingId']) as num?;
+
+      if (offerId != null || bookingId != null) {
         for (final handler in List.of(_driverOfferClosedHandlers.values)) {
-          handler(offerId.toInt());
+          handler(
+            offerId: offerId?.toInt(),
+            bookingId: bookingId?.toInt(),
+          );
         }
       }
     }
