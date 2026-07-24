@@ -159,27 +159,36 @@ class _RatingSummaryCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  summary.averageRating.toStringAsFixed(1),
-                  style: const TextStyle(
-                    fontSize: 48,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF1F1F1F),
-                    height: 1,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    summary.averageRating.toStringAsFixed(1),
+                    style: const TextStyle(
+                      fontSize: 48,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF1F1F1F),
+                      height: 1,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  children: List.generate(5, (index) {
-                    final double score = summary.averageRating;
-                    if (index < score.floor()) {
-                      return const Icon(Icons.star, color: Color(0xFFFFB800), size: 20);
-                    } else if (index < score) {
-                      return const Icon(Icons.star_half, color: Color(0xFFFFB800), size: 20);
-                    } else {
-                      return const Icon(Icons.star_outline, color: Color(0xFFFFB800), size: 20);
-                    }
-                  }),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    children: List.generate(5, (index) {
+                      final double score = summary.averageRating;
+                      if (index < score.floor()) {
+                        return const Icon(Icons.star,
+                            color: Color(0xFFFFB800), size: 20);
+                      } else if (index < score) {
+                        return const Icon(Icons.star_half,
+                            color: Color(0xFFFFB800), size: 20);
+                      } else {
+                        return const Icon(Icons.star_outline,
+                            color: Color(0xFFFFB800), size: 20);
+                      }
+                    }),
+                  ),
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -189,11 +198,13 @@ class _RatingSummaryCard extends StatelessWidget {
                     color: Color(0xFF6B6B6B),
                     fontWeight: FontWeight.w600,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 20),
+          const SizedBox(width: 16),
           Expanded(
             flex: 6,
             child: Column(
@@ -302,28 +313,26 @@ class _ReviewCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          rating.customerName,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF1F1F1F),
-                          ),
-                        ),
-                        Text(
-                          dateStr,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Color(0xFF6B6B6B),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
+                    Text(
+                      rating.customerName,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1F1F1F),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 2),
+                    Text(
+                      dateStr,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF6B6B6B),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
                     Row(
                       children: List.generate(5, (index) {
                         return Icon(
