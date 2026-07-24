@@ -101,7 +101,7 @@ public sealed class CancelBookingCommandHandler
 
         await _jobScheduler.CancelJobsForBookingAsync(booking.BookingId, cancellationToken);
 
-        await _bookingRepository.CancelActiveDriverOffersAsync(
+        var cancelledOffers = await _bookingRepository.CancelActiveDriverOffersAsync(
             booking.BookingId,
             utcNow,
             cancellationToken);
@@ -115,6 +115,19 @@ public sealed class CancelBookingCommandHandler
                 booking.BookingStatus,
                 utcNow),
             cancellationToken);
+
+        foreach (var cancelledOffer in cancelledOffers)
+        {
+            await _realtimeNotificationService.PublishDriverOfferCancelledAsync(
+                new DriverOfferCancelledEvent(
+                    cancelledOffer.BookingId,
+                    booking.CustomerId,
+                    cancelledOffer.DriverId,
+                    cancelledOffer.Id,
+                    utcNow,
+                    "Yêu cầu nhận chuyến đã bị hủy bởi khách hàng."),
+                cancellationToken);
+        }
 
         if (booking.Trip?.TripStatus == TripStatus.CANCELLED)
         {
