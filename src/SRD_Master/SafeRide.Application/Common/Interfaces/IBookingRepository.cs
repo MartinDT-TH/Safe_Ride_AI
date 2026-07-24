@@ -69,7 +69,7 @@ public interface IBookingRepository
         DateTime matchingCutoffUtc,
         CancellationToken cancellationToken);
 
-    Task CancelActiveDriverOffersAsync(
+    Task<IReadOnlyList<BookingDriverOffer>> CancelActiveDriverOffersAsync(
         long bookingId,
         DateTime cancelledAt,
         CancellationToken cancellationToken);
