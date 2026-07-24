@@ -1,10 +1,10 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Hosting;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Features.Bookings;
 using SafeRide.Application.Features.Trips.DTOs;
 using SafeRide.Domain.Enums;
+using SafeRide.Infrastructure.ExternalServices.Cloudinary;
 using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
 
@@ -25,18 +25,18 @@ public sealed class TripChatService : ITripChatService
     private readonly ApplicationDbContext _dbContext;
     private readonly IRedisService _redisService;
     private readonly IDateTimeProvider _dateTimeProvider;
-    private readonly IHostEnvironment _environment;
+    private readonly ICloudinaryImageService _cloudinaryImageService;
 
     public TripChatService(
         ApplicationDbContext dbContext,
         IRedisService redisService,
         IDateTimeProvider dateTimeProvider,
-        IHostEnvironment environment)
+        ICloudinaryImageService cloudinaryImageService)
     {
         _dbContext = dbContext;
         _redisService = redisService;
         _dateTimeProvider = dateTimeProvider;
-        _environment = environment;
+        _cloudinaryImageService = cloudinaryImageService;
     }
 
     public async Task EnsureCanAccessTripChatAsync(
@@ -127,7 +127,7 @@ public sealed class TripChatService : ITripChatService
             "Không thể gửi ảnh cho chuyến đi đã kết thúc.",
             cancellationToken);
 
-        var imageUrl = await SaveImageAsync(
+        var imageUrl = await _cloudinaryImageService.UploadTripChatImageAsync(
             trip.Id,
             image,
             contentType,
@@ -276,36 +276,6 @@ public sealed class TripChatService : ITripChatService
                 "Định dạng ảnh không được hỗ trợ.",
                 400);
         }
-    }
-
-    private async Task<string> SaveImageAsync(
-        long tripId,
-        Stream image,
-        string contentType,
-        CancellationToken cancellationToken)
-    {
-        var extension = GetExtension(contentType)
-            ?? throw new BookingException(
-                "trip_chat.image_unsupported",
-                "Định dạng ảnh không được hỗ trợ.",
-                400);
-        var fileName = $"{Guid.NewGuid():N}{extension}";
-        var relativeDirectory = Path.Combine(
-            "uploads",
-            "trip-chat",
-            tripId.ToString());
-        var absoluteDirectory = Path.Combine(
-            _environment.ContentRootPath,
-            relativeDirectory);
-        Directory.CreateDirectory(absoluteDirectory);
-
-        var absolutePath = Path.Combine(absoluteDirectory, fileName);
-        await using (var fileStream = File.Create(absolutePath))
-        {
-            await image.CopyToAsync(fileStream, cancellationToken);
-        }
-
-        return $"/uploads/trip-chat/{tripId}/{fileName}";
     }
 
     private static string? GetExtension(string contentType)

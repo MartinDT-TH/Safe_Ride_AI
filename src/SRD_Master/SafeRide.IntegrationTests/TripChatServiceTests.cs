@@ -1,7 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.FileProviders;
-using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using NetTopologySuite.Geometries;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
@@ -9,6 +8,7 @@ using SafeRide.Application.Features.Bookings;
 using SafeRide.Application.Features.Trips.DTOs;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
+using SafeRide.Infrastructure.ExternalServices.Cloudinary;
 using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
 using SafeRide.Infrastructure.Services;
@@ -197,7 +197,7 @@ public sealed class TripChatServiceTests
             dbContext,
             redis,
             new DateTimeProviderFake(UtcNow),
-            new HostEnvironmentFake());
+            new CloudinaryImageServiceFake());
 
         await service.ShortenMessageTtlAsync(4);
 
@@ -226,9 +226,7 @@ public sealed class TripChatServiceTests
 
         Assert.Equal("Image", result.MessageType);
         Assert.Equal(string.Empty, result.Message);
-        Assert.NotNull(result.ImageUrl);
-        Assert.StartsWith($"/uploads/trip-chat/{trip.Id}/", result.ImageUrl);
-        Assert.EndsWith(".webp", result.ImageUrl);
+        Assert.StartsWith("https://res.cloudinary.com/", result.ImageUrl);
 
         var stored = await redis.ListRangeAsync(RedisKeys.TripChatMessages(trip.Id));
         var payload = JsonSerializer.Deserialize<TripChatMessageDto>(
@@ -277,8 +275,25 @@ public sealed class TripChatServiceTests
             image.Length);
 
         Assert.Equal("Image", result.MessageType);
-        Assert.NotNull(result.ImageUrl);
+        Assert.StartsWith("https://res.cloudinary.com/", result.ImageUrl);
         Assert.Single(await redis.ListRangeAsync(RedisKeys.TripChatMessages(trip.Id)));
+    }
+
+    [Fact]
+    public async Task UploadTripChatImageAsync_WithoutCloudinaryConfig_ThrowsClearError()
+    {
+        var service = new CloudinaryImageService(
+            Options.Create(new CloudinaryOptions()));
+        await using var image = new MemoryStream([1, 2, 3]);
+
+        var exception = await Assert.ThrowsAsync<BookingException>(
+            () => service.UploadTripChatImageAsync(
+                4,
+                image,
+                "image/png"));
+
+        Assert.Equal("Cloudinary chưa được cấu hình.", exception.Message);
+        Assert.Equal(503, exception.StatusCode);
     }
 
     [Fact]
@@ -319,7 +334,7 @@ public sealed class TripChatServiceTests
             dbContext,
             redis,
             new DateTimeProviderFake(UtcNow),
-            new HostEnvironmentFake());
+            new CloudinaryImageServiceFake());
     }
 
     private static Trip SeedTrip(
@@ -406,16 +421,23 @@ public sealed class TripChatServiceTests
         public DateTime UtcNow { get; } = utcNow;
     }
 
-    private sealed class HostEnvironmentFake : IHostEnvironment
+    private sealed class CloudinaryImageServiceFake : ICloudinaryImageService
     {
-        public string EnvironmentName { get; set; } = "Testing";
+        public Task<string> UploadAvatarAsync(
+            Guid userId,
+            Stream stream,
+            string fileName,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(
+                $"https://res.cloudinary.com/test/image/upload/saferide/avatars/{userId:N}.webp");
 
-        public string ApplicationName { get; set; } = "SafeRide.Tests";
-
-        public string ContentRootPath { get; set; } = Path.GetTempPath();
-
-        public IFileProvider ContentRootFileProvider { get; set; } =
-            new NullFileProvider();
+        public Task<string> UploadTripChatImageAsync(
+            long tripId,
+            Stream stream,
+            string contentType,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(
+                $"https://res.cloudinary.com/test/image/upload/saferide/trip-chat/{tripId}/{Guid.NewGuid():N}.webp");
     }
 
     private sealed class RedisServiceFake : IRedisService

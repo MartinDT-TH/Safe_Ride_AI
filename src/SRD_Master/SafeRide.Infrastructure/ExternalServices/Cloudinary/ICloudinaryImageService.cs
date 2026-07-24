@@ -7,4 +7,10 @@ public interface ICloudinaryImageService
         Stream stream,
         string fileName,
         CancellationToken cancellationToken = default);
+
+    Task<string> UploadTripChatImageAsync(
+        long tripId,
+        Stream stream,
+        string contentType,
+        CancellationToken cancellationToken = default);
 }
