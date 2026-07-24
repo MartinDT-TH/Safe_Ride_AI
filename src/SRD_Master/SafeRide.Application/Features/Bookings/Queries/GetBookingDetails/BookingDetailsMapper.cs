@@ -83,7 +83,7 @@ internal static class BookingDetailsMapper
     private static TripPaymentSummaryDto? MapPayment(Trip? trip, decimal finalFare)
     {
         if (trip is null
-            || trip.TripStatus is not (TripStatus.WAITING_PAYMENT or TripStatus.COMPLETED))
+            || trip.TripStatus is TripStatus.CANCELLED)
         {
             return null;
         }
@@ -111,6 +111,13 @@ internal static class BookingDetailsMapper
         if (paymentStatus == PaymentStatus.Success || tripStatus == TripStatus.COMPLETED)
         {
             return "Thanh toán đã hoàn tất.";
+        }
+
+        if (tripStatus is TripStatus.ACCEPTED
+            or TripStatus.DRIVER_ARRIVING
+            or TripStatus.ARRIVED)
+        {
+            return "Bạn có thể thanh toán trước bằng PayOS hoặc thanh toán sau chuyến đi.";
         }
 
         return "Vui lòng thanh toán cho tài xế để hoàn tất chuyến đi.";

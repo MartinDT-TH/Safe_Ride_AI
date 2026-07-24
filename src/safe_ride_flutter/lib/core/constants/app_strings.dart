@@ -221,7 +221,7 @@ abstract final class LocationStrings {
 abstract final class AppConfig {
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://192.168.100.116:5026/api/',
+    defaultValue: 'http://192.168.1.26:5026/api/',
   );
   // https://safe-ride-ai.onrender.com
   // http://192.168.100.116:5026
@@ -273,6 +273,8 @@ abstract final class ApiEndpoints {
   static String completeTrip(int tripId) => '/trips/$tripId/complete';
   static String createDriverTripQrPayment(int tripId) =>
       '/payments/driver/trips/$tripId/qr';
+  static String createCustomerTripQrPayment(int tripId) =>
+      '/payments/trips/$tripId/qr';
   static String driverTripPaymentStatus(int tripId) =>
       '/payments/driver/trips/$tripId/status';
   static String customerTripPaymentStatus(int tripId) =>
