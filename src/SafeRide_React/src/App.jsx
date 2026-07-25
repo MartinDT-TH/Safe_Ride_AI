@@ -6,6 +6,7 @@ import './App.css';
 
 const RevenuePage = lazy(() => import('./pages/RevenuePage'));
 const TransactionsPage = lazy(() => import('./pages/TransactionsPage'));
+const AdminPromotionsPage = lazy(() => import('./pages/admin/promotions/AdminPromotionsPage'));
 /**
  * Root component — reads auth state from Redux to decide
  * which page to show. Will be replaced by React Router later.
@@ -19,6 +20,9 @@ function App() {
     }
     if (activeSidebarId === 'transactions') {
         return <Suspense fallback={<div className="app-loading">Đang tải trang giao dịch...</div>}><TransactionsPage /></Suspense>;
+    }
+    if (activeSidebarId === 'promotions') {
+        return <Suspense fallback={<div className="app-loading">Đang tải trang khuyến mãi...</div>}><AdminPromotionsPage /></Suspense>;
     }
     return <DriversPage />;
 }
