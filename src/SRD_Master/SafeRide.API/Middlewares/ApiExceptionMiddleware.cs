@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
+using SafeRide.Application.Features.AdminUserAccounts;
 using SafeRide.Application.Features.Auth;
 using SafeRide.Application.Features.Bookings;
+using SafeRide.Application.Features.Notifications;
 using SafeRide.Application.Features.Promotions;
 using SafeRide.Application.Features.Ratings;
 using SafeRide.Application.Features.Reports;
@@ -63,7 +65,15 @@ public sealed class ApiExceptionMiddleware
                 exception.Code,
                 exception.Message);
         }
-        catch (ReportException exception)
+        catch (AdminUserAccountException exception)
+        {
+            await WriteProblemAsync(
+                context,
+                exception.StatusCode,
+                exception.Code,
+                exception.Message);
+        }
+        catch (NotificationException exception)
         {
             await WriteProblemAsync(
                 context,

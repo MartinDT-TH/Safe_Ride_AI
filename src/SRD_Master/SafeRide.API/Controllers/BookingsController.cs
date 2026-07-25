@@ -193,6 +193,7 @@ public sealed class BookingsController : ControllerBase
         return Ok(result
             .Select(item => new BookingHistoryResponse(
                 item.Id,
+                item.TripId,
                 item.PickupAddress,
                 item.DestinationAddress,
                 item.OccurredAt,

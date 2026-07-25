@@ -5,7 +5,9 @@ class TripChatMessageModel {
   final int tripId;
   final String senderUserId;
   final String senderName;
+  final String messageType;
   final String message;
+  final String? imageUrl;
   final DateTime sentAt;
   final bool isMine;
 
@@ -14,10 +16,15 @@ class TripChatMessageModel {
     required this.tripId,
     required this.senderUserId,
     required this.senderName,
+    required this.messageType,
     required this.message,
+    this.imageUrl,
     required this.sentAt,
     this.isMine = false,
   });
+
+  bool get isText => messageType.toLowerCase() == 'text';
+  bool get isImage => messageType.toLowerCase() == 'image';
 
   factory TripChatMessageModel.fromJson(Map<String, dynamic> json, String currentUserId) {
     final senderUserId = json['senderUserId']?.toString() ?? '';
@@ -26,7 +33,9 @@ class TripChatMessageModel {
       tripId: (json[ApiKeys.tripId] as num?)?.toInt() ?? 0,
       senderUserId: senderUserId,
       senderName: json['senderName']?.toString() ?? '',
+      messageType: json['messageType']?.toString() ?? 'Text',
       message: json['message']?.toString() ?? '',
+      imageUrl: json['imageUrl']?.toString(),
       sentAt: json['sentAt'] == null
           ? DateTime.now()
           : DateTime.tryParse(json['sentAt'].toString()) ?? DateTime.now(),
@@ -48,7 +57,9 @@ class TripChatMessageModel {
       tripId: tripId,
       senderUserId: senderUserId,
       senderName: senderName,
+      messageType: messageType,
       message: message,
+      imageUrl: imageUrl,
       sentAt: sentAt,
       isMine: isMine ?? this.isMine,
     );

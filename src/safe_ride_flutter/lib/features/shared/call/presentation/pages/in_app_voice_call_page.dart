@@ -6,6 +6,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../../../../../core/services/socket_service.dart';
 import '../../../../../dependency_injection/injection.dart';
+import '../../services/call_tone_player.dart';
 
 class InAppVoiceCallPage extends StatefulWidget {
   const InAppVoiceCallPage({
@@ -30,6 +31,7 @@ class InAppVoiceCallPage extends StatefulWidget {
 class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
   final SocketService _socketService = getIt<SocketService>();
   final RTCVideoRenderer _remoteRenderer = RTCVideoRenderer();
+  final CallTonePlayer _callTonePlayer = CallTonePlayer();
   final String _callId =
       '${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(999999)}';
 
@@ -57,6 +59,7 @@ class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
   @override
   void dispose() {
     _durationTimer?.cancel();
+    unawaited(_callTonePlayer.dispose());
     _removeSignalHandlers();
     unawaited(_hangUp(notifyPeer: true));
     _remoteRenderer.dispose();
@@ -81,6 +84,7 @@ class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
         setState(() => _initializing = false);
       }
     } catch (e) {
+      await _callTonePlayer.stop();
       if (!mounted) return;
       setState(() {
         _initializing = false;
@@ -127,6 +131,7 @@ class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
       if (event.streams.isEmpty) return;
       _remoteStream = event.streams.first;
       _remoteRenderer.srcObject = _remoteStream;
+      unawaited(_callTonePlayer.stop());
       if (!mounted) return;
       setState(() => _connected = true);
       _startDurationTimer();
@@ -134,6 +139,7 @@ class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
   }
 
   Future<void> _startOutgoingCall() async {
+    await _callTonePlayer.playOutgoing();
     final offer = await _peerConnection!.createOffer({
       'offerToReceiveAudio': true,
       'offerToReceiveVideo': false,
@@ -187,6 +193,7 @@ class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
       await _peerConnection?.setRemoteDescription(
         RTCSessionDescription(signal.sdp, signal.sdpType),
       );
+      await _callTonePlayer.stop();
       if (mounted) setState(() => _connected = true);
       _startDurationTimer();
     }, key: '$key:answer');
@@ -244,6 +251,7 @@ class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
   Future<void> _hangUp({required bool notifyPeer}) async {
     if (_closed) return;
     _closed = true;
+    await _callTonePlayer.stop();
     if (notifyPeer) {
       await _socketService.endInAppCall(
         InAppCallSignal(

@@ -3,7 +3,7 @@ name: Test and Deploy Backend to Render
 on:
   push:
     branches:
-      - beta
+      - main_demo_project
     paths:
       - "src/SRD_Master/**"
       - ".github/workflows/deploy-render.yml"

@@ -23,8 +23,11 @@ import '../../../../shared/history/presentation/pages/history_page.dart';
 import '../../../../shared/onboarding/presentation/providers/role_provider.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../shared/call/presentation/pages/in_app_voice_call_page.dart';
+import '../../../../shared/call/services/call_tone_player.dart';
 import '../../../../shared/profile/presentation/pages/profile_page.dart';
 import '../../../../shared/chat/presentation/pages/trip_chat_page.dart';
+import '../../../../shared/notifications/presentation/pages/notifications_page.dart';
+import '../../../../shared/notifications/presentation/providers/notification_provider.dart';
 import 'driver_trip_payment_page.dart';
 import 'driver_return_evidence_page.dart';
 import '../../../wallet/presentation/pages/driver_wallet_page.dart';
@@ -130,12 +133,27 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
       }
       if (token != null) {
         _provider.initializeRealtime(token);
+        await context.read<NotificationProvider>().initialize(token);
       }
     });
   }
 
   void _onProviderUpdated() {
     if (!mounted) return;
+
+    final snackbarMessage = _provider.snackbarMessage;
+    if (snackbarMessage != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(snackbarMessage),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        _provider.clearSnackbarMessage();
+      });
+    }
 
     final tripAwaitingPaymentId = _provider.takeTripAwaitingPayment();
     if (tripAwaitingPaymentId != null) {
@@ -323,29 +341,61 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
   Future<void> _showIncomingCallDialog(InAppCallSignal signal) async {
     if (_incomingCallDialogOpen) return;
     _incomingCallDialogOpen = true;
+    final callTonePlayer = CallTonePlayer();
+    final endedHandlerKey = 'incomingTone:${signal.tripId}:${signal.callId}';
+    BuildContext? incomingDialogContext;
+    var endedByPeer = false;
+    _socketService.onInAppCallEnded((endedSignal) {
+      if (endedSignal.tripId != signal.tripId ||
+          endedSignal.callId != signal.callId) {
+        return;
+      }
+      endedByPeer = true;
+      final dialogContext = incomingDialogContext;
+      if (dialogContext != null && dialogContext.mounted) {
+        Navigator.of(dialogContext).pop();
+      }
+    }, key: endedHandlerKey);
+    await callTonePlayer.playIncoming();
+    if (!mounted || endedByPeer) {
+      _socketService.removeInAppCallEndedHandler(endedHandlerKey);
+      await callTonePlayer.dispose();
+      _incomingCallDialogOpen = false;
+      return;
+    }
     final accessToken = context.read<AuthProvider>().token;
-    final accepted = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Cuộc gọi đến'),
-        content: const Text('Khách hàng đang gọi cho bạn.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Từ chối'),
-          ),
-          FilledButton.icon(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            icon: const Icon(Icons.call_rounded),
-            label: const Text('Nghe máy'),
-          ),
-        ],
-      ),
-    );
+    bool? accepted;
+    try {
+      accepted = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          incomingDialogContext = dialogContext;
+          return AlertDialog(
+            title: const Text('Cuộc gọi đến'),
+            content: const Text('Khách hàng đang gọi cho bạn.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Từ chối'),
+              ),
+              FilledButton.icon(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                icon: const Icon(Icons.call_rounded),
+                label: const Text('Nghe máy'),
+              ),
+            ],
+          );
+        },
+      );
+    } finally {
+      _socketService.removeInAppCallEndedHandler(endedHandlerKey);
+      await callTonePlayer.dispose();
+    }
     _incomingCallDialogOpen = false;
 
     if (!mounted || accessToken == null || accessToken.isEmpty) return;
+    if (endedByPeer) return;
     if (accepted != true) {
       await _socketService.rejectInAppCall(signal);
       return;
@@ -682,11 +732,18 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
           tripId: trip.tripId,
           currentUserId: currentUserId,
           receiverName: 'Khách hàng',
-          canSendMessage:
-              trip.tripStatus != 'COMPLETED' && trip.tripStatus != 'CANCELLED',
+          canSendMessage: _canSendChat(trip.tripStatus),
         ),
       ),
     );
+  }
+
+  bool _canSendChat(String? status) {
+    if (status == null) return true;
+    final normalized = status.trim().toUpperCase();
+    return normalized != 'CANCELLED' &&
+        normalized != 'CANCELED' &&
+        normalized != 'EXPIRED';
   }
 
   @override
@@ -832,8 +889,16 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                       ),
                     _CircleIconButton(
                       icon: Icons.notifications_none_rounded,
-                      hasBadge: true,
-                      onPressed: () {},
+                      hasBadge: context.select<NotificationProvider, bool>(
+                        (provider) => provider.unreadCount > 0,
+                      ),
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const NotificationsPage(),
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -1132,8 +1197,10 @@ class _ActiveTripCard extends StatelessWidget {
                     label: const Text('Nhắn tin'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF006B70),
-                      side:
-                          const BorderSide(color: Color(0xFF006B70), width: 1.5),
+                      side: const BorderSide(
+                        color: Color(0xFF006B70),
+                        width: 1.5,
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -1149,8 +1216,10 @@ class _ActiveTripCard extends StatelessWidget {
                     label: const Text('Gọi khách'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF006B70),
-                      side:
-                          const BorderSide(color: Color(0xFF006B70), width: 1.5),
+                      side: const BorderSide(
+                        color: Color(0xFF006B70),
+                        width: 1.5,
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),

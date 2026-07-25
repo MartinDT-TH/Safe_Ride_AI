@@ -42,12 +42,7 @@ public sealed class DriverWalletService : IDriverWalletService
             throw new DriverWalletException("Ví tài xế chưa được khởi tạo.");
         }
 
-        var pendingAmount = await _dbContext.WithdrawalRequests
-            .Where(x => x.WalletId == wallet.Id
-                && x.Status == WithdrawalRequestStatus.Pending)
-            .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
-        var availableBalance = wallet.CurrentBalance - pendingAmount;
-        if (amount > availableBalance)
+        if (amount > wallet.CurrentBalance)
         {
             throw new DriverWalletException("Số dư khả dụng không đủ.");
         }
@@ -73,6 +68,6 @@ public sealed class DriverWalletService : IDriverWalletService
             request.Amount,
             request.Status,
             request.CreatedAt,
-            availableBalance - request.Amount);
+            wallet.CurrentBalance);
     }
 }

@@ -4,6 +4,7 @@ using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Features.Bookings;
 using SafeRide.Application.Features.Trips.DTOs;
 using SafeRide.Domain.Enums;
+using SafeRide.Infrastructure.ExternalServices.Cloudinary;
 using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
 
@@ -14,22 +15,28 @@ public sealed class TripChatService : ITripChatService
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
     private static readonly TimeSpan MessageTtl = TimeSpan.FromHours(24);
-    private static readonly TimeSpan TerminalMessageTtl = TimeSpan.FromHours(2);
+    private static readonly TimeSpan TerminalMessageTtl = TimeSpan.FromDays(7);
     private const int MaxMessages = 100;
     private const int MaxMessageLength = 1000;
+    private const long MaxImageSizeBytes = 5 * 1024 * 1024;
+    private const string TextMessageType = "Text";
+    private const string ImageMessageType = "Image";
 
     private readonly ApplicationDbContext _dbContext;
     private readonly IRedisService _redisService;
     private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly ICloudinaryImageService _cloudinaryImageService;
 
     public TripChatService(
         ApplicationDbContext dbContext,
         IRedisService redisService,
-        IDateTimeProvider dateTimeProvider)
+        IDateTimeProvider dateTimeProvider,
+        ICloudinaryImageService cloudinaryImageService)
     {
         _dbContext = dbContext;
         _redisService = redisService;
         _dateTimeProvider = dateTimeProvider;
+        _cloudinaryImageService = cloudinaryImageService;
     }
 
     public async Task EnsureCanAccessTripChatAsync(
@@ -74,7 +81,7 @@ public sealed class TripChatService : ITripChatService
                 403);
         }
 
-        if (trip.TripStatus is TripStatus.COMPLETED or TripStatus.CANCELLED)
+        if (trip.TripStatus == TripStatus.CANCELLED)
         {
             throw new BookingException(
                 "trip_chat.trip_closed",
@@ -90,7 +97,9 @@ public sealed class TripChatService : ITripChatService
             tripId,
             senderUserId,
             senderName,
+            TextMessageType,
             normalizedMessage,
+            null,
             _dateTimeProvider.UtcNow);
 
         await _redisService.ListRightPushTrimAndExpireAsync(
@@ -99,6 +108,44 @@ public sealed class TripChatService : ITripChatService
             MaxMessages,
             MessageTtl,
             cancellationToken);
+
+        return payload;
+    }
+
+    public async Task<TripChatMessageDto> SendImageMessageAsync(
+        Guid senderUserId,
+        long tripId,
+        Stream image,
+        string contentType,
+        long fileSizeBytes,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateImage(image, contentType, fileSizeBytes);
+        var trip = await GetAccessibleTripAsync(
+            senderUserId,
+            tripId,
+            "Không thể gửi ảnh cho chuyến đi đã kết thúc.",
+            cancellationToken);
+
+        var imageUrl = await _cloudinaryImageService.UploadTripChatImageAsync(
+            trip.Id,
+            image,
+            contentType,
+            cancellationToken);
+        var senderName = await ResolveSenderNameAsync(
+            senderUserId,
+            cancellationToken);
+        var payload = new TripChatMessageDto(
+            Guid.NewGuid(),
+            trip.Id,
+            senderUserId,
+            senderName,
+            ImageMessageType,
+            string.Empty,
+            imageUrl,
+            _dateTimeProvider.UtcNow);
+
+        await StoreMessageAsync(trip.Id, payload, cancellationToken);
 
         return payload;
     }
@@ -154,6 +201,92 @@ public sealed class TripChatService : ITripChatService
         }
 
         return normalized;
+    }
+
+    private async Task<Domain.Entities.Trip> GetAccessibleTripAsync(
+        Guid userId,
+        long tripId,
+        string closedTripMessage,
+        CancellationToken cancellationToken)
+    {
+        var trip = await _dbContext.Trips
+            .AsNoTracking()
+            .Include(item => item.Booking)
+            .FirstOrDefaultAsync(
+                item => item.Id == tripId
+                    && (item.DriverId == userId || item.Booking.CustomerId == userId),
+                cancellationToken);
+        if (trip is null)
+        {
+            throw new BookingException(
+                "trip_chat.forbidden",
+                "Bạn không có quyền truy cập cuộc trò chuyện này.",
+                403);
+        }
+
+        if (trip.TripStatus == TripStatus.CANCELLED)
+        {
+            throw new BookingException(
+                "trip_chat.trip_closed",
+                closedTripMessage,
+                409);
+        }
+
+        return trip;
+    }
+
+    private async Task StoreMessageAsync(
+        long tripId,
+        TripChatMessageDto payload,
+        CancellationToken cancellationToken)
+    {
+        await _redisService.ListRightPushTrimAndExpireAsync(
+            RedisKeys.TripChatMessages(tripId),
+            JsonSerializer.Serialize(payload, JsonOptions),
+            MaxMessages,
+            MessageTtl,
+            cancellationToken);
+    }
+
+    private static void ValidateImage(
+        Stream image,
+        string contentType,
+        long fileSizeBytes)
+    {
+        if (image is null || fileSizeBytes <= 0)
+        {
+            throw new BookingException(
+                "trip_chat.image_required",
+                "Vui lòng chọn ảnh để gửi.",
+                400);
+        }
+
+        if (fileSizeBytes > MaxImageSizeBytes)
+        {
+            throw new BookingException(
+                "trip_chat.image_too_large",
+                "Ảnh không được vượt quá 5MB.",
+                400);
+        }
+
+        if (GetExtension(contentType) is null)
+        {
+            throw new BookingException(
+                "trip_chat.image_unsupported",
+                "Định dạng ảnh không được hỗ trợ.",
+                400);
+        }
+    }
+
+    private static string? GetExtension(string contentType)
+    {
+        return contentType.Trim().ToLowerInvariant() switch
+        {
+            "image/jpeg" => ".jpg",
+            "image/png" => ".png",
+            "image/webp" => ".webp",
+            _ => null
+        };
     }
 
     private async Task<string> ResolveSenderNameAsync(

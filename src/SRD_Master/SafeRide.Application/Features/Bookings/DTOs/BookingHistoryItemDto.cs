@@ -4,6 +4,7 @@ namespace SafeRide.Application.Features.Bookings.DTOs;
 
 public sealed record BookingHistoryItemDto(
     long Id,
+    long? TripId,
     string PickupAddress,
     string DestinationAddress,
     DateTime OccurredAt,

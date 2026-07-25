@@ -236,6 +236,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .action-link {
@@ -257,9 +258,26 @@
   opacity: 0.75;
 }
 
+.action-link--button {
+  min-width: 132px;
+  height: 38px;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  border: 1px solid var(--sr-teal);
+  border-radius: var(--sr-radius-md);
+  font-weight: 600;
+  transition: all var(--sr-transition);
+}
+
+.action-link--button:hover:not(:disabled) {
+  opacity: 1;
+  background: rgba(26, 138, 125, 0.06);
+}
+
 .action-link:disabled {
   cursor: wait;
-  opacity: 0.55;
+  opacity: 0.6;
 }
 
 .action-link--teal {
@@ -268,6 +286,11 @@
 
 .action-link--red {
   color: #dc3545;
+  border-color: #dc3545;
+}
+
+.action-link--red.action-link--button:hover:not(:disabled) {
+  background: rgba(220, 53, 69, 0.06);
 }
 
 .driver-table-empty {

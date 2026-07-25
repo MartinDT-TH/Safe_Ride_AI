@@ -221,6 +221,75 @@ public sealed class TripStatusServiceTests
     }
 
     [Fact]
+    public async Task PrepaidQrPayment_BeforeTrip_DoesNotCompleteTripOrCreditDriverWallet()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.DRIVER_ARRIVING);
+        fixture.DbContext.Payments.Add(new Payment
+        {
+            TripId = fixture.TripId,
+            PaymentMethod = PaymentMethod.QR,
+            TransactionReference = "123456789",
+            Amount = 62_000m,
+            Currency = "VND",
+            PaymentStatus = PaymentStatus.Success,
+            PaidAt = UtcNow,
+            CreatedAt = UtcNow
+        });
+        await fixture.DbContext.SaveChangesAsync();
+
+        var result = await fixture.CreatePaymentService().GetTripPaymentStatusAsync(
+            fixture.CustomerId,
+            fixture.TripId,
+            CancellationToken.None);
+
+        Assert.Equal(PaymentStatus.Success, result.PaymentStatus);
+        Assert.Equal(TripStatus.DRIVER_ARRIVING, result.TripStatus);
+        Assert.Equal(
+            TripStatus.DRIVER_ARRIVING,
+            (await fixture.DbContext.Trips.SingleAsync(x => x.Id == fixture.TripId)).TripStatus);
+        Assert.Empty(await fixture.DbContext.DriverWallets.ToListAsync());
+        Assert.Empty(await fixture.DbContext.WalletTransactions.ToListAsync());
+    }
+
+    [Fact]
+    public async Task PrepaidQrPayment_AfterTripEnds_CreditsWalletAndCompletesOnlyOnce()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.WAITING_PAYMENT);
+        fixture.DbContext.Payments.Add(new Payment
+        {
+            TripId = fixture.TripId,
+            PaymentMethod = PaymentMethod.QR,
+            TransactionReference = "123456789",
+            Amount = 62_000m,
+            Currency = "VND",
+            PaymentStatus = PaymentStatus.Success,
+            PaidAt = UtcNow,
+            CreatedAt = UtcNow
+        });
+        await fixture.DbContext.SaveChangesAsync();
+
+        var paymentService = fixture.CreatePaymentService();
+        var result = await paymentService.GetDriverTripPaymentStatusAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            CancellationToken.None);
+
+        Assert.Equal(TripStatus.COMPLETED, result.TripStatus);
+        var wallet = await fixture.DbContext.DriverWallets.SingleAsync();
+        var payout = await fixture.DbContext.WalletTransactions.SingleAsync();
+        Assert.Equal(WalletTransactionType.Income, payout.TransactionType);
+        Assert.Equal(wallet.Id, payout.WalletId);
+        Assert.True(wallet.CurrentBalance > 0m);
+
+        await paymentService.GetDriverTripPaymentStatusAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            CancellationToken.None);
+
+        Assert.Single(await fixture.DbContext.WalletTransactions.ToListAsync());
+    }
+
+    [Fact]
     public async Task ConfirmCashPayment_CompletesTripPublishesPaymentSucceededAndIncrementsPromotionUsage()
     {
         using var fixture = await TripStatusFixture.CreateAsync(TripStatus.WAITING_PAYMENT);

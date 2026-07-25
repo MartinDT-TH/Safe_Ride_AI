@@ -157,6 +157,20 @@ public sealed class BookingTests
     public async Task CancelBooking_SearchingBooking_CancelsJobsOnceRemovesPromotionAndCancelsOffers()
     {
         var fixture = new CancelBookingFixture();
+        var sentOffer = new BookingDriverOffer
+        {
+            Id = 70,
+            BookingId = 55,
+            DriverId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
+            OfferStatus = DriverOfferStatus.Sent
+        };
+        var acceptedOffer = new BookingDriverOffer
+        {
+            Id = 71,
+            BookingId = 55,
+            DriverId = Guid.Parse("33333333-3333-3333-3333-333333333333"),
+            OfferStatus = DriverOfferStatus.DriverAccepted
+        };
         var promotion = new Promotion
         {
             Id = 9,
@@ -186,6 +200,7 @@ public sealed class BookingTests
             }
         };
         fixture.Repository.CustomerBooking = booking;
+        fixture.Repository.ActiveOffers = [sentOffer, acceptedOffer];
 
         var result = await fixture.Handler.Handle(
             new CancelBookingCommand(
@@ -204,6 +219,18 @@ public sealed class BookingTests
         Assert.Equal(1, fixture.Repository.RemoveBookingPromotionsCallCount);
         Assert.Equal(1, fixture.Repository.CancelActiveDriverOffersCallCount);
         Assert.Equal(booking.BookingId, fixture.Repository.CancelledOffersBookingId);
+        Assert.Collection(
+            fixture.Realtime.CancelledOffers,
+            notification =>
+            {
+                Assert.Equal(sentOffer.Id, notification.OfferId);
+                Assert.Equal(sentOffer.DriverId, notification.DriverId);
+            },
+            notification =>
+            {
+                Assert.Equal(acceptedOffer.Id, notification.OfferId);
+                Assert.Equal(acceptedOffer.DriverId, notification.DriverId);
+            });
         Assert.Empty(booking.BookingPromotions);
         Assert.Equal(4, promotion.CurrentUsageCount);
     }
@@ -291,11 +318,12 @@ public sealed class BookingTests
             Repository = new BookingRepositoryFake();
             UnitOfWork = new UnitOfWorkFake();
             Scheduler = new BookingLifecycleJobSchedulerFake();
+            Realtime = new RealtimeNotificationServiceFake();
             Handler = new CancelBookingCommandHandler(
                 Repository,
                 UnitOfWork,
                 new DateTimeProviderFake(UtcNow),
-                new RealtimeNotificationServiceFake(),
+                Realtime,
                 Repository,
                 Scheduler);
         }
@@ -303,6 +331,7 @@ public sealed class BookingTests
         public BookingRepositoryFake Repository { get; }
         public UnitOfWorkFake UnitOfWork { get; }
         public BookingLifecycleJobSchedulerFake Scheduler { get; }
+        public RealtimeNotificationServiceFake Realtime { get; }
         public CancelBookingCommandHandler Handler { get; }
     }
 
@@ -317,6 +346,7 @@ public sealed class BookingTests
         public int CancelActiveDriverOffersCallCount { get; private set; }
         public int RemoveBookingPromotionsCallCount { get; private set; }
         public long? CancelledOffersBookingId { get; private set; }
+        public IReadOnlyList<BookingDriverOffer> ActiveOffers { get; set; } = [];
 
         public Task AddAsync(Booking booking, CancellationToken cancellationToken)
         {
@@ -436,14 +466,20 @@ public sealed class BookingTests
             return Task.FromResult<IReadOnlyList<Booking>>([]);
         }
 
-        public Task CancelActiveDriverOffersAsync(
+        public Task<IReadOnlyList<BookingDriverOffer>> CancelActiveDriverOffersAsync(
             long bookingId,
             DateTime cancelledAt,
             CancellationToken cancellationToken)
         {
             CancelActiveDriverOffersCallCount++;
             CancelledOffersBookingId = bookingId;
-            return Task.CompletedTask;
+            foreach (var offer in ActiveOffers)
+            {
+                offer.OfferStatus = DriverOfferStatus.Cancelled;
+                offer.CancelledAt = cancelledAt;
+            }
+
+            return Task.FromResult(ActiveOffers);
         }
 
         public Task<bool> CancelAssignedTripAsync(
@@ -584,6 +620,8 @@ public sealed class BookingTests
     private sealed class RealtimeNotificationServiceFake
         : IRealtimeNotificationService
     {
+        public List<DriverOfferCancelledEvent> CancelledOffers { get; } = [];
+
         public Task PublishBookingStatusChangedAsync(
             BookingStatusChangedEvent notification,
             CancellationToken cancellationToken = default) =>
@@ -651,8 +689,11 @@ public sealed class BookingTests
 
         public Task PublishDriverOfferCancelledAsync(
             DriverOfferCancelledEvent notification,
-            CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
+            CancellationToken cancellationToken = default)
+        {
+            CancelledOffers.Add(notification);
+            return Task.CompletedTask;
+        }
 
         public Task PublishDriverMatchedAsync(
             DriverMatchedEvent notification,

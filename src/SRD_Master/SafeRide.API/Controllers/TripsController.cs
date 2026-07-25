@@ -2,12 +2,14 @@ using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using SafeRide.API.Authorization;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Features.Auth;
 using SafeRide.Application.Features.Ratings.Commands.SubmitTripRating;
 using SafeRide.Application.Features.Trips.DTOs;
 using SafeRide.Contracts.Requests.Trips;
+using SafeRide.Realtime;
 
 namespace SafeRide.API.Controllers;
 
@@ -18,15 +20,18 @@ public sealed class TripsController : ControllerBase
 {
     private readonly ITripStatusService _tripStatusService;
     private readonly ITripChatService _tripChatService;
+    private readonly IHubContext<TripChatHub> _tripChatHubContext;
     private readonly ISender _sender;
 
     public TripsController(
         ITripStatusService tripStatusService,
         ITripChatService tripChatService,
+        IHubContext<TripChatHub> tripChatHubContext,
         ISender sender)
     {
         _tripStatusService = tripStatusService;
         _tripChatService = tripChatService;
+        _tripChatHubContext = tripChatHubContext;
         _sender = sender;
     }
 
@@ -283,6 +288,47 @@ public sealed class TripsController : ControllerBase
             cancellationToken);
 
         return Ok(messages);
+    }
+
+    [HttpPost("{tripId:long}/chat/images")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType<TripChatMessageDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<TripChatMessageDto>> SendChatImage(
+        long tripId,
+        [FromForm(Name = "image")] IFormFile? image,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Unauthorized",
+                Detail = "Không xác định được tài khoản."
+            });
+        }
+
+        await using var imageStream = image?.OpenReadStream() ?? Stream.Null;
+        var message = await _tripChatService.SendImageMessageAsync(
+            userId,
+            tripId,
+            imageStream,
+            image?.ContentType ?? string.Empty,
+            image?.Length ?? 0,
+            cancellationToken);
+
+        await _tripChatHubContext.Clients
+            .Group(RealtimeGroups.TripChat(tripId))
+            .SendAsync(
+                "TripMessageReceived",
+                message,
+                cancellationToken);
+
+        return Ok(message);
     }
 
     private bool TryGetDriverId(out Guid driverId)

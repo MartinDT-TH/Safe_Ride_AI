@@ -346,6 +346,18 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
                 utcNow),
             cancellationToken);
 
+        // Driver clients treat cancellation/expiry events as the signal to close
+        // the customer-confirmation waiting state.
+        await _realtimeNotificationService.PublishDriverOfferCancelledAsync(
+            new DriverOfferCancelledEvent(
+                booking.BookingId,
+                booking.CustomerId,
+                offer.DriverId,
+                offer.Id,
+                utcNow,
+                "Khách hàng đã từ chối yêu cầu nhận chuyến."),
+            cancellationToken);
+
         var nextOffer = await _bookingMatchingService.StartMatchingAsync(
             booking.BookingId,
             cancellationToken);

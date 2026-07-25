@@ -5,5 +5,7 @@ public sealed record TripChatMessageDto(
     long TripId,
     Guid SenderUserId,
     string SenderName,
+    string MessageType,
     string Message,
+    string? ImageUrl,
     DateTime SentAt);

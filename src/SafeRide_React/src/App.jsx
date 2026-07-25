@@ -7,6 +7,9 @@ import './App.css';
 const RevenuePage = lazy(() => import('./pages/RevenuePage'));
 const TransactionsPage = lazy(() => import('./pages/TransactionsPage'));
 const AdminPromotionsPage = lazy(() => import('./pages/admin/promotions/AdminPromotionsPage'));
+const CustomersPage = lazy(() => import('./pages/CustomersPage'));
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
+const BookingsPage = lazy(() => import('./pages/BookingsPage'));
 /**
  * Root component — reads auth state from Redux to decide
  * which page to show. Will be replaced by React Router later.
@@ -15,6 +18,12 @@ function App() {
     const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
     const activeSidebarId = useAppSelector((state) => state.ui.activeSidebarId);
     if (!isAuthenticated) return <LoginPage />;
+    if (activeSidebarId === 'bookings') {
+        return <Suspense fallback={<div className="app-loading">Đang tải trang yêu cầu đặt xe...</div>}><BookingsPage /></Suspense>;
+    }
+    if (activeSidebarId === 'customers') {
+        return <Suspense fallback={<div className="app-loading">Đang tải trang khách hàng...</div>}><CustomersPage /></Suspense>;
+    }
     if (activeSidebarId === 'revenue') {
         return <Suspense fallback={<div className="app-loading">Đang tải trang doanh thu...</div>}><RevenuePage /></Suspense>;
     }
@@ -23,6 +32,8 @@ function App() {
     }
     if (activeSidebarId === 'promotions') {
         return <Suspense fallback={<div className="app-loading">Đang tải trang khuyến mãi...</div>}><AdminPromotionsPage /></Suspense>;
+    if (activeSidebarId === 'notifications') {
+        return <Suspense fallback={<div className="app-loading">Đang tải trang thông báo...</div>}><NotificationsPage /></Suspense>;
     }
     return <DriversPage />;
 }

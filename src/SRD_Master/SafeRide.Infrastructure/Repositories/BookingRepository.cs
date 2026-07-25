@@ -390,6 +390,7 @@ public sealed class BookingRepository : IBookingRepository
 
         return new BookingHistoryItemDto(
             booking.BookingId,
+            booking.Trip?.Id,
             booking.PickupAddress,
             booking.DestinationAddress ?? string.Empty,
             ResolveOccurredAt(booking),
@@ -411,6 +412,7 @@ public sealed class BookingRepository : IBookingRepository
 
         return new BookingHistoryItemDto(
             booking.BookingId,
+            booking.Trip?.Id,
             booking.PickupAddress,
             booking.DestinationAddress ?? string.Empty,
             ResolveOccurredAt(booking),
@@ -683,7 +685,7 @@ public sealed class BookingRepository : IBookingRepository
             .ToListAsync(cancellationToken);
     }
 
-    public async Task CancelActiveDriverOffersAsync(
+    public async Task<IReadOnlyList<BookingDriverOffer>> CancelActiveDriverOffersAsync(
         long bookingId,
         DateTime cancelledAt,
         CancellationToken cancellationToken)
@@ -707,6 +709,8 @@ public sealed class BookingRepository : IBookingRepository
         }
 
         await _redisService.RemoveAsync(RedisKeys.MatchingBooking(bookingId));
+
+        return offers;
     }
 
     public async Task<bool> CancelAssignedTripAsync(

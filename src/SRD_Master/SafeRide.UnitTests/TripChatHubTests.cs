@@ -19,7 +19,9 @@ public sealed class TripChatHubTests
             tripId,
             userId,
             "Khách hàng",
+            "Text",
             "Anh tới chưa?",
+            null,
             new DateTime(2026, 7, 19, 10, 0, 0, DateTimeKind.Utc));
         var service = new TripChatServiceFake(payload);
         var clients = new RecordingHubCallerClients();
@@ -67,6 +69,15 @@ public sealed class TripChatHubTests
             LastMessage = message;
             return Task.FromResult(payload);
         }
+
+        public Task<TripChatMessageDto> SendImageMessageAsync(
+            Guid senderUserId,
+            long tripId,
+            Stream image,
+            string contentType,
+            long fileSizeBytes,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(payload);
 
         public Task<IReadOnlyList<TripChatMessageDto>> GetMessagesAsync(
             Guid userId,

@@ -4,6 +4,7 @@ namespace SafeRide.Contracts.Responses.Bookings;
 
 public sealed record BookingHistoryResponse(
     long Id,
+    long? TripId,
     string PickupAddress,
     string DestinationAddress,
     DateTime OccurredAt,
