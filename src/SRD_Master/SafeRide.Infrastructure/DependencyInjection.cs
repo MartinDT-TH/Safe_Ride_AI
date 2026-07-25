@@ -80,13 +80,25 @@ public static class DependencyInjection
         services
             .AddOptions<PayOsOptions>()
             .Bind(configuration.GetSection(PayOsOptions.SectionName));
+        var googleMapsIsPrimaryProvider = string.Equals(
+            configuration["MapServices:PrimaryProvider"],
+            "GoogleMaps",
+            StringComparison.OrdinalIgnoreCase);
         services
             .AddOptions<GoogleMapsOptions>()
             .Bind(configuration.GetSection(GoogleMapsOptions.SectionName))
-            .ValidateDataAnnotations()
-            .Validate(options => options.TimeoutSeconds > 0, "MapServices:GoogleMaps:TimeoutSeconds must be greater than zero.");
-            // NOTE: ValidateOnStart removed — Google Maps is a fallback provider.
-            // URL validation is skipped when VietMap is the primary provider.
+            .Validate(
+                options => !googleMapsIsPrimaryProvider || !string.IsNullOrWhiteSpace(options.ApiKey),
+                "MapServices:GoogleMaps:ApiKey must be configured when GoogleMaps is the primary provider.")
+            .Validate(
+                options => !googleMapsIsPrimaryProvider
+                    || (Uri.TryCreate(options.RoutesApiUrl, UriKind.Absolute, out var uri)
+                        && uri.Scheme == Uri.UriSchemeHttps),
+                "MapServices:GoogleMaps:RoutesApiUrl must be an absolute HTTPS URI when GoogleMaps is the primary provider.")
+            .Validate(
+                options => !googleMapsIsPrimaryProvider || options.TimeoutSeconds > 0,
+                "MapServices:GoogleMaps:TimeoutSeconds must be greater than zero when GoogleMaps is the primary provider.")
+            .ValidateOnStart();
         services
             .AddOptions<OpenRouteServiceOptions>()
             .Bind(configuration.GetSection(OpenRouteServiceOptions.SectionName))

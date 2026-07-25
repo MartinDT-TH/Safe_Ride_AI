@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
+using SafeRide.Application.Common.Exceptions;
 using SafeRide.Application.Features.AdminUserAccounts;
 using SafeRide.Application.Features.Auth;
 using SafeRide.Application.Features.Bookings;
@@ -79,6 +80,20 @@ public sealed class ApiExceptionMiddleware
                 context,
                 exception.StatusCode,
                 exception.Code,
+                exception.Message);
+        }
+        catch (MapServiceException exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Map provider error for {Method} {Path}.",
+                context.Request.Method,
+                context.Request.Path);
+
+            await WriteProblemAsync(
+                context,
+                StatusCodes.Status502BadGateway,
+                "map.provider_error",
                 exception.Message);
         }
         catch (Exception exception)

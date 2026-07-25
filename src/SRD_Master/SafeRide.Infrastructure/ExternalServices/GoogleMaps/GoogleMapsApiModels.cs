@@ -5,7 +5,7 @@ namespace SafeRide.Infrastructure.ExternalServices.GoogleMaps;
 internal sealed class GoogleRoutesResponse
 {
     [JsonPropertyName("routes")]
-    public List<GoogleRoute> Routes { get; init; } = [];
+    public List<GoogleRoute>? Routes { get; init; }
 }
 
 internal sealed class GoogleRoute
