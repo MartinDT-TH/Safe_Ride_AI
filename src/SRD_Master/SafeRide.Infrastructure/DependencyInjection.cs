@@ -210,6 +210,7 @@ public static class DependencyInjection
         services.AddScoped<ITripContinuationAccessService, TripContinuationAccessService>();
         services.AddScoped<IBookingRepository, BookingRepository>();
         services.AddScoped<IPromotionRepository, PromotionRepository>();
+        services.AddScoped<IAdminPromotionRepository, PromotionRepository>();
         services.AddScoped<IRatingRepository, RatingRepository>();
         services.AddScoped<IReportRepository, ReportRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
