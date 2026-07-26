@@ -27,10 +27,14 @@ class BookingOptionsPage extends StatefulWidget {
     super.key,
     this.initialMode = BookingServiceMode.perTrip,
     this.showSchedule = false,
+    this.initialPickup,
+    this.initialDestination,
   });
 
   final BookingServiceMode initialMode;
   final bool showSchedule;
+  final BookingLocation? initialPickup;
+  final BookingLocation? initialDestination;
 
   @override
   State<BookingOptionsPage> createState() => _BookingOptionsPageState();
@@ -50,6 +54,8 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
   @override
   void initState() {
     super.initState();
+    _pickup = widget.initialPickup;
+    _destination = widget.initialDestination;
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadInitialData());
   }
 
@@ -89,8 +95,12 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
     }
 
     final currentLocation = await currentLocationFuture.catchError((_) => null);
-    if (mounted && currentLocation != null) {
+    if (!mounted) return;
+
+    if (_pickup == null && currentLocation != null) {
       setState(() => _pickup = currentLocation);
+    }
+    if (_pickup != null) {
       await _refreshEstimate();
     }
   }

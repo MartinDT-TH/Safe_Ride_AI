@@ -19,6 +19,7 @@ import '../../../../customer/booking/presentation/pages/booking_options_page.dar
 import '../../../../customer/booking/presentation/pages/promotion_page.dart';
 import '../../../../customer/booking/presentation/pages/trip_tracking_page.dart';
 import '../../../../customer/booking/presentation/providers/booking_provider.dart';
+import '../../../../customer/ai_chat/presentation/widgets/ai_chat_sheet.dart';
 import '../../../../shared/history/presentation/pages/history_page.dart';
 import '../../../../shared/notifications/presentation/pages/notifications_page.dart';
 import '../../../../shared/notifications/presentation/providers/notification_provider.dart';
@@ -238,6 +239,15 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                   )
                 : null),
         body: IndexedStack(index: selectedIndex, children: pages),
+        floatingActionButton: selectedIndex == 0
+            ? FloatingActionButton(
+                onPressed: () => AiChatSheet.show(context),
+                backgroundColor: const Color(0xFF006B70),
+                foregroundColor: Colors.white,
+                tooltip: 'Trợ lý SafeRide',
+                child: const Icon(Icons.smart_toy_outlined),
+              )
+            : null,
         bottomNavigationBar: CustomerBottomNavBar(
           currentIndex: selectedIndex,
           onTap: (index) {
