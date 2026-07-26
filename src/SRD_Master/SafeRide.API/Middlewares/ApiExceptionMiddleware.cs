@@ -4,6 +4,7 @@ using SafeRide.Application.Features.AdminUserAccounts;
 using SafeRide.Application.Features.Auth;
 using SafeRide.Application.Features.Bookings;
 using SafeRide.Application.Features.Notifications;
+using SafeRide.Application.Features.Pricing;
 using SafeRide.Application.Features.Promotions;
 using SafeRide.Application.Features.Ratings;
 using SafeRide.Application.Features.Reports;
@@ -50,6 +51,14 @@ public sealed class ApiExceptionMiddleware
                 exception.Message);
         }
         catch (PromotionException exception)
+        {
+            await WriteProblemAsync(
+                context,
+                exception.StatusCode,
+                exception.Code,
+                exception.Message);
+        }
+        catch (PricingRuleException exception)
         {
             await WriteProblemAsync(
                 context,

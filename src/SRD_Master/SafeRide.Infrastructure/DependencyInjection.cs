@@ -209,6 +209,7 @@ public static class DependencyInjection
         services.AddScoped<ITripSessionQueryService, TripSessionQueryService>();
         services.AddScoped<ITripContinuationAccessService, TripContinuationAccessService>();
         services.AddScoped<IBookingRepository, BookingRepository>();
+        services.AddScoped<IAdminPricingRuleRepository, AdminPricingRuleRepository>();
         services.AddScoped<IPromotionRepository, PromotionRepository>();
         services.AddScoped<IAdminPromotionRepository, PromotionRepository>();
         services.AddScoped<IRatingRepository, RatingRepository>();
