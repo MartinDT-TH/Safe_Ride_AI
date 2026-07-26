@@ -9,6 +9,7 @@ import {
     faLocationDot,
     faMoneyBillWave,
     faMotorcycle,
+    faRoute,
     faSearch,
     faUser,
     faUserPlus,
@@ -23,6 +24,7 @@ import {
     getAdminBookingsPath,
     mapAdminBookingsPage,
 } from '../features/bookings/bookingsApi';
+import AdminTripDetailsPage from './AdminTripDetailsPage';
 import './BookingsPage.css';
 
 const PAGE_SIZE = 10;
@@ -48,6 +50,7 @@ function BookingsPage() {
     const [appliedFilters, setAppliedFilters] = useState(initialFilters);
     const [currentPage, setCurrentPage] = useState(1);
     const [selectedBooking, setSelectedBooking] = useState(null);
+    const [selectedTripBookingId, setSelectedTripBookingId] = useState(null);
     const { query, setQuery } = useAdminSearch({
         placeholder: 'Tìm kiếm yêu cầu đặt xe, khách hàng, tài xế hoặc địa điểm...',
     });
@@ -104,6 +107,17 @@ function BookingsPage() {
         setDraftFilters(nextFilters);
         setAppliedFilters(normalizeDateRangeFilters(nextFilters));
     };
+
+    if (selectedTripBookingId) {
+        return (
+            <AdminLayout>
+                <AdminTripDetailsPage
+                    bookingId={selectedTripBookingId}
+                    onBack={() => setSelectedTripBookingId(null)}
+                />
+            </AdminLayout>
+        );
+    }
 
     return (
         <AdminLayout>
@@ -326,6 +340,13 @@ function BookingsPage() {
                                                             title="Điều phối tài xế chưa nằm trong phạm vi của tính năng xem yêu cầu đặt xe."
                                                             disabled
                                                         />
+                                                        {booking.driverId && (
+                                                            <ActionButton
+                                                                icon={faRoute}
+                                                                title="Xem thông tin chuyến đi"
+                                                                onClick={() => setSelectedTripBookingId(booking.rawId)}
+                                                            />
+                                                        )}
                                                         <ActionButton
                                                             icon={faEye}
                                                             title="Xem chi tiết yêu cầu đặt xe"
