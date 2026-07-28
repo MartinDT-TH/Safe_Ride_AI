@@ -7,6 +7,9 @@ class AiChatMessage {
     required this.content,
     required this.createdAt,
     this.bookingDraft,
+    this.localAudioPath,
+    this.isAudio = false,
+    this.audioUrl,
   });
 
   final String id;
@@ -14,6 +17,9 @@ class AiChatMessage {
   final String content;
   final DateTime createdAt;
   final AiBookingDraft? bookingDraft;
+  final String? localAudioPath;
+  final bool isAudio;
+  final String? audioUrl;
 
   bool get isUser => role == 'user';
 
@@ -28,6 +34,8 @@ class AiChatMessage {
                 json['bookingDraft'] as Map<String, dynamic>,
               )
             : null,
+        isAudio: json['isAudio'] as bool? ?? false,
+        audioUrl: json['audioUrl']?.toString(),
       );
 }
 
@@ -51,10 +59,17 @@ class AiConversation {
 }
 
 class AiBookingDraft {
-  const AiBookingDraft({required this.pickup, required this.destination});
+  const AiBookingDraft({
+    required this.pickup,
+    required this.destination,
+    this.vehicleQuery,
+    this.promotionCode,
+  });
 
   final BookingLocation pickup;
   final BookingLocation destination;
+  final String? vehicleQuery;
+  final String? promotionCode;
 
   factory AiBookingDraft.fromJson(Map<String, dynamic> json) {
     BookingLocation location(Map<String, dynamic> value) => BookingLocation(
@@ -66,6 +81,8 @@ class AiBookingDraft {
     return AiBookingDraft(
       pickup: location(json['pickup'] as Map<String, dynamic>),
       destination: location(json['destination'] as Map<String, dynamic>),
+      vehicleQuery: json['vehicleQuery']?.toString(),
+      promotionCode: json['promotionCode']?.toString(),
     );
   }
 }

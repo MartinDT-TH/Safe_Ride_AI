@@ -65,6 +65,7 @@ dependencies:
   wakelock_plus: ^1.5.2
   flutter_webrtc: ^0.12.12
   audioplayers: ^6.7.1
+  record: ^6.1.2
   fl_chart: ^1.2.0
 
 dev_dependencies:

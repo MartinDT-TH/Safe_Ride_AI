@@ -15,4 +15,5 @@ public sealed class AiChatOptions
     public int ContextMessageLimit { get; init; } = 20;
     public int ContextTtlHours { get; init; } = 24;
     public int MaxMessageLength { get; init; } = 1000;
+    public int MaxAudioBytes { get; init; } = 10 * 1024 * 1024;
 }

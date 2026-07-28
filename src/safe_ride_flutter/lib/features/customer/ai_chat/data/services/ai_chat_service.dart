@@ -49,6 +49,31 @@ class AiChatService {
     return AiChatReply.fromJson(response.data!);
   }
 
+  Future<AiChatReply> sendAudio({
+    required String filePath,
+    String? conversationId,
+    BookingLocation? currentLocation,
+  }) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      'ai-chat/audio',
+      data: FormData.fromMap({
+        'audio': await MultipartFile.fromFile(
+          filePath,
+          filename: 'voice-${DateTime.now().millisecondsSinceEpoch}.m4a',
+          contentType: DioMediaType.parse('audio/mp4'),
+        ),
+        if (conversationId != null) 'conversationId': conversationId,
+        if (currentLocation != null) ...{
+          'currentAddress': currentLocation.address,
+          'currentLatitude': currentLocation.latitude.toString(),
+          'currentLongitude': currentLocation.longitude.toString(),
+        },
+      }),
+      options: await _authorizationOptions(),
+    );
+    return AiChatReply.fromJson(response.data!);
+  }
+
   Future<List<AiChatMessage>> getMessages(String conversationId) async {
     final response = await _dio.get<List<dynamic>>(
       'ai-chat/conversations/$conversationId/messages',
