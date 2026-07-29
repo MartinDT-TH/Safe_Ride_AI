@@ -11,7 +11,9 @@ namespace SafeRide.API.Controllers;
 [ApiController]
 [Authorize(Roles = "Customer")]
 [Route("api/ai-chat")]
-public sealed class AiChatController(IAiChatService chatService) : ControllerBase
+public sealed class AiChatController(
+    IAiChatService chatService,
+    ILogger<AiChatController> logger) : ControllerBase
 {
     [HttpPost("messages")]
     [ProducesResponseType<AiChatReplyDto>(StatusCodes.Status200OK)]
@@ -37,8 +39,15 @@ public sealed class AiChatController(IAiChatService chatService) : ControllerBas
             return ProblemResponse(404, "ai_chat.not_found", exception.Message);
         }
         catch (HttpRequestException exception)
-            when (exception.StatusCode is HttpStatusCode.TooManyRequests or
-                HttpStatusCode.ServiceUnavailable)
+            when (exception.StatusCode == HttpStatusCode.TooManyRequests)
+        {
+            return ProblemResponse(
+                StatusCodes.Status503ServiceUnavailable,
+                "ai_chat.provider_rate_limited",
+                "Gemini đã đạt giới hạn lượt gọi. Vui lòng chờ một lát rồi thử lại.");
+        }
+        catch (HttpRequestException exception)
+            when (exception.StatusCode == HttpStatusCode.ServiceUnavailable)
         {
             return ProblemResponse(
                 StatusCodes.Status503ServiceUnavailable,
@@ -103,13 +112,28 @@ public sealed class AiChatController(IAiChatService chatService) : ControllerBas
             return ProblemResponse(400, "ai_chat.invalid_audio", exception.Message);
         }
         catch (HttpRequestException exception)
-            when (exception.StatusCode is HttpStatusCode.TooManyRequests or
-                HttpStatusCode.ServiceUnavailable)
+            when (exception.StatusCode == HttpStatusCode.TooManyRequests)
+        {
+            return ProblemResponse(
+                StatusCodes.Status503ServiceUnavailable,
+                "ai_chat.provider_rate_limited",
+                "Gemini đã đạt giới hạn lượt gọi. Vui lòng chờ một lát rồi gửi lại tin nhắn thoại.");
+        }
+        catch (HttpRequestException exception)
+            when (exception.StatusCode == HttpStatusCode.ServiceUnavailable)
         {
             return ProblemResponse(
                 StatusCodes.Status503ServiceUnavailable,
                 "ai_chat.provider_unavailable",
                 "Trợ lý AI đang tạm quá tải. File ghi âm chưa được gửi, vui lòng thử lại sau.");
+        }
+        catch (InvalidOperationException exception)
+        {
+            logger.LogError(exception, "AI chat audio infrastructure operation failed.");
+            return ProblemResponse(
+                StatusCodes.Status503ServiceUnavailable,
+                "ai_chat.audio_processing_unavailable",
+                "Dịch vụ xử lý ghi âm đang tạm gián đoạn. Vui lòng thử lại sau.");
         }
     }
 

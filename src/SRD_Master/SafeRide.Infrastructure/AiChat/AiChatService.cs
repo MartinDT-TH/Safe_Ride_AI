@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using SafeRide.Application.Common.Interfaces;
@@ -20,19 +21,22 @@ public sealed class AiChatService : IAiChatService
     private readonly IMongoCollection<AiConversationDocument> _conversations;
     private readonly IMongoCollection<AiMessageDocument> _messages;
     private readonly ICloudinaryImageService _cloudinary;
+    private readonly ILogger<AiChatService> _logger;
 
     public AiChatService(
         IOptions<AiChatOptions> options,
         HttpClient httpClient,
         IRedisService redis,
         IMapGeocodingService geocoding,
-        ICloudinaryImageService cloudinary)
+        ICloudinaryImageService cloudinary,
+        ILogger<AiChatService> logger)
     {
         _options = options.Value;
         _httpClient = httpClient;
         _redis = redis;
         _geocoding = geocoding;
         _cloudinary = cloudinary;
+        _logger = logger;
 
         var client = new MongoClient(
             string.IsNullOrWhiteSpace(_options.MongoConnectionString)
@@ -171,9 +175,22 @@ public sealed class AiChatService : IAiChatService
                 }
             };
         }
-        catch
+        catch (Exception originalException)
         {
-            await _cloudinary.DeleteAiChatAudioAsync(upload.PublicId, CancellationToken.None);
+            try
+            {
+                await _cloudinary.DeleteAiChatAudioAsync(
+                    upload.PublicId,
+                    CancellationToken.None);
+            }
+            catch (Exception cleanupException)
+            {
+                _logger.LogWarning(
+                    cleanupException,
+                    "Could not roll back Cloudinary AI chat audio {PublicId} after {ExceptionType}.",
+                    upload.PublicId,
+                    originalException.GetType().Name);
+            }
             throw;
         }
     }
@@ -209,14 +226,13 @@ public sealed class AiChatService : IAiChatService
             $"v1beta/models/{Uri.EscapeDataString(_options.GeminiModel)}:generateContent");
         request.Headers.Add("x-goog-api-key", _options.GeminiApiKey);
         request.Content = JsonContent.Create(body);
-        using var response = await SendGeminiAsync(request, cancellationToken);
+        using var response = await SendGeminiAsync(
+            request, "transcription", cancellationToken);
         response.EnsureSuccessStatusCode();
         using var json = await JsonDocument.ParseAsync(
             await response.Content.ReadAsStreamAsync(cancellationToken),
             cancellationToken: cancellationToken);
-        return json.RootElement.GetProperty("candidates")[0]
-            .GetProperty("content").GetProperty("parts")[0]
-            .GetProperty("text").GetString()?.Trim() ?? "";
+        return ExtractGeminiText(json.RootElement, "transcription");
     }
 
     public async Task<IReadOnlyList<AiConversationDto>> GetConversationsAsync(
@@ -391,16 +407,61 @@ public sealed class AiChatService : IAiChatService
             $"v1beta/models/{Uri.EscapeDataString(_options.GeminiModel)}:generateContent");
         request.Headers.Add("x-goog-api-key", _options.GeminiApiKey);
         request.Content = JsonContent.Create(body);
-        using var response = await SendGeminiAsync(request, cancellationToken);
+        using var response = await SendGeminiAsync(
+            request, "booking_extraction", cancellationToken);
         response.EnsureSuccessStatusCode();
         using var json = await JsonDocument.ParseAsync(
             await response.Content.ReadAsStreamAsync(cancellationToken),
             cancellationToken: cancellationToken);
-        var text = json.RootElement.GetProperty("candidates")[0]
-            .GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString();
+        var text = ExtractGeminiText(json.RootElement, "booking_extraction");
         return JsonSerializer.Deserialize<GeneratedReply>(
-            text ?? "", new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+            text, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
             ?? throw new InvalidOperationException("AI trả về dữ liệu không hợp lệ.");
+    }
+
+    private string ExtractGeminiText(JsonElement root, string stage)
+    {
+        if (root.TryGetProperty("candidates", out var candidates) &&
+            candidates.ValueKind == JsonValueKind.Array &&
+            candidates.GetArrayLength() > 0)
+        {
+            var candidate = candidates[0];
+            if (candidate.TryGetProperty("content", out var content) &&
+                content.TryGetProperty("parts", out var parts) &&
+                parts.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var part in parts.EnumerateArray())
+                {
+                    if (part.TryGetProperty("text", out var textElement) &&
+                        textElement.ValueKind == JsonValueKind.String &&
+                        !string.IsNullOrWhiteSpace(textElement.GetString()))
+                        return textElement.GetString()!.Trim();
+                }
+            }
+
+            var finishReason = candidate.TryGetProperty("finishReason", out var reason)
+                ? reason.GetString()
+                : null;
+            _logger.LogWarning(
+                "Gemini returned no text during {Stage}. Finish reason: {FinishReason}.",
+                stage,
+                finishReason ?? "unknown");
+        }
+        else
+        {
+            var promptFeedback = root.TryGetProperty("promptFeedback", out var feedback)
+                ? feedback.GetRawText()
+                : "not provided";
+            _logger.LogWarning(
+                "Gemini returned no candidates during {Stage}. Prompt feedback: {PromptFeedback}.",
+                stage,
+                promptFeedback);
+        }
+
+        throw new InvalidOperationException(
+            stage == "transcription"
+                ? "Gemini không thể phiên âm file ghi âm này."
+                : "Gemini không trả về nội dung có thể xử lý.");
     }
 
     private async Task<BookingDraftResolution> ResolveBookingDraftAsync(
@@ -644,16 +705,37 @@ public sealed class AiChatService : IAiChatService
 
     private async Task<HttpResponseMessage> SendGeminiAsync(
         HttpRequestMessage request,
+        string stage,
         CancellationToken cancellationToken)
     {
-        var response = await _httpClient.SendAsync(request, cancellationToken);
-        if (response.StatusCode != System.Net.HttpStatusCode.ServiceUnavailable)
-            return response;
+        const int maxAttempts = 4;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            using var attemptRequest = await CloneRequestAsync(request, cancellationToken);
+            var response = await _httpClient.SendAsync(attemptRequest, cancellationToken);
+            var retryable = response.StatusCode is
+                System.Net.HttpStatusCode.ServiceUnavailable or
+                System.Net.HttpStatusCode.TooManyRequests;
+            if (!retryable || attempt == maxAttempts)
+                return response;
 
-        response.Dispose();
-        await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
-        using var retry = await CloneRequestAsync(request, cancellationToken);
-        return await _httpClient.SendAsync(retry, cancellationToken);
+            _logger.LogWarning(
+                "Gemini returned {StatusCode} during {Stage} with model {Model}; retry {Attempt}/{MaxAttempts}.",
+                (int)response.StatusCode,
+                stage,
+                _options.GeminiModel,
+                attempt,
+                maxAttempts);
+            var retryAfter = response.Headers.RetryAfter?.Delta;
+            response.Dispose();
+            var delay = retryAfter is { } providerDelay &&
+                        providerDelay <= TimeSpan.FromSeconds(10)
+                ? providerDelay
+                : TimeSpan.FromMilliseconds(500 * Math.Pow(2, attempt - 1));
+            await Task.Delay(delay, cancellationToken);
+        }
+
+        throw new InvalidOperationException("Gemini retry loop ended unexpectedly.");
     }
 
     private static async Task<HttpRequestMessage> CloneRequestAsync(
