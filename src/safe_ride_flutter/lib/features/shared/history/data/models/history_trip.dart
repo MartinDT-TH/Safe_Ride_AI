@@ -2,6 +2,7 @@ enum HistoryTripStatus { completed, cancelled, booked }
 
 class HistoryTrip {
   final int id;
+  final int? tripId;
   final String pickup;
   final String destination;
   final DateTime time;
@@ -13,9 +14,11 @@ class HistoryTrip {
   final String? driverAvatar;
   final String vehicleName;
   final bool isMotorbike;
+  final bool hasReported;
 
   HistoryTrip({
     required this.id,
+    this.tripId,
     required this.pickup,
     required this.destination,
     required this.time,
@@ -24,6 +27,7 @@ class HistoryTrip {
     required this.status,
     required this.vehicleName,
     this.isMotorbike = false,
+    this.hasReported = false,
     this.driverName,
     this.driverRating,
     this.driverAvatar,
@@ -48,6 +52,7 @@ class HistoryTrip {
 
     return HistoryTrip(
       id: (json['id'] as num?)?.toInt() ?? 0,
+      tripId: (json['tripId'] as num?)?.toInt(),
       pickup: json['pickupAddress'] ?? '',
       destination: json['destinationAddress'] ?? '',
       time: DateTime.tryParse(occurredAt ?? '') ?? DateTime.now(),
@@ -56,6 +61,7 @@ class HistoryTrip {
       status: status,
       vehicleName: json['vehicleName'] ?? 'SafeRide',
       isMotorbike: json['isMotorbike'] ?? false,
+      hasReported: json['hasReported'] == true,
       driverName: json['driverName'],
       driverRating: (json['driverRating'] as num?)?.toDouble(),
       driverAvatar: json['driverAvatarUrl'] ?? json['driverAvatar'],

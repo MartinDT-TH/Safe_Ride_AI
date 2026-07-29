@@ -193,6 +193,7 @@ public sealed class BookingsController : ControllerBase
         return Ok(result
             .Select(item => new BookingHistoryResponse(
                 item.Id,
+                item.TripId,
                 item.PickupAddress,
                 item.DestinationAddress,
                 item.OccurredAt,
@@ -204,7 +205,8 @@ public sealed class BookingsController : ControllerBase
                 item.IsMotorbike,
                 item.DriverName,
                 item.DriverRating,
-                item.DriverAvatarUrl))
+                item.DriverAvatarUrl,
+                item.HasReported))
             .ToList());
     }
 

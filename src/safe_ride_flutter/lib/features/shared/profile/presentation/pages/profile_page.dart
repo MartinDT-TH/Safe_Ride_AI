@@ -181,14 +181,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 title: ProfileStrings.editProfile,
                 onTap: () => _navigateToEditProfile(auth),
               ),
-              ProfileMenuTile(
-                icon: Icons.link_rounded,
-                title: ProfileStrings.linkedAccounts,
-                trailingWidget: _buildLinkedAccountStatus(auth),
-                onTap: auth.isLoading
-                    ? null
-                    : () => _handleLinkedAccounts(auth),
-              ),
+              _buildLinkedAccountItem(auth),
               ProfileMenuTile(
                 icon: Icons.badge_outlined,
                 title: 'Đăng ký tài xế',
@@ -348,6 +341,8 @@ class _ProfilePageState extends State<ProfilePage> {
                     color: Color(0xFF1F1F1F),
                     letterSpacing: -0.5,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -357,6 +352,9 @@ class _ProfilePageState extends State<ProfilePage> {
                     color: Color(0xFF78909C),
                     fontWeight: FontWeight.w500,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
                 ),
                 Text(
                   auth.phoneNumber ?? '+84 123 456 789',
@@ -392,7 +390,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildLinkedAccountStatus(AuthProvider auth) {
+  Widget _buildLinkedAccountItem(AuthProvider auth) {
     final status = auth.googleLinked
         ? auth.googleEmail ?? ProfileStrings.linked
         : ProfileStrings.notLinked;
@@ -400,24 +398,76 @@ class _ProfilePageState extends State<ProfilePage> {
         ? const Color(0xFF006B70)
         : const Color(0xFFF59E0B);
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 150),
-          child: Text(
-            status,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 13,
-              color: color,
-              fontWeight: FontWeight.w600,
+    return InkWell(
+      onTap: auth.isLoading ? null : () => _handleLinkedAccounts(auth),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.link_rounded,
+                  color: Colors.grey.shade600,
+                  size: 24,
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        ProfileStrings.linkedAccounts,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w400,
+                          color: Color(0xFF333333),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (auth.googleLinked)
+                        Text(
+                          status,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: color,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          softWrap: false,
+                        ),
+                    ],
+                  ),
+                ),
+                if (!auth.googleLinked)
+                  Text(
+                    status,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: color,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.chevron_right,
+                  color: Colors.grey.shade400,
+                  size: 20,
+                ),
+              ],
             ),
           ),
-        ),
-        const SizedBox(width: 4),
-        Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 20),
-      ],
+          Divider(
+            height: 1,
+            indent: 16,
+            endIndent: 16,
+            color: Colors.grey.shade100,
+          ),
+        ],
+      ),
     );
   }
 

@@ -5,6 +5,7 @@ namespace SafeRide.Infrastructure.Redis;
 public sealed class InMemoryRedisService : IRedisService
 {
     private readonly ConcurrentDictionary<string, CacheEntry> _entries = new();
+    private readonly ConcurrentDictionary<string, ListCacheEntry> _listEntries = new();
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, GeoEntry>> _geoEntries = new();
     private readonly ConcurrentDictionary<long, TripTrackingState> _tripTracking = new();
     private readonly object _sync = new();
@@ -68,7 +69,89 @@ public sealed class InMemoryRedisService : IRedisService
         lock (_sync)
         {
             _entries.TryRemove(key, out _);
+            _listEntries.TryRemove(key, out _);
             return Task.CompletedTask;
+        }
+    }
+
+    public Task ExpireAsync(
+        string key,
+        TimeSpan expiration,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_sync)
+        {
+            var expiresAt = GetExpiration(expiration);
+            if (_entries.TryGetValue(key, out var entry))
+            {
+                _entries[key] = entry with { ExpiresAt = expiresAt };
+            }
+
+            if (_listEntries.TryGetValue(key, out var listEntry))
+            {
+                _listEntries[key] = listEntry with { ExpiresAt = expiresAt };
+            }
+
+            return Task.CompletedTask;
+        }
+    }
+
+    public Task ListRightPushTrimAndExpireAsync(
+        string key,
+        string value,
+        int maxLength,
+        TimeSpan expiration,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_sync)
+        {
+            RemoveExpiredList(key);
+            var entry = _listEntries.GetOrAdd(
+                key,
+                _ => new ListCacheEntry([], GetExpiration(expiration)));
+            entry.Values.Add(value);
+            if (entry.Values.Count > maxLength)
+            {
+                entry.Values.RemoveRange(0, entry.Values.Count - maxLength);
+            }
+
+            _listEntries[key] = entry with { ExpiresAt = GetExpiration(expiration) };
+            return Task.CompletedTask;
+        }
+    }
+
+    public Task<IReadOnlyList<string>> ListRangeAsync(
+        string key,
+        long start = 0,
+        long stop = -1,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_sync)
+        {
+            RemoveExpiredList(key);
+            if (!_listEntries.TryGetValue(key, out var entry))
+            {
+                return Task.FromResult<IReadOnlyList<string>>([]);
+            }
+
+            var count = entry.Values.Count;
+            var startIndex = start < 0 ? count + (int)start : (int)start;
+            var stopIndex = stop < 0 ? count + (int)stop : (int)stop;
+            startIndex = Math.Clamp(startIndex, 0, count);
+            stopIndex = Math.Clamp(stopIndex, -1, count - 1);
+            if (startIndex > stopIndex)
+            {
+                return Task.FromResult<IReadOnlyList<string>>([]);
+            }
+
+            return Task.FromResult<IReadOnlyList<string>>(
+                entry.Values
+                    .Skip(startIndex)
+                    .Take(stopIndex - startIndex + 1)
+                    .ToList());
         }
     }
 
@@ -423,12 +506,23 @@ public sealed class InMemoryRedisService : IRedisService
         }
     }
 
+    private void RemoveExpiredList(string key)
+    {
+        if (_listEntries.TryGetValue(key, out var entry)
+            && entry.ExpiresAt <= DateTimeOffset.UtcNow)
+        {
+            _listEntries.TryRemove(key, out _);
+        }
+    }
+
     private static DateTimeOffset GetExpiration(TimeSpan expiration)
     {
         return DateTimeOffset.UtcNow.Add(expiration);
     }
 
     private sealed record CacheEntry(string Value, DateTimeOffset ExpiresAt);
+
+    private sealed record ListCacheEntry(List<string> Values, DateTimeOffset ExpiresAt);
 
     private sealed record GeoEntry(double Longitude, double Latitude);
 

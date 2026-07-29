@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
 import '../../../../../core/maps/models/map_models.dart';
 import '../../../../../core/maps/widgets/live_trip_map_widget.dart';
@@ -17,8 +18,13 @@ import '../../data/models/booking_location.dart';
 import '../../data/models/booking_response.dart';
 import '../providers/booking_provider.dart';
 import '../widgets/booking_cancel_flow.dart';
+import 'customer_trip_prepayment_page.dart';
 
+import '../../../../shared/call/presentation/pages/in_app_voice_call_page.dart';
+import '../../../../shared/call/services/call_tone_player.dart';
 import '../../../../shared/feedback/presentation/pages/trip_summary_page.dart';
+import '../../../../shared/feedback/presentation/pages/driver_reviews_page.dart';
+import '../../../../shared/chat/presentation/pages/trip_chat_page.dart';
 
 enum TripTrackingState { arriving, inProgress }
 
@@ -65,6 +71,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   bool _summaryOpened = false;
   bool _isCompletingTrip = false;
   bool _arrivalRouteRefreshInProgress = false;
+  bool _incomingCallDialogOpen = false;
+  late bool _isPrepaid;
   late String? _currentTripStatus;
   static const _tealColor = Color(0xFF006B70);
   static const double _arrivalRerouteThresholdMeters = 35;
@@ -92,6 +100,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         (widget.state == TripTrackingState.inProgress
             ? 'IN_PROGRESS'
             : 'DRIVER_ARRIVING');
+    _isPrepaid = widget.booking.payment?.isSuccess == true;
     _initializeRoutes();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -148,6 +157,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       _socketService.removeTripStatusChangedHandler(
         _tripStatusHandlerKey(tripId),
       );
+      _socketService.removeInAppCallOfferHandler(_callOfferHandlerKey(tripId));
       await _socketService.leaveTrip(tripId);
     } catch (e) {
       debugPrint('Tracking: Error during socket cleanup: $e');
@@ -233,6 +243,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
 
       setState(() {
         _currentTripStatus = booking.tripStatus ?? _currentTripStatus;
+        _isPrepaid = booking.payment?.isSuccess == true;
         _initializeRoutes(booking);
       });
       _openSummaryIfPostTrip(booking.tripStatus);
@@ -302,6 +313,13 @@ class _TripTrackingPageState extends State<TripTrackingPage>
           Navigator.of(context).popUntil((route) => route.isFirst);
         }
       }, key: _tripStatusHandlerKey(tripId));
+
+      _socketService.onInAppCallOffer((signal) {
+        if (!mounted || signal.tripId != tripId || signal.sdp == null) {
+          return;
+        }
+        _showIncomingCallDialog(signal);
+      }, key: _callOfferHandlerKey(tripId));
 
       await _socketService.joinTrip(tripId);
       debugPrint('Tracking: Joined Trip Group $tripId');
@@ -955,13 +973,65 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        offer?.driverName ?? 'Tài xế SafeRide',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFF1A1A1A),
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              offer?.driverName ?? 'Tài xế SafeRide',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF1A1A1A),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (offer != null) ...[
+                            const SizedBox(width: 4),
+                            InkWell(
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => DriverReviewsPage(
+                                      driverId: offer.driverId,
+                                      driverName: offer.driverName,
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.star_outline_rounded,
+                                      size: 16,
+                                      color: AppColors.primary,
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Xem đánh giá',
+                                      style: TextStyle(
+                                        color: AppColors.primary,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -1011,21 +1081,66 @@ class _TripTrackingPageState extends State<TripTrackingPage>
             ),
             const SizedBox(height: 24),
             if (isArriving) ...[
+              SizedBox(
+                width: double.infinity,
+                child: _isPrepaid
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE5F5F0),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.check_circle_rounded,
+                              color: Color(0xFF0A8F62),
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'Đã thanh toán trước',
+                              style: TextStyle(
+                                color: Color(0xFF08734F),
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ElevatedButton.icon(
+                        onPressed: _openPrepayment,
+                        icon: const Icon(Icons.qr_code_2_rounded),
+                        label: const Text('Thanh toán trước bằng PayOS'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _tealColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 15),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+              ),
+              const SizedBox(height: 14),
               Row(
                 children: [
                   Expanded(
                     child: _ActionButton(
                       icon: Icons.chat_bubble_rounded,
                       label: 'Nhắn tin',
-                      onPressed: () =>
-                          _showMessage('Chức năng nhắn tin đang phát triển'),
+                      onPressed: _openChat,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     flex: 2,
                     child: ElevatedButton.icon(
-                      onPressed: () => _showMessage('Đang kết nối cuộc gọi...'),
+                      onPressed: _startInAppCall,
                       icon: const Icon(Icons.phone_in_talk_rounded),
                       label: const Text('Gọi điện'),
                       style: ElevatedButton.styleFrom(
@@ -1134,6 +1249,14 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                 children: [
                   Expanded(
                     child: _CircleActionButton(
+                      icon: Icons.chat_bubble_rounded,
+                      onPressed: _openChat,
+                      label: 'Nhắn tin',
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _CircleActionButton(
                       icon: Icons.share_rounded,
                       onPressed: _showShareModal,
                       label: 'Chia sẻ',
@@ -1143,7 +1266,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                   Expanded(
                     child: _CircleActionButton(
                       icon: Icons.phone_in_talk_rounded,
-                      onPressed: () {},
+                      onPressed: _startInAppCall,
                       label: 'Gọi điện',
                     ),
                   ),
@@ -1189,6 +1312,167 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     showDialog(
       context: context,
       builder: (context) => const Center(child: ShareTripModal()),
+    );
+  }
+
+  Future<void> _openPrepayment() async {
+    final tripId = widget.booking.tripId;
+    if (tripId == null) {
+      _showMessage('Chuyến đi chưa sẵn sàng để thanh toán.');
+      return;
+    }
+
+    final paid = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => CustomerTripPrepaymentPage(tripId: tripId),
+      ),
+    );
+    if (!mounted) return;
+    if (paid == true) {
+      setState(() => _isPrepaid = true);
+      unawaited(_refreshTrackingSnapshot());
+    }
+  }
+
+  void _openChat() {
+    final tripId = widget.booking.tripId;
+    final auth = context.read<AuthProvider>();
+    final accessToken = auth.token;
+    final currentUserId = auth.userId;
+    final driverName = widget.booking.driverOffer?.driverName;
+
+    if (tripId == null) {
+      _showMessage('Chuyến đi chưa sẵn sàng để trò chuyện.');
+      return;
+    }
+    if (accessToken == null || accessToken.isEmpty) {
+      _showMessage('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      return;
+    }
+    if (currentUserId == null) {
+      _showMessage('Không thể xác định tài khoản để mở trò chuyện.');
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TripChatPage(
+          tripId: tripId,
+          currentUserId: currentUserId,
+          receiverName: driverName,
+          canSendMessage:
+              _canSendChat(_currentTripStatus),
+        ),
+      ),
+    );
+  }
+
+  bool _canSendChat(String? status) {
+    if (status == null) return true;
+    final normalized = status.trim().toUpperCase();
+    return normalized != 'CANCELLED' &&
+        normalized != 'CANCELED' &&
+        normalized != 'EXPIRED';
+  }
+
+  Future<void> _startInAppCall() async {
+    final tripId = widget.booking.tripId;
+    final accessToken = context.read<AuthProvider>().token;
+    if (tripId == null || accessToken == null || accessToken.isEmpty) {
+      _showMessage('Chưa thể gọi khi chuyến đi chưa sẵn sàng.');
+      return;
+    }
+
+    await _socketService.connect(accessToken);
+    await _socketService.joinTrip(tripId);
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => InAppVoiceCallPage(
+          tripId: tripId,
+          bookingId: widget.booking.bookingId,
+          peerName: widget.booking.driverOffer?.driverName ?? 'Tài xế SafeRide',
+          accessToken: accessToken,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showIncomingCallDialog(InAppCallSignal signal) async {
+    if (_incomingCallDialogOpen) return;
+    _incomingCallDialogOpen = true;
+    final callTonePlayer = CallTonePlayer();
+    final endedHandlerKey = 'incomingTone:${signal.tripId}:${signal.callId}';
+    BuildContext? incomingDialogContext;
+    var endedByPeer = false;
+    _socketService.onInAppCallEnded((endedSignal) {
+      if (endedSignal.tripId != signal.tripId ||
+          endedSignal.callId != signal.callId) {
+        return;
+      }
+      endedByPeer = true;
+      final dialogContext = incomingDialogContext;
+      if (dialogContext != null && dialogContext.mounted) {
+        Navigator.of(dialogContext).pop();
+      }
+    }, key: endedHandlerKey);
+    await callTonePlayer.playIncoming();
+    if (!mounted || endedByPeer) {
+      _socketService.removeInAppCallEndedHandler(endedHandlerKey);
+      await callTonePlayer.dispose();
+      _incomingCallDialogOpen = false;
+      return;
+    }
+    final accessToken = context.read<AuthProvider>().token;
+    bool? accepted;
+    try {
+      accepted = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          incomingDialogContext = dialogContext;
+          return AlertDialog(
+            title: const Text('Cuộc gọi đến'),
+            content: Text(
+              '${widget.booking.driverOffer?.driverName ?? 'Tài xế'} đang gọi cho bạn.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Từ chối'),
+              ),
+              FilledButton.icon(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                icon: const Icon(Icons.call_rounded),
+                label: const Text('Nghe máy'),
+              ),
+            ],
+          );
+        },
+      );
+    } finally {
+      _socketService.removeInAppCallEndedHandler(endedHandlerKey);
+      await callTonePlayer.dispose();
+    }
+    _incomingCallDialogOpen = false;
+
+    if (!mounted || accessToken == null || accessToken.isEmpty) return;
+    if (endedByPeer) return;
+    if (accepted != true) {
+      await _socketService.rejectInAppCall(signal);
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => InAppVoiceCallPage(
+          tripId: signal.tripId,
+          bookingId: signal.bookingId ?? widget.booking.bookingId,
+          peerName: widget.booking.driverOffer?.driverName ?? 'Tài xế SafeRide',
+          accessToken: accessToken,
+          initialOffer: signal,
+        ),
+      ),
     );
   }
 
@@ -1310,6 +1594,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   static String _tripStatusHandlerKey(int tripId) => 'tripTracking:$tripId';
   static String _driverLocationHandlerKey(int tripId) =>
       'tripTrackingLocation:$tripId';
+  static String _callOfferHandlerKey(int tripId) => 'tripTrackingCall:$tripId';
   static bool _shouldOpenTripSummary(String? status) {
     if (status == null) return false;
     final s = status.toUpperCase();

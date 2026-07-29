@@ -1,0 +1,131 @@
+.transaction-page-header { margin-bottom: 28px; }
+
+.transaction-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+  margin-bottom: 28px;
+}
+
+.transaction-stats .stat-card {
+  min-width: 0;
+  min-height: 154px;
+  border-color: #becdd0;
+  box-shadow: 0 1px 2px rgba(14, 45, 50, .04);
+}
+.transaction-stats .stat-card-label { color: var(--sr-gray-600); font-size: 14px; text-transform: none; letter-spacing: 0; }
+.transaction-stats .stat-card-value { font-size: 25px; color: #171717; }
+.transaction-stats .stat-card-badge { padding: 0; background: transparent; font-weight: 700; }
+.transaction-stats .stat-card-icon--red { background: #fee2e2; color: #dc2626; }
+.transaction-stats .stat-card-icon--orange { background: #ffe5d1; color: #9a4a0b; }
+.transaction-stats .stat-card-badge--red { color: #ef3038; }
+.transaction-stat-item, .withdrawal-card-trigger { min-width: 0; }
+.withdrawal-card-trigger { padding: 0; border: 0; background: none; text-align: left; cursor: pointer; }
+.withdrawal-card-trigger .stat-card { width: 100%; height: 100%; transition: transform .16s ease, box-shadow .16s ease; }
+.withdrawal-card-trigger:hover .stat-card { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0, 104, 116, .12); }
+
+.withdrawal-header { margin-bottom: 46px; }
+.withdrawal-back { display: inline-flex; gap: 8px; align-items: center; margin-bottom: 12px; padding: 0; background: none; color: #087d89; font-weight: 700; }
+.withdrawal-filter-bar { display: flex; align-items: center; height: 82px; margin-bottom: 14px; padding: 20px; border: 1px solid #d2dddf; border-radius: 14px; background: white; box-shadow: 0 2px 4px rgba(22, 43, 46, .05); }
+.withdrawal-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 280px)); gap: 20px; margin-bottom: 18px; }
+.withdrawal-summary { display: flex; justify-content: space-between; min-height: 150px; padding: 20px; border: 1px solid #d2dddf; border-radius: 14px; background: #fff; box-shadow: 0 2px 4px rgba(22, 43, 46, .05); }
+.withdrawal-summary > div { display: flex; flex-direction: column; }
+.withdrawal-summary div > span { color: #475153; font-size: 14px; font-weight: 700; }
+.withdrawal-summary div > strong { margin-top: 35px; color: #161616; font-size: 28px; line-height: 1; }
+.withdrawal-summary div > small { margin-top: 10px; font-size: 12px; font-weight: 700; }
+.summary-note--teal { color: #007985; }.summary-note--brown { color: #975313; }
+.withdrawal-summary-icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 10px; font-size: 22px; }
+.withdrawal-summary-icon--teal { background: #e4f2f3; color: #008493; }.withdrawal-summary-icon--brown { background: #f5ede5; color: #965415; }
+.withdrawal-panel { overflow: hidden; border: 1px solid #d2dddf; border-radius: 14px; background: #fff; box-shadow: 0 2px 4px rgba(22, 43, 46, .05); }
+.withdrawal-table { width: 100%; min-width: 1050px; border-collapse: collapse; table-layout: fixed; }
+.withdrawal-table th { height: 78px; padding: 16px 28px; background: #faf9f9; border-bottom: 1px solid #bdcdd0; color: #475153; font-size: 14px; text-align: left; }
+.withdrawal-table td { height: 110px; padding: 16px 28px; border-bottom: 1px solid #e5ebec; vertical-align: middle; }
+.withdrawal-table th:nth-child(1) { width: 21%; }.withdrawal-table th:nth-child(2) { width: 19%; }.withdrawal-table th:nth-child(3) { width: 15%; }.withdrawal-table th:nth-child(4) { width: 17%; }.withdrawal-table th:nth-child(5) { width: 11%; }.withdrawal-table th:nth-child(6) { width: 17%; }
+.withdrawal-driver { display: flex; align-items: center; gap: 16px; }
+.withdrawal-driver > img, .withdrawal-driver > span { width: 48px; height: 48px; flex: 0 0 auto; border-radius: 50%; object-fit: cover; }
+.withdrawal-driver > span { display: grid; place-items: center; background: #dce8e9; color: #006f7a; font-weight: 800; }
+.withdrawal-driver div, .bank-info { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.withdrawal-driver strong { overflow: hidden; color: #1d1d1d; font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }.withdrawal-driver small, .bank-info small { color: #5a6263; font-size: 11px; font-weight: 700; }
+.bank-info strong { color: #007b87; font-size: 15px; }.bank-info span { color: #353a3b; }.bank-info small { text-transform: uppercase; }
+.withdrawal-amount { color: #008792; font-size: 18px; white-space: nowrap; }
+.withdrawal-status { display: inline-flex; justify-content: center; min-width: 52px; padding: 9px 8px; border-radius: 20px; font-size: 11px; font-weight: 800; text-align: center; }
+.withdrawal-status--pending { background: #ffdfc8; color: #8b4b11; }.withdrawal-status--approved { background: #b9f3f8; color: #397a80; }.withdrawal-status--rejected { background: #fee2e2; color: #c82828; }
+.withdrawal-actions { display: flex; gap: 10px; }
+.withdrawal-actions button { min-width: 84px; height: 56px; border-radius: 10px; border: 1px solid #007a86; background: #007a86; color: #fff; font-weight: 700; }
+.withdrawal-actions button:last-child { border-color: #d42027; background: #fff; color: #d42027; }.withdrawal-actions button:disabled { opacity: .55; cursor: wait; }
+.withdrawal-completed { color: #969d9e; font-size: 13px; font-weight: 700; }
+
+.transaction-panel {
+  overflow: hidden;
+  background: var(--sr-white);
+  border: 1px solid #bccbce;
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(14, 45, 50, .04);
+}
+
+.transaction-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  align-items: end;
+  gap: 16px;
+  padding: 22px 20px 18px;
+  background: #fbfafa;
+  border-bottom: 1px solid #bccbce;
+}
+
+.transaction-field { display: grid; gap: 5px; min-width: 0; }
+.transaction-field span { font-size: 12px; font-weight: 700; color: var(--sr-gray-600); }
+.transaction-field select,
+.transaction-field input {
+  width: 100%; height: 46px; padding: 0 14px; border: 1px solid #bdcdd0; border-radius: 10px;
+  background: white; color: var(--sr-gray-700); font: 14px var(--sr-font); outline: none;
+}
+.transaction-field select:focus,
+.transaction-field input:focus { border-color: var(--sr-teal); box-shadow: var(--sr-shadow-input-focus); }
+
+.advanced-filter-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 46px; padding: 0 18px;
+  border: 1px solid #bdcdd0; border-radius: 10px; background: white; color: var(--sr-gray-600); font-size: 14px; font-weight: 700; white-space: nowrap;
+}
+.advanced-filter-btn:hover { background: var(--sr-gray-50); border-color: var(--sr-teal); }
+
+.transaction-table-scroll { overflow-x: auto; }
+.transaction-table { width: 100%; min-width: 1050px; border-collapse: collapse; table-layout: fixed; }
+.transaction-table th { padding: 11px 16px; background: #f8f7f7; border-bottom: 1px solid #bdcdd0; color: var(--sr-gray-600); font-size: 12px; font-weight: 700; text-align: left; }
+.transaction-table td { height: 86px; padding: 14px 16px; border-bottom: 1px solid var(--sr-gray-200); color: var(--sr-gray-700); font-size: 14px; vertical-align: middle; }
+.transaction-table tbody tr:hover { background: #fbfdfd; }
+.transaction-table th:nth-child(1) { width: 126px; }.transaction-table th:nth-child(2) { width: 120px; }.transaction-table th:nth-child(3) { width: 205px; }.transaction-table th:nth-child(4) { width: 105px; }.transaction-table th:nth-child(5) { width: 135px; }.transaction-table th:nth-child(6) { width: 145px; }.transaction-table th:nth-child(7) { width: 130px; }.transaction-table th:nth-child(8) { width: 44px; }
+
+.transaction-code { color: #007d8a; line-height: 1.35; }
+.trip-link { display: inline-flex; align-items: center; gap: 7px; background: none; color: #078897; font-size: 14px; }
+.trip-link:hover { text-decoration: underline; }
+.trip-link svg { font-size: 11px; }
+.customer-cell { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.customer-avatar { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex: 0 0 auto; background: #e2e8e9; color: #27383a; font-size: 11px; font-weight: 800; }
+.customer-avatar--1 { background: #ffddca; }.customer-avatar--2 { background: #e4e9e9; }.customer-avatar--3 { background: #92e8f5; }
+.customer-cell > span:last-child, .date-cell { display: flex; min-width: 0; flex-direction: column; }
+.customer-cell strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #212121; }
+.customer-cell small, .date-cell small { color: var(--sr-gray-600); font-size: 12px; }
+.amount-cell { color: #232323; white-space: nowrap; }
+.payment-method { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.payment-method--online svg { color: #2868ed; }.payment-method--cash svg { color: #18a951; }
+.date-cell { gap: 2px; }.date-cell strong { font-weight: 500; }.date-cell small { font-size: 14px; }
+.status-badge::before { content: ''; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: currentColor; }
+.row-action { width: 32px; height: 36px; background: transparent; color: var(--sr-gray-600); border-radius: 7px; }
+.row-action:hover { background: var(--sr-gray-100); }
+.empty-transactions { height: 180px !important; text-align: center; color: var(--sr-gray-500) !important; }
+
+.transaction-footer { min-height: 78px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 20px; background: #fbfafa; color: var(--sr-gray-600); font-size: 14px; }
+
+@media (max-width: 1180px) {
+  .transaction-stats { grid-template-columns: repeat(2, 1fr); }
+  .transaction-filters { grid-template-columns: repeat(2, 1fr); }
+  .advanced-filter-btn { width: 100%; }
+  .withdrawal-stats { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 760px) {
+  .admin-content { padding: 20px 16px; }
+  .transaction-stats, .transaction-filters { grid-template-columns: 1fr; }
+  .withdrawal-stats { grid-template-columns: 1fr; }
+  .transaction-footer { align-items: flex-start; flex-direction: column; }
+}

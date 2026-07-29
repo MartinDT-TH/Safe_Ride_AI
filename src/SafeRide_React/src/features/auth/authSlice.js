@@ -1,6 +1,7 @@
 import { createSlice } from '@reduxjs/toolkit';
+import { getAccessToken } from '../../shared/api/apiClient';
 const initialState = {
-    isAuthenticated: false,
+    isAuthenticated: Boolean(getAccessToken()),
     user: null,
     rememberMe: false,
 };

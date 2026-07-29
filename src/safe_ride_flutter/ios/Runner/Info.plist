@@ -33,6 +33,10 @@
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>SafeRide dùng vị trí để xác định điểm đón của chuyến đi.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>SafeRide dùng micro để nhận nội dung bạn nói với trợ lý AI.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>SafeRide dùng nhận dạng giọng nói để chuyển lời nói thành tin nhắn cho trợ lý AI.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

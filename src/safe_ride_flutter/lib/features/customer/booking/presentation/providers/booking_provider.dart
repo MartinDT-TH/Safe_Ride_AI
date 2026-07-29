@@ -526,6 +526,24 @@ class BookingProvider extends ChangeNotifier {
     return ok == true;
   }
 
+  Future<bool> submitTripReport(
+    String accessToken, {
+    required int bookingId,
+    required String subject,
+    required String description,
+  }) async {
+    final ok = await _run(() async {
+      await _repository.submitTripReport(
+        accessToken,
+        bookingId: bookingId,
+        subject: subject,
+        description: description,
+      );
+      return true;
+    });
+    return ok == true;
+  }
+
   Future<BookingResponse?> rejectDriver(
     String accessToken, {
     required int bookingId,

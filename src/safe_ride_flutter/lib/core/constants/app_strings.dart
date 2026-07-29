@@ -96,6 +96,8 @@ abstract final class HistoryStrings {
   static const completed = 'Hoàn thành';
   static const cancelled = 'Đã hủy';
   static const rebook = 'Đặt lại';
+  static const report = 'Báo cáo';
+  static const reported = 'Đã báo cáo';
   static const cancelledByCustomer = 'Đã hủy bởi khách hàng';
   static const driverRating = '★';
   static const booked = 'Đã đặt';
@@ -219,10 +221,10 @@ abstract final class LocationStrings {
 abstract final class AppConfig {
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://192.168.100.116:5026/api/',
+    defaultValue: 'http://192.168.1.26:5026/api/',
   );
   // https://safe-ride-ai.onrender.com
-  // http://192.168.100.116:5026
+  // http://192.168.1.19:5026
   static const forceWebSockets = bool.fromEnvironment(
     'FORCE_WEBSOCKETS',
     defaultValue: true, // Dev only or config-based
@@ -250,6 +252,7 @@ abstract final class ApiEndpoints {
   static const bookings = '/bookings';
   static const bookingHistory = '/bookings/history';
   static const activeBooking = '/bookings/active';
+  static const notifications = '/notifications';
   static const availablePromotions = '/promotions/available';
   static const bookingCatalog = '/bookings/catalog';
   static const bookingEstimate = '/bookings/estimate';
@@ -257,6 +260,9 @@ abstract final class ApiEndpoints {
   static const driverOffline = '/drivers/offline';
   static const driverLocation = '/drivers/location';
   static const driverActiveTrip = '/drivers/trips/active';
+  static const driverWallet = '/drivers/wallet';
+  static const driverWithdrawals = '/drivers/wallet/withdrawals';
+  static const driverTripRequests = '/drivers/trip-requests';
   static const nearbyDrivers = '/drivers/nearby';
   static String acceptDriverOffer(int offerId) =>
       '/drivers/offers/$offerId/accept';
@@ -268,6 +274,8 @@ abstract final class ApiEndpoints {
   static String completeTrip(int tripId) => '/trips/$tripId/complete';
   static String createDriverTripQrPayment(int tripId) =>
       '/payments/driver/trips/$tripId/qr';
+  static String createCustomerTripQrPayment(int tripId) =>
+      '/payments/trips/$tripId/qr';
   static String driverTripPaymentStatus(int tripId) =>
       '/payments/driver/trips/$tripId/status';
   static String customerTripPaymentStatus(int tripId) =>
@@ -276,6 +284,12 @@ abstract final class ApiEndpoints {
       '/payments/driver/trips/$tripId/cash';
   static String submitTripRating(int tripId) =>
       '/feedbacks/trips/$tripId/rating';
+  static String getDriverRatings(String driverId) =>
+      '/feedbacks/drivers/$driverId/ratings';
+  static String submitTripReport(int bookingId) =>
+      '/feedbacks/bookings/$bookingId/reports';
+  static String notificationRead(int notificationId) =>
+      '/notifications/$notificationId/read';
   static const identityVerificationDocuments =
       '/identity-verification/documents';
   static String endTrip(int tripId) => '/trips/$tripId/end';
@@ -288,6 +302,7 @@ abstract final class ApiEndpoints {
 abstract final class ApiKeys {
   static const authorization = 'Authorization';
   static const bearer = 'Bearer';
+  static const userId = 'userId';
   static const phoneNumber = 'phoneNumber';
   static const otpCode = 'otpCode';
   static const deviceId = 'deviceId';
@@ -365,6 +380,8 @@ abstract final class ApiKeys {
   static const rating = 'rating';
   static const ratingScore = 'ratingScore';
   static const comment = 'comment';
+  static const subject = 'subject';
+  static const description = 'description';
   static const tripCount = 'tripCount';
   static const experienceYears = 'experienceYears';
   static const licenseClass = 'licenseClass';

@@ -93,6 +93,42 @@ public sealed class RedisService : IRedisService, IDisposable
 
     public Task RemoveAsync(string key) => Database.KeyDeleteAsync(key);
 
+    public Task ExpireAsync(
+        string key,
+        TimeSpan expiration,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Database.KeyExpireAsync(key, expiration);
+    }
+
+    public async Task ListRightPushTrimAndExpireAsync(
+        string key,
+        string value,
+        int maxLength,
+        TimeSpan expiration,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await Database.ListRightPushAsync(key, value);
+        await Database.ListTrimAsync(key, -maxLength, -1);
+        await Database.KeyExpireAsync(key, expiration);
+    }
+
+    public async Task<IReadOnlyList<string>> ListRangeAsync(
+        string key,
+        long start = 0,
+        long stop = -1,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var values = await Database.ListRangeAsync(key, start, stop);
+        return values
+            .Where(value => value.HasValue)
+            .Select(value => value.ToString())
+            .ToList();
+    }
+
     public async Task<long> IncrementAsync(string key, TimeSpan expiration)
     {
         const string script = """

@@ -16,6 +16,7 @@ using SafeRide.Application.Common.Models;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Domain.Entities;
 using SafeRide.Infrastructure.Authentication;
+using SafeRide.Infrastructure.AiChat;
 using SafeRide.Infrastructure.BackgroundJobs;
 using SafeRide.Infrastructure.ExternalServices;
 using SafeRide.Infrastructure.ExternalServices.GoogleMaps;
@@ -41,6 +42,18 @@ public static class DependencyInjection
         IHostEnvironment environment)
     {
         var backgroundJobsEnabled = configuration.GetValue<bool>("BackgroundJobs:Enabled");
+
+        services
+            .AddOptions<AiChatOptions>()
+            .Bind(configuration.GetSection(AiChatOptions.SectionName))
+            .PostConfigure(options =>
+                options.MongoConnectionString =
+                    configuration.GetConnectionString("MongoDB") ?? "");
+        services.AddHttpClient<IAiChatService, AiChatService>(client =>
+        {
+            client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
+        });
+        services.AddHostedService<AiChatMongoInitializer>();
 
         services.AddDbContext<ApplicationDbContext>(
             options => options.UseSqlServer(
@@ -209,16 +222,27 @@ public static class DependencyInjection
         services.AddScoped<ITripSessionQueryService, TripSessionQueryService>();
         services.AddScoped<ITripContinuationAccessService, TripContinuationAccessService>();
         services.AddScoped<IBookingRepository, BookingRepository>();
+        services.AddScoped<IAdminPricingRuleRepository, AdminPricingRuleRepository>();
         services.AddScoped<IPromotionRepository, PromotionRepository>();
+        services.AddScoped<IAdminPromotionRepository, PromotionRepository>();
         services.AddScoped<IRatingRepository, RatingRepository>();
+        services.AddScoped<IReportRepository, ReportRepository>();
+        services.AddScoped<IAdminCustomerAccountService, AdminCustomerAccountService>();
+        services.AddScoped<IAdminDriverAccountService, AdminDriverAccountService>();
+        services.AddScoped<IAdminBookingManagementService, AdminBookingManagementService>();
+        services.AddScoped<IAdminTripManagementService, AdminTripManagementService>();
+        services.AddScoped<IAdminNotificationManagementService, AdminNotificationManagementService>();
+        services.AddScoped<IUserNotificationService, UserNotificationService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddSingleton<IMatchingPolicyProvider, MatchingPolicyProvider>();
         services.AddScoped<IBookingMatchingService, BookingMatchingService>();
         services.AddScoped<IBookingAssignmentService, BookingAssignmentService>();
         services.AddScoped<IDriverQueryService, DriverQueryService>();
+        services.AddScoped<IDriverWalletService, DriverWalletService>();
         services.AddScoped<IDriverRealtimeService, DriverRealtimeService>();
         services.AddScoped<TripFareFinalizationService>();
         services.AddScoped<ITripStatusService, TripStatusService>();
+        services.AddScoped<ITripChatService, TripChatService>();
         services.AddHttpClient<ISpeedSmsService, InfobipSmsService>();
         services.AddHttpClient<IPaymentService, PayOsPaymentService>((provider, client) =>
         {
@@ -265,7 +289,13 @@ public static class DependencyInjection
             }
             else
             {
-                services.AddSingleton<IMapGeocodingService, NoOpGeocodingService>();
+                services.AddHttpClient<IMapGeocodingService, VietMapGeocodingService>(client =>
+                {
+                    var timeoutSeconds = configuration.GetValue<int>(
+                        "MapServices:VietMap:TimeoutSeconds",
+                        15);
+                    client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+                });
             }
             
         }

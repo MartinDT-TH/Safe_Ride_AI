@@ -10,8 +10,11 @@ import '../../../../customer/booking/presentation/providers/booking_provider.dar
 import '../../../../shared/onboarding/presentation/providers/role_provider.dart';
 import '../../data/models/history_trip.dart';
 import '../providers/history_provider.dart';
+import 'trip_details_page.dart';
 import '../widgets/interactive_button.dart';
 import '../widgets/trip_history_card.dart';
+import 'package:safe_ride/features/shared/feedback/presentation/pages/report_trip_page.dart';
+import 'package:safe_ride/features/shared/chat/presentation/pages/trip_chat_page.dart';
 
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
@@ -77,6 +80,51 @@ class _HistoryPageState extends State<HistoryPage> {
 
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => RebookTripPage(oldBooking: details)),
+    );
+  }
+
+  Future<void> _handleReport(HistoryTrip trip) async {
+    final result = await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => ReportTripPage(trip: trip)),
+    );
+
+    if (result == true) {
+      _loadHistory();
+    }
+  }
+
+  void _handleChat(HistoryTrip trip) {
+    final auth = context.read<AuthProvider>();
+    final currentUserId = auth.userId;
+
+    if (trip.tripId == null || currentUserId == null) {
+      _showMessage('Không thể mở trò chuyện lúc này.');
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TripChatPage(
+          tripId: trip.tripId!,
+          currentUserId: currentUserId,
+          receiverName: trip.driverName ?? 'Tài xế SafeRide',
+          canSendMessage: _canSendChat(trip.status.name),
+        ),
+      ),
+    );
+  }
+
+  bool _canSendChat(String? status) {
+    if (status == null) return true;
+    final normalized = status.trim().toUpperCase();
+    return normalized != 'CANCELLED';
+  }
+
+  Future<void> _openTripDetails(HistoryTrip trip, {required bool canRebook}) {
+    return Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TripDetailsPage(trip: trip, canRebook: canRebook),
+      ),
     );
   }
 
@@ -166,13 +214,28 @@ class _HistoryPageState extends State<HistoryPage> {
                           itemCount: provider.trips.length,
                           itemBuilder: (context, index) {
                             final trip = provider.trips[index];
-                            return TripHistoryCard(
-                              trip: trip,
-                              onRebook:
-                                  (isDriver ||
-                                      trip.status == HistoryTripStatus.booked)
-                                  ? null
-                                  : () => _handleRebook(trip),
+                            final canRebook =
+                                !isDriver &&
+                                trip.status != HistoryTripStatus.booked;
+
+                            return InteractiveButton(
+                              onTap: () =>
+                                  _openTripDetails(trip, canRebook: canRebook),
+                              borderRadius: BorderRadius.circular(24),
+                              child: TripHistoryCard(
+                                onChat: trip.tripId != null
+                                    ? () => _handleChat(trip)
+                                    : null,
+                                trip: trip,
+                                onReport:
+                                    (isDriver ||
+                                            trip.status ==
+                                                HistoryTripStatus.booked)
+                                        ? null
+                                        : () => _handleReport(trip),
+                                onRebook:
+                                    canRebook ? () => _handleRebook(trip) : null,
+                              ),
                             );
                           },
                         ),

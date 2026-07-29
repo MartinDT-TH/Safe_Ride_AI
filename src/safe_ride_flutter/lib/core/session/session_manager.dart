@@ -55,22 +55,46 @@ class SessionManager {
   final _tokenUpdatedController = StreamController<SessionTokens>.broadcast();
   Completer<String?>? _refreshCompleter;
 
+  String? _cachedAccessToken;
+  DateTime? _cachedExpiry;
+  bool _isInitialized = false;
+  Future<void>? _initFuture;
+
   Stream<void> get sessionExpiredStream => _sessionExpiredController.stream;
   Stream<SessionTokens> get tokenUpdatedStream => _tokenUpdatedController.stream;
 
-  Future<String?> getValidAccessToken({bool forceRefresh = false}) async {
+  Future<void> _ensureInitialized() {
+    if (_isInitialized) return Future.value();
+    _initFuture ??= _initCache().whenComplete(() => _initFuture = null);
+    return _initFuture!;
+  }
+
+  Future<void> _initCache() async {
+    if (_isInitialized) return;
     final savedToken = await _storage.readAccessToken();
-    if (savedToken == null || savedToken.trim().isEmpty) {
+    if (savedToken != null && savedToken.trim().isNotEmpty) {
+      _cachedAccessToken = AuthHeader.normalizeAccessToken(savedToken);
+      if (_cachedAccessToken != null) {
+        _cachedExpiry = _readExpiry(_cachedAccessToken!);
+      }
+    }
+    _isInitialized = true;
+  }
+
+  Future<String?> getValidAccessToken({bool forceRefresh = false}) async {
+    await _ensureInitialized();
+
+    final accessToken = _cachedAccessToken;
+    if (accessToken == null || accessToken.trim().isEmpty) {
       return null;
     }
 
-    final accessToken = AuthHeader.normalizeAccessToken(savedToken);
     if (!AuthHeader.isCompactJwt(accessToken)) {
       await clearSession(notify: true);
       return null;
     }
 
-    if (forceRefresh || _expiresSoon(accessToken)) {
+    if (forceRefresh || _expiresSoon()) {
       return refreshAccessToken();
     }
 
@@ -108,6 +132,9 @@ class SessionManager {
   }
 
   Future<void> clearSession({bool notify = true}) async {
+    _cachedAccessToken = null;
+    _cachedExpiry = null;
+    _isInitialized = false;
     await _storage.clearTokens();
     if (notify) {
       _sessionExpiredController.add(null);
@@ -208,6 +235,9 @@ class SessionManager {
   }
 
   Future<void> _persistTokens(SessionTokens tokens) async {
+    _cachedAccessToken = tokens.accessToken;
+    _cachedExpiry = _readExpiry(tokens.accessToken);
+    
     await _storage.saveTokens(
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
@@ -220,8 +250,8 @@ class SessionManager {
     );
   }
 
-  bool _expiresSoon(String accessToken) {
-    final expiresAt = _readExpiry(accessToken);
+  bool _expiresSoon() {
+    final expiresAt = _cachedExpiry;
     if (expiresAt == null) {
       return false;
     }

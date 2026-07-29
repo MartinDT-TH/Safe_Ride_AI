@@ -284,6 +284,66 @@ class TripPaymentUpdate {
   }
 }
 
+class SystemNotificationUpdate {
+  const SystemNotificationUpdate({
+    required this.id,
+    required this.title,
+    required this.content,
+    required this.notificationType,
+    required this.sentAt,
+  });
+
+  final int id;
+  final String title;
+  final String content;
+  final String notificationType;
+  final DateTime sentAt;
+
+  static SystemNotificationUpdate? fromSignalRArguments(
+    List<Object?>? arguments,
+  ) {
+    if (arguments == null || arguments.isEmpty || arguments.first is! Map) {
+      return null;
+    }
+
+    final data = Map<String, dynamic>.from(arguments.first as Map);
+    final id = (_value(data, 'id') as num?)?.toInt();
+    final title = _value(data, 'title')?.toString();
+    final content = _value(data, 'content')?.toString();
+    final sentAtRaw = _value(data, 'sentAt');
+
+    if (id == null ||
+        title == null ||
+        title.isEmpty ||
+        content == null ||
+        content.isEmpty ||
+        sentAtRaw == null) {
+      return null;
+    }
+
+    final sentAt = DateTime.tryParse(sentAtRaw.toString());
+    if (sentAt == null) {
+      return null;
+    }
+
+    return SystemNotificationUpdate(
+      id: id,
+      title: title,
+      content: content,
+      notificationType:
+          _value(data, 'notificationType')?.toString() ?? 'System Update',
+      sentAt: sentAt,
+    );
+  }
+
+  static Object? _value(Map<String, dynamic> data, String key) {
+    final pascalKey = key.isEmpty
+        ? key
+        : '${key[0].toUpperCase()}${key.substring(1)}';
+    return data[key] ?? data[pascalKey];
+  }
+}
+
 class BookingUpdate {
   const BookingUpdate({
     required this.bookingId,
@@ -393,8 +453,8 @@ class BookingUpdate {
       'BookingDriverAssigned' ||
       'TripCreated' ||
       'CustomerConfirmedDriverOffer' => 'DriverAssigned',
-      'BookingExpired' => 'Expired',
-      'BookingCancelled' => 'Cancelled',
+      'BookingExpired' || 'DriverOfferExpired' => 'Expired',
+      'BookingCancelled' || 'DriverOfferCancelled' => 'Cancelled',
       _ => null,
     };
   }
@@ -432,6 +492,72 @@ class BookingUpdate {
   }
 }
 
+class InAppCallSignal {
+  const InAppCallSignal({
+    required this.tripId,
+    required this.callId,
+    this.bookingId,
+    this.sdp,
+    this.sdpType,
+    this.candidate,
+    this.sdpMid,
+    this.sdpMLineIndex,
+  });
+
+  final int tripId;
+  final int? bookingId;
+  final String callId;
+  final String? sdp;
+  final String? sdpType;
+  final String? candidate;
+  final String? sdpMid;
+  final int? sdpMLineIndex;
+
+  Map<String, dynamic> toJson() {
+    return {
+      ApiKeys.tripId: tripId,
+      ApiKeys.bookingId: bookingId,
+      'callId': callId,
+      'sdp': sdp,
+      'sdpType': sdpType,
+      'candidate': candidate,
+      'sdpMid': sdpMid,
+      'sdpMLineIndex': sdpMLineIndex,
+    };
+  }
+
+  static InAppCallSignal? fromSignalRArguments(List<Object?>? arguments) {
+    if (arguments == null || arguments.isEmpty || arguments.first is! Map) {
+      return null;
+    }
+
+    final data = Map<String, dynamic>.from(arguments.first as Map);
+    final tripId = (_value(data, ApiKeys.tripId) as num?)?.toInt();
+    final callId = _value(data, 'callId')?.toString();
+    if (tripId == null || callId == null || callId.isEmpty) {
+      return null;
+    }
+
+    return InAppCallSignal(
+      tripId: tripId,
+      bookingId: (_value(data, ApiKeys.bookingId) as num?)?.toInt(),
+      callId: callId,
+      sdp: _value(data, 'sdp')?.toString(),
+      sdpType: _value(data, 'sdpType')?.toString(),
+      candidate: _value(data, 'candidate')?.toString(),
+      sdpMid: _value(data, 'sdpMid')?.toString(),
+      sdpMLineIndex: (_value(data, 'sdpMLineIndex') as num?)?.toInt(),
+    );
+  }
+
+  static Object? _value(Map<String, dynamic> data, String key) {
+    final pascalKey = key.isEmpty
+        ? key
+        : '${key[0].toUpperCase()}${key.substring(1)}';
+    return data[key] ?? data[pascalKey];
+  }
+}
+
 class SocketService {
   SocketService({
     MobileConfigService? mobileConfigService,
@@ -455,6 +581,8 @@ class SocketService {
   bool _driverOfferReceivedListenerAttached = false;
   bool _driverOfferClosedListenerAttached = false;
   bool _bookingListenerAttached = false;
+  bool _systemNotificationListenerAttached = false;
+  bool _inAppCallListenerAttached = false;
   final List<void Function()> _connectionLostHandlers = [];
   final Map<String, void Function(DriverLocationUpdate update)>
   _driverLocationHandlers = {};
@@ -464,9 +592,22 @@ class SocketService {
   _tripPaymentHandlers = {};
   final Map<String, void Function(DriverOfferUpdate update)>
   _driverOfferReceivedHandlers = {};
-  final Map<String, void Function(int offerId)> _driverOfferClosedHandlers = {};
+  final Map<String, void Function({int? offerId, int? bookingId})>
+  _driverOfferClosedHandlers = {};
 
   final Map<String, void Function(BookingUpdate update)> _bookingHandlers = {};
+  final Map<String, void Function(SystemNotificationUpdate update)>
+  _systemNotificationHandlers = {};
+  final Map<String, void Function(InAppCallSignal signal)>
+  _inAppCallOfferHandlers = {};
+  final Map<String, void Function(InAppCallSignal signal)>
+  _inAppCallAnswerHandlers = {};
+  final Map<String, void Function(InAppCallSignal signal)>
+  _inAppCallIceCandidateHandlers = {};
+  final Map<String, void Function(InAppCallSignal signal)>
+  _inAppCallRejectedHandlers = {};
+  final Map<String, void Function(InAppCallSignal signal)>
+  _inAppCallEndedHandlers = {};
 
   final Set<int> _desiredTripGroups = {};
   final Set<int> _joinedTripGroups = {};
@@ -545,6 +686,8 @@ class SocketService {
       _driverOfferReceivedListenerAttached = false;
       _driverOfferClosedListenerAttached = false;
       _bookingListenerAttached = false;
+      _systemNotificationListenerAttached = false;
+      _inAppCallListenerAttached = false;
       _joinedTripGroups.clear();
       _joinedBookingGroups.clear();
       for (final h in List.of(_connectionLostHandlers)) {
@@ -584,6 +727,13 @@ class SocketService {
     }
     if (_bookingHandlers.isNotEmpty && !_bookingListenerAttached) {
       _attachBookingListeners();
+    }
+    if (_systemNotificationHandlers.isNotEmpty &&
+        !_systemNotificationListenerAttached) {
+      _attachSystemNotificationListener();
+    }
+    if (_hasInAppCallHandlers && !_inAppCallListenerAttached) {
+      _attachInAppCallListeners();
     }
     if (_desiredTripGroups.isNotEmpty || _desiredBookingGroups.isNotEmpty) {
       _rejoinGroups();
@@ -651,7 +801,7 @@ class SocketService {
   }
 
   void onDriverOfferClosed(
-    void Function(int offerId) handler, {
+    void Function({int? offerId, int? bookingId}) handler, {
     String key = 'default',
   }) {
     _driverOfferClosedHandlers[key] = handler;
@@ -671,9 +821,14 @@ class SocketService {
 
       final data = Map<String, dynamic>.from(arguments.first as Map);
       final offerId = (data[ApiKeys.offerId] ?? data['OfferId']) as num?;
-      if (offerId != null) {
+      final bookingId = (data[ApiKeys.bookingId] ?? data['BookingId']) as num?;
+
+      if (offerId != null || bookingId != null) {
         for (final handler in List.of(_driverOfferClosedHandlers.values)) {
-          handler(offerId.toInt());
+          handler(
+            offerId: offerId?.toInt(),
+            bookingId: bookingId?.toInt(),
+          );
         }
       }
     }
@@ -797,6 +952,128 @@ class SocketService {
     _bookingHandlers.remove(key);
   }
 
+  void onSystemNotificationReceived(
+    void Function(SystemNotificationUpdate update) handler, {
+    String key = 'default',
+  }) {
+    _systemNotificationHandlers[key] = handler;
+    _attachSystemNotificationListener();
+  }
+
+  void _attachSystemNotificationListener() {
+    if (_connection == null || _systemNotificationListenerAttached) {
+      return;
+    }
+
+    _systemNotificationListenerAttached = true;
+    _connection!.on('SystemNotificationReceived', (arguments) {
+      final update = SystemNotificationUpdate.fromSignalRArguments(arguments);
+      if (update != null) {
+        for (final handler in List.of(_systemNotificationHandlers.values)) {
+          handler(update);
+        }
+      }
+    });
+  }
+
+  void removeSystemNotificationReceivedHandler(String key) {
+    _systemNotificationHandlers.remove(key);
+  }
+
+  void onInAppCallOffer(
+    void Function(InAppCallSignal signal) handler, {
+    String key = 'default',
+  }) {
+    _inAppCallOfferHandlers[key] = handler;
+    _attachInAppCallListeners();
+  }
+
+  void removeInAppCallOfferHandler(String key) {
+    _inAppCallOfferHandlers.remove(key);
+  }
+
+  void onInAppCallAnswer(
+    void Function(InAppCallSignal signal) handler, {
+    String key = 'default',
+  }) {
+    _inAppCallAnswerHandlers[key] = handler;
+    _attachInAppCallListeners();
+  }
+
+  void removeInAppCallAnswerHandler(String key) {
+    _inAppCallAnswerHandlers.remove(key);
+  }
+
+  void onInAppCallIceCandidate(
+    void Function(InAppCallSignal signal) handler, {
+    String key = 'default',
+  }) {
+    _inAppCallIceCandidateHandlers[key] = handler;
+    _attachInAppCallListeners();
+  }
+
+  void removeInAppCallIceCandidateHandler(String key) {
+    _inAppCallIceCandidateHandlers.remove(key);
+  }
+
+  void onInAppCallRejected(
+    void Function(InAppCallSignal signal) handler, {
+    String key = 'default',
+  }) {
+    _inAppCallRejectedHandlers[key] = handler;
+    _attachInAppCallListeners();
+  }
+
+  void removeInAppCallRejectedHandler(String key) {
+    _inAppCallRejectedHandlers.remove(key);
+  }
+
+  void onInAppCallEnded(
+    void Function(InAppCallSignal signal) handler, {
+    String key = 'default',
+  }) {
+    _inAppCallEndedHandlers[key] = handler;
+    _attachInAppCallListeners();
+  }
+
+  void removeInAppCallEndedHandler(String key) {
+    _inAppCallEndedHandlers.remove(key);
+  }
+
+  void _attachInAppCallListeners() {
+    if (_connection == null || _inAppCallListenerAttached) {
+      return;
+    }
+
+    _inAppCallListenerAttached = true;
+    void attach(
+      String event,
+      Map<String, void Function(InAppCallSignal signal)> handlers,
+    ) {
+      _connection!.on(event, (arguments) {
+        final signal = InAppCallSignal.fromSignalRArguments(arguments);
+        if (signal != null) {
+          for (final handler in List.of(handlers.values)) {
+            handler(signal);
+          }
+        }
+      });
+    }
+
+    attach('InAppCallOffer', _inAppCallOfferHandlers);
+    attach('InAppCallAnswer', _inAppCallAnswerHandlers);
+    attach('InAppCallIceCandidate', _inAppCallIceCandidateHandlers);
+    attach('InAppCallRejected', _inAppCallRejectedHandlers);
+    attach('InAppCallEnded', _inAppCallEndedHandlers);
+  }
+
+  bool get _hasInAppCallHandlers =>
+      _inAppCallOfferHandlers.isNotEmpty ||
+      _inAppCallAnswerHandlers.isNotEmpty ||
+      _inAppCallIceCandidateHandlers.isNotEmpty ||
+      _inAppCallRejectedHandlers.isNotEmpty ||
+      _inAppCallEndedHandlers.isNotEmpty;
+
   Future<void> joinTrip(int tripId) async {
     final firstRequest = _desiredTripGroups.add(tripId);
     if (!firstRequest && _joinedTripGroups.contains(tripId)) {
@@ -873,6 +1150,26 @@ class SocketService {
     await _invokeSafely('SetDriverOffline', []);
   }
 
+  Future<void> sendInAppCallOffer(InAppCallSignal signal) async {
+    await _invokeSafely('SendInAppCallOffer', [signal.toJson()]);
+  }
+
+  Future<void> sendInAppCallAnswer(InAppCallSignal signal) async {
+    await _invokeSafely('SendInAppCallAnswer', [signal.toJson()]);
+  }
+
+  Future<void> sendInAppCallIceCandidate(InAppCallSignal signal) async {
+    await _invokeSafely('SendInAppCallIceCandidate', [signal.toJson()]);
+  }
+
+  Future<void> rejectInAppCall(InAppCallSignal signal) async {
+    await _invokeSafely('RejectInAppCall', [signal.toJson()]);
+  }
+
+  Future<void> endInAppCall(InAppCallSignal signal) async {
+    await _invokeSafely('EndInAppCall', [signal.toJson()]);
+  }
+
   void _rejoinGroups() {
     _joinedTripGroups.clear();
     _joinedBookingGroups.clear();
@@ -933,12 +1230,20 @@ class SocketService {
     _driverOfferReceivedListenerAttached = false;
     _driverOfferClosedListenerAttached = false;
     _bookingListenerAttached = false;
+    _systemNotificationListenerAttached = false;
+    _inAppCallListenerAttached = false;
     _driverLocationHandlers.clear();
     _tripStatusHandlers.clear();
     _tripPaymentHandlers.clear();
     _driverOfferReceivedHandlers.clear();
     _driverOfferClosedHandlers.clear();
     _bookingHandlers.clear();
+    _systemNotificationHandlers.clear();
+    _inAppCallOfferHandlers.clear();
+    _inAppCallAnswerHandlers.clear();
+    _inAppCallIceCandidateHandlers.clear();
+    _inAppCallRejectedHandlers.clear();
+    _inAppCallEndedHandlers.clear();
     _desiredTripGroups.clear();
     _joinedTripGroups.clear();
     _desiredBookingGroups.clear();

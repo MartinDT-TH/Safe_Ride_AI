@@ -79,6 +79,9 @@ public static class RedisKeys
     public static string TripTrackingFinalizeLock(long tripId) =>
         $"sr:trip:finalize-lock:{tripId}";
 
+    public static string TripChatMessages(long tripId) =>
+        $"sr:tripchat:messages:{tripId}";
+
     public static IReadOnlyList<string> TripTrackingKeys(long tripId) =>
     [
         TripTrackingPath(tripId),

@@ -29,20 +29,31 @@ class HistoryRemoteDatasource {
         ),
       );
 
-      final List data = response.data is List ? response.data as List : const [];
+      final List data = response.data is List
+          ? response.data as List
+          : const [];
       return data
           .map(
-            (json) => HistoryTrip.fromJson(
-              Map<String, dynamic>.from(json as Map),
-            ),
+            (json) =>
+                HistoryTrip.fromJson(Map<String, dynamic>.from(json as Map)),
           )
           .toList();
     } on FormatException {
       throw const HistoryApiException(BookingStrings.sessionExpired);
     } on DioException catch (exception) {
       final data = exception.response?.data;
-      if (data is Map && data[ApiKeys.detail] != null) {
-        throw HistoryApiException(data[ApiKeys.detail].toString());
+      if (data is Map) {
+        if (data[ApiKeys.detail] != null) {
+          throw HistoryApiException(data[ApiKeys.detail].toString());
+        }
+
+        if (data[ApiKeys.message] != null) {
+          throw HistoryApiException(data[ApiKeys.message].toString());
+        }
+
+        if (data['title'] != null) {
+          throw HistoryApiException(data['title'].toString());
+        }
       }
 
       throw const HistoryApiException(_loadErrorMessage);

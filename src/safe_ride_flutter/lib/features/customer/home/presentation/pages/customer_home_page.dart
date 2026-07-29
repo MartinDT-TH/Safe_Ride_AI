@@ -19,7 +19,10 @@ import '../../../../customer/booking/presentation/pages/booking_options_page.dar
 import '../../../../customer/booking/presentation/pages/promotion_page.dart';
 import '../../../../customer/booking/presentation/pages/trip_tracking_page.dart';
 import '../../../../customer/booking/presentation/providers/booking_provider.dart';
+import '../../../../customer/ai_chat/presentation/widgets/ai_chat_sheet.dart';
 import '../../../../shared/history/presentation/pages/history_page.dart';
+import '../../../../shared/notifications/presentation/pages/notifications_page.dart';
+import '../../../../shared/notifications/presentation/providers/notification_provider.dart';
 
 class CustomerHomePage extends StatefulWidget {
   const CustomerHomePage({super.key});
@@ -74,6 +77,8 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     }
 
     context.read<HomeProvider>().loadHomeData();
+    context.read<BookingProvider>().loadAvailablePromotions(auth.token!);
+    context.read<NotificationProvider>().initialize(auth.token);
     _loadActiveBooking(auth.token);
   }
 
@@ -90,6 +95,9 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     final auth = context.watch<AuthProvider>();
     final bookingProvider = context.watch<BookingProvider>();
     final homeProvider = context.watch<HomeProvider>();
+    final hasUnreadNotifications = context.select<NotificationProvider, bool>(
+      (provider) => provider.unreadCount > 0,
+    );
 
     final activeBooking = bookingProvider.activeBooking;
     final activePickup = bookingProvider.activePickup ?? activeBooking?.pickup;
@@ -190,20 +198,27 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                           color: Color(0xFF006B70),
                           size: 28,
                         ),
-                        onPressed: () {},
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const NotificationsPage(),
+                            ),
+                          );
+                        },
                       ),
-                      Positioned(
-                        top: 14,
-                        right: 14,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
+                      if (hasUnreadNotifications)
+                        Positioned(
+                          top: 14,
+                          right: 14,
+                          child: Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
                           ),
                         ),
-                      ),
                     ],
                   ),
                   const SizedBox(width: 8),
@@ -224,6 +239,15 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                   )
                 : null),
         body: IndexedStack(index: selectedIndex, children: pages),
+        floatingActionButton: selectedIndex == 0
+            ? FloatingActionButton(
+                onPressed: () => AiChatSheet.show(context),
+                backgroundColor: const Color(0xFF006B70),
+                foregroundColor: Colors.white,
+                tooltip: 'Trợ lý SafeRide',
+                child: const Icon(Icons.smart_toy_outlined),
+              )
+            : null,
         bottomNavigationBar: CustomerBottomNavBar(
           currentIndex: selectedIndex,
           onTap: (index) {
@@ -507,25 +531,97 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                   time: HomeStrings.recentTime,
                 ),
                 const SizedBox(height: 24),
-                GestureDetector(
-                  onTap: () {
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (context) => const PromotionPage(),
-                    );
-                  },
-                  child: const PromoBanner(
-                    title: HomeStrings.promotionTitle,
-                    code: HomeStrings.promotionCode,
-                  ),
-                ),
+                _buildPromotionSection(bookingProvider),
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildPromotionSection(BookingProvider bookingProvider) {
+    if (bookingProvider.isLoadingPromotions &&
+        bookingProvider.availablePromotions.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader(HomeStrings.promotions),
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            height: 160,
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
+        ],
+      );
+    }
+
+    if (bookingProvider.availablePromotions.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _buildSectionHeader(HomeStrings.promotions),
+            TextButton(
+              onPressed: () {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (context) => const PromotionPage(),
+                );
+              },
+              child: const Text(
+                'Xem tất cả',
+                style: TextStyle(
+                  color: Color(0xFF006B70),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 160,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: bookingProvider.availablePromotions.length,
+            separatorBuilder: (context, index) => const SizedBox(width: 16),
+            itemBuilder: (context, index) {
+              final promo = bookingProvider.availablePromotions[index];
+              return GestureDetector(
+                onTap: () {
+                  bookingProvider.selectPromo(promo);
+                  _openBooking(context, BookingType.now);
+                },
+                child: PromoBanner(promo: promo),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.bold,
+        color: Color(0xFF1A1A1A),
+      ),
     );
   }
 
