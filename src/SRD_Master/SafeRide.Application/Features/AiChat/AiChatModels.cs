@@ -14,14 +14,20 @@ public sealed record AiBookingLocationDto(string Address, double Latitude, doubl
 
 public sealed record AiBookingDraftDto(
     AiBookingLocationDto Pickup,
-    AiBookingLocationDto Destination);
+    AiBookingLocationDto Destination,
+    string? VehicleQuery = null,
+    string? PromotionCode = null);
 
 public sealed record AiChatMessageDto(
     string Id,
     string Role,
     string Content,
     DateTime CreatedAt,
-    AiBookingDraftDto? BookingDraft = null);
+    AiBookingDraftDto? BookingDraft = null,
+    bool IsAudio = false,
+    string? AudioUrl = null,
+    string? AudioMimeType = null,
+    long? AudioSizeBytes = null);
 
 public sealed record AiChatReplyDto(
     string ConversationId,

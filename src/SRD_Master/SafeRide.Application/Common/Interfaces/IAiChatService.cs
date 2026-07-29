@@ -9,6 +9,14 @@ public interface IAiChatService
         SendAiChatMessageRequest request,
         CancellationToken cancellationToken);
 
+    Task<AiChatReplyDto> SendAudioAsync(
+        Guid userId,
+        Stream audio,
+        string mimeType,
+        string? conversationId,
+        AiCurrentLocationRequest? currentLocation,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyList<AiConversationDto>> GetConversationsAsync(
         Guid userId,
         CancellationToken cancellationToken);

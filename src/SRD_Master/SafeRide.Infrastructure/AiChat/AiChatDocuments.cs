@@ -25,6 +25,11 @@ internal sealed class AiMessageDocument
     public string Role { get; set; } = "";
     public string Content { get; set; } = "";
     public AiBookingDraftDocument? BookingDraft { get; set; }
+    public bool IsAudio { get; set; }
+    public string? AudioUrl { get; set; }
+    public string? AudioPublicId { get; set; }
+    public string? AudioMimeType { get; set; }
+    public long? AudioSizeBytes { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime ExpiresAt { get; set; }
 }
@@ -33,6 +38,8 @@ internal sealed class AiBookingDraftDocument
 {
     public AiBookingLocationDocument Pickup { get; set; } = new();
     public AiBookingLocationDocument Destination { get; set; } = new();
+    public string? VehicleQuery { get; set; }
+    public string? PromotionCode { get; set; }
 }
 
 internal sealed class AiBookingLocationDocument

@@ -1,12 +1,14 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
 using SafeRide.Application.Features.AiChat;
 using SafeRide.Infrastructure.Redis;
+using SafeRide.Infrastructure.ExternalServices.Cloudinary;
 
 namespace SafeRide.Infrastructure.AiChat;
 
@@ -18,17 +20,23 @@ public sealed class AiChatService : IAiChatService
     private readonly IMapGeocodingService _geocoding;
     private readonly IMongoCollection<AiConversationDocument> _conversations;
     private readonly IMongoCollection<AiMessageDocument> _messages;
+    private readonly ICloudinaryImageService _cloudinary;
+    private readonly ILogger<AiChatService> _logger;
 
     public AiChatService(
         IOptions<AiChatOptions> options,
         HttpClient httpClient,
         IRedisService redis,
-        IMapGeocodingService geocoding)
+        IMapGeocodingService geocoding,
+        ICloudinaryImageService cloudinary,
+        ILogger<AiChatService> logger)
     {
         _options = options.Value;
         _httpClient = httpClient;
         _redis = redis;
         _geocoding = geocoding;
+        _cloudinary = cloudinary;
+        _logger = logger;
 
         var client = new MongoClient(
             string.IsNullOrWhiteSpace(_options.MongoConnectionString)
@@ -102,6 +110,131 @@ public sealed class AiChatService : IAiChatService
             draft);
     }
 
+    public async Task<AiChatReplyDto> SendAudioAsync(
+        Guid userId,
+        Stream audio,
+        string mimeType,
+        string? conversationId,
+        AiCurrentLocationRequest? currentLocation,
+        CancellationToken cancellationToken)
+    {
+        EnsureEnabled();
+        if (!SupportedAudioTypes.Contains(mimeType))
+            throw new ArgumentException("Định dạng ghi âm không được hỗ trợ.");
+
+        using var buffer = new MemoryStream();
+        await audio.CopyToAsync(buffer, cancellationToken);
+        if (buffer.Length is 0 || buffer.Length > _options.MaxAudioBytes)
+            throw new ArgumentException("File ghi âm phải có dung lượng từ 1 byte đến 10 MB.");
+
+        var bytes = buffer.ToArray();
+        await using var uploadStream = new MemoryStream(bytes, writable: false);
+        var extension = mimeType switch
+        {
+            "audio/aac" => ".aac",
+            "audio/mpeg" => ".mp3",
+            "audio/ogg" => ".ogg",
+            "audio/wav" => ".wav",
+            "audio/webm" => ".webm",
+            _ => ".m4a"
+        };
+        var upload = await _cloudinary.UploadAiChatAudioAsync(
+            userId,
+            uploadStream,
+            $"voice-{Guid.NewGuid():N}{extension}",
+            cancellationToken);
+        try
+        {
+            var transcript = await TranscribeAsync(bytes, mimeType, cancellationToken);
+            if (string.IsNullOrWhiteSpace(transcript))
+                throw new ArgumentException("Không nhận diện được nội dung trong file ghi âm.");
+
+            var reply = await SendAsync(
+                userId,
+                new SendAiChatMessageRequest(transcript, conversationId, currentLocation),
+                cancellationToken);
+            var messageId = ObjectId.Parse(reply.UserMessage.Id);
+            await _messages.UpdateOneAsync(
+                item => item.Id == messageId && item.UserId == userId,
+                Builders<AiMessageDocument>.Update
+                    .Set(item => item.IsAudio, true)
+                    .Set(item => item.AudioUrl, upload.Url)
+                    .Set(item => item.AudioPublicId, upload.PublicId)
+                    .Set(item => item.AudioMimeType, mimeType)
+                    .Set(item => item.AudioSizeBytes, buffer.Length),
+                cancellationToken: cancellationToken);
+            return reply with
+            {
+                UserMessage = reply.UserMessage with
+                {
+                    Content = "Tin nhắn thoại",
+                    IsAudio = true,
+                    AudioUrl = upload.Url,
+                    AudioMimeType = mimeType,
+                    AudioSizeBytes = buffer.Length
+                }
+            };
+        }
+        catch (Exception originalException)
+        {
+            try
+            {
+                await _cloudinary.DeleteAiChatAudioAsync(
+                    upload.PublicId,
+                    CancellationToken.None);
+            }
+            catch (Exception cleanupException)
+            {
+                _logger.LogWarning(
+                    cleanupException,
+                    "Could not roll back Cloudinary AI chat audio {PublicId} after {ExceptionType}.",
+                    upload.PublicId,
+                    originalException.GetType().Name);
+            }
+            throw;
+        }
+    }
+
+    private async Task<string> TranscribeAsync(
+        byte[] audio,
+        string mimeType,
+        CancellationToken cancellationToken)
+    {
+        var body = new
+        {
+            contents = new[]
+            {
+                new
+                {
+                    parts = new object[]
+                    {
+                        new { text = "Phiên âm chính xác file ghi âm này sang tiếng Việt. Chỉ trả về nội dung đã nói, không giải thích." },
+                        new
+                        {
+                            inline_data = new
+                            {
+                                mime_type = mimeType,
+                                data = Convert.ToBase64String(audio)
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"v1beta/models/{Uri.EscapeDataString(_options.GeminiModel)}:generateContent");
+        request.Headers.Add("x-goog-api-key", _options.GeminiApiKey);
+        request.Content = JsonContent.Create(body);
+        using var response = await SendGeminiAsync(
+            request, "transcription", cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var json = await JsonDocument.ParseAsync(
+            await response.Content.ReadAsStreamAsync(cancellationToken),
+            cancellationToken: cancellationToken);
+        return ExtractGeminiText(json.RootElement, "transcription");
+    }
+
     public async Task<IReadOnlyList<AiConversationDto>> GetConversationsAsync(
         Guid userId, CancellationToken cancellationToken)
     {
@@ -140,7 +273,13 @@ public sealed class AiChatService : IAiChatService
                         new AiBookingLocationDto(
                             item.BookingDraft.Destination.Address,
                             item.BookingDraft.Destination.Latitude,
-                            item.BookingDraft.Destination.Longitude))))
+                            item.BookingDraft.Destination.Longitude),
+                        item.BookingDraft.VehicleQuery,
+                        item.BookingDraft.PromotionCode),
+                item.IsAudio,
+                item.AudioUrl,
+                item.AudioMimeType,
+                item.AudioSizeBytes))
             .ToListAsync(cancellationToken);
     }
 
@@ -149,11 +288,22 @@ public sealed class AiChatService : IAiChatService
     {
         EnsureEnabled();
         var id = ParseOwnedId(conversationId);
-        var deleted = await _conversations.DeleteOneAsync(
-            item => item.Id == id && item.UserId == userId, cancellationToken);
-        if (deleted.DeletedCount == 0) throw new KeyNotFoundException("Không tìm thấy cuộc trò chuyện.");
+        var owned = await _conversations.Find(
+                item => item.Id == id && item.UserId == userId)
+            .AnyAsync(cancellationToken);
+        if (!owned) throw new KeyNotFoundException("Không tìm thấy cuộc trò chuyện.");
+        var audioPublicIds = await _messages.Find(
+                item => item.ConversationId == id &&
+                        item.UserId == userId &&
+                        item.AudioPublicId != null)
+            .Project(item => item.AudioPublicId!)
+            .ToListAsync(cancellationToken);
+        foreach (var publicId in audioPublicIds)
+            await _cloudinary.DeleteAiChatAudioAsync(publicId, cancellationToken);
         await _messages.DeleteManyAsync(
             item => item.ConversationId == id && item.UserId == userId, cancellationToken);
+        await _conversations.DeleteOneAsync(
+            item => item.Id == id && item.UserId == userId, cancellationToken);
         await _redis.RemoveAsync(ContextKey(userId, id));
     }
 
@@ -215,6 +365,10 @@ public sealed class AiChatService : IAiChatService
             Nếu thiếu điểm đón hoặc điểm đến, đặt trường còn thiếu thành null và hỏi đúng thông tin
             còn thiếu. Trả lời ngắn gọn, tự nhiên và không tuyên bố rằng chuyến xe đã được đặt.
 
+            Nếu người dùng nhắc tên xe hoặc biển số xe, điền nguyên văn phần nhận diện đó vào
+            vehicleQuery. Nếu người dùng nhắc mã giảm giá, điền mã vào promotionCode. Không tự
+            bịa xe hoặc mã khi người dùng không cung cấp.
+
             {{locationInstruction}}
             """;
         var body = new
@@ -235,9 +389,15 @@ public sealed class AiChatService : IAiChatService
                     {
                         reply = new { type = "STRING" },
                         pickupAddress = new { type = "STRING", nullable = true },
-                        destinationAddress = new { type = "STRING", nullable = true }
+                        destinationAddress = new { type = "STRING", nullable = true },
+                        vehicleQuery = new { type = "STRING", nullable = true },
+                        promotionCode = new { type = "STRING", nullable = true }
                     },
-                    required = new[] { "reply", "pickupAddress", "destinationAddress" }
+                    required = new[]
+                    {
+                        "reply", "pickupAddress", "destinationAddress", "vehicleQuery",
+                        "promotionCode"
+                    }
                 }
             }
         };
@@ -247,16 +407,61 @@ public sealed class AiChatService : IAiChatService
             $"v1beta/models/{Uri.EscapeDataString(_options.GeminiModel)}:generateContent");
         request.Headers.Add("x-goog-api-key", _options.GeminiApiKey);
         request.Content = JsonContent.Create(body);
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        using var response = await SendGeminiAsync(
+            request, "booking_extraction", cancellationToken);
         response.EnsureSuccessStatusCode();
         using var json = await JsonDocument.ParseAsync(
             await response.Content.ReadAsStreamAsync(cancellationToken),
             cancellationToken: cancellationToken);
-        var text = json.RootElement.GetProperty("candidates")[0]
-            .GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString();
+        var text = ExtractGeminiText(json.RootElement, "booking_extraction");
         return JsonSerializer.Deserialize<GeneratedReply>(
-            text ?? "", new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+            text, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
             ?? throw new InvalidOperationException("AI trả về dữ liệu không hợp lệ.");
+    }
+
+    private string ExtractGeminiText(JsonElement root, string stage)
+    {
+        if (root.TryGetProperty("candidates", out var candidates) &&
+            candidates.ValueKind == JsonValueKind.Array &&
+            candidates.GetArrayLength() > 0)
+        {
+            var candidate = candidates[0];
+            if (candidate.TryGetProperty("content", out var content) &&
+                content.TryGetProperty("parts", out var parts) &&
+                parts.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var part in parts.EnumerateArray())
+                {
+                    if (part.TryGetProperty("text", out var textElement) &&
+                        textElement.ValueKind == JsonValueKind.String &&
+                        !string.IsNullOrWhiteSpace(textElement.GetString()))
+                        return textElement.GetString()!.Trim();
+                }
+            }
+
+            var finishReason = candidate.TryGetProperty("finishReason", out var reason)
+                ? reason.GetString()
+                : null;
+            _logger.LogWarning(
+                "Gemini returned no text during {Stage}. Finish reason: {FinishReason}.",
+                stage,
+                finishReason ?? "unknown");
+        }
+        else
+        {
+            var promptFeedback = root.TryGetProperty("promptFeedback", out var feedback)
+                ? feedback.GetRawText()
+                : "not provided";
+            _logger.LogWarning(
+                "Gemini returned no candidates during {Stage}. Prompt feedback: {PromptFeedback}.",
+                stage,
+                promptFeedback);
+        }
+
+        throw new InvalidOperationException(
+            stage == "transcription"
+                ? "Gemini không thể phiên âm file ghi âm này."
+                : "Gemini không trả về nội dung có thể xử lý.");
     }
 
     private async Task<BookingDraftResolution> ResolveBookingDraftAsync(
@@ -298,7 +503,9 @@ public sealed class AiChatService : IAiChatService
                 new AiBookingLocationDto(
                     generated.DestinationAddress.Trim(),
                     destination.Lat,
-                    destination.Lng)),
+                    destination.Lng),
+                NormalizeHint(generated.VehicleQuery),
+                NormalizeHint(generated.PromotionCode)),
             true,
             true,
             useCurrentLocation);
@@ -445,7 +652,9 @@ public sealed class AiChatService : IAiChatService
                     Address = bookingDraft.Destination.Address,
                     Latitude = bookingDraft.Destination.Latitude,
                     Longitude = bookingDraft.Destination.Longitude
-                }
+                },
+                VehicleQuery = bookingDraft.VehicleQuery,
+                PromotionCode = bookingDraft.PromotionCode
             },
         CreatedAt = createdAt,
         ExpiresAt = expiresAt
@@ -467,7 +676,16 @@ public sealed class AiChatService : IAiChatService
                     new AiBookingLocationDto(
                         message.BookingDraft.Destination.Address,
                         message.BookingDraft.Destination.Latitude,
-                        message.BookingDraft.Destination.Longitude)));
+                        message.BookingDraft.Destination.Longitude),
+                    message.BookingDraft.VehicleQuery,
+                    message.BookingDraft.PromotionCode),
+            message.IsAudio,
+            message.AudioUrl,
+            message.AudioMimeType,
+            message.AudioSizeBytes);
+
+    private static string? NormalizeHint(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private void EnsureEnabled()
     {
@@ -485,9 +703,71 @@ public sealed class AiChatService : IAiChatService
     private static string ContextKey(Guid userId, ObjectId conversationId) =>
         $"ai-chat:context:{userId:N}:{conversationId}";
 
+    private async Task<HttpResponseMessage> SendGeminiAsync(
+        HttpRequestMessage request,
+        string stage,
+        CancellationToken cancellationToken)
+    {
+        const int maxAttempts = 4;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            using var attemptRequest = await CloneRequestAsync(request, cancellationToken);
+            var response = await _httpClient.SendAsync(attemptRequest, cancellationToken);
+            var retryable = response.StatusCode is
+                System.Net.HttpStatusCode.ServiceUnavailable or
+                System.Net.HttpStatusCode.TooManyRequests;
+            if (!retryable || attempt == maxAttempts)
+                return response;
+
+            _logger.LogWarning(
+                "Gemini returned {StatusCode} during {Stage} with model {Model}; retry {Attempt}/{MaxAttempts}.",
+                (int)response.StatusCode,
+                stage,
+                _options.GeminiModel,
+                attempt,
+                maxAttempts);
+            var retryAfter = response.Headers.RetryAfter?.Delta;
+            response.Dispose();
+            var delay = retryAfter is { } providerDelay &&
+                        providerDelay <= TimeSpan.FromSeconds(10)
+                ? providerDelay
+                : TimeSpan.FromMilliseconds(500 * Math.Pow(2, attempt - 1));
+            await Task.Delay(delay, cancellationToken);
+        }
+
+        throw new InvalidOperationException("Gemini retry loop ended unexpectedly.");
+    }
+
+    private static async Task<HttpRequestMessage> CloneRequestAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        var clone = new HttpRequestMessage(request.Method, request.RequestUri);
+        foreach (var header in request.Headers)
+            clone.Headers.TryAddWithoutValidation(header.Key, header.Value);
+        if (request.Content is not null)
+        {
+            var bytes = await request.Content.ReadAsByteArrayAsync(cancellationToken);
+            clone.Content = new ByteArrayContent(bytes);
+            foreach (var header in request.Content.Headers)
+                clone.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);
+        }
+        return clone;
+    }
+
+    private static readonly HashSet<string> SupportedAudioTypes =
+    [
+        "audio/aac", "audio/m4a", "audio/mp4", "audio/mpeg", "audio/ogg", "audio/wav",
+        "audio/webm"
+    ];
+
     private sealed record CachedMessage(string Role, string Content);
     private sealed record GeneratedReply(
-        string Reply, string? PickupAddress, string? DestinationAddress);
+        string Reply,
+        string? PickupAddress,
+        string? DestinationAddress,
+        string? VehicleQuery,
+        string? PromotionCode);
     private sealed record BookingDraftResolution(
         AiBookingDraftDto? Draft,
         bool PickupResolved,

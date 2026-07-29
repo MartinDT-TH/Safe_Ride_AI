@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Net;
+using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SafeRide.Application.Common.Interfaces;
@@ -10,7 +11,9 @@ namespace SafeRide.API.Controllers;
 [ApiController]
 [Authorize(Roles = "Customer")]
 [Route("api/ai-chat")]
-public sealed class AiChatController(IAiChatService chatService) : ControllerBase
+public sealed class AiChatController(
+    IAiChatService chatService,
+    ILogger<AiChatController> logger) : ControllerBase
 {
     [HttpPost("messages")]
     [ProducesResponseType<AiChatReplyDto>(StatusCodes.Status200OK)]
@@ -41,7 +44,96 @@ public sealed class AiChatController(IAiChatService chatService) : ControllerBas
             return ProblemResponse(
                 StatusCodes.Status503ServiceUnavailable,
                 "ai_chat.provider_rate_limited",
+                "Gemini đã đạt giới hạn lượt gọi. Vui lòng chờ một lát rồi thử lại.");
+        }
+        catch (HttpRequestException exception)
+            when (exception.StatusCode == HttpStatusCode.ServiceUnavailable)
+        {
+            return ProblemResponse(
+                StatusCodes.Status503ServiceUnavailable,
+                "ai_chat.provider_rate_limited",
                 "Trợ lý AI đang tạm quá tải. Vui lòng thử lại sau.");
+        }
+    }
+
+    [HttpPost("audio")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(10 * 1024 * 1024)]
+    [ProducesResponseType<AiChatReplyDto>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> SendAudio(
+        IFormFile audio,
+        [FromForm] string? conversationId,
+        [FromForm] string? currentAddress,
+        [FromForm] string? currentLatitude,
+        [FromForm] string? currentLongitude,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId)) return UnauthorizedProblem();
+        if (audio.Length == 0)
+            return ProblemResponse(400, "ai_chat.invalid_audio", "Vui lòng gửi file ghi âm.");
+
+        var hasLatitude = double.TryParse(
+            currentLatitude,
+            NumberStyles.Float,
+            CultureInfo.InvariantCulture,
+            out var latitude);
+        var hasLongitude = double.TryParse(
+            currentLongitude,
+            NumberStyles.Float,
+            CultureInfo.InvariantCulture,
+            out var longitude);
+        if (!hasLatitude || !hasLongitude ||
+            latitude is < -90 or > 90 || longitude is < -180 or > 180)
+        {
+            return ProblemResponse(
+                400,
+                "ai_chat.location_required",
+                "Không lấy được GPS hiện tại. Vui lòng bật vị trí rồi gửi lại tin nhắn thoại.");
+        }
+        var location = hasLatitude && hasLongitude
+            ? new AiCurrentLocationRequest(
+                currentAddress,
+                latitude,
+                longitude)
+            : null;
+        try
+        {
+            await using var stream = audio.OpenReadStream();
+            return Ok(await chatService.SendAudioAsync(
+                userId,
+                stream,
+                audio.ContentType,
+                conversationId,
+                location,
+                cancellationToken));
+        }
+        catch (ArgumentException exception)
+        {
+            return ProblemResponse(400, "ai_chat.invalid_audio", exception.Message);
+        }
+        catch (HttpRequestException exception)
+            when (exception.StatusCode == HttpStatusCode.TooManyRequests)
+        {
+            return ProblemResponse(
+                StatusCodes.Status503ServiceUnavailable,
+                "ai_chat.provider_rate_limited",
+                "Gemini đã đạt giới hạn lượt gọi. Vui lòng chờ một lát rồi gửi lại tin nhắn thoại.");
+        }
+        catch (HttpRequestException exception)
+            when (exception.StatusCode == HttpStatusCode.ServiceUnavailable)
+        {
+            return ProblemResponse(
+                StatusCodes.Status503ServiceUnavailable,
+                "ai_chat.provider_unavailable",
+                "Trợ lý AI đang tạm quá tải. File ghi âm chưa được gửi, vui lòng thử lại sau.");
+        }
+        catch (InvalidOperationException exception)
+        {
+            logger.LogError(exception, "AI chat audio infrastructure operation failed.");
+            return ProblemResponse(
+                StatusCodes.Status503ServiceUnavailable,
+                "ai_chat.audio_processing_unavailable",
+                "Dịch vụ xử lý ghi âm đang tạm gián đoạn. Vui lòng thử lại sau.");
         }
     }
 
