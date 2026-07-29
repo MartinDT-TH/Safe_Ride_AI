@@ -19,7 +19,8 @@ class PromoBanner extends StatelessWidget {
     if (promo.discountType.toLowerCase() == 'percentage') {
       discountText = 'Giảm ${promo.discountValue.round()}%';
       if (promo.maximumDiscountValue > 0) {
-        discountText += ' (Tối đa ${currencyFormatter.format(promo.maximumDiscountValue)})';
+        discountText +=
+            ' (Tối đa ${currencyFormatter.format(promo.maximumDiscountValue)})';
       }
     } else {
       discountText = 'Giảm ${currencyFormatter.format(promo.discountValue)}';
@@ -27,17 +28,19 @@ class PromoBanner extends StatelessWidget {
 
     String expiryText = '';
     if (promo.endDate != null) {
-      expiryText = 'Hết hạn: ${DateFormat('dd/MM/yyyy').format(promo.endDate!)}';
+      expiryText =
+          'Hết hạn: ${DateFormat('dd/MM/yyyy').format(promo.endDate!)}';
     }
 
     String minOrderText = '';
     if (promo.minimumOrderValue > 0) {
-      minOrderText = 'Đơn tối thiểu ${currencyFormatter.format(promo.minimumOrderValue)}';
+      minOrderText =
+          'Đơn tối thiểu ${currencyFormatter.format(promo.minimumOrderValue)}';
     }
 
     return Container(
       width: 280,
-      height: 160,
+      height: 176,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         image: const DecorationImage(
@@ -62,9 +65,9 @@ class PromoBanner extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
+              constraints: const BoxConstraints(maxWidth: double.infinity),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -72,6 +75,8 @@ class PromoBanner extends StatelessWidget {
               ),
               child: Text(
                 promo.promotionCode,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: Color(0xFF006B70),
                   fontSize: 12,
@@ -80,36 +85,78 @@ class PromoBanner extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            Text(
-              promo.shortDescription,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    promo.shortDescription,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      height: 1.15,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    discountText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (minOrderText.isNotEmpty || expiryText.isNotEmpty)
+                    Row(
+                      children: [
+                        if (minOrderText.isNotEmpty)
+                          Expanded(
+                            child: Text(
+                              minOrderText,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                        if (minOrderText.isNotEmpty &&
+                            expiryText.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          const Text(
+                            '•',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 11,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        if (expiryText.isNotEmpty)
+                          Text(
+                            expiryText,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 11,
+                            ),
+                          ),
+                      ],
+                    ),
+                ],
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              discountText,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            if (minOrderText.isNotEmpty || expiryText.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                '${minOrderText}${minOrderText.isNotEmpty && expiryText.isNotEmpty ? ' • ' : ''}${expiryText}',
-                style: const TextStyle(color: Colors.white70, fontSize: 11),
-              ),
-            ],
           ],
         ),
       ),
     );
   }
 }
-
