@@ -13,12 +13,14 @@ class TripHistoryCard extends StatelessWidget {
     this.onRebook,
     this.onReport,
     this.onChat,
+    this.onViewFeedback,
   });
 
   final HistoryTrip trip;
   final VoidCallback? onRebook;
   final VoidCallback? onReport;
   final VoidCallback? onChat;
+  final VoidCallback? onViewFeedback;
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +38,8 @@ class TripHistoryCard extends StatelessWidget {
         trip.driverName != null ||
         onRebook != null ||
         onReport != null ||
-        onChat != null;
+        onChat != null ||
+        onViewFeedback != null;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -175,7 +178,10 @@ class TripHistoryCard extends StatelessWidget {
                         ),
                       ],
                     ),
-                  if (onReport != null || onRebook != null || onChat != null) ...[
+                  if (onReport != null ||
+                      onRebook != null ||
+                      onChat != null ||
+                      onViewFeedback != null) ...[
                     const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
@@ -211,6 +217,43 @@ class TripHistoryCard extends StatelessWidget {
                                     SizedBox(width: 6),
                                     Text(
                                       'Nhắn tin',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF626A6C),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          if (onViewFeedback != null)
+                            InteractiveButton(
+                              onTap: onViewFeedback!,
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                height: 38,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: const Color(0xFFE0E0E0),
+                                  ),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.star_outline_rounded,
+                                      size: 16,
+                                      color: Color(0xFF626A6C),
+                                    ),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      'Xem đánh giá',
                                       style: TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.bold,

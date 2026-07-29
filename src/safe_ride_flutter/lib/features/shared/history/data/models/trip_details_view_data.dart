@@ -1,16 +1,22 @@
 import '../../../../customer/booking/data/models/booking_catalog.dart';
 import '../../../../customer/booking/data/models/booking_location.dart';
 import '../../../../customer/booking/data/models/booking_response.dart';
+import 'package:safe_ride/features/shared/feedback/data/models/driver_rating_item.dart';
 import 'history_trip.dart';
 
 class TripDetailsViewData {
-  const TripDetailsViewData({required this.historyTrip, this.booking});
+  const TripDetailsViewData({
+    required this.historyTrip,
+    this.booking,
+    this.feedback,
+  });
 
   final HistoryTrip historyTrip;
   final BookingResponse? booking;
+  final DriverRatingItem? feedback;
 
   int get bookingId => booking?.bookingId ?? historyTrip.id;
-  int? get tripId => booking?.tripId;
+  int? get tripId => booking?.tripId ?? historyTrip.tripId;
 
   DateTime get bookingTime => booking?.scheduledAt ?? historyTrip.time;
 
@@ -231,13 +237,20 @@ class TripDetailsViewData {
   bool get hasMapCoordinates =>
       _hasCoordinates(pickupLocation) || _hasCoordinates(destinationLocation);
 
-  bool get hasFeedback => false;
+  bool get hasFeedback => feedback != null;
 
-  String get feedbackText => 'Chưa có dữ liệu đánh giá cho chuyến đi này.';
+  String get feedbackText =>
+      feedback?.comment ?? 'Khách hàng chưa đánh giá chuyến đi này.';
 
-  int? get ratingScore => null;
+  int? get ratingScore => feedback?.score;
 
-  String? get feedbackComment => null;
+  String? get feedbackComment => feedback?.comment;
+
+  String? get feedbackCustomerName => feedback?.customerName;
+
+  String? get feedbackCustomerAvatarUrl => feedback?.customerAvatarUrl;
+
+  DateTime? get feedbackCreatedAt => feedback?.createdAt;
 
   static bool _hasCoordinates(BookingLocation? location) {
     if (location == null) {
