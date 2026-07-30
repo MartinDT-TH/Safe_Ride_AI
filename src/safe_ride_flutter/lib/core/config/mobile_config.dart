@@ -146,6 +146,7 @@ class MobileRealtimeEvents {
     required this.customerConfirmedDriverOffer,
     required this.tripCreated,
     required this.tripStatusChanged,
+    required this.sosTriggered,
     required this.tripPaymentPending,
     required this.tripPaymentSucceeded,
   });
@@ -167,6 +168,7 @@ class MobileRealtimeEvents {
   final String customerConfirmedDriverOffer;
   final String tripCreated;
   final String tripStatusChanged;
+  final String sosTriggered;
   final String tripPaymentPending;
   final String tripPaymentSucceeded;
 
@@ -262,6 +264,7 @@ class MobileRealtimeEvents {
         'tripStatusChanged',
         fallback.tripStatusChanged,
       ),
+      sosTriggered: _read(json, 'sosTriggered', fallback.sosTriggered),
       tripPaymentPending: _read(
         json,
         'tripPaymentPending',
@@ -293,6 +296,7 @@ class MobileRealtimeEvents {
     customerConfirmedDriverOffer: 'CustomerConfirmedDriverOffer',
     tripCreated: 'TripCreated',
     tripStatusChanged: 'TripStatusChanged',
+    sosTriggered: 'SOSTriggered',
     tripPaymentPending: 'TripPaymentPending',
     tripPaymentSucceeded: 'TripPaymentSucceeded',
   );

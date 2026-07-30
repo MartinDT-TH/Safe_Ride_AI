@@ -497,6 +497,43 @@ class BookingProvider extends ChangeNotifier {
     return ok == true;
   }
 
+  Future<bool> triggerSOS(
+    String accessToken, {
+    required int tripId,
+    required double latitude,
+    required double longitude,
+    required String message,
+  }) async {
+    final ok = await _run(() async {
+      await _repository.triggerSOS(
+        accessToken,
+        tripId: tripId,
+        latitude: latitude,
+        longitude: longitude,
+        message: message,
+      );
+      _setSOSActivated(tripId);
+      return true;
+    });
+    return ok == true;
+  }
+
+  void markSOSActivated(int tripId) {
+    _setSOSActivated(tripId);
+    notifyListeners();
+  }
+
+  void _setSOSActivated(int tripId) {
+    final activeBooking = _activeBooking;
+    if (activeBooking?.tripId == tripId) {
+      _activeBooking = activeBooking!.copyWith(isSOSActivated: true);
+    }
+    final searchingBooking = _searchingBooking;
+    if (searchingBooking?.tripId == tripId) {
+      _searchingBooking = searchingBooking!.copyWith(isSOSActivated: true);
+    }
+  }
+
   Future<bool> confirmCustomerReturn(
     String accessToken, {
     required int tripId,

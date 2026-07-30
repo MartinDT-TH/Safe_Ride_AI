@@ -72,6 +72,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   bool _isCompletingTrip = false;
   bool _arrivalRouteRefreshInProgress = false;
   bool _incomingCallDialogOpen = false;
+  bool _isSendingSOS = false;
+  late bool _isSOSActivated;
   late bool _isPrepaid;
   late String? _currentTripStatus;
   static const _tealColor = Color(0xFF006B70);
@@ -101,6 +103,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
             ? 'IN_PROGRESS'
             : 'DRIVER_ARRIVING');
     _isPrepaid = widget.booking.payment?.isSuccess == true;
+    _isSOSActivated = widget.booking.isSOSActivated;
     _initializeRoutes();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -121,6 +124,11 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         if (!mounted) return;
         _openSummaryIfPostTrip(widget.booking.tripStatus);
       });
+    }
+    if (!oldWidget.booking.isSOSActivated &&
+        widget.booking.isSOSActivated &&
+        !_isSOSActivated) {
+      _isSOSActivated = true;
     }
 
     if (oldWidget.booking.tripId == null && widget.booking.tripId != null) {
@@ -157,6 +165,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       _socketService.removeTripStatusChangedHandler(
         _tripStatusHandlerKey(tripId),
       );
+      _socketService.removeSOSTriggeredHandler(_sosHandlerKey(tripId));
       _socketService.removeInAppCallOfferHandler(_callOfferHandlerKey(tripId));
       await _socketService.leaveTrip(tripId);
     } catch (e) {
@@ -244,6 +253,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       setState(() {
         _currentTripStatus = booking.tripStatus ?? _currentTripStatus;
         _isPrepaid = booking.payment?.isSuccess == true;
+        _isSOSActivated =
+            _isSOSActivated || booking.isSOSActivated;
         _initializeRoutes(booking);
       });
       _openSummaryIfPostTrip(booking.tripStatus);
@@ -313,6 +324,17 @@ class _TripTrackingPageState extends State<TripTrackingPage>
           Navigator.of(context).popUntil((route) => route.isFirst);
         }
       }, key: _tripStatusHandlerKey(tripId));
+
+      _socketService.onSOSTriggered((update) {
+        if (!mounted || update.tripId != tripId || _isSOSActivated) {
+          return;
+        }
+        context.read<BookingProvider>().markSOSActivated(tripId);
+        setState(() {
+          _isSOSActivated = true;
+          _isSendingSOS = false;
+        });
+      }, key: _sosHandlerKey(tripId));
 
       _socketService.onInAppCallOffer((signal) {
         if (!mounted || signal.tripId != tripId || signal.sdp == null) {
@@ -465,6 +487,85 @@ class _TripTrackingPageState extends State<TripTrackingPage>
           margin: const EdgeInsets.all(16),
         ),
       );
+  }
+
+  bool get _canTriggerSOS {
+    final status = _currentTripStatus?.toUpperCase();
+    return status == 'ACCEPTED' ||
+        status == 'ARRIVED' ||
+        status == 'IN_PROGRESS';
+  }
+
+  Future<void> _confirmAndTriggerSOS() async {
+    if (_isSendingSOS || _isSOSActivated || !_canTriggerSOS) {
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Kích hoạt SOS?'),
+        content: const Text(
+          'Bạn có chắc muốn gửi tín hiệu khẩn cấp cho chuyến đi này không?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Kích hoạt SOS'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    final tripId = widget.booking.tripId;
+    final token = context.read<AuthProvider>().token;
+    if (tripId == null || token == null || token.isEmpty) {
+      _showMessage('Không thể kích hoạt SOS. Vui lòng thử lại.');
+      return;
+    }
+
+    setState(() => _isSendingSOS = true);
+    final bookingProvider = context.read<BookingProvider>();
+    final location = await bookingProvider.getCurrentLocation();
+    if (!mounted) return;
+    if (location == null) {
+      setState(() => _isSendingSOS = false);
+      _showMessage('Không thể lấy vị trí hiện tại để kích hoạt SOS.');
+      return;
+    }
+
+    final success = await bookingProvider.triggerSOS(
+      token,
+      tripId: tripId,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      message: 'Tôi cần hỗ trợ khẩn cấp',
+    );
+    if (!mounted) return;
+
+    final duplicate = bookingProvider.errorStatusCode == 409;
+    setState(() {
+      _isSendingSOS = false;
+      _isSOSActivated = success || duplicate;
+    });
+    if (duplicate) {
+      bookingProvider.markSOSActivated(tripId);
+      _showMessage('SOS đã được kích hoạt cho chuyến đi này.');
+    } else if (success) {
+      _showMessage(
+        'SOS đã được kích hoạt. Hệ thống sẽ hỗ trợ bạn sớm nhất.',
+      );
+    } else {
+      _showMessage('Không thể kích hoạt SOS. Vui lòng thử lại.');
+    }
   }
 
   @override
@@ -908,7 +1009,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                     ],
                   ),
                   _SosButton(
-                    onTap: () => _showMessage('Đã gửi tín hiệu SOS khẩn cấp!'),
+                    isActivated: _isSOSActivated,
+                    isLoading: _isSendingSOS,
+                    onTap: _canTriggerSOS ? _confirmAndTriggerSOS : null,
                   ),
                 ],
               ),
@@ -1161,7 +1264,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                   const SizedBox(width: 12),
                   _SosButton(
                     isCircle: true,
-                    onTap: () => _showMessage('Đã gửi tín hiệu SOS khẩn cấp!'),
+                    isActivated: _isSOSActivated,
+                    isLoading: _isSendingSOS,
+                    onTap: _canTriggerSOS ? _confirmAndTriggerSOS : null,
                   ),
                 ],
               ),
@@ -1592,6 +1697,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   }
 
   static String _tripStatusHandlerKey(int tripId) => 'tripTracking:$tripId';
+  static String _sosHandlerKey(int tripId) => 'tripTrackingSOS:$tripId';
   static String _driverLocationHandlerKey(int tripId) =>
       'tripTrackingLocation:$tripId';
   static String _callOfferHandlerKey(int tripId) => 'tripTrackingCall:$tripId';
@@ -1722,32 +1828,52 @@ class _CircleActionButton extends StatelessWidget {
 
 class _SosButton extends StatelessWidget {
   final bool isCircle;
+  final bool isActivated;
+  final bool isLoading;
   final VoidCallback? onTap;
-  const _SosButton({this.isCircle = false, this.onTap});
+  const _SosButton({
+    this.isCircle = false,
+    this.isActivated = false,
+    this.isLoading = false,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final enabled = onTap != null && !isActivated && !isLoading;
+    final useCircle = isCircle && !isActivated && !isLoading;
     return GestureDetector(
-      onTap: onTap,
+      onTap: enabled ? onTap : null,
       child: Container(
-        padding: isCircle
+        padding: useCircle
             ? const EdgeInsets.all(16)
             : const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: const Color(0xFFE53935),
-          shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
-          borderRadius: isCircle ? null : BorderRadius.circular(20),
+          color: isActivated
+              ? const Color(0xFF667085)
+              : enabled || isLoading
+              ? const Color(0xFFE53935)
+              : const Color(0xFFB0B0B0),
+          shape: useCircle ? BoxShape.circle : BoxShape.rectangle,
+          borderRadius: useCircle ? null : BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFE53935).withValues(alpha: 0.3),
+              color: (isActivated
+                      ? const Color(0xFF667085)
+                      : const Color(0xFFE53935))
+                  .withValues(alpha: 0.3),
               blurRadius: 8,
               offset: const Offset(0, 4),
             ),
           ],
         ),
-        child: const Text(
-          'SOS',
-          style: TextStyle(
+        child: Text(
+          isActivated
+              ? 'SOS đã kích hoạt'
+              : isLoading
+              ? 'Đang gửi tín hiệu SOS...'
+              : 'SOS',
+          style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.w900,
             fontSize: 12,

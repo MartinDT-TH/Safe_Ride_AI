@@ -510,7 +510,17 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                       backgroundColor: const Color(0xFFFFE8E8),
                       iconColor: Colors.red,
                       textColor: Colors.red,
-                      onTap: () {},
+                      onTap: () {
+                        final activeTrip =
+                            bookingProvider.activeBooking?.tripId != null;
+                        if (!activeTrip) {
+                          _showMessage(
+                            'Bạn chưa có chuyến đi đang diễn ra để kích hoạt SOS.',
+                          );
+                          return;
+                        }
+                        homeProvider.setSelectedIndex(1);
+                      },
                     ),
                   ],
                 ),
