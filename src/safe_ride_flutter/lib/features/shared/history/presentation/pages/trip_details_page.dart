@@ -12,6 +12,8 @@ import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../customer/booking/domain/repositories/booking_repository.dart';
 import '../../../../customer/booking/presentation/pages/rebook_trip_page.dart';
 import '../../../../customer/booking/presentation/providers/booking_provider.dart';
+import '../../../../shared/onboarding/presentation/providers/role_provider.dart';
+import '../../../../shared/feedback/domain/repositories/feedback_repository.dart';
 import '../../data/models/history_trip.dart';
 import '../../data/models/trip_details_view_data.dart';
 import '../../data/repositories/trip_details_repository_impl.dart';
@@ -30,16 +32,24 @@ class TripDetailsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accessToken = context.read<AuthProvider>().token;
+    final roleProvider = context.read<RoleProvider>();
+    final auth = context.read<AuthProvider>();
+    final isDriver = roleProvider.isDriver;
 
     return ChangeNotifierProvider<TripDetailsProvider>(
       create: (_) => TripDetailsProvider.create(
         TripDetailsRepositoryImpl(getIt<BookingRepository>()),
         trip,
-      )..loadDetails(accessToken),
+        feedbackRepository: getIt<FeedbackRepository>(),
+      )..loadDetails(
+        accessToken,
+        driverIdForFeedback: isDriver ? auth.userId : null,
+      ),
       child: _TripDetailsView(
         trip: trip,
         canRebook: canRebook,
         accessToken: accessToken,
+        driverId: isDriver ? auth.userId : null,
       ),
     );
   }
@@ -50,14 +60,19 @@ class _TripDetailsView extends StatelessWidget {
     required this.trip,
     required this.canRebook,
     required this.accessToken,
+    this.driverId,
   });
 
   final HistoryTrip trip;
   final bool canRebook;
   final String? accessToken;
+  final String? driverId;
 
   Future<void> _reload(BuildContext context) {
-    return context.read<TripDetailsProvider>().loadDetails(accessToken);
+    return context.read<TripDetailsProvider>().loadDetails(
+      accessToken,
+      driverIdForFeedback: driverId,
+    );
   }
 
   Future<void> _handleRebook(BuildContext context) async {
@@ -921,13 +936,16 @@ class _TripFeedbackCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final roleProvider = context.read<RoleProvider>();
+    final isDriver = roleProvider.isDriver;
+
     return _TripSectionCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Đánh giá và phản hồi',
-            style: TextStyle(
+          Text(
+            isDriver ? 'Đánh giá của khách hàng' : 'Đánh giá và phản hồi',
+            style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w800,
               color: Color(0xFF101828),
@@ -935,6 +953,55 @@ class _TripFeedbackCard extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           if (data.hasFeedback) ...[
+            if (isDriver && data.feedbackCustomerName != null) ...[
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: const Color(0xFFE0EAEB),
+                    backgroundImage: data.feedbackCustomerAvatarUrl != null
+                        ? NetworkImage(data.feedbackCustomerAvatarUrl!)
+                        : null,
+                    child: data.feedbackCustomerAvatarUrl == null
+                        ? Text(
+                          data.feedbackCustomerName![0].toUpperCase(),
+                          style: const TextStyle(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        )
+                        : null,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          data.feedbackCustomerName!,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF101828),
+                          ),
+                        ),
+                        if (data.feedbackCreatedAt != null)
+                          Text(
+                            DateFormat(
+                              'dd/MM/yyyy',
+                            ).format(data.feedbackCreatedAt!),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF667085),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
             Row(
               children: List.generate(5, (index) {
                 final selected = index < (data.ratingScore ?? 0);
@@ -947,7 +1014,8 @@ class _TripFeedbackCard extends StatelessWidget {
                 );
               }),
             ),
-            if (data.feedbackComment != null) ...[
+            if (data.feedbackComment != null &&
+                data.feedbackComment!.isNotEmpty) ...[
               const SizedBox(height: 12),
               Container(
                 width: double.infinity,
@@ -975,9 +1043,11 @@ class _TripFeedbackCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(color: const Color(0xFFE4E7EC)),
               ),
-              child: const Text(
-                'Chưa có dữ liệu đánh giá cho chuyến đi này.',
-                style: TextStyle(fontSize: 14, color: Color(0xFF667085)),
+              child: Text(
+                isDriver
+                    ? 'Khách hàng chưa đánh giá chuyến đi này.'
+                    : 'Chưa có dữ liệu đánh giá cho chuyến đi này.',
+                style: const TextStyle(fontSize: 14, color: Color(0xFF667085)),
               ),
             ),
         ],

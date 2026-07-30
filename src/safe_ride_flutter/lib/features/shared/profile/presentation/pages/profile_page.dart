@@ -406,11 +406,7 @@ class _ProfilePageState extends State<ProfilePage> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               children: [
-                Icon(
-                  Icons.link_rounded,
-                  color: Colors.grey.shade600,
-                  size: 24,
-                ),
+                Icon(Icons.link_rounded, color: Colors.grey.shade600, size: 24),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(

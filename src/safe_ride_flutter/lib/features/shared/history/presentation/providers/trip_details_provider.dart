@@ -3,9 +3,12 @@ import 'package:flutter/material.dart';
 import '../../data/models/history_trip.dart';
 import '../../data/models/trip_details_view_data.dart';
 import '../../domain/repositories/trip_details_repository.dart';
+import 'package:safe_ride/features/shared/feedback/domain/repositories/feedback_repository.dart';
+import 'package:safe_ride/features/shared/feedback/data/models/driver_rating_item.dart';
 
 class TripDetailsProvider extends ChangeNotifier {
   final TripDetailsRepository _repository;
+  final FeedbackRepository? _feedbackRepository;
   final HistoryTrip _historyTrip;
 
   bool _isLoading = false;
@@ -15,16 +18,19 @@ class TripDetailsProvider extends ChangeNotifier {
 
   TripDetailsProvider._internal(
     this._repository,
+    this._feedbackRepository,
     this._historyTrip,
     this._tripDetailsViewData,
   );
 
   factory TripDetailsProvider.create(
     TripDetailsRepository repository,
-    HistoryTrip historyTrip,
-  ) {
+    HistoryTrip historyTrip, {
+    FeedbackRepository? feedbackRepository,
+  }) {
     return TripDetailsProvider._internal(
       repository,
+      feedbackRepository,
       historyTrip,
       TripDetailsViewData(historyTrip: historyTrip),
     );
@@ -35,7 +41,10 @@ class TripDetailsProvider extends ChangeNotifier {
   bool get hasLoadedRemoteDetails => _hasLoadedRemoteDetails;
   TripDetailsViewData get tripDetails => _tripDetailsViewData;
 
-  Future<void> loadDetails(String? accessToken) async {
+  Future<void> loadDetails(
+    String? accessToken, {
+    String? driverIdForFeedback,
+  }) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -51,9 +60,31 @@ class TripDetailsProvider extends ChangeNotifier {
         accessToken,
         bookingId: _historyTrip.id,
       );
+
+      DriverRatingItem? feedback;
+      final tripId = booking.tripId ?? _historyTrip.tripId;
+
+      if (driverIdForFeedback != null &&
+          _feedbackRepository != null &&
+          tripId != null) {
+        try {
+          final summary = await _feedbackRepository.getDriverRatings(
+            accessToken,
+            driverId: driverIdForFeedback,
+          );
+          feedback = summary.ratings.firstWhere(
+            (r) => r.tripId == tripId,
+            orElse: () => throw Exception('Not found'),
+          );
+        } catch (_) {
+          // Feedback not found or error loading feedback, ignore and continue
+        }
+      }
+
       _tripDetailsViewData = TripDetailsViewData(
         historyTrip: _historyTrip,
         booking: booking,
+        feedback: feedback,
       );
       _hasLoadedRemoteDetails = true;
     } on TripDetailsRepositoryException catch (exception) {

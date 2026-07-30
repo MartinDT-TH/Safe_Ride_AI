@@ -550,7 +550,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
           const SizedBox(height: 16),
           Container(
             width: double.infinity,
-            height: 160,
+            height: 176,
             decoration: BoxDecoration(
               color: Colors.grey[200],
               borderRadius: BorderRadius.circular(20),
@@ -593,7 +593,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
         ),
         const SizedBox(height: 8),
         SizedBox(
-          height: 160,
+          height: 176,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: bookingProvider.availablePromotions.length,

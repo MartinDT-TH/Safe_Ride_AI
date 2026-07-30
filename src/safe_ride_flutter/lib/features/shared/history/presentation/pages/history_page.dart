@@ -114,6 +114,10 @@ class _HistoryPageState extends State<HistoryPage> {
     );
   }
 
+  void _handleViewFeedback(HistoryTrip trip) {
+    _openTripDetails(trip, canRebook: false);
+  }
+
   bool _canSendChat(String? status) {
     if (status == null) return true;
     final normalized = status.trim().toUpperCase();
@@ -226,6 +230,13 @@ class _HistoryPageState extends State<HistoryPage> {
                                 onChat: trip.tripId != null
                                     ? () => _handleChat(trip)
                                     : null,
+                                onViewFeedback:
+                                    isDriver &&
+                                            trip.status ==
+                                                HistoryTripStatus.completed &&
+                                            trip.tripId != null
+                                        ? () => _handleViewFeedback(trip)
+                                        : null,
                                 trip: trip,
                                 onReport:
                                     (isDriver ||
