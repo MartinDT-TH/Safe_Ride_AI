@@ -809,6 +809,11 @@ public sealed class TripStatusServiceTests
             return Task.CompletedTask;
         }
 
+        public Task PublishSOSTriggeredAsync(
+            SOSTriggeredEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
         public Task PublishBookingSearchingStartedAsync(
             BookingSearchingStartedEvent notification,
             CancellationToken cancellationToken = default) =>

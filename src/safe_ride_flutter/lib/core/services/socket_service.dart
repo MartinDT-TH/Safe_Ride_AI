@@ -196,6 +196,25 @@ class TripStatusUpdate {
   }
 }
 
+class SOSTriggeredUpdate {
+  const SOSTriggeredUpdate({required this.tripId});
+
+  final int tripId;
+
+  static SOSTriggeredUpdate? fromSignalRArguments(
+    List<Object?>? arguments,
+  ) {
+    if (arguments == null || arguments.isEmpty || arguments.first is! Map) {
+      return null;
+    }
+
+    final data = Map<String, dynamic>.from(arguments.first as Map);
+    final value = data[ApiKeys.tripId] ?? data['TripId'];
+    final tripId = (value as num?)?.toInt();
+    return tripId == null ? null : SOSTriggeredUpdate(tripId: tripId);
+  }
+}
+
 class TripPaymentUpdate {
   const TripPaymentUpdate({
     required this.tripId,
@@ -577,6 +596,7 @@ class SocketService {
   HubConnection? _connection;
   bool _driverLocationListenerAttached = false;
   bool _tripStatusListenerAttached = false;
+  bool _sosTriggeredListenerAttached = false;
   bool _tripPaymentListenerAttached = false;
   bool _driverOfferReceivedListenerAttached = false;
   bool _driverOfferClosedListenerAttached = false;
@@ -588,6 +608,8 @@ class SocketService {
   _driverLocationHandlers = {};
   final Map<String, void Function(TripStatusUpdate update)>
   _tripStatusHandlers = {};
+  final Map<String, void Function(SOSTriggeredUpdate update)>
+  _sosTriggeredHandlers = {};
   final Map<String, void Function(TripPaymentUpdate update)>
   _tripPaymentHandlers = {};
   final Map<String, void Function(DriverOfferUpdate update)>
@@ -682,6 +704,7 @@ class SocketService {
       _connection = null;
       _driverLocationListenerAttached = false;
       _tripStatusListenerAttached = false;
+      _sosTriggeredListenerAttached = false;
       _tripPaymentListenerAttached = false;
       _driverOfferReceivedListenerAttached = false;
       _driverOfferClosedListenerAttached = false;
@@ -713,6 +736,9 @@ class SocketService {
     }
     if (_tripStatusHandlers.isNotEmpty && !_tripStatusListenerAttached) {
       _attachTripStatusListener();
+    }
+    if (_sosTriggeredHandlers.isNotEmpty && !_sosTriggeredListenerAttached) {
+      _attachSOSTriggeredListener();
     }
     if (_tripPaymentHandlers.isNotEmpty && !_tripPaymentListenerAttached) {
       _attachTripPaymentListeners();
@@ -870,6 +896,36 @@ class SocketService {
 
   void removeTripStatusChangedHandler(String key) {
     _tripStatusHandlers.remove(key);
+  }
+
+  void onSOSTriggered(
+    void Function(SOSTriggeredUpdate update) handler, {
+    String key = 'default',
+  }) {
+    _sosTriggeredHandlers[key] = handler;
+    _attachSOSTriggeredListener();
+  }
+
+  void _attachSOSTriggeredListener() {
+    if (_connection == null || _sosTriggeredListenerAttached) {
+      return;
+    }
+
+    _sosTriggeredListenerAttached = true;
+    _connection!.on(_configService.config.realtime.events.sosTriggered, (
+      arguments,
+    ) {
+      final update = SOSTriggeredUpdate.fromSignalRArguments(arguments);
+      if (update != null) {
+        for (final handler in List.of(_sosTriggeredHandlers.values)) {
+          handler(update);
+        }
+      }
+    });
+  }
+
+  void removeSOSTriggeredHandler(String key) {
+    _sosTriggeredHandlers.remove(key);
   }
 
   void onTripPaymentUpdated(

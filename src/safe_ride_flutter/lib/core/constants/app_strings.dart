@@ -272,6 +272,7 @@ abstract final class ApiEndpoints {
       '/bookings/$bookingId/confirm-driver-offer/$offerId';
   static String tripStatus(int tripId) => '/trips/$tripId/status';
   static String completeTrip(int tripId) => '/trips/$tripId/complete';
+  static String triggerTripSOS(int tripId) => '/trips/$tripId/sos';
   static String createDriverTripQrPayment(int tripId) =>
       '/payments/driver/trips/$tripId/qr';
   static String createCustomerTripQrPayment(int tripId) =>
@@ -364,6 +365,7 @@ abstract final class ApiKeys {
   static const paidAt = 'paidAt';
   static const tripStatus = 'tripStatus';
   static const tripId = 'tripId';
+  static const isSOSActivated = 'isSOSActivated';
   static const address = 'address';
   static const latitude = 'latitude';
   static const longitude = 'longitude';

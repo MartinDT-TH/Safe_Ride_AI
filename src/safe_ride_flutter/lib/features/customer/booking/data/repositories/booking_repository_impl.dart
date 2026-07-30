@@ -108,6 +108,23 @@ class BookingRepositoryImpl implements BookingRepository {
   }
 
   @override
+  Future<void> triggerSOS(
+    String accessToken, {
+    required int tripId,
+    required double latitude,
+    required double longitude,
+    required String message,
+  }) {
+    return _remoteDatasource.triggerSOS(
+      accessToken,
+      tripId: tripId,
+      latitude: latitude,
+      longitude: longitude,
+      message: message,
+    );
+  }
+
+  @override
   Future<void> confirmCustomerReturn(
     String accessToken, {
     required int tripId,

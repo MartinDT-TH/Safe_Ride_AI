@@ -342,6 +342,42 @@ class BookingRemoteDatasource {
     }
   }
 
+  Future<void> triggerSOS(
+    String accessToken, {
+    required int tripId,
+    required double latitude,
+    required double longitude,
+    required String message,
+  }) async {
+    try {
+      await _dio.post(
+        ApiEndpoints.triggerTripSOS(tripId),
+        data: {
+          ApiKeys.latitude: latitude,
+          ApiKeys.longitude: longitude,
+          ApiKeys.message: message,
+        },
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+        ),
+      );
+    } on DioException catch (exception) {
+      final statusCode = exception.response?.statusCode;
+      final data = exception.response?.data;
+      if (data is Map) {
+        final detail = data[ApiKeys.detail]?.toString();
+        final code = data[ApiKeys.code]?.toString();
+        if (detail != null) {
+          throw BookingApiException(detail, code: code, statusCode: statusCode);
+        }
+      }
+      throw BookingApiException(
+        'Không thể kích hoạt SOS. Vui lòng thử lại.',
+        statusCode: statusCode,
+      );
+    }
+  }
+
   Future<void> confirmCustomerReturn(
     String accessToken, {
     required int tripId,

@@ -32,6 +32,10 @@ public interface IRealtimeNotificationService
         TripPaymentSucceededEvent notification,
         CancellationToken cancellationToken = default);
 
+    Task PublishSOSTriggeredAsync(
+        SOSTriggeredEvent notification,
+        CancellationToken cancellationToken = default);
+
     Task PublishDriverLocationUpdatedAsync(
         DriverLocationUpdatedEvent notification,
         CancellationToken cancellationToken = default);

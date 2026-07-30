@@ -55,6 +55,19 @@ public sealed record TripPaymentSucceededEvent(
     string Message,
     BookingStatus? BookingStatus = null);
 
+public sealed record SOSTriggeredEvent(
+    long SosAlertId,
+    long TripId,
+    long BookingId,
+    Guid CustomerId,
+    Guid DriverId,
+    double Latitude,
+    double Longitude,
+    string? EmergencyMessage,
+    SOSStatus SOSStatus,
+    DateTime CreatedAt,
+    string Message);
+
 public sealed record TripCreatedEvent(
     long TripId,
     long BookingId,
