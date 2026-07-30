@@ -657,6 +657,11 @@ public sealed class BookingTests
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
+        public Task PublishSOSTriggeredAsync(
+            SOSTriggeredEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
         public Task PublishDriverLocationUpdatedAsync(
             DriverLocationUpdatedEvent notification,
             CancellationToken cancellationToken = default) =>

@@ -140,6 +140,33 @@ public sealed class SignalRRealtimeNotificationService
                 cancellationToken));
     }
 
+    public Task PublishSOSTriggeredAsync(
+        SOSTriggeredEvent notification,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.WhenAll(
+            SendToUserAsync(
+                notification.CustomerId,
+                "SOSTriggered",
+                notification,
+                cancellationToken),
+            SendToDriverAsync(
+                notification.DriverId,
+                "SOSTriggered",
+                notification,
+                cancellationToken),
+            SendToBookingAsync(
+                notification.BookingId,
+                "SOSTriggered",
+                notification,
+                cancellationToken),
+            SendToTripAsync(
+                notification.TripId,
+                "SOSTriggered",
+                notification,
+                cancellationToken));
+    }
+
     public Task PublishDriverLocationUpdatedAsync(
         DriverLocationUpdatedEvent notification,
         CancellationToken cancellationToken = default)

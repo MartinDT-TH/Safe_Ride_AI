@@ -432,6 +432,11 @@ public sealed class DriverRealtimeServiceTests
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
+        public Task PublishSOSTriggeredAsync(
+            SOSTriggeredEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
         public Task PublishBookingDriverAssignedAsync(
             BookingDriverAssignedEvent notification,
             CancellationToken cancellationToken = default) =>

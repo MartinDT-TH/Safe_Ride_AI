@@ -7,6 +7,7 @@ using SafeRide.API.Authorization;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Features.Auth;
 using SafeRide.Application.Features.Ratings.Commands.SubmitTripRating;
+using SafeRide.Application.Features.Safety.Commands.TriggerSOS;
 using SafeRide.Application.Features.Trips.DTOs;
 using SafeRide.Contracts.Requests.Trips;
 using SafeRide.Realtime;
@@ -259,6 +260,41 @@ public sealed class TripsController : ControllerBase
                 customerId,
                 request.RatingScore,
                 request.Comment),
+            cancellationToken);
+
+        return Ok(response);
+    }
+
+    [HttpPost("{tripId:long}/sos")]
+    [Authorize(Roles = "Customer")]
+    [ProducesResponseType<TriggerSOSResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<TriggerSOSResponse>> TriggerSOS(
+        long tripId,
+        [FromBody] TriggerSOSRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var customerId))
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Unauthorized",
+                Detail = "Không xác định được tài khoản khách hàng."
+            });
+        }
+
+        var response = await _sender.Send(
+            new TriggerSOSCommand(
+                tripId,
+                customerId,
+                request.Latitude,
+                request.Longitude,
+                request.Message),
             cancellationToken);
 
         return Ok(response);

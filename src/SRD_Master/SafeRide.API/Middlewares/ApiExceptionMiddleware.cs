@@ -8,6 +8,7 @@ using SafeRide.Application.Features.Pricing;
 using SafeRide.Application.Features.Promotions;
 using SafeRide.Application.Features.Ratings;
 using SafeRide.Application.Features.Reports;
+using SafeRide.Application.Features.Safety;
 
 namespace SafeRide.API.Middlewares;
 
@@ -67,6 +68,14 @@ public sealed class ApiExceptionMiddleware
                 exception.Message);
         }
         catch (RatingException exception)
+        {
+            await WriteProblemAsync(
+                context,
+                exception.StatusCode,
+                exception.Code,
+                exception.Message);
+        }
+        catch (SafetyException exception)
         {
             await WriteProblemAsync(
                 context,
