@@ -58,6 +58,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   final MapApiService _mapApiService = MapApiService();
   final List<AppLatLng> _arrivalRoutePoints = [];
   final List<AppLatLng> _tripRoutePoints = [];
+  final List<AppLatLng> _actualPathPoints = [];
   AppLatLng? _driverPosition;
   double _driverHeading = 0;
   DateTime? _lastCameraFitAt;
@@ -72,6 +73,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   bool _isCompletingTrip = false;
   bool _arrivalRouteRefreshInProgress = false;
   bool _incomingCallDialogOpen = false;
+  bool _deviationAlertOpen = false;
   late bool _isPrepaid;
   late String? _currentTripStatus;
   static const _tealColor = Color(0xFF006B70);
@@ -157,6 +159,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       _socketService.removeTripStatusChangedHandler(
         _tripStatusHandlerKey(tripId),
       );
+      _socketService.removeTripRouteRecalculatedHandler(
+        _tripRouteHandlerKey(tripId),
+      );
       _socketService.removeInAppCallOfferHandler(_callOfferHandlerKey(tripId));
       await _socketService.leaveTrip(tripId);
     } catch (e) {
@@ -205,6 +210,20 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         }
       } on FormatException {
         _tripRoutePoints.clear();
+      }
+    }
+
+    final actualPolyline = booking.actualEncodedPolyline;
+    if (actualPolyline != null && actualPolyline.isNotEmpty) {
+      try {
+        final points = decodePolyline(actualPolyline);
+        if (points.isNotEmpty) {
+          _actualPathPoints
+            ..clear()
+            ..addAll(points);
+        }
+      } on FormatException {
+        _actualPathPoints.clear();
       }
     }
 
@@ -287,6 +306,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
             _driverHeading = _calculateHeading(_driverPosition!, rawPosition);
           }
           _driverPosition = rawPosition;
+          if (_trackingState == TripTrackingState.inProgress) {
+            _actualPathPoints.add(rawPosition);
+          }
         });
 
         _fitMapToVisibleRoute(throttled: true);
@@ -313,6 +335,31 @@ class _TripTrackingPageState extends State<TripTrackingPage>
           Navigator.of(context).popUntil((route) => route.isFirst);
         }
       }, key: _tripStatusHandlerKey(tripId));
+
+      _socketService.onTripRouteRecalculated((update) {
+        if (!mounted || update.tripId != tripId) {
+          return;
+        }
+
+        try {
+          final points = decodePolyline(update.encodedPolyline);
+          if (points.length < 2) {
+            return;
+          }
+
+          setState(() {
+            _tripRoutePoints
+              ..clear()
+              ..addAll(points);
+          });
+          _fitMapToVisibleRoute();
+          if (update.shouldAlertCustomer) {
+            unawaited(_showRouteDeviationAlert(update.message));
+          }
+        } on FormatException {
+          debugPrint('Tracking: Invalid recalculated trip polyline.');
+        }
+      }, key: _tripRouteHandlerKey(tripId));
 
       _socketService.onInAppCallOffer((signal) {
         if (!mounted || signal.tripId != tripId || signal.sdp == null) {
@@ -467,6 +514,43 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       );
   }
 
+  Future<void> _showRouteDeviationAlert(String message) async {
+    if (!mounted || _deviationAlertOpen) return;
+    _deviationAlertOpen = true;
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          icon: const Icon(
+            Icons.health_and_safety_outlined,
+            color: Colors.orange,
+            size: 34,
+          ),
+          title: const Text('Kiểm tra an toàn'),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _showMessage('SafeRide đã ghi nhận bạn vẫn an toàn.');
+              },
+              child: const Text('Tôi vẫn an toàn'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                unawaited(_startInAppCall());
+              },
+              child: const Text('Gọi tài xế'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      _deviationAlertOpen = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -490,6 +574,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
           : null,
       arrivalRoutePoints: _arrivalRoutePoints,
       tripRoutePoints: _tripRoutePoints,
+      actualPathPoints: _actualPathPoints,
       driverPosition: _driverPosition,
       driverHeading: _driverHeading,
       padding: const EdgeInsets.only(
@@ -1594,6 +1679,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   static String _tripStatusHandlerKey(int tripId) => 'tripTracking:$tripId';
   static String _driverLocationHandlerKey(int tripId) =>
       'tripTrackingLocation:$tripId';
+  static String _tripRouteHandlerKey(int tripId) =>
+      'tripTrackingRoute:$tripId';
   static String _callOfferHandlerKey(int tripId) => 'tripTrackingCall:$tripId';
   static bool _shouldOpenTripSummary(String? status) {
     if (status == null) return false;

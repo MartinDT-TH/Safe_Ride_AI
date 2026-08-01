@@ -177,6 +177,15 @@ public static class DependencyInjection
             .Validate(options => options.MaxInferredSpeedKmh > 0, "TripTracking:MaxInferredSpeedKmh must be greater than zero.")
             .Validate(options => options.MaxAccuracyMeters > 0, "TripTracking:MaxAccuracyMeters must be greater than zero.")
             .Validate(options => options.FinalizeLockSeconds > 0, "TripTracking:FinalizeLockSeconds must be greater than zero.")
+            .Validate(options => options.RouteDeviationThresholdMeters > 0, "TripTracking:RouteDeviationThresholdMeters must be greater than zero.")
+            .Validate(options => options.RouteDeviationRequiredSamples > 0, "TripTracking:RouteDeviationRequiredSamples must be greater than zero.")
+            .Validate(options => options.RouteDeviationStateTtlMinutes > 0, "TripTracking:RouteDeviationStateTtlMinutes must be greater than zero.")
+            .Validate(options => options.RouteRerouteCooldownSeconds > 0, "TripTracking:RouteRerouteCooldownSeconds must be greater than zero.")
+            .Validate(options => options.CustomerDeviationAlertCooldownMinutes > 0, "TripTracking:CustomerDeviationAlertCooldownMinutes must be greater than zero.")
+            .Validate(options => options.ActiveRouteTtlHours > 0, "TripTracking:ActiveRouteTtlHours must be greater than zero.")
+            .Validate(options => options.ReverseProgressThresholdMeters > 0, "TripTracking:ReverseProgressThresholdMeters must be greater than zero.")
+            .Validate(options => options.ReverseRequiredSamples > 0, "TripTracking:ReverseRequiredSamples must be greater than zero.")
+            .Validate(options => options.CustomerAlertDistanceIncreaseMeters > 0, "TripTracking:CustomerAlertDistanceIncreaseMeters must be greater than zero.")
             .ValidateOnStart();
 
         // ── Hangfire ───────────────────────────────────────────────────────────────

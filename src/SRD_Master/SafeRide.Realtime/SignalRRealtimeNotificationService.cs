@@ -160,6 +160,17 @@ public sealed class SignalRRealtimeNotificationService
             cancellationToken);
     }
 
+    public Task PublishTripRouteRecalculatedAsync(
+        TripRouteRecalculatedEvent notification,
+        CancellationToken cancellationToken = default)
+    {
+        return SendToTripAsync(
+            notification.TripId,
+            "TripRouteRecalculated",
+            notification,
+            cancellationToken);
+    }
+
     public Task PublishDriverOfferCreatedAsync(
         DriverOfferCreatedEvent notification,
         CancellationToken cancellationToken = default)

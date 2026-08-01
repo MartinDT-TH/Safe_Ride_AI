@@ -12,6 +12,7 @@ class LiveTripMapWidget extends StatefulWidget {
   final AppLatLng? destination;
   final List<AppLatLng> arrivalRoutePoints;
   final List<AppLatLng> tripRoutePoints;
+  final List<AppLatLng> actualPathPoints;
   final AppLatLng? driverPosition;
   final double driverHeading;
   final EdgeInsets padding;
@@ -24,6 +25,7 @@ class LiveTripMapWidget extends StatefulWidget {
     this.destination,
     this.arrivalRoutePoints = const [],
     this.tripRoutePoints = const [],
+    this.actualPathPoints = const [],
     this.driverPosition,
     this.driverHeading = 0,
     this.padding = const EdgeInsets.all(24),
@@ -101,6 +103,9 @@ class _LiveTripMapWidgetState extends State<LiveTripMapWidget> {
     if (widget.tripRoutePoints.isNotEmpty) {
       points.addAll(widget.tripRoutePoints);
     }
+    if (widget.actualPathPoints.isNotEmpty) {
+      points.addAll(widget.actualPathPoints);
+    }
     points.add(widget.pickup);
     if (widget.destination != null) points.add(widget.destination!);
     if (widget.driverPosition != null) points.add(widget.driverPosition!);
@@ -174,6 +179,19 @@ class _LiveTripMapWidgetState extends State<LiveTripMapWidget> {
     final polylines = <AppPolyline>{};
     final bool isArriving =
         widget.trackingState == LiveTripTrackingState.arriving;
+
+    if (widget.actualPathPoints.length >= 2) {
+      polylines.add(
+        AppPolyline(
+          id: 'trip-actual-path',
+          points: widget.actualPathPoints,
+          color: Colors.grey.withValues(alpha: 0.55),
+          width: 5,
+          zIndex: 2,
+          endCapRound: true,
+        ),
+      );
+    }
 
     // Very faded full-route background (whole route outline) — zIndex: 1
     if (widget.tripRoutePoints.length >= 2) {

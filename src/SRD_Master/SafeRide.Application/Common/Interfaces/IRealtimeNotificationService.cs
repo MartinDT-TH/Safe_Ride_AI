@@ -36,6 +36,11 @@ public interface IRealtimeNotificationService
         DriverLocationUpdatedEvent notification,
         CancellationToken cancellationToken = default);
 
+    Task PublishTripRouteRecalculatedAsync(
+        TripRouteRecalculatedEvent notification,
+        CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
+
     Task PublishDriverOfferCreatedAsync(
         DriverOfferCreatedEvent notification,
         CancellationToken cancellationToken = default);
