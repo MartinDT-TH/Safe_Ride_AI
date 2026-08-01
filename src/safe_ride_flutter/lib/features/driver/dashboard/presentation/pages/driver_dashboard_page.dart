@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:intl/intl.dart';
 
 import '../../../../../core/maps/models/map_models.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
@@ -16,6 +17,8 @@ import '../../../../../dependency_injection/injection.dart';
 
 import '../providers/driver_dashboard_provider.dart';
 import '../widgets/driver_bottom_nav_bar.dart';
+import '../../../../../core/localization/localization_extensions.dart';
+import '../../../../../core/localization/locale_provider.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../customer/booking/presentation/providers/booking_provider.dart';
 import '../../../../customer/home/presentation/pages/customer_home_page.dart';
@@ -32,15 +35,21 @@ import 'driver_trip_payment_page.dart';
 import 'driver_return_evidence_page.dart';
 import '../../../wallet/presentation/pages/driver_wallet_page.dart';
 
+String _formatCurrency(num value) => NumberFormat.currency(
+  locale: LocaleProvider.currentLocale.toLanguageTag(),
+  symbol: 'VND',
+  decimalDigits: 0,
+).format(value);
+
 class DriverDashboardPage extends StatefulWidget {
-  const DriverDashboardPage({super.key});
+  DriverDashboardPage({super.key});
 
   @override
   State<DriverDashboardPage> createState() => _DriverDashboardPageState();
 }
 
 class _RouteProgress {
-  const _RouteProgress({
+  _RouteProgress({
     required this.point,
     required this.segmentIndex,
     required this.progress,
@@ -100,7 +109,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Không thể lấy vị trí hiện tại: ${e.toString()}'),
+          content: Text(context.l10n.currentLocationFailed(e.toString())),
         ),
       );
     } finally {
@@ -318,7 +327,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     final accessToken = context.read<AuthProvider>().token;
     if (accessToken == null || accessToken.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Chưa thể gọi khi phiên đã hết hạn.')),
+        SnackBar(content: Text(context.l10n.callUnavailableSessionExpired)),
       );
       return;
     }
@@ -331,7 +340,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
         builder: (_) => InAppVoiceCallPage(
           tripId: trip.tripId,
           bookingId: trip.bookingId,
-          peerName: 'Khách hàng',
+          peerName: context.l10n.customer,
           accessToken: accessToken,
         ),
       ),
@@ -372,17 +381,17 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
         builder: (dialogContext) {
           incomingDialogContext = dialogContext;
           return AlertDialog(
-            title: const Text('Cuộc gọi đến'),
-            content: const Text('Khách hàng đang gọi cho bạn.'),
+            title: Text(context.l10n.incomingCall),
+            content: Text(context.l10n.customerCalling),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(false),
-                child: const Text('Từ chối'),
+                child: Text(context.l10n.decline),
               ),
               FilledButton.icon(
                 onPressed: () => Navigator.of(dialogContext).pop(true),
-                icon: const Icon(Icons.call_rounded),
-                label: const Text('Nghe máy'),
+                icon: Icon(Icons.call_rounded),
+                label: Text(context.l10n.answer),
               ),
             ],
           );
@@ -406,7 +415,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
         builder: (_) => InAppVoiceCallPage(
           tripId: signal.tripId,
           bookingId: signal.bookingId,
-          peerName: 'Khách hàng',
+          peerName: context.l10n.customer,
           accessToken: accessToken,
           initialOffer: signal,
         ),
@@ -422,7 +431,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     if (_provider.isDemoMode) return;
     _positionStream =
         Geolocator.getPositionStream(
-          locationSettings: const LocationSettings(
+          locationSettings: LocationSettings(
             accuracy: LocationAccuracy.high,
             distanceFilter: 5,
           ),
@@ -458,9 +467,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Không thể lấy vị trí hiện tại hoặc không thể online: ${e.toString()}',
-          ),
+          content: Text(context.l10n.onlineLocationFailed(e.toString())),
         ),
       );
       rethrow;
@@ -678,7 +685,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
       }
       roleProvider.setRole(AppValues.roleCustomer);
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const CustomerHomePage()),
+        MaterialPageRoute(builder: (_) => CustomerHomePage()),
         (route) => false,
       );
       return true;
@@ -720,9 +727,9 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     final currentUserId = auth.userId;
 
     if (currentUserId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Không thể mở trò chuyện lúc này.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.l10n.chatUnavailable)));
       return;
     }
 
@@ -731,7 +738,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
         builder: (_) => TripChatPage(
           tripId: trip.tripId,
           currentUserId: currentUserId,
-          receiverName: 'Khách hàng',
+          receiverName: context.l10n.customer,
           canSendMessage: _canSendChat(trip.tripStatus),
         ),
       ),
@@ -750,9 +757,9 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
   Widget build(BuildContext context) {
     final List<Widget> pages = [
       _buildHomeContent(),
-      const HistoryPage(),
-      _selectedIndex == 2 ? const DriverWalletPage() : const SizedBox.shrink(),
-      const ProfilePage(),
+      HistoryPage(),
+      _selectedIndex == 2 ? DriverWalletPage() : const SizedBox.shrink(),
+      ProfilePage(),
     ];
 
     return Scaffold(
@@ -867,24 +874,24 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                             if (nextDemoMode) {
                               _stopLocationUpdates();
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
+                                SnackBar(
                                   content: Text(
-                                    'Đã bật mô phỏng GPS (Backend)',
+                                    context.l10n.gpsSimulationEnabled,
                                   ),
                                 ),
                               );
                             } else {
                               _startLocationUpdates();
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
+                                SnackBar(
                                   content: Text(
-                                    'Đã tắt mô phỏng GPS, dùng GPS thật',
+                                    context.l10n.gpsSimulationDisabled,
                                   ),
                                 ),
                               );
                             }
                           },
-                          tooltip: 'Demo GPS Mode',
+                          tooltip: context.l10n.demoGpsMode,
                         ),
                       ),
                     _CircleIconButton(
@@ -895,7 +902,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                       onPressed: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => const NotificationsPage(),
+                            builder: (_) => NotificationsPage(),
                           ),
                         );
                       },
@@ -962,7 +969,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                           state.activeTrip == null &&
                           !state.hasNewRequest &&
                           !state.isWaitingForCustomerConfirmation)) {
-                    return const Padding(
+                    return Padding(
                       padding: EdgeInsets.only(bottom: 24),
                       child: Center(
                         child: CircularProgressIndicator(
@@ -1008,7 +1015,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                     );
                   }
                   if (state.isWaitingForCustomerConfirmation) {
-                    return const _WaitingCustomerConfirmationCard();
+                    return _WaitingCustomerConfirmationCard();
                   }
                   return _StatusToggle(
                     onGoOnline: _publishInitialLocation,
@@ -1021,7 +1028,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                 },
               ),
 
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
             ],
           ),
         ),
@@ -1034,7 +1041,7 @@ class _ErrorLoadingActiveTripCard extends StatelessWidget {
   final String errorMessage;
   final VoidCallback onRetry;
 
-  const _ErrorLoadingActiveTripCard({
+  _ErrorLoadingActiveTripCard({
     required this.errorMessage,
     required this.onRetry,
   });
@@ -1052,41 +1059,41 @@ class _ErrorLoadingActiveTripCard extends StatelessWidget {
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.16),
               blurRadius: 20,
-              offset: const Offset(0, 10),
+              offset: Offset(0, 10),
             ),
           ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.cloud_off_rounded, size: 48, color: Colors.grey),
-            const SizedBox(height: 12),
-            const Text(
-              'Lỗi kết nối máy chủ',
+            Icon(Icons.cloud_off_rounded, size: 48, color: Colors.grey),
+            SizedBox(height: 12),
+            Text(
+              context.l10n.serverConnectionErrorTitle,
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
                 color: Color(0xFF1A1A1A),
               ),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             Text(
               errorMessage,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14, color: Colors.black54),
+              style: TextStyle(fontSize: 14, color: Colors.black54),
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: onRetry,
-                icon: const Icon(Icons.refresh_rounded),
-                label: const Text(
-                  'Thử lại',
+                icon: Icon(Icons.refresh_rounded),
+                label: Text(
+                  context.l10n.tryAgain,
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF006B70),
+                  backgroundColor: Color(0xFF006B70),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
@@ -1104,7 +1111,7 @@ class _ErrorLoadingActiveTripCard extends StatelessWidget {
 }
 
 class _ActiveTripCard extends StatelessWidget {
-  const _ActiveTripCard({
+  _ActiveTripCard({
     required this.trip,
     required this.isUpdating,
     required this.onCall,
@@ -1138,7 +1145,7 @@ class _ActiveTripCard extends StatelessWidget {
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.16),
               blurRadius: 20,
-              offset: const Offset(0, 10),
+              offset: Offset(0, 10),
             ),
           ],
         ),
@@ -1150,33 +1157,33 @@ class _ActiveTripCard extends StatelessWidget {
               children: [
                 Container(
                   padding: const EdgeInsets.all(10),
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     color: Color(0xFFE8F2F2),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.route_rounded,
                     color: Color(0xFF006B70),
                     size: 22,
                   ),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Chuyến đang thực hiện',
+                      Text(
+                        context.l10n.activeTrip,
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                           color: Colors.black87,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      SizedBox(height: 4),
                       Text(
-                        _statusLabel(status),
-                        style: const TextStyle(
+                        _statusLabel(context, status),
+                        style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                           color: Color(0xFF667085),
@@ -1187,17 +1194,17 @@ class _ActiveTripCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: onChat,
-                    icon: const Icon(Icons.chat_bubble_outline_rounded),
-                    label: const Text('Nhắn tin'),
+                    icon: Icon(Icons.chat_bubble_outline_rounded),
+                    label: Text(context.l10n.message),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF006B70),
-                      side: const BorderSide(
+                      foregroundColor: Color(0xFF006B70),
+                      side: BorderSide(
                         color: Color(0xFF006B70),
                         width: 1.5,
                       ),
@@ -1208,15 +1215,15 @@ class _ActiveTripCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: onCall,
-                    icon: const Icon(Icons.phone_in_talk_rounded),
-                    label: const Text('Gọi khách'),
+                    icon: Icon(Icons.phone_in_talk_rounded),
+                    label: Text(context.l10n.callCustomer),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF006B70),
-                      side: const BorderSide(
+                      foregroundColor: Color(0xFF006B70),
+                      side: BorderSide(
                         color: Color(0xFF006B70),
                         width: 1.5,
                       ),
@@ -1229,7 +1236,7 @@ class _ActiveTripCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             if (status == 'ACCEPTED')
               SizedBox(
                 width: double.infinity,
@@ -1242,8 +1249,12 @@ class _ActiveTripCard extends StatelessWidget {
                               .read<DriverDashboardProvider>()
                               .startArriving(),
                         ),
-                  icon: const Icon(Icons.navigation_rounded),
-                  label: Text(isUpdating ? 'Đang xử lý...' : 'Bắt đầu đến đón'),
+                  icon: Icon(Icons.navigation_rounded),
+                  label: Text(
+                    isUpdating
+                        ? context.l10n.processing
+                        : context.l10n.startPickup,
+                  ),
                   style: _primaryButtonStyle(),
                 ),
               )
@@ -1261,11 +1272,11 @@ class _ActiveTripCard extends StatelessWidget {
                                     .read<DriverDashboardProvider>()
                                     .cancelActiveTrip(),
                               ),
-                        icon: const Icon(Icons.close_rounded),
-                        label: const Text('Hủy chuyến'),
+                        icon: Icon(Icons.close_rounded),
+                        label: Text(context.l10n.cancelBooking),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFFE53935),
-                          side: const BorderSide(color: Color(0xFFE53935)),
+                          foregroundColor: Color(0xFFE53935),
+                          side: BorderSide(color: Color(0xFFE53935)),
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -1273,7 +1284,7 @@ class _ActiveTripCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: 12),
                   ],
                   Expanded(
                     child: ElevatedButton.icon(
@@ -1285,8 +1296,8 @@ class _ActiveTripCard extends StatelessWidget {
                                   .read<DriverDashboardProvider>()
                                   .markArrived(),
                             ),
-                      icon: const Icon(Icons.flag_rounded),
-                      label: const Text('Đã tới đón'),
+                      icon: Icon(Icons.flag_rounded),
+                      label: Text(context.l10n.driverArrived),
                       style: _primaryButtonStyle(),
                     ),
                   ),
@@ -1306,11 +1317,11 @@ class _ActiveTripCard extends StatelessWidget {
                                     .read<DriverDashboardProvider>()
                                     .cancelActiveTrip(),
                               ),
-                        icon: const Icon(Icons.close_rounded),
-                        label: const Text('Hủy chuyến'),
+                        icon: Icon(Icons.close_rounded),
+                        label: Text(context.l10n.cancelBooking),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFFE53935),
-                          side: const BorderSide(color: Color(0xFFE53935)),
+                          foregroundColor: Color(0xFFE53935),
+                          side: BorderSide(color: Color(0xFFE53935)),
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -1318,7 +1329,7 @@ class _ActiveTripCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: 12),
                   ],
                   Expanded(
                     child: ElevatedButton.icon(
@@ -1330,8 +1341,8 @@ class _ActiveTripCard extends StatelessWidget {
                                   .read<DriverDashboardProvider>()
                                   .startTrip(),
                             ),
-                      icon: const Icon(Icons.play_arrow_rounded),
-                      label: const Text('Bắt đầu chuyến'),
+                      icon: Icon(Icons.play_arrow_rounded),
+                      label: Text(context.l10n.startTrip),
                       style: _primaryButtonStyle(),
                     ),
                   ),
@@ -1349,11 +1360,9 @@ class _ActiveTripCard extends StatelessWidget {
                               .read<DriverDashboardProvider>()
                               .endTripAsync(),
                         ),
-                  icon: const Icon(Icons.flag_rounded),
+                  icon: Icon(Icons.flag_rounded),
                   label: Text(
-                    isUpdating
-                        ? 'Đang xử lý...'
-                        : DriverReturnEvidenceStrings.endTripButton,
+                    isUpdating ? context.l10n.processing : context.l10n.endTrip,
                   ),
                   style: _primaryButtonStyle(),
                 ),
@@ -1361,7 +1370,7 @@ class _ActiveTripCard extends StatelessWidget {
             else if (isWaitingReturn)
               _buildWaitingReturnSection(context, trip.tripId, isUpdating)
             else if (isReturnConfirmed)
-              _buildReturnConfirmedBanner()
+              _buildReturnConfirmedBanner(context)
             else if (isWaitingPayment)
               _buildWaitingPaymentSection(context, trip.tripId),
           ],
@@ -1372,7 +1381,7 @@ class _ActiveTripCard extends StatelessWidget {
 
   static ButtonStyle _primaryButtonStyle() {
     return ElevatedButton.styleFrom(
-      backgroundColor: const Color(0xFF006B70),
+      backgroundColor: Color(0xFF006B70),
       foregroundColor: Colors.white,
       padding: const EdgeInsets.symmetric(vertical: 14),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1393,13 +1402,13 @@ class _ActiveTripCard extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: const Color(0xFFFFF8E1),
+            color: Color(0xFFFFF8E1),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: const Color(0xFFFFCC02).withValues(alpha: 0.5),
+              color: Color(0xFFFFCC02).withValues(alpha: 0.5),
             ),
           ),
-          child: const Row(
+          child: Row(
             children: [
               Icon(
                 Icons.hourglass_top_rounded,
@@ -1409,7 +1418,7 @@ class _ActiveTripCard extends StatelessWidget {
               SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Đang chờ khách xác nhận trả xe.\nNếu khách không phản hồi, bạn có thể xác nhận thay.',
+                  context.l10n.waitingCustomerReturnConfirmation,
                   style: TextStyle(
                     color: Color(0xFF7B5800),
                     fontSize: 13,
@@ -1420,7 +1429,7 @@ class _ActiveTripCard extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 14),
+        SizedBox(height: 14),
 
         // Driver substitute confirm button
         SizedBox(
@@ -1437,11 +1446,11 @@ class _ActiveTripCard extends StatelessWidget {
                       ),
                     );
                   },
-            icon: const Icon(Icons.add_photo_alternate_rounded),
-            label: const Text('Xác nhận thay bằng ảnh bằng chứng'),
+            icon: Icon(Icons.add_photo_alternate_rounded),
+            label: Text(context.l10n.confirmReturnWithEvidence),
             style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF006B70),
-              side: const BorderSide(color: Color(0xFF006B70), width: 1.5),
+              foregroundColor: Color(0xFF006B70),
+              side: BorderSide(color: Color(0xFF006B70), width: 1.5),
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -1455,23 +1464,23 @@ class _ActiveTripCard extends StatelessWidget {
 
   // ─────────── RETURN_CONFIRMED banner ─────────────────────────────────
 
-  static Widget _buildReturnConfirmedBanner() {
+  static Widget _buildReturnConfirmedBanner(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFE8F7F0),
+        color: Color(0xFFE8F7F0),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: const Color(0xFF0A8F62).withValues(alpha: 0.3),
+          color: Color(0xFF0A8F62).withValues(alpha: 0.3),
         ),
       ),
-      child: const Row(
+      child: Row(
         children: [
           Icon(Icons.check_circle_rounded, color: Color(0xFF0A8F62), size: 22),
           SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Đã xác nhận trả xe. Đang hoàn tất chuyến đi...',
+              context.l10n.returnConfirmedCompleting,
               style: TextStyle(
                 color: Color(0xFF0A5C3E),
                 fontSize: 14,
@@ -1491,19 +1500,19 @@ class _ActiveTripCard extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color(0xFFE8F2F2),
+            color: Color(0xFFE8F2F2),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: const Color(0xFF006B70).withValues(alpha: 0.3),
+              color: Color(0xFF006B70).withValues(alpha: 0.3),
             ),
           ),
-          child: const Row(
+          child: Row(
             children: [
               Icon(Icons.payments_rounded, color: Color(0xFF006B70), size: 22),
               SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Đã xác nhận trả xe. Vui lòng xác nhận thanh toán để hoàn tất chuyến đi.',
+                  context.l10n.returnConfirmedPaymentRequired,
                   style: TextStyle(
                     color: Color(0xFF00545A),
                     fontSize: 14,
@@ -1514,7 +1523,7 @@ class _ActiveTripCard extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 14),
+        SizedBox(height: 14),
         SizedBox(
           width: double.infinity,
           child: ElevatedButton.icon(
@@ -1531,8 +1540,8 @@ class _ActiveTripCard extends StatelessWidget {
               provider.markTripPaymentCompleted(tripId);
               await provider.loadActiveTrip();
             },
-            icon: const Icon(Icons.receipt_long_rounded),
-            label: const Text('Xác nhận thanh toán'),
+            icon: Icon(Icons.receipt_long_rounded),
+            label: Text(context.l10n.confirmPayment),
             style: _primaryButtonStyle(),
           ),
         ),
@@ -1540,16 +1549,15 @@ class _ActiveTripCard extends StatelessWidget {
     );
   }
 
-  static String _statusLabel(String status) {
+  static String _statusLabel(BuildContext context, String status) {
     return switch (status) {
-      'ACCEPTED' => 'Đã nhận chuyến',
-      'DRIVER_ARRIVING' => 'Đang đến điểm đón',
-      'ARRIVED' => 'Đã tới điểm đón',
-      'IN_PROGRESS' => 'Đang thực hiện chuyến',
-      'WAITING_RETURN_CONFIRM' =>
-        DriverReturnEvidenceStrings.waitingReturnLabel,
-      'RETURN_CONFIRMED' => DriverReturnEvidenceStrings.returnConfirmedLabel,
-      'WAITING_PAYMENT' => 'Chờ thanh toán',
+      'ACCEPTED' => context.l10n.statusAccepted,
+      'DRIVER_ARRIVING' => context.l10n.statusDriverArriving,
+      'ARRIVED' => context.l10n.statusArrived,
+      'IN_PROGRESS' => context.l10n.statusInProgress,
+      'WAITING_RETURN_CONFIRM' => context.l10n.waitingReturnConfirmation,
+      'RETURN_CONFIRMED' => context.l10n.returnConfirmedStatus,
+      'WAITING_PAYMENT' => context.l10n.waitForPayment,
       _ => status,
     };
   }
@@ -1577,9 +1585,7 @@ class _ActiveTripCard extends StatelessWidget {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
-          const SnackBar(
-            content: Text('Không thể cập nhật trạng thái chuyến.'),
-          ),
+          SnackBar(content: Text(context.l10n.tripStatusUpdateFailed)),
         );
     }
   }
@@ -1590,7 +1596,7 @@ class _CircleIconButton extends StatelessWidget {
   final VoidCallback onPressed;
   final bool hasBadge;
 
-  const _CircleIconButton({
+  _CircleIconButton({
     required this.icon,
     required this.onPressed,
     this.hasBadge = false,
@@ -1606,7 +1612,7 @@ class _CircleIconButton extends StatelessWidget {
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 8,
-            offset: const Offset(0, 2),
+            offset: Offset(0, 2),
           ),
         ],
       ),
@@ -1623,7 +1629,7 @@ class _CircleIconButton extends StatelessWidget {
               child: Container(
                 width: 8,
                 height: 8,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   color: Colors.red,
                   shape: BoxShape.circle,
                 ),
@@ -1654,15 +1660,15 @@ class _IncomeHeader extends StatelessWidget {
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.1),
                 blurRadius: 10,
-                offset: const Offset(0, 4),
+                offset: Offset(0, 4),
               ),
             ],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                'THU NHẬP HÔM NAY',
+              Text(
+                context.l10n.todayIncomeUpper,
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
@@ -1673,26 +1679,26 @@ class _IncomeHeader extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '${summary.todayIncome.toInt().toString().replaceAllMapped(RegExp(r"(\d{3})(?=\d)"), (m) => "${m[1]},")}đ',
-                    style: const TextStyle(
+                    _formatCurrency(summary.todayIncome),
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: Color(0xFF006B70),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 6,
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE8F2F2),
+                      color: Color(0xFFE8F2F2),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      '${summary.todayTrips} chuyến',
-                      style: const TextStyle(
+                      context.l10n.tripCountShort(summary.todayTrips),
+                      style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
                         color: Color(0xFF006B70),
@@ -1713,7 +1719,7 @@ class _StatusToggle extends StatefulWidget {
   final Future<void> Function() onGoOnline;
   final Future<void> Function() onGoOffline;
 
-  const _StatusToggle({required this.onGoOnline, required this.onGoOffline});
+  _StatusToggle({required this.onGoOnline, required this.onGoOffline});
 
   @override
   State<_StatusToggle> createState() => _StatusToggleState();
@@ -1754,7 +1760,7 @@ class _StatusToggleState extends State<_StatusToggle> {
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.1),
                   blurRadius: 10,
-                  offset: const Offset(0, 4),
+                  offset: Offset(0, 4),
                 ),
               ],
             ),
@@ -1788,7 +1794,7 @@ class _StatusToggleState extends State<_StatusToggle> {
                           margin: const EdgeInsets.all(4),
                           decoration: BoxDecoration(
                             color: isOnline
-                                ? const Color(0xFF006B70)
+                                ? Color(0xFF006B70)
                                 : Colors.transparent,
                             borderRadius: BorderRadius.circular(30),
                           ),
@@ -1800,12 +1806,12 @@ class _StatusToggleState extends State<_StatusToggle> {
                                   Container(
                                     width: 8,
                                     height: 8,
-                                    decoration: const BoxDecoration(
+                                    decoration: BoxDecoration(
                                       color: Colors.cyanAccent,
                                       shape: BoxShape.circle,
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
+                                  SizedBox(width: 8),
                                 ],
                                 Text(
                                   'Online',
@@ -1826,7 +1832,7 @@ class _StatusToggleState extends State<_StatusToggle> {
                   ],
                 ),
                 if (_isLoading)
-                  const Center(
+                  Center(
                     child: CircularProgressIndicator(color: Color(0xFF006B70)),
                   ),
               ],
@@ -1839,7 +1845,7 @@ class _StatusToggleState extends State<_StatusToggle> {
 }
 
 class _WaitingCustomerConfirmationCard extends StatelessWidget {
-  const _WaitingCustomerConfirmationCard();
+  _WaitingCustomerConfirmationCard();
 
   @override
   Widget build(BuildContext context) {
@@ -1854,11 +1860,11 @@ class _WaitingCustomerConfirmationCard extends StatelessWidget {
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.12),
               blurRadius: 24,
-              offset: const Offset(0, 8),
+              offset: Offset(0, 8),
             ),
           ],
         ),
-        child: const Column(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             SizedBox(
@@ -1871,7 +1877,7 @@ class _WaitingCustomerConfirmationCard extends StatelessWidget {
             ),
             SizedBox(height: 24),
             Text(
-              'Đang đợi xác nhận',
+              context.l10n.waitingConfirmation,
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -1880,7 +1886,7 @@ class _WaitingCustomerConfirmationCard extends StatelessWidget {
             ),
             SizedBox(height: 8),
             Text(
-              'Đang đợi khách hàng xác nhận tài xế. Vui lòng không tắt ứng dụng.',
+              context.l10n.waitingCustomerDriverConfirmation,
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
@@ -1899,7 +1905,7 @@ class _NewRequestCard extends StatelessWidget {
   final TripRequest request;
   final bool isResponding;
 
-  const _NewRequestCard({required this.request, required this.isResponding});
+  _NewRequestCard({required this.request, required this.isResponding});
 
   @override
   Widget build(BuildContext context) {
@@ -1914,7 +1920,7 @@ class _NewRequestCard extends StatelessWidget {
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.2),
               blurRadius: 20,
-              offset: const Offset(0, 10),
+              offset: Offset(0, 10),
             ),
           ],
         ),
@@ -1926,15 +1932,15 @@ class _NewRequestCard extends StatelessWidget {
               children: [
                 Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     color: Color(0xFF006B70),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.check, color: Colors.white, size: 20),
+                  child: Icon(Icons.check, color: Colors.white, size: 20),
                 ),
-                const SizedBox(width: 12),
-                const Text(
-                  'Bạn đã có chuyến mới!',
+                SizedBox(width: 12),
+                Text(
+                  context.l10n.newTripAvailable,
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -1943,15 +1949,15 @@ class _NewRequestCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'THU NHẬP DỰ KIẾN',
+                    Text(
+                      context.l10n.expectedIncomeUpper,
                       style: TextStyle(
                         fontSize: 10,
                         color: Colors.grey,
@@ -1959,8 +1965,8 @@ class _NewRequestCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      '${request.expectedIncome.toInt().toString().replaceAllMapped(RegExp(r"(\d{3})(?=\d)"), (m) => "${m[1]},")}đ',
-                      style: const TextStyle(
+                      _formatCurrency(request.expectedIncome),
+                      style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
                         color: Color(0xFF006B70),
@@ -1971,8 +1977,8 @@ class _NewRequestCard extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    const Text(
-                      'ĐÓN KHÁCH',
+                    Text(
+                      context.l10n.pickupCustomerUpper,
                       style: TextStyle(
                         fontSize: 10,
                         color: Colors.grey,
@@ -1981,7 +1987,7 @@ class _NewRequestCard extends StatelessWidget {
                     ),
                     Text(
                       '${request.pickupDistance} (${request.pickupTime})',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                         color: Colors.black87,
@@ -1991,14 +1997,14 @@ class _NewRequestCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
             _AddressItem(
               icon: Icons.radio_button_checked,
               iconColor: Colors.teal,
-              label: 'Điểm đón (A)',
+              label: context.l10n.pickupPointA,
               address: request.pickupAddress,
             ),
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(left: 11),
               child: SizedBox(
                 height: 20,
@@ -2012,10 +2018,10 @@ class _NewRequestCard extends StatelessWidget {
             _AddressItem(
               icon: Icons.location_on,
               iconColor: Colors.red,
-              label: 'Điểm đến (B)',
+              label: context.l10n.destinationPointB,
               address: request.destinationAddress,
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: 24),
             Row(
               children: [
                 Expanded(
@@ -2031,10 +2037,10 @@ class _NewRequestCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const Text('Từ chối'),
+                    child: Text(context.l10n.decline),
                   ),
                 ),
-                const SizedBox(width: 16),
+                SizedBox(width: 16),
                 Expanded(
                   child: ElevatedButton(
                     onPressed: isResponding
@@ -2043,14 +2049,18 @@ class _NewRequestCard extends StatelessWidget {
                               .read<DriverDashboardProvider>()
                               .acceptRequest(),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF006B70),
+                      backgroundColor: Color(0xFF006B70),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: Text(isResponding ? 'Đang xử lý...' : 'Chấp nhận'),
+                    child: Text(
+                      isResponding
+                          ? context.l10n.processing
+                          : context.l10n.accept,
+                    ),
                   ),
                 ),
               ],
@@ -2068,7 +2078,7 @@ class _AddressItem extends StatelessWidget {
   final String label;
   final String address;
 
-  const _AddressItem({
+  _AddressItem({
     required this.icon,
     required this.iconColor,
     required this.label,
@@ -2081,14 +2091,14 @@ class _AddressItem extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(icon, color: iconColor, size: 22),
-        const SizedBox(width: 12),
+        SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 10,
                   color: Colors.grey,
                   fontWeight: FontWeight.bold,
@@ -2096,7 +2106,7 @@ class _AddressItem extends StatelessWidget {
               ),
               Text(
                 address,
-                style: const TextStyle(fontSize: 14, color: Colors.black87),
+                style: TextStyle(fontSize: 14, color: Colors.black87),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
