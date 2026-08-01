@@ -12,6 +12,7 @@ const CustomersPage = lazy(() => import('./pages/CustomersPage'));
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
 const BookingsPage = lazy(() => import('./pages/BookingsPage'));
 const TripsPage = lazy(() => import('./pages/TripsPage'));
+const AdminReportsPage = lazy(() => import('./pages/admin/reports/AdminReportsPage'));
 /**
  * Root component — reads auth state from Redux to decide
  * which page to show. Will be replaced by React Router later.
@@ -43,6 +44,9 @@ function App() {
     }
     if (activeSidebarId === 'notifications') {
         return <Suspense fallback={<div className="app-loading">Đang tải trang thông báo...</div>}><NotificationsPage /></Suspense>;
+    }
+    if (activeSidebarId === 'reports') {
+        return <Suspense fallback={<div className="app-loading">Đang tải danh sách báo cáo...</div>}><AdminReportsPage /></Suspense>;
     }
     return <DriversPage />;
 }
