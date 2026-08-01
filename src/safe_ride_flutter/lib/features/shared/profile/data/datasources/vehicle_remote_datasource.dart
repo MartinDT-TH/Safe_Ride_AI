@@ -58,4 +58,3 @@ class VehicleRemoteDatasource {
     return Options(headers: {'Authorization': 'Bearer $accessToken'});
   }
 }
-

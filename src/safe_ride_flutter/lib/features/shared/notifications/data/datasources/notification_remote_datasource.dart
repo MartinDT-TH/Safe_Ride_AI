@@ -3,16 +3,17 @@ import 'package:dio/dio.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/network/auth_header.dart';
 import '../../../../../core/network/dio_client.dart';
+import '../../../../../core/localization/locale_provider.dart';
 import '../models/system_notification_item.dart';
 import '../models/system_notifications_page.dart';
 
 class NotificationRemoteDatasource {
   NotificationRemoteDatasource({Dio? dio}) : _dio = dio ?? DioClient().dio;
 
-  static const _loadErrorMessage =
-      'Không thể tải danh sách thông báo. Vui lòng thử lại.';
-  static const _markReadErrorMessage =
-      'Không thể cập nhật trạng thái đã đọc.';
+  static String get _loadErrorMessage =>
+      LocaleProvider.currentLocalizations.notificationsLoadFailed;
+  static String get _markReadErrorMessage =>
+      LocaleProvider.currentLocalizations.genericError;
 
   final Dio _dio;
 
@@ -24,14 +25,9 @@ class NotificationRemoteDatasource {
     try {
       final response = await _dio.get(
         ApiEndpoints.notifications,
-        queryParameters: {
-          'page': page,
-          'pageSize': pageSize,
-        },
+        queryParameters: {'page': page, 'pageSize': pageSize},
         options: Options(
-          headers: {
-            ApiKeys.authorization: AuthHeader.bearer(accessToken),
-          },
+          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
         ),
       );
 
@@ -39,10 +35,9 @@ class NotificationRemoteDatasource {
         Map<String, dynamic>.from(response.data as Map),
       );
     } on DioException catch (exception) {
-      throw NotificationApiException(_readErrorMessage(
-        exception,
-        _loadErrorMessage,
-      ));
+      throw NotificationApiException(
+        _readErrorMessage(exception, _loadErrorMessage),
+      );
     }
   }
 
@@ -54,9 +49,7 @@ class NotificationRemoteDatasource {
       final response = await _dio.patch(
         ApiEndpoints.notificationRead(notificationId),
         options: Options(
-          headers: {
-            ApiKeys.authorization: AuthHeader.bearer(accessToken),
-          },
+          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
         ),
       );
 
@@ -64,10 +57,9 @@ class NotificationRemoteDatasource {
         Map<String, dynamic>.from(response.data as Map),
       );
     } on DioException catch (exception) {
-      throw NotificationApiException(_readErrorMessage(
-        exception,
-        _markReadErrorMessage,
-      ));
+      throw NotificationApiException(
+        _readErrorMessage(exception, _markReadErrorMessage),
+      );
     }
   }
 

@@ -29,15 +29,15 @@ class FeedbackRemoteDatasource {
       throw Exception('Invalid response format');
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) {
-         // If no ratings yet, backend might return 404 or empty object.
-         // Assuming backend returns an empty summary if no ratings.
-         // If it returns 404, we handle it as empty.
-         return DriverRatingSummary(
-           driverId: driverId,
-           averageRating: 0,
-           totalRatings: 0,
-           ratings: []
-         );
+        // If no ratings yet, backend might return 404 or empty object.
+        // Assuming backend returns an empty summary if no ratings.
+        // If it returns 404, we handle it as empty.
+        return DriverRatingSummary(
+          driverId: driverId,
+          averageRating: 0,
+          totalRatings: 0,
+          ratings: [],
+        );
       }
       rethrow;
     }

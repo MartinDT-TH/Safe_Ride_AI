@@ -26,10 +26,15 @@ class TripChatMessageModel {
   bool get isText => messageType.toLowerCase() == 'text';
   bool get isImage => messageType.toLowerCase() == 'image';
 
-  factory TripChatMessageModel.fromJson(Map<String, dynamic> json, String currentUserId) {
+  factory TripChatMessageModel.fromJson(
+    Map<String, dynamic> json,
+    String currentUserId,
+  ) {
     final senderUserId = json['senderUserId']?.toString() ?? '';
     return TripChatMessageModel(
-      id: json['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      id:
+          json['id']?.toString() ??
+          DateTime.now().millisecondsSinceEpoch.toString(),
       tripId: (json[ApiKeys.tripId] as num?)?.toInt() ?? 0,
       senderUserId: senderUserId,
       senderName: json['senderName']?.toString() ?? '',
@@ -43,9 +48,14 @@ class TripChatMessageModel {
     );
   }
 
-  factory TripChatMessageModel.fromSignalR(List<Object?>? arguments, String currentUserId) {
+  factory TripChatMessageModel.fromSignalR(
+    List<Object?>? arguments,
+    String currentUserId,
+  ) {
     if (arguments == null || arguments.isEmpty || arguments.first is! Map) {
-      throw const FormatException('Invalid SignalR arguments for TripChatMessage');
+      throw const FormatException(
+        'Invalid SignalR arguments for TripChatMessage',
+      );
     }
     final data = Map<String, dynamic>.from(arguments.first as Map);
     return TripChatMessageModel.fromJson(data, currentUserId);

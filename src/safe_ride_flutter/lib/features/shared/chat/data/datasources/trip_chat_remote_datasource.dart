@@ -26,10 +26,12 @@ class TripChatRemoteDatasource {
 
       final List data = response.data as List;
       return data
-          .map((item) => TripChatMessageModel.fromJson(
-                Map<String, dynamic>.from(item),
-                currentUserId,
-              ))
+          .map(
+            (item) => TripChatMessageModel.fromJson(
+              Map<String, dynamic>.from(item),
+              currentUserId,
+            ),
+          )
           .toList();
     } catch (e) {
       return [];

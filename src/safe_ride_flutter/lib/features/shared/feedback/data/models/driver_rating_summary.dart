@@ -21,8 +21,11 @@ class DriverRatingSummary {
       totalRatings: (json['totalRatings'] as num?)?.toInt() ?? 0,
       ratings: ratingsList != null
           ? ratingsList
-              .map((item) => DriverRatingItem.fromJson(item as Map<String, dynamic>))
-              .toList()
+                .map(
+                  (item) =>
+                      DriverRatingItem.fromJson(item as Map<String, dynamic>),
+                )
+                .toList()
           : [],
     );
   }

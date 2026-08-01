@@ -27,4 +27,3 @@ class VehicleRepositoryImpl implements VehicleRepository {
     return _datasource.deleteVehicle(accessToken, id);
   }
 }
-

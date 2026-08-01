@@ -3,11 +3,12 @@ import 'package:intl/intl.dart';
 
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import '../../data/models/history_trip.dart';
 import './interactive_button.dart';
 
 class TripHistoryCard extends StatelessWidget {
-  const TripHistoryCard({
+  TripHistoryCard({
     super.key,
     required this.trip,
     this.onRebook,
@@ -25,14 +26,15 @@ class TripHistoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isCancelled = trip.status == HistoryTripStatus.cancelled;
-    final dateStr = DateFormat('HH:mm, d ThMM', 'vi').format(trip.time);
+    final locale = Localizations.localeOf(context).toLanguageTag();
+    final dateStr = DateFormat.yMd(locale).add_Hm().format(trip.time);
     final fareStr = trip.fare > 0
         ? NumberFormat.currency(
-            locale: 'vi_VN',
-            symbol: '\u0111',
+            locale: locale,
+            symbol: '₫',
             decimalDigits: 0,
           ).format(trip.fare)
-        : '0\u0111';
+        : '0 ₫';
     final showFooter =
         isCancelled ||
         trip.driverName != null ||
@@ -46,12 +48,12 @@ class TripHistoryCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFEEEEEE)),
+        border: Border.all(color: Color(0xFFEEEEEE)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.02),
             blurRadius: 10,
-            offset: const Offset(0, 4),
+            offset: Offset(0, 4),
           ),
         ],
       ),
@@ -64,7 +66,7 @@ class TripHistoryCard extends StatelessWidget {
               children: [
                 Container(
                   padding: const EdgeInsets.all(10),
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     color: Color(0xFFF5F5F5),
                     shape: BoxShape.circle,
                   ),
@@ -78,21 +80,21 @@ class TripHistoryCard extends StatelessWidget {
                     size: 20,
                   ),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         dateStr,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       Text(
                         '${trip.vehicleName} \u2022 ${trip.distanceKm} km',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: Colors.grey,
                           fontSize: 13,
                         ),
@@ -110,19 +112,19 @@ class TripHistoryCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             _buildRouteLine(isCancelled),
             if (showFooter) ...[
-              const SizedBox(height: 16),
-              const Divider(height: 1, color: Color(0xFFF0F0F0)),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
+              Divider(height: 1, color: Color(0xFFF0F0F0)),
+              SizedBox(height: 16),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (isCancelled)
                     Text(
-                      HistoryStrings.cancelledByCustomer,
-                      style: const TextStyle(
+                      context.l10n.cancelledByCustomer,
+                      style: TextStyle(
                         color: Colors.red,
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
@@ -136,19 +138,19 @@ class TripHistoryCard extends StatelessWidget {
                           backgroundImage: trip.driverAvatar != null
                               ? NetworkImage(trip.driverAvatar!)
                               : null,
-                          backgroundColor: const Color(0xFFE0E0E0),
+                          backgroundColor: Color(0xFFE0E0E0),
                           child: trip.driverAvatar == null
-                              ? const Icon(Icons.person, color: Colors.white)
+                              ? Icon(Icons.person, color: Colors.white)
                               : null,
                         ),
-                        const SizedBox(width: 10),
+                        SizedBox(width: 10),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 trip.driverName!,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 14,
                                 ),
@@ -158,15 +160,15 @@ class TripHistoryCard extends StatelessWidget {
                               if (trip.driverRating != null)
                                 Row(
                                   children: [
-                                    const Icon(
+                                    Icon(
                                       Icons.star,
                                       color: Colors.orange,
                                       size: 14,
                                     ),
-                                    const SizedBox(width: 2),
+                                    SizedBox(width: 2),
                                     Text(
                                       trip.driverRating!.toString(),
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         color: Colors.grey,
                                         fontSize: 12,
                                       ),
@@ -182,7 +184,7 @@ class TripHistoryCard extends StatelessWidget {
                       onRebook != null ||
                       onChat != null ||
                       onViewFeedback != null) ...[
-                    const SizedBox(height: 12),
+                    SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
                       child: Wrap(
@@ -203,10 +205,10 @@ class TripHistoryCard extends StatelessWidget {
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(10),
                                   border: Border.all(
-                                    color: const Color(0xFFE0E0E0),
+                                    color: Color(0xFFE0E0E0),
                                   ),
                                 ),
-                                child: const Row(
+                                child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(
@@ -216,7 +218,7 @@ class TripHistoryCard extends StatelessWidget {
                                     ),
                                     SizedBox(width: 6),
                                     Text(
-                                      'Nhắn tin',
+                                      context.l10n.chat,
                                       style: TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.bold,
@@ -240,10 +242,10 @@ class TripHistoryCard extends StatelessWidget {
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(10),
                                   border: Border.all(
-                                    color: const Color(0xFFE0E0E0),
+                                    color: Color(0xFFE0E0E0),
                                   ),
                                 ),
-                                child: const Row(
+                                child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(
@@ -253,7 +255,7 @@ class TripHistoryCard extends StatelessWidget {
                                     ),
                                     SizedBox(width: 6),
                                     Text(
-                                      'Xem đánh giá',
+                                      context.l10n.viewReviews,
                                       style: TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.bold,
@@ -275,13 +277,13 @@ class TripHistoryCard extends StatelessWidget {
                                 ),
                                 decoration: BoxDecoration(
                                   color: trip.hasReported
-                                      ? const Color(0xFFF2F4F7)
+                                      ? Color(0xFFF2F4F7)
                                       : Colors.white,
                                   borderRadius: BorderRadius.circular(10),
                                   border: Border.all(
                                     color: trip.hasReported
                                         ? Colors.transparent
-                                        : const Color(0xFFE0E0E0),
+                                        : Color(0xFFE0E0E0),
                                   ),
                                 ),
                                 child: Row(
@@ -293,20 +295,20 @@ class TripHistoryCard extends StatelessWidget {
                                           : Icons.report_outlined,
                                       size: 16,
                                       color: trip.hasReported
-                                          ? const Color(0xFF98A2B3)
-                                          : const Color(0xFF626A6C),
+                                          ? Color(0xFF98A2B3)
+                                          : Color(0xFF626A6C),
                                     ),
-                                    const SizedBox(width: 6),
+                                    SizedBox(width: 6),
                                     Text(
                                       trip.hasReported
-                                          ? HistoryStrings.reported
-                                          : HistoryStrings.report,
+                                          ? context.l10n.reported
+                                          : context.l10n.report,
                                       style: TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.bold,
                                         color: trip.hasReported
-                                            ? const Color(0xFF98A2B3)
-                                            : const Color(0xFF626A6C),
+                                            ? Color(0xFF98A2B3)
+                                            : Color(0xFF626A6C),
                                       ),
                                     ),
                                   ],
@@ -323,13 +325,13 @@ class TripHistoryCard extends StatelessWidget {
                                   horizontal: 16,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFE8ECEF),
+                                  color: Color(0xFFE8ECEF),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Center(
                                   child: Text(
-                                    HistoryStrings.rebook,
-                                    style: const TextStyle(
+                                    context.l10n.rebook,
+                                    style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.bold,
                                       color: Color(0xFF626A6C),
@@ -357,7 +359,7 @@ class TripHistoryCard extends StatelessWidget {
         Row(
           children: [
             _buildDot(AppColors.primary, isCancelled),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Expanded(
               child: Text(
                 trip.pickup,
@@ -378,16 +380,14 @@ class TripHistoryCard extends StatelessWidget {
             child: Container(
               width: 1,
               height: 20,
-              decoration: BoxDecoration(
-                color: Colors.grey.withOpacity(0.3),
-              ),
+              decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3)),
             ),
           ),
         ),
         Row(
           children: [
             _buildDot(Colors.red, isCancelled),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Expanded(
               child: Text(
                 trip.destination,

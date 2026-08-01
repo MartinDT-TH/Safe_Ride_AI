@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../../core/localization/locale_provider.dart';
 import '../../domain/repositories/feedback_repository.dart';
 import '../../data/models/driver_rating_summary.dart';
 
@@ -17,7 +18,7 @@ class FeedbackProvider extends ChangeNotifier {
 
   Future<void> loadDriverRatings(String? accessToken, String driverId) async {
     if (accessToken == null) {
-      _errorMessage = 'Phiên đăng nhập hết hạn.';
+      _errorMessage = LocaleProvider.currentLocalizations.sessionExpired;
       notifyListeners();
       return;
     }
@@ -32,7 +33,7 @@ class FeedbackProvider extends ChangeNotifier {
         driverId: driverId,
       );
     } catch (e) {
-      _errorMessage = 'Không thể tải đánh giá tài xế.';
+      _errorMessage = LocaleProvider.currentLocalizations.genericError;
     } finally {
       _isLoading = false;
       notifyListeners();

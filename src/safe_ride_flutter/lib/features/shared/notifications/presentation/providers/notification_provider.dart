@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import '../../../../../core/localization/locale_provider.dart';
+import '../../../../../core/localization/api_error_localizer.dart';
 
 import '../../data/datasources/notification_remote_datasource.dart';
 import '../../data/models/system_notification_item.dart';
@@ -6,10 +8,7 @@ import '../../domain/repositories/notification_repository.dart';
 import '../../../../../core/services/socket_service.dart';
 
 class NotificationProvider extends ChangeNotifier {
-  NotificationProvider(
-    this._repository,
-    this._socketService,
-  );
+  NotificationProvider(this._repository, this._socketService);
 
   static const int _pageSize = 20;
   static const String _socketHandlerKey = 'sharedNotifications';
@@ -54,7 +53,7 @@ class NotificationProvider extends ChangeNotifier {
     final token = accessToken ?? _accessToken;
     if (token == null || token.isEmpty) {
       _notifications = [];
-      _errorMessage = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+      _errorMessage = LocaleProvider.currentLocalizations.sessionExpired;
       notifyListeners();
       return;
     }
@@ -76,9 +75,12 @@ class NotificationProvider extends ChangeNotifier {
       _totalItems = page.totalItems;
       _unreadCount = page.unreadCount;
     } on NotificationApiException catch (exception) {
-      _errorMessage = exception.message;
+      _errorMessage = ApiErrorLocalizer.translate(
+        LocaleProvider.currentLocalizations,
+        fallback: exception.message,
+      );
     } catch (_) {
-      _errorMessage = 'Đã xảy ra lỗi. Vui lòng thử lại.';
+      _errorMessage = LocaleProvider.currentLocalizations.genericError;
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -109,9 +111,12 @@ class NotificationProvider extends ChangeNotifier {
       _unreadCount = page.unreadCount;
       _errorMessage = null;
     } on NotificationApiException catch (exception) {
-      _errorMessage = exception.message;
+      _errorMessage = ApiErrorLocalizer.translate(
+        LocaleProvider.currentLocalizations,
+        fallback: exception.message,
+      );
     } catch (_) {
-      _errorMessage = 'Đã xảy ra lỗi. Vui lòng thử lại.';
+      _errorMessage = LocaleProvider.currentLocalizations.genericError;
     } finally {
       _isLoadingMore = false;
       notifyListeners();
@@ -124,7 +129,9 @@ class NotificationProvider extends ChangeNotifier {
       return;
     }
 
-    final index = _notifications.indexWhere((item) => item.id == notificationId);
+    final index = _notifications.indexWhere(
+      (item) => item.id == notificationId,
+    );
     if (index < 0 || _notifications[index].isRead) {
       return;
     }
@@ -137,10 +144,13 @@ class NotificationProvider extends ChangeNotifier {
       _unreadCount = (_unreadCount - 1).clamp(0, _totalItems);
       notifyListeners();
     } on NotificationApiException catch (exception) {
-      _errorMessage = exception.message;
+      _errorMessage = ApiErrorLocalizer.translate(
+        LocaleProvider.currentLocalizations,
+        fallback: exception.message,
+      );
       notifyListeners();
     } catch (_) {
-      _errorMessage = 'Đã xảy ra lỗi. Vui lòng thử lại.';
+      _errorMessage = LocaleProvider.currentLocalizations.genericError;
       notifyListeners();
     }
   }
