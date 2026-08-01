@@ -96,6 +96,19 @@ public sealed record DriverLocationUpdatedEvent(
     double Longitude,
     DateTime UpdatedAt);
 
+public sealed record TripRouteRecalculatedEvent(
+    long TripId,
+    long BookingId,
+    Guid CustomerId,
+    Guid DriverId,
+    string EncodedPolyline,
+    double DistanceMeters,
+    double DurationSeconds,
+    double DeviationMeters,
+    DateTime UpdatedAt,
+    string Message,
+    bool ShouldAlertCustomer);
+
 public sealed record DriverOfferCreatedEvent(
     long BookingId,
     Guid CustomerId,

@@ -57,6 +57,60 @@ class DriverLocationUpdate {
   }
 }
 
+class TripRouteRecalculatedUpdate {
+  const TripRouteRecalculatedUpdate({
+    required this.tripId,
+    required this.encodedPolyline,
+    required this.distanceMeters,
+    required this.durationSeconds,
+    required this.deviationMeters,
+    required this.message,
+    required this.shouldAlertCustomer,
+  });
+
+  final int tripId;
+  final String encodedPolyline;
+  final double distanceMeters;
+  final double durationSeconds;
+  final double deviationMeters;
+  final String message;
+  final bool shouldAlertCustomer;
+
+  static TripRouteRecalculatedUpdate? fromSignalRArguments(
+    List<Object?>? arguments,
+  ) {
+    if (arguments == null || arguments.isEmpty || arguments.first is! Map) {
+      return null;
+    }
+
+    final data = Map<String, dynamic>.from(arguments.first as Map);
+    Object? value(String key) {
+      final pascalKey = '${key[0].toUpperCase()}${key.substring(1)}';
+      return data[key] ?? data[pascalKey];
+    }
+
+    final tripId = (value('tripId') as num?)?.toInt();
+    final encodedPolyline = value('encodedPolyline')?.toString();
+    if (tripId == null ||
+        encodedPolyline == null ||
+        encodedPolyline.isEmpty) {
+      return null;
+    }
+
+    return TripRouteRecalculatedUpdate(
+      tripId: tripId,
+      encodedPolyline: encodedPolyline,
+      distanceMeters: (value('distanceMeters') as num?)?.toDouble() ?? 0,
+      durationSeconds: (value('durationSeconds') as num?)?.toDouble() ?? 0,
+      deviationMeters: (value('deviationMeters') as num?)?.toDouble() ?? 0,
+      message:
+          value('message')?.toString() ??
+          'SafeRide đã cập nhật tuyến đường.',
+      shouldAlertCustomer: value('shouldAlertCustomer') == true,
+    );
+  }
+}
+
 class DriverOfferUpdate {
   const DriverOfferUpdate({
     required this.bookingId,
@@ -595,6 +649,7 @@ class SocketService {
   StreamSubscription<void>? _sessionExpiredSubscription;
   HubConnection? _connection;
   bool _driverLocationListenerAttached = false;
+  bool _tripRouteRecalculatedListenerAttached = false;
   bool _tripStatusListenerAttached = false;
   bool _sosTriggeredListenerAttached = false;
   bool _tripPaymentListenerAttached = false;
@@ -606,6 +661,8 @@ class SocketService {
   final List<void Function()> _connectionLostHandlers = [];
   final Map<String, void Function(DriverLocationUpdate update)>
   _driverLocationHandlers = {};
+  final Map<String, void Function(TripRouteRecalculatedUpdate update)>
+  _tripRouteRecalculatedHandlers = {};
   final Map<String, void Function(TripStatusUpdate update)>
   _tripStatusHandlers = {};
   final Map<String, void Function(SOSTriggeredUpdate update)>
@@ -703,6 +760,7 @@ class SocketService {
       debugPrint('SOCKET: Connection permanently closed. error=$error');
       _connection = null;
       _driverLocationListenerAttached = false;
+      _tripRouteRecalculatedListenerAttached = false;
       _tripStatusListenerAttached = false;
       _sosTriggeredListenerAttached = false;
       _tripPaymentListenerAttached = false;
@@ -733,6 +791,10 @@ class SocketService {
     if (_driverLocationHandlers.isNotEmpty &&
         !_driverLocationListenerAttached) {
       _attachDriverLocationListener();
+    }
+    if (_tripRouteRecalculatedHandlers.isNotEmpty &&
+        !_tripRouteRecalculatedListenerAttached) {
+      _attachTripRouteRecalculatedListener();
     }
     if (_tripStatusHandlers.isNotEmpty && !_tripStatusListenerAttached) {
       _attachTripStatusListener();
@@ -795,6 +857,36 @@ class SocketService {
 
   void removeDriverLocationUpdatedHandler(String key) {
     _driverLocationHandlers.remove(key);
+  }
+
+  void onTripRouteRecalculated(
+    void Function(TripRouteRecalculatedUpdate update) handler, {
+    String key = 'default',
+  }) {
+    _tripRouteRecalculatedHandlers[key] = handler;
+    _attachTripRouteRecalculatedListener();
+  }
+
+  void _attachTripRouteRecalculatedListener() {
+    if (_connection == null || _tripRouteRecalculatedListenerAttached) {
+      return;
+    }
+
+    _tripRouteRecalculatedListenerAttached = true;
+    _connection!.on('TripRouteRecalculated', (arguments) {
+      final update = TripRouteRecalculatedUpdate.fromSignalRArguments(
+        arguments,
+      );
+      if (update != null) {
+        for (final handler in List.of(_tripRouteRecalculatedHandlers.values)) {
+          handler(update);
+        }
+      }
+    });
+  }
+
+  void removeTripRouteRecalculatedHandler(String key) {
+    _tripRouteRecalculatedHandlers.remove(key);
   }
 
   void onDriverOfferReceived(
@@ -1281,6 +1373,7 @@ class SocketService {
     }
     _connection = null;
     _driverLocationListenerAttached = false;
+    _tripRouteRecalculatedListenerAttached = false;
     _tripStatusListenerAttached = false;
     _tripPaymentListenerAttached = false;
     _driverOfferReceivedListenerAttached = false;
@@ -1289,6 +1382,7 @@ class SocketService {
     _systemNotificationListenerAttached = false;
     _inAppCallListenerAttached = false;
     _driverLocationHandlers.clear();
+    _tripRouteRecalculatedHandlers.clear();
     _tripStatusHandlers.clear();
     _tripPaymentHandlers.clear();
     _driverOfferReceivedHandlers.clear();
