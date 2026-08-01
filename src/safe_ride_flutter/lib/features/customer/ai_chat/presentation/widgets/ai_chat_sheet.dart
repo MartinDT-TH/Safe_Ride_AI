@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart';
+import '../../../../../core/localization/localization_extensions.dart';
+import '../../../../../core/localization/locale_provider.dart';
 
 import '../../../../../core/maps/models/map_models.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
@@ -27,14 +29,14 @@ import '../../data/services/ai_chat_service.dart';
 enum _BookingStep { vehicle, promotion, confirmation }
 
 class AiChatSheet extends StatefulWidget {
-  const AiChatSheet({super.key});
+  AiChatSheet({super.key});
 
   static Future<void> show(BuildContext context) => showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => const AiChatSheet(),
+    builder: (_) => AiChatSheet(),
   );
 
   @override
@@ -85,20 +87,23 @@ class _AiChatSheetState extends State<AiChatSheet> {
     if (location == null) {
       if (mounted) {
         setState(() {
-          _error = context.read<BookingProvider>().locationErrorMessage ??
-              'Hãy bật vị trí để SafeRide tự dùng GPS làm điểm đón.';
+          _error =
+              context.read<BookingProvider>().locationErrorMessage ??
+              context.l10n.enableLocationForPickup;
         });
       }
       return;
     }
     if (!await _recorder.hasPermission()) {
-      if (mounted) setState(() => _error = 'Bạn cần cho phép SafeRide dùng micro.');
+      if (mounted)
+        setState(() => _error = context.l10n.microphonePermissionRequired);
       return;
     }
-    final path = '${Directory.systemTemp.path}${Platform.pathSeparator}'
+    final path =
+        '${Directory.systemTemp.path}${Platform.pathSeparator}'
         'saferide-voice-${DateTime.now().microsecondsSinceEpoch}.m4a';
     await _recorder.start(
-      const RecordConfig(encoder: AudioEncoder.aacLc, numChannels: 1),
+      RecordConfig(encoder: AudioEncoder.aacLc, numChannels: 1),
       path: path,
     );
     if (!mounted) return;
@@ -135,7 +140,7 @@ class _AiChatSheetState extends State<AiChatSheet> {
         AiChatMessage(
           id: pendingId,
           role: 'user',
-          content: 'Tin nhắn thoại',
+          content: context.l10n.voiceMessage,
           createdAt: DateTime.now(),
           localAudioPath: path,
           isAudio: true,
@@ -149,8 +154,9 @@ class _AiChatSheetState extends State<AiChatSheet> {
         if (mounted) {
           setState(() {
             _sending = false;
-            _error = context.read<BookingProvider>().locationErrorMessage ??
-                'Không lấy được GPS hiện tại. Vui lòng bật vị trí rồi thử lại.';
+            _error =
+                context.read<BookingProvider>().locationErrorMessage ??
+                context.l10n.currentGpsUnavailable;
           });
         }
         return;
@@ -163,7 +169,9 @@ class _AiChatSheetState extends State<AiChatSheet> {
       if (!mounted) return;
       setState(() {
         _conversationId = reply.conversationId;
-        final pendingIndex = _messages.indexWhere((item) => item.id == pendingId);
+        final pendingIndex = _messages.indexWhere(
+          (item) => item.id == pendingId,
+        );
         final persistedAudio = AiChatMessage(
           id: reply.userMessage.id,
           role: reply.userMessage.role,
@@ -182,14 +190,12 @@ class _AiChatSheetState extends State<AiChatSheet> {
         _messages.add(reply.assistantMessage);
         _draft = reply.bookingDraft;
       });
-      if (reply.bookingDraft != null) await _prepareBooking(reply.bookingDraft!);
+      if (reply.bookingDraft != null)
+        await _prepareBooking(reply.bookingDraft!);
     } on DioException catch (exception) {
       if (!mounted) return;
       setState(() {
-        _error = _apiErrorMessage(
-          exception,
-          'Không thể gửi file ghi âm. Vui lòng thử lại.',
-        );
+        _error = _apiErrorMessage(exception, context.l10n.audioUploadFailed);
       });
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -239,10 +245,10 @@ class _AiChatSheetState extends State<AiChatSheet> {
       final isServerError = (exception.response?.statusCode ?? 0) >= 500;
       setState(() {
         _error = isServerError
-            ? 'Trợ lý AI đang gặp sự cố. Vui lòng thử lại sau.'
+            ? context.l10n.aiAssistantUnavailable
             : _apiErrorMessage(
                 exception,
-                'Không thể kết nối với trợ lý AI. Vui lòng thử lại.',
+                context.l10n.aiAssistantConnectionFailed,
               );
       });
     } finally {
@@ -256,7 +262,7 @@ class _AiChatSheetState extends State<AiChatSheet> {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 220),
+          duration: Duration(milliseconds: 220),
           curve: Curves.easeOut,
         );
       }
@@ -267,7 +273,7 @@ class _AiChatSheetState extends State<AiChatSheet> {
     if (_preparingBooking) return;
     final token = context.read<AuthProvider>().token;
     if (token == null || token.isEmpty) {
-      setState(() => _error = 'Phiên đăng nhập đã hết hạn.');
+      setState(() => _error = context.l10n.sessionExpired);
       return;
     }
 
@@ -284,22 +290,22 @@ class _AiChatSheetState extends State<AiChatSheet> {
     if (!mounted) return;
 
     final catalog = bookingProvider.catalog;
-    final vehicles = catalog?.vehicles ?? const <BookingVehicleOption>[];
+    final vehicles = catalog?.vehicles ?? <BookingVehicleOption>[];
     final promotions = bookingProvider.availablePromotions;
     final vehicleMatches = draft.vehicleQuery == null
-        ? const <BookingVehicleOption>[]
+        ? <BookingVehicleOption>[]
         : vehicles
-            .where((item) => _matchesVehicle(item, draft.vehicleQuery!))
-            .toList();
+              .where((item) => _matchesVehicle(item, draft.vehicleQuery!))
+              .toList();
     final promoMatches = draft.promotionCode == null
-        ? const <PromoModel>[]
+        ? <PromoModel>[]
         : promotions
-            .where(
-              (item) =>
-                  item.promotionCode.toLowerCase() ==
-                  draft.promotionCode!.trim().toLowerCase(),
-            )
-            .toList();
+              .where(
+                (item) =>
+                    item.promotionCode.toLowerCase() ==
+                    draft.promotionCode!.trim().toLowerCase(),
+              )
+              .toList();
     setState(() {
       _selectedVehicle = draft.vehicleQuery == null
           ? vehicles.firstOrNull
@@ -367,7 +373,10 @@ class _AiChatSheetState extends State<AiChatSheet> {
     if (!mounted || savedVehicle == null) return;
     final token = context.read<AuthProvider>().token;
     if (token == null) return;
-    await context.read<BookingProvider>().loadCatalog(token, forceRefresh: true);
+    await context.read<BookingProvider>().loadCatalog(
+      token,
+      forceRefresh: true,
+    );
     if (!mounted) return;
     final vehicles = context.read<BookingProvider>().catalog?.vehicles ?? [];
     setState(() {
@@ -384,8 +393,13 @@ class _AiChatSheetState extends State<AiChatSheet> {
     final service = _selectedService;
     final estimate = _fareEstimate;
     final token = context.read<AuthProvider>().token;
-    if (draft == null || vehicle == null || service == null ||
-        estimate == null || token == null || _creatingBooking) return;
+    if (draft == null ||
+        vehicle == null ||
+        service == null ||
+        estimate == null ||
+        token == null ||
+        _creatingBooking)
+      return;
 
     setState(() {
       _creatingBooking = true;
@@ -406,7 +420,9 @@ class _AiChatSheetState extends State<AiChatSheet> {
     if (!mounted) return;
     setState(() => _creatingBooking = false);
     if (booking == null) {
-      setState(() => _error = provider.errorMessage ?? 'Không thể đặt chuyến.');
+      setState(
+        () => _error = provider.errorMessage ?? context.l10n.aiBookingFailed,
+      );
       return;
     }
     provider.setSearchingBooking(booking);
@@ -516,7 +532,10 @@ class _AiChatSheetState extends State<AiChatSheet> {
     } on DioException catch (exception) {
       if (!mounted) return;
       setState(() {
-        _error = _apiErrorMessage(exception, 'Không thể mở cuộc trò chuyện.');
+        _error = _apiErrorMessage(
+          exception,
+          context.l10n.conversationOpenFailed,
+        );
       });
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -528,19 +547,16 @@ class _AiChatSheetState extends State<AiChatSheet> {
     final height = MediaQuery.sizeOf(context).height * .82;
     return Container(
       height: height,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: Color(0xFFFCF9F9),
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
         children: [
-          _Header(
-            onHistory: _showHistory,
-            onNewConversation: _newConversation,
-          ),
+          _Header(onHistory: _showHistory, onNewConversation: _newConversation),
           Expanded(
             child: _messages.isEmpty
-                ? const _Welcome()
+                ? _Welcome()
                 : ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.all(16),
@@ -553,7 +569,9 @@ class _AiChatSheetState extends State<AiChatSheet> {
             _BookingComposer(
               loading: _preparingBooking,
               creating: _creatingBooking,
-              vehicles: context.watch<BookingProvider>().catalog?.vehicles ?? const [],
+              vehicles:
+                  context.watch<BookingProvider>().catalog?.vehicles ??
+                  [],
               promotions: context.watch<BookingProvider>().availablePromotions,
               selectedVehicle: _selectedVehicle,
               selectedService: _selectedService,
@@ -566,13 +584,12 @@ class _AiChatSheetState extends State<AiChatSheet> {
                 setState(() => _selectedVehicle = vehicle);
                 await _estimateFare();
               },
-              onPromoSelected: (promo) => setState(() => _selectedPromo = promo),
-              onContinueFromVehicle: () => setState(
-                () => _bookingStep = _BookingStep.promotion,
-              ),
-              onContinueFromPromotion: () => setState(
-                () => _bookingStep = _BookingStep.confirmation,
-              ),
+              onPromoSelected: (promo) =>
+                  setState(() => _selectedPromo = promo),
+              onContinueFromVehicle: () =>
+                  setState(() => _bookingStep = _BookingStep.promotion),
+              onContinueFromPromotion: () =>
+                  setState(() => _bookingStep = _BookingStep.confirmation),
               onBack: () => setState(() {
                 _bookingStep = switch (_bookingStep) {
                   _BookingStep.confirmation => _BookingStep.promotion,
@@ -589,7 +606,7 @@ class _AiChatSheetState extends State<AiChatSheet> {
                 _error!,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.red),
+                style: TextStyle(color: Colors.red),
               ),
             ),
           Padding(
@@ -614,9 +631,9 @@ class _AiChatSheetState extends State<AiChatSheet> {
                       counterText: '',
                       hintText: _voiceMode
                           ? (_recording
-                                ? 'Đang ghi âm...'
-                                : 'Chọn gửi hoặc hủy bản ghi')
-                          : 'Nhắn cho trợ lý SafeRide...',
+                                ? context.l10n.recording
+                                : context.l10n.sendOrCancelRecording)
+                          : context.l10n.aiMessageHint,
                       filled: true,
                       fillColor: Colors.white,
                       border: OutlineInputBorder(
@@ -626,29 +643,29 @@ class _AiChatSheetState extends State<AiChatSheet> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 if (_voiceMode) ...[
                   IconButton.outlined(
-                    tooltip: 'Hủy voice',
+                    tooltip: context.l10n.cancelVoice,
                     onPressed: _cancelVoice,
-                    icon: const Icon(Icons.close_rounded),
+                    icon: Icon(Icons.close_rounded),
                   ),
-                  const SizedBox(width: 6),
+                  SizedBox(width: 6),
                   IconButton.filled(
-                    tooltip: 'Gửi voice',
+                    tooltip: context.l10n.sendVoice,
                     onPressed: _sendVoice,
-                    icon: const Icon(Icons.send_rounded),
+                    icon: Icon(Icons.send_rounded),
                     style: IconButton.styleFrom(
-                      backgroundColor: const Color(0xFF006B70),
+                      backgroundColor: Color(0xFF006B70),
                     ),
                   ),
                 ] else ...[
                   IconButton.outlined(
-                    tooltip: 'Nhập bằng giọng nói',
+                    tooltip: context.l10n.voiceInput,
                     onPressed: _sending ? null : _startVoice,
-                    icon: const Icon(Icons.mic_rounded),
+                    icon: Icon(Icons.mic_rounded),
                   ),
-                  const SizedBox(width: 6),
+                  SizedBox(width: 6),
                   IconButton.filled(
                     onPressed: _sending ? null : _send,
                     icon: _sending
@@ -659,9 +676,9 @@ class _AiChatSheetState extends State<AiChatSheet> {
                               color: Colors.white,
                             ),
                           )
-                        : const Icon(Icons.send_rounded),
+                        : Icon(Icons.send_rounded),
                     style: IconButton.styleFrom(
-                      backgroundColor: const Color(0xFF006B70),
+                      backgroundColor: Color(0xFF006B70),
                     ),
                   ),
                 ],
@@ -680,7 +697,8 @@ String _apiErrorMessage(DioException exception, String fallback) {
       ? data['detail']?.toString().trim()
       : null;
   if (detail == null || detail.isEmpty || detail.length > 300) return fallback;
-  if (detail.contains('Exception:') || detail.contains('\n   at ')) return fallback;
+  if (detail.contains('Exception:') || detail.contains('\n   at '))
+    return fallback;
   return detail;
 }
 
@@ -704,25 +722,26 @@ String? _buildSelectionNotice(
   int promoMatchCount,
 ) {
   final notices = <String>[];
+  final l10n = LocaleProvider.currentLocalizations;
   if (draft.vehicleQuery != null) {
     notices.add(
       vehicleMatchCount == 1
-          ? 'Đã chọn xe theo “${draft.vehicleQuery}”.'
-          : 'Không tìm thấy chính xác xe “${draft.vehicleQuery}”. Vui lòng chọn lại.',
+          ? l10n.vehicleSelectedByQuery(draft.vehicleQuery!)
+          : l10n.vehicleQueryNotFound(draft.vehicleQuery!),
     );
   }
   if (draft.promotionCode != null) {
     notices.add(
       promoMatchCount == 1
-          ? 'Đã áp dụng mã ${draft.promotionCode}.'
-          : 'Mã ${draft.promotionCode} không khả dụng.',
+          ? l10n.promoApplied(draft.promotionCode!)
+          : l10n.promoUnavailable(draft.promotionCode!),
     );
   }
   return notices.isEmpty ? null : notices.join(' ');
 }
 
 class _ConversationHistorySheet extends StatefulWidget {
-  const _ConversationHistorySheet({
+  _ConversationHistorySheet({
     required this.service,
     required this.activeConversationId,
     required this.onDeleted,
@@ -737,9 +756,8 @@ class _ConversationHistorySheet extends StatefulWidget {
       _ConversationHistorySheetState();
 }
 
-class _ConversationHistorySheetState
-    extends State<_ConversationHistorySheet> {
-  List<AiConversation> _conversations = const [];
+class _ConversationHistorySheetState extends State<_ConversationHistorySheet> {
+  List<AiConversation> _conversations = [];
   bool _loading = true;
   String? _error;
   String? _deletingId;
@@ -763,7 +781,7 @@ class _ConversationHistorySheetState
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'Không thể tải lịch sử trò chuyện.';
+        _error = context.l10n.conversationHistoryLoadFailed;
       });
     }
   }
@@ -772,19 +790,19 @@ class _ConversationHistorySheetState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Xóa cuộc trò chuyện?'),
+        title: Text(context.l10n.deleteConversationQuestion),
         content: Text(
-          '“${conversation.title}” và các file ghi âm liên quan sẽ bị xóa vĩnh viễn.',
+          context.l10n.deleteConversationDescription(conversation.title),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Hủy'),
+            child: Text(context.l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Xóa'),
+            child: Text(context.l10n.delete),
           ),
         ],
       ),
@@ -806,7 +824,7 @@ class _ConversationHistorySheetState
       if (!mounted) return;
       setState(() {
         _deletingId = null;
-        _error = 'Không thể xóa cuộc trò chuyện. Vui lòng thử lại.';
+        _error = context.l10n.conversationDeleteFailed;
       });
     }
   }
@@ -820,16 +838,16 @@ class _ConversationHistorySheetState
           padding: const EdgeInsets.fromLTRB(20, 16, 8, 12),
           child: Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'Lịch sử trò chuyện',
+                  context.l10n.conversationHistory,
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ),
               IconButton(
-                tooltip: 'Đóng',
+                tooltip: context.l10n.close,
                 onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close_rounded),
+                icon: Icon(Icons.close_rounded),
               ),
             ],
           ),
@@ -842,22 +860,25 @@ class _ConversationHistorySheetState
                 Expanded(
                   child: Text(
                     _error!,
-                    style: const TextStyle(color: Colors.red),
+                    style: TextStyle(color: Colors.red),
                   ),
                 ),
-                TextButton(onPressed: _load, child: const Text('Thử lại')),
+                TextButton(
+                  onPressed: _load,
+                  child: Text(context.l10n.tryAgain),
+                ),
               ],
             ),
           ),
         Expanded(
           child: _loading
-              ? const Center(child: CircularProgressIndicator())
+              ? Center(child: CircularProgressIndicator())
               : _conversations.isEmpty
-              ? const Center(child: Text('Chưa có cuộc trò chuyện nào.'))
+              ? Center(child: Text(context.l10n.noConversations))
               : ListView.separated(
                   padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
                   itemCount: _conversations.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  separatorBuilder: (_, __) => Divider(height: 1),
                   itemBuilder: (context, index) {
                     final conversation = _conversations[index];
                     final active =
@@ -876,8 +897,9 @@ class _ConversationHistorySheetState
                         overflow: TextOverflow.ellipsis,
                       ),
                       subtitle: Text(
-                        DateFormat('dd/MM/yyyy • HH:mm')
-                            .format(conversation.updatedAt.toLocal()),
+                        DateFormat(
+                          'dd/MM/yyyy • HH:mm',
+                        ).format(conversation.updatedAt.toLocal()),
                       ),
                       onTap: deleting
                           ? null
@@ -888,9 +910,9 @@ class _ConversationHistorySheetState
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : IconButton(
-                              tooltip: 'Xóa cuộc trò chuyện',
+                              tooltip: context.l10n.deleteConversation,
                               onPressed: () => _delete(conversation),
-                              icon: const Icon(Icons.delete_outline_rounded),
+                              icon: Icon(Icons.delete_outline_rounded),
                             ),
                     );
                   },
@@ -902,10 +924,7 @@ class _ConversationHistorySheetState
 }
 
 class _Header extends StatelessWidget {
-  const _Header({
-    required this.onHistory,
-    required this.onNewConversation,
-  });
+  _Header({required this.onHistory, required this.onNewConversation});
 
   final VoidCallback onHistory;
   final VoidCallback onNewConversation;
@@ -915,39 +934,39 @@ class _Header extends StatelessWidget {
     padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
     child: Row(
       children: [
-        const CircleAvatar(
+        CircleAvatar(
           backgroundColor: Color(0xFFE0F2F1),
           child: Icon(Icons.auto_awesome, color: Color(0xFF006B70)),
         ),
-        const SizedBox(width: 12),
-        const Expanded(
+        SizedBox(width: 12),
+        Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Trợ lý SafeRide',
+                context.l10n.safeRideAssistantTitle,
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               Text(
-                'AI có thể mắc lỗi • Kiểm tra trước khi đặt',
+                context.l10n.aiDisclaimer,
                 style: TextStyle(fontSize: 12, color: Colors.grey),
               ),
             ],
           ),
         ),
         IconButton(
-          tooltip: 'Lịch sử trò chuyện',
+          tooltip: context.l10n.conversationHistory,
           onPressed: onHistory,
-          icon: const Icon(Icons.history_rounded),
+          icon: Icon(Icons.history_rounded),
         ),
         IconButton(
-          tooltip: 'Đoạn chat mới',
+          tooltip: context.l10n.newChat,
           onPressed: onNewConversation,
-          icon: const Icon(Icons.add_comment_outlined),
+          icon: Icon(Icons.add_comment_outlined),
         ),
         IconButton(
           onPressed: () => Navigator.pop(context),
-          icon: const Icon(Icons.close),
+          icon: Icon(Icons.close),
         ),
       ],
     ),
@@ -955,7 +974,7 @@ class _Header extends StatelessWidget {
 }
 
 class _BookingComposer extends StatelessWidget {
-  const _BookingComposer({
+  _BookingComposer({
     required this.loading,
     required this.creating,
     required this.vehicles,
@@ -998,19 +1017,19 @@ class _BookingComposer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (loading) {
-      return const Padding(
+      return Padding(
         padding: EdgeInsets.all(16),
         child: LinearProgressIndicator(),
       );
     }
 
     return Container(
-      constraints: const BoxConstraints(maxHeight: 500),
+      constraints: BoxConstraints(maxHeight: 500),
       margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border.all(color: const Color(0xFFDDE5E5)),
+        border: Border.all(color: Color(0xFFDDE5E5)),
         borderRadius: BorderRadius.circular(8),
       ),
       child: SingleChildScrollView(
@@ -1021,18 +1040,19 @@ class _BookingComposer extends StatelessWidget {
               children: [
                 if (step != _BookingStep.vehicle)
                   IconButton(
-                    tooltip: 'Quay lại',
+                    tooltip: context.l10n.back,
                     onPressed: onBack,
-                    icon: const Icon(Icons.arrow_back_rounded),
+                    icon: Icon(Icons.arrow_back_rounded),
                   ),
                 Expanded(
                   child: Text(
                     switch (step) {
-                      _BookingStep.vehicle => 'Bạn muốn đi bằng xe nào?',
-                      _BookingStep.promotion => 'Chọn mã giảm giá',
-                      _BookingStep.confirmation => 'Xác nhận chuyến đi',
+                      _BookingStep.vehicle =>
+                        context.l10n.chooseVehicleQuestion,
+                      _BookingStep.promotion => context.l10n.chooseDiscountCode,
+                      _BookingStep.confirmation => context.l10n.confirmTrip,
                     },
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
                     ),
@@ -1040,97 +1060,106 @@ class _BookingComposer extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             if (notice != null && step != _BookingStep.confirmation) ...[
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEAF5F4),
+                  color: Color(0xFFEAF5F4),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: Text(notice!, style: const TextStyle(fontSize: 13)),
+                child: Text(notice!, style: TextStyle(fontSize: 13)),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
             ],
             if (step == _BookingStep.vehicle) ...[
               Row(
-              children: [
-                const Expanded(
-                  child: Text('Xe của bạn', style: TextStyle(fontWeight: FontWeight.w600)),
-                ),
-                TextButton.icon(
-                  onPressed: onAddVehicle,
-                  icon: const Icon(Icons.add_rounded, size: 18),
-                  label: Text(vehicles.isEmpty ? 'Thêm xe' : 'Xe mới'),
-                ),
-              ],
-            ),
-              if (vehicles.isEmpty)
-              const Text(
-                'Bạn chưa có xe. Hãy thêm xe để tiếp tục đặt chuyến.',
-                style: TextStyle(color: Color(0xFF666666)),
-              )
-              else
-              ...vehicles.map(
-                (vehicle) => RadioListTile<int>(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  value: vehicle.id,
-                  groupValue: selectedVehicle?.id,
-                  onChanged: (_) => onVehicleSelected(vehicle),
-                  secondary: Icon(
-                    vehicle.isMotorbike ? Icons.two_wheeler : Icons.directions_car,
+                children: [
+                  Expanded(
+                    child: Text(
+                      context.l10n.yourVehicles,
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
                   ),
-                  title: Text(vehicle.name),
-                  subtitle: Text('${vehicle.plateNumber} • ${vehicle.color}'),
-                ),
+                  TextButton.icon(
+                    onPressed: onAddVehicle,
+                    icon: Icon(Icons.add_rounded, size: 18),
+                    label: Text(
+                      vehicles.isEmpty
+                          ? context.l10n.addVehicle
+                          : context.l10n.newVehicle,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
+              if (vehicles.isEmpty)
+                Text(
+                  context.l10n.noVehicleForAiBooking,
+                  style: TextStyle(color: Color(0xFF666666)),
+                )
+              else
+                ...vehicles.map(
+                  (vehicle) => RadioListTile<int>(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: vehicle.id,
+                    groupValue: selectedVehicle?.id,
+                    onChanged: (_) => onVehicleSelected(vehicle),
+                    secondary: Icon(
+                      vehicle.isMotorbike
+                          ? Icons.two_wheeler
+                          : Icons.directions_car,
+                    ),
+                    title: Text(vehicle.name),
+                    subtitle: Text('${vehicle.plateNumber} • ${vehicle.color}'),
+                  ),
+                ),
+              SizedBox(height: 8),
               FilledButton(
                 onPressed: selectedVehicle == null || fareEstimate == null
                     ? null
                     : onContinueFromVehicle,
-                child: const Text('Tiếp tục chọn mã giảm giá'),
+                child: Text(context.l10n.continueChooseDiscount),
               ),
             ],
             if (step == _BookingStep.promotion) ...[
               if (promotions.isEmpty)
-              const Padding(
-                padding: EdgeInsets.only(top: 6),
-                child: Text(
-                  'Hiện không có mã giảm giá khả dụng.',
-                  style: TextStyle(color: Color(0xFF666666)),
-                ),
-              )
+                Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text(
+                    context.l10n.noDiscountAvailable,
+                    style: TextStyle(color: Color(0xFF666666)),
+                  ),
+                )
               else ...[
-              RadioListTile<int>(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                value: -1,
-                groupValue: selectedPromo?.promotionId ?? -1,
-                onChanged: (_) => onPromoSelected(null),
-                title: const Text('Không dùng mã giảm giá'),
-              ),
-              ...promotions.map(
-                (promo) => RadioListTile<int>(
+                RadioListTile<int>(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
-                  value: promo.promotionId,
+                  value: -1,
                   groupValue: selectedPromo?.promotionId ?? -1,
-                  onChanged: (_) => onPromoSelected(promo),
-                  title: Text(promo.promotionCode),
-                  subtitle: Text(promo.shortDescription),
+                  onChanged: (_) => onPromoSelected(null),
+                  title: Text(context.l10n.noDiscount),
                 ),
-              ),
+                ...promotions.map(
+                  (promo) => RadioListTile<int>(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: promo.promotionId,
+                    groupValue: selectedPromo?.promotionId ?? -1,
+                    onChanged: (_) => onPromoSelected(promo),
+                    title: Text(promo.promotionCode),
+                    subtitle: Text(promo.shortDescription),
+                  ),
+                ),
               ],
-              const SizedBox(height: 10),
+              SizedBox(height: 10),
               FilledButton(
                 onPressed: onContinueFromPromotion,
                 child: Text(
                   promotions.isEmpty || selectedPromo == null
-                      ? 'Tiếp tục không dùng mã'
-                      : 'Dùng mã ${selectedPromo!.promotionCode}',
+                      ? context.l10n.continueWithoutDiscount
+                      : context.l10n.usePromoCode(selectedPromo!.promotionCode),
                 ),
               ),
             ],
@@ -1139,53 +1168,65 @@ class _BookingComposer extends StatelessWidget {
                 height: 190,
                 child: _ChatRouteMap(draft: draft, estimate: fareEstimate),
               ),
-              const SizedBox(height: 12),
-              _SummaryRow(label: 'Điểm đón', value: draft.pickup.address),
-              _SummaryRow(label: 'Điểm đến', value: draft.destination.address),
+              SizedBox(height: 12),
+              _SummaryRow(
+                label: context.l10n.pickupPoint,
+                value: draft.pickup.address,
+              ),
+              _SummaryRow(
+                label: context.l10n.destinationPoint,
+                value: draft.destination.address,
+              ),
               if (selectedVehicle != null)
                 _SummaryRow(
-                  label: 'Xe',
+                  label: context.l10n.vehicleType,
                   value:
                       '${selectedVehicle!.name} • ${selectedVehicle!.plateNumber}',
                 ),
               _SummaryRow(
-                label: 'Khuyến mãi',
-                value: selectedPromo?.promotionCode ?? 'Không sử dụng',
+                label: context.l10n.promotion,
+                value: selectedPromo?.promotionCode ?? context.l10n.notUsed,
               ),
               if (fareEstimate != null) ...[
-              const Divider(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    '${fareEstimate!.estimatedDistanceKm.toStringAsFixed(1)} km • '
-                    '${fareEstimate!.estimatedDurationMinutes} phút',
-                  ),
-                  Text(
-                    NumberFormat.currency(locale: 'vi_VN', symbol: 'đ')
-                        .format(fareEstimate!.estimatedFare),
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
+                Divider(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${fareEstimate!.estimatedDistanceKm.toStringAsFixed(1)} km • '
+                      '${context.l10n.minutesValue(fareEstimate!.estimatedDurationMinutes)}',
+                    ),
+                    Text(
+                      NumberFormat.currency(
+                        locale: LocaleProvider.currentLocale.toLanguageTag(),
+                        symbol: 'VND',
+                        decimalDigits: 0,
+                      ).format(fareEstimate!.estimatedFare),
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
               ],
-              const SizedBox(height: 10),
+              SizedBox(height: 10),
               FilledButton.icon(
-              onPressed: creating || selectedVehicle == null ||
-                      selectedService == null || fareEstimate == null
-                  ? null
-                  : onConfirm,
-              icon: creating
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.search_rounded),
-              label: const Text('Xác nhận và tìm tài xế'),
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(46),
-                backgroundColor: const Color(0xFF006B70),
-              ),
+                onPressed:
+                    creating ||
+                        selectedVehicle == null ||
+                        selectedService == null ||
+                        fareEstimate == null
+                    ? null
+                    : onConfirm,
+                icon: creating
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(Icons.search_rounded),
+                label: Text(context.l10n.confirmAndFindDriverAi),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(46),
+                  backgroundColor: Color(0xFF006B70),
+                ),
               ),
             ],
           ],
@@ -1196,7 +1237,7 @@ class _BookingComposer extends StatelessWidget {
 }
 
 class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({required this.label, required this.value});
+  _SummaryRow({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -1209,16 +1250,21 @@ class _SummaryRow extends StatelessWidget {
       children: [
         SizedBox(
           width: 82,
-          child: Text(label, style: const TextStyle(color: Color(0xFF666666))),
+          child: Text(label, style: TextStyle(color: Color(0xFF666666))),
         ),
-        Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600))),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
       ],
     ),
   );
 }
 
 class _ChatRouteMap extends StatefulWidget {
-  const _ChatRouteMap({required this.draft, required this.estimate});
+  _ChatRouteMap({required this.draft, required this.estimate});
 
   final AiBookingDraft draft;
   final BookingFareEstimate? estimate;
@@ -1230,10 +1276,8 @@ class _ChatRouteMap extends StatefulWidget {
 class _ChatRouteMapState extends State<_ChatRouteMap> {
   AppMapController? _controller;
 
-  AppLatLng get _pickup => AppLatLng(
-    widget.draft.pickup.latitude,
-    widget.draft.pickup.longitude,
-  );
+  AppLatLng get _pickup =>
+      AppLatLng(widget.draft.pickup.latitude, widget.draft.pickup.longitude);
   AppLatLng get _destination => AppLatLng(
     widget.draft.destination.latitude,
     widget.draft.destination.longitude,
@@ -1293,7 +1337,11 @@ class _ChatRouteMapState extends State<_ChatRouteMap> {
         ),
       },
       polylines: {
-        AppPolyline(id: 'route', points: _route, color: const Color(0xFF006B70)),
+        AppPolyline(
+          id: 'route',
+          points: _route,
+          color: Color(0xFF006B70),
+        ),
       },
       onMapCreated: (controller) {
         _controller = controller;
@@ -1305,14 +1353,14 @@ class _ChatRouteMapState extends State<_ChatRouteMap> {
 }
 
 class _Welcome extends StatelessWidget {
-  const _Welcome();
+  _Welcome();
 
   @override
-  Widget build(BuildContext context) => const Center(
+  Widget build(BuildContext context) => Center(
     child: Padding(
       padding: EdgeInsets.all(32),
       child: Text(
-        'Xin chào! Mình có thể hỗ trợ bạn sử dụng SafeRide hoặc chuẩn bị một chuyến đi.\n\nVí dụ: “Đặt xe từ Đại học FPT đến sân bay Tân Sơn Nhất”.',
+        LocaleProvider.currentLocalizations.aiWelcome,
         textAlign: TextAlign.center,
         style: TextStyle(height: 1.5, color: Color(0xFF555555)),
       ),
@@ -1321,7 +1369,7 @@ class _Welcome extends StatelessWidget {
 }
 
 class _Bubble extends StatefulWidget {
-  const _Bubble({required this.message});
+  _Bubble({required this.message});
 
   final AiChatMessage message;
 
@@ -1362,11 +1410,11 @@ class _BubbleState extends State<_Bubble> {
         ? Alignment.centerRight
         : Alignment.centerLeft,
     child: Container(
-      constraints: const BoxConstraints(maxWidth: 300),
+      constraints: BoxConstraints(maxWidth: 300),
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: widget.message.isUser ? const Color(0xFF006B70) : Colors.white,
+        color: widget.message.isUser ? Color(0xFF006B70) : Colors.white,
         borderRadius: BorderRadius.circular(16),
       ),
       child: !widget.message.isAudio
@@ -1375,12 +1423,13 @@ class _BubbleState extends State<_Bubble> {
               style: TextStyle(
                 color: widget.message.isUser
                     ? Colors.white
-                    : const Color(0xFF222222),
+                    : Color(0xFF222222),
                 height: 1.4,
               ),
             )
           : InkWell(
-              onTap: widget.message.localAudioPath == null &&
+              onTap:
+                  widget.message.localAudioPath == null &&
                       widget.message.audioUrl == null
                   ? null
                   : _toggleAudio,
@@ -1396,11 +1445,11 @@ class _BubbleState extends State<_Bubble> {
                         : Icons.play_arrow_rounded,
                     color: Colors.white,
                   ),
-                  const SizedBox(width: 8),
-                  const Icon(Icons.graphic_eq_rounded, color: Colors.white),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Tin nhắn thoại',
+                  SizedBox(width: 8),
+                  Icon(Icons.graphic_eq_rounded, color: Colors.white),
+                  SizedBox(width: 8),
+                  Text(
+                    context.l10n.voiceMessage,
                     style: TextStyle(color: Colors.white),
                   ),
                 ],

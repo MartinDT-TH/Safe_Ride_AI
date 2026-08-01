@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../../core/constants/app_colors.dart';
-import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/localization/localization_extensions.dart';
+import '../../../../../core/localization/locale_provider.dart';
+import 'package:intl/intl.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/booking_provider.dart';
 import '../../data/models/promo_model.dart';
 
 class SelectPromoSheet extends StatefulWidget {
-  const SelectPromoSheet({super.key});
+  SelectPromoSheet({super.key});
 
   static Future<PromoModel?> show(BuildContext context) {
     return showModalBottomSheet<PromoModel>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => const SelectPromoSheet(),
+      builder: (context) => SelectPromoSheet(),
     );
   }
 
@@ -52,31 +54,31 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.85,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
       ),
       child: Column(
         children: [
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           // Handle bar
           Container(
             width: 48,
             height: 5,
             decoration: BoxDecoration(
-              color: const Color(0xFFE2E2E2),
+              color: Color(0xFFE2E2E2),
               borderRadius: BorderRadius.circular(10),
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           // Header
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  PromotionStrings.selectPromotion,
+                Text(
+                  context.l10n.selectPromotion,
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
@@ -87,11 +89,11 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
                   onPressed: () => Navigator.pop(context),
                   icon: Container(
                     padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: Color(0xFFF5F5F5),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.close,
                       size: 20,
                       color: Color(0xFF6B6B6B),
@@ -101,8 +103,8 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
               ],
             ),
           ),
-          const Divider(height: 1),
-          const SizedBox(height: 20),
+          Divider(height: 1),
+          SizedBox(height: 20),
           // Input Section
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -114,13 +116,13 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
                     child: TextField(
                       controller: _promoController,
                       decoration: InputDecoration(
-                        hintText: PromotionStrings.enterPromoCode,
-                        hintStyle: const TextStyle(
+                        hintText: context.l10n.enterPromoCode,
+                        hintStyle: TextStyle(
                           color: Color(0xFFAAAAAA),
                           fontSize: 15,
                         ),
                         filled: true,
-                        fillColor: const Color(0xFFF7F7F7),
+                        fillColor: Color(0xFFF7F7F7),
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 16,
                         ),
@@ -132,7 +134,7 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 SizedBox(
                   height: 54,
                   child: ElevatedButton(
@@ -146,7 +148,7 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
                               discountValue: 0,
                               remainingUsageCount: 1,
                               shortDescription:
-                                  'Mã sẽ được kiểm tra khi đặt chuyến',
+                                  context.l10n.promoValidatedOnBooking,
                             );
                             provider.selectPromo(promo);
                             Navigator.pop(context, promo);
@@ -160,8 +162,8 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
                       ),
                       padding: const EdgeInsets.symmetric(horizontal: 24),
                     ),
-                    child: const Text(
-                      PromotionStrings.apply,
+                    child: Text(
+                      context.l10n.apply,
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 16,
@@ -172,24 +174,22 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: 24),
           // List Section
           Expanded(
             child: isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? Center(child: CircularProgressIndicator())
                 : promos.isEmpty
-                ? const Center(
-                    child: Text('Hiện chưa có mã khuyến mãi khả dụng.'),
-                  )
+                ? Center(child: Text(context.l10n.noAvailablePromoCodes))
                 : ListView.separated(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 20,
                       vertical: 8,
                     ),
                     itemCount: promos.length,
-                    physics: const BouncingScrollPhysics(),
+                    physics: BouncingScrollPhysics(),
                     separatorBuilder: (context, index) =>
-                        const SizedBox(height: 16),
+                        SizedBox(height: 16),
                     itemBuilder: (context, index) {
                       return _PromoCard(
                         promo: promos[index],
@@ -217,12 +217,12 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
                   },
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.red,
-                    side: const BorderSide(color: Colors.red),
+                    side: BorderSide(color: Colors.red),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: const Text('Bỏ chọn mã khuyến mãi'),
+                  child: Text(context.l10n.deselectPromo),
                 ),
               ),
             ),
@@ -237,7 +237,7 @@ class _PromoCard extends StatelessWidget {
   final VoidCallback onUse;
   final bool isSelected;
 
-  const _PromoCard({
+  _PromoCard({
     required this.promo,
     required this.onUse,
     this.isSelected = false,
@@ -250,7 +250,7 @@ class _PromoCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isSelected ? AppColors.primary : const Color(0xFFEEEEEE),
+          color: isSelected ? AppColors.primary : Color(0xFFEEEEEE),
           width: 1.5,
         ),
       ),
@@ -264,16 +264,16 @@ class _PromoCard extends StatelessWidget {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: const Color(0xFFE0F2F2),
+                color: Color(0xFFE0F2F2),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.confirmation_num_outlined,
                 color: AppColors.primary,
                 size: 24,
               ),
             ),
-            const SizedBox(width: 16),
+            SizedBox(width: 16),
             // Info
             Expanded(
               child: Column(
@@ -285,12 +285,12 @@ class _PromoCard extends StatelessWidget {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE0F2F2),
+                      color: Color(0xFFE0F2F2),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       promo.promotionCode,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppColors.primary,
                         fontWeight: FontWeight.w800,
                         fontSize: 12,
@@ -298,10 +298,10 @@ class _PromoCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  SizedBox(height: 10),
                   Text(
                     promo.shortDescription,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
                       color: Color(0xFF2D2D2D),
@@ -309,29 +309,33 @@ class _PromoCard extends StatelessWidget {
                     ),
                   ),
                   if (promo.minimumOrderValue > 0) ...[
-                    const SizedBox(height: 4),
+                    SizedBox(height: 4),
                     Text(
-                      'Đơn tối thiểu: ${_formatCurrency(promo.minimumOrderValue)}',
-                      style: const TextStyle(
+                      context.l10n.minimumOrder(
+                        _formatCurrency(promo.minimumOrderValue),
+                      ),
+                      style: TextStyle(
                         fontSize: 12,
                         color: Color(0xFF888888),
                       ),
                     ),
                   ],
-                  const SizedBox(height: 10),
+                  SizedBox(height: 10),
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.access_time,
                         size: 14,
                         color: Color(0xFF888888),
                       ),
-                      const SizedBox(width: 4),
+                      SizedBox(width: 4),
                       Text(
                         promo.remainingUsageCount > 0
-                            ? 'Còn lại: ${promo.remainingUsageCount} lượt'
-                            : 'Hết lượt sử dụng',
-                        style: const TextStyle(
+                            ? context.l10n.remainingUseCount(
+                                promo.remainingUsageCount,
+                              )
+                            : context.l10n.usageExhausted,
+                        style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                           color: Color(0xFF888888),
@@ -342,7 +346,7 @@ class _PromoCard extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             // Action
             TextButton(
               onPressed: promo.remainingUsageCount > 0 ? onUse : null,
@@ -352,9 +356,9 @@ class _PromoCard extends StatelessWidget {
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
               child: Text(
-                isSelected ? 'Đang\ndùng' : PromotionStrings.useNow,
+                isSelected ? context.l10n.inUse : context.l10n.useNow,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 14,
                   height: 1.2,
@@ -368,12 +372,10 @@ class _PromoCard extends StatelessWidget {
   }
 
   String _formatCurrency(double value) {
-    final digits = value.round().toString();
-    final buffer = StringBuffer();
-    for (var index = 0; index < digits.length; index++) {
-      if (index > 0 && (digits.length - index) % 3 == 0) buffer.write('.');
-      buffer.write(digits[index]);
-    }
-    return '$bufferđ';
+    return NumberFormat.currency(
+      locale: LocaleProvider.currentLocale.toLanguageTag(),
+      symbol: 'VND',
+      decimalDigits: 0,
+    ).format(value);
   }
 }

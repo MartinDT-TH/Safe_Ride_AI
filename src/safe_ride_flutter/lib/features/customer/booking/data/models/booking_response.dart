@@ -1,4 +1,5 @@
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/localization/locale_provider.dart';
 import 'booking_catalog.dart';
 import 'booking_location.dart';
 
@@ -141,7 +142,7 @@ class BookingResponse {
           : DateTime.tryParse(_value(json, ApiKeys.tripEndedAt).toString()),
       message:
           _value(json, ApiKeys.message)?.toString() ??
-          BookingStrings.bookingSuccess,
+          LocaleProvider.currentLocalizations.bookingSuccess,
       driverOffer: driverOfferRaw is Map
           ? BookingDriverOffer.fromJson(
               Map<String, dynamic>.from(driverOfferRaw),
@@ -470,7 +471,7 @@ class TripPaymentSummary {
           : DateTime.tryParse(_value(json, ApiKeys.paidAt).toString()),
       message:
           _value(json, ApiKeys.message)?.toString() ??
-          'Vui lòng thanh toán cho tài xế để hoàn tất chuyến đi.',
+          LocaleProvider.currentLocalizations.payDriverToComplete,
     );
   }
 
