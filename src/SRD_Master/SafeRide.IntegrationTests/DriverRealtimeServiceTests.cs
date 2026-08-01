@@ -250,6 +250,7 @@ public sealed class DriverRealtimeServiceTests
                     PathSampleIntervalSeconds = 1,
                     MaxInferredSpeedKmh = 130
                 }),
+            new MapRoutingServiceFake(),
             NullLogger<DriverRealtimeService>.Instance);
     }
 
@@ -388,6 +389,15 @@ public sealed class DriverRealtimeServiceTests
     private sealed class DateTimeProviderFake(DateTime utcNow) : IDateTimeProvider
     {
         public DateTime UtcNow { get; } = utcNow;
+    }
+
+    private sealed class MapRoutingServiceFake : IMapRoutingService
+    {
+        public Task<RouteEstimateResult> GetRouteEstimateAsync(
+            RouteEstimateRequest request,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException(
+                "Routing should not be called by these tracking tests.");
     }
 
     private sealed class RealtimeNotificationServiceFake : IRealtimeNotificationService
