@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/localization/locale_provider.dart';
+import '../../../../../core/localization/api_error_localizer.dart';
 import '../../../../../core/services/location_service.dart';
 import '../../../../../core/services/socket_service.dart';
 import '../../data/models/promo_model.dart';
@@ -209,10 +211,10 @@ class BookingProvider extends ChangeNotifier {
       }
       return booking;
     } on BookingApiException catch (exception) {
-      _errorMessage = exception.message;
+      _errorMessage = _bookingError(exception);
       return null;
     } catch (_) {
-      _errorMessage = AppStrings.genericError;
+      _errorMessage = LocaleProvider.currentLocalizations.genericError;
       return null;
     } finally {
       _isLoading = false;
@@ -248,11 +250,11 @@ class BookingProvider extends ChangeNotifier {
       notifyListeners();
       return booking;
     } on BookingApiException catch (exception) {
-      _errorMessage = exception.message;
+      _errorMessage = _bookingError(exception);
       notifyListeners();
       return null;
     } catch (_) {
-      _errorMessage = AppStrings.genericError;
+      _errorMessage = LocaleProvider.currentLocalizations.genericError;
       notifyListeners();
       return null;
     }
@@ -335,9 +337,9 @@ class BookingProvider extends ChangeNotifier {
         accessToken,
       );
     } on BookingApiException catch (exception) {
-      _errorMessage = exception.message;
+      _errorMessage = _bookingError(exception);
     } catch (_) {
-      _errorMessage = AppStrings.genericError;
+      _errorMessage = LocaleProvider.currentLocalizations.genericError;
     } finally {
       _isLoadingPromotions = false;
       notifyListeners();
@@ -365,7 +367,7 @@ class BookingProvider extends ChangeNotifier {
       notifyListeners();
       return null;
     } catch (_) {
-      _locationErrorMessage = AppStrings.genericError;
+      _locationErrorMessage = LocaleProvider.currentLocalizations.genericError;
       notifyListeners();
       return null;
     }
@@ -428,12 +430,12 @@ class BookingProvider extends ChangeNotifier {
       return estimate;
     } on BookingApiException catch (exception) {
       if (requestId == _estimateRequestId) {
-        _errorMessage = exception.message;
+        _errorMessage = _bookingError(exception);
       }
       return null;
     } catch (_) {
       if (requestId == _estimateRequestId) {
-        _errorMessage = AppStrings.genericError;
+        _errorMessage = LocaleProvider.currentLocalizations.genericError;
       }
       return null;
     } finally {
@@ -650,11 +652,11 @@ class BookingProvider extends ChangeNotifier {
       _errorMessage = exception.message;
       return null;
     } on BookingApiException catch (exception) {
-      _errorMessage = exception.message;
+      _errorMessage = _bookingError(exception);
       _errorStatusCode = exception.statusCode;
       return null;
     } catch (_) {
-      _errorMessage = AppStrings.genericError;
+      _errorMessage = LocaleProvider.currentLocalizations.genericError;
       return null;
     } finally {
       _isLoading = false;
@@ -673,11 +675,18 @@ class BookingProvider extends ChangeNotifier {
       notifyListeners();
       return null;
     } catch (_) {
-      _locationErrorMessage = AppStrings.genericError;
+      _locationErrorMessage = LocaleProvider.currentLocalizations.genericError;
       notifyListeners();
       return null;
     }
   }
+
+  String _bookingError(BookingApiException exception) =>
+      ApiErrorLocalizer.translate(
+        LocaleProvider.currentLocalizations,
+        code: exception.code,
+        fallback: exception.message,
+      );
 
   void _setActiveBookingFromResponse(BookingResponse booking) {
     _activeBooking = booking;

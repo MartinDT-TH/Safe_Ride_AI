@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 
 class DriverBottomNavBar extends StatelessWidget {
   final int currentIndex;
   final Function(int) onTap;
 
-  const DriverBottomNavBar({
+  DriverBottomNavBar({
     super.key,
     required this.currentIndex,
     required this.onTap,
@@ -17,47 +17,39 @@ class DriverBottomNavBar extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border(
-          top: BorderSide(
-            color: Colors.grey.withOpacity(0.1),
-            width: 1,
-          ),
+          top: BorderSide(color: Colors.grey.withOpacity(0.1), width: 1),
         ),
       ),
       child: BottomNavigationBar(
         currentIndex: currentIndex,
         type: BottomNavigationBarType.fixed,
-        selectedItemColor: const Color(0xFF006B70),
+        selectedItemColor: Color(0xFF006B70),
         unselectedItemColor: Colors.grey,
         showUnselectedLabels: true,
-        selectedLabelStyle: const TextStyle(
+        selectedLabelStyle: TextStyle(
           fontWeight: FontWeight.w800,
           fontSize: 12,
         ),
-        unselectedLabelStyle: const TextStyle(fontSize: 12),
+        unselectedLabelStyle: TextStyle(fontSize: 12),
         onTap: onTap,
         items: [
           _buildNavItem(
             Icons.home_outlined,
             Icons.home_filled,
-            HomeStrings.home,
+            context.l10n.home,
             0,
           ),
-          _buildNavItem(
-            Icons.history,
-            Icons.history,
-            HomeStrings.activity,
-            1,
-          ),
+          _buildNavItem(Icons.history, Icons.history, context.l10n.activity, 1),
           _buildNavItem(
             Icons.account_balance_wallet_outlined,
             Icons.account_balance_wallet_rounded,
-            HomeStrings.wallet,
+            context.l10n.wallet,
             2,
           ),
           _buildNavItem(
             Icons.person_outline_rounded,
             Icons.person_rounded,
-            HomeStrings.account,
+            context.l10n.account,
             3,
           ),
         ],
@@ -76,7 +68,7 @@ class DriverBottomNavBar extends StatelessWidget {
       icon: Container(
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF006B70) : Colors.transparent,
+          color: isSelected ? Color(0xFF006B70) : Colors.transparent,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Icon(

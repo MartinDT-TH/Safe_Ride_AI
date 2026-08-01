@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/network/auth_header.dart';
+import '../../../../../core/localization/locale_provider.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../../core/network/dio_client.dart';
 import '../../../../../core/session/session_manager.dart';
 import '../../../../../dependency_injection/injection.dart';
@@ -17,7 +20,7 @@ import '../../../../customer/booking/presentation/providers/booking_provider.dar
 import '../../../../driver/dashboard/data/models/payment_models.dart';
 
 class TripSummaryPage extends StatefulWidget {
-  const TripSummaryPage({
+  TripSummaryPage({
     super.key,
     required this.booking,
     this.onConfirmedVehicleReturned,
@@ -66,8 +69,8 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
     context.read<HomeProvider>().setSelectedIndex(0);
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Chuyến đi đã hoàn thành. Cảm ơn bạn!'),
+      SnackBar(
+        content: Text(context.l10n.tripCompletedThanks),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -80,7 +83,7 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
 
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const CustomerHomePage()),
+      MaterialPageRoute(builder: (_) => CustomerHomePage()),
       (route) => false,
     );
   }
@@ -91,7 +94,7 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
     final token = context.read<AuthProvider>().token;
     final tripId = _booking.tripId;
     if (token == null || token.isEmpty || tripId == null) {
-      _showSnack('Không thể xác định thông tin chuyến đi. Vui lòng thử lại.');
+      _showSnack(context.l10n.tripInfoUnavailable);
       return;
     }
 
@@ -114,8 +117,7 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
         _isSubmittingRating = false;
       });
       _showSnack(
-        bookingProvider.errorMessage ??
-            'Không thể xác nhận trả xe. Vui lòng thử lại.',
+        bookingProvider.errorMessage ?? context.l10n.returnConfirmationFailed,
       );
       return;
     }
@@ -206,7 +208,7 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
 
     _paymentPollingTimer?.cancel();
     unawaited(_pollPaymentStatusOnce());
-    _paymentPollingTimer = Timer.periodic(const Duration(seconds: 3), (
+    _paymentPollingTimer = Timer.periodic(Duration(seconds: 3), (
       timer,
     ) async {
       final completed = await _pollPaymentStatusOnce();
@@ -269,20 +271,12 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
       _isSubmittingRating = false;
       _canRateLater = (bookingProvider.errorStatusCode ?? 0) >= 500;
     });
-    _showSnack(
-      bookingProvider.errorMessage ??
-          'Không thể gửi đánh giá. Vui lòng thử lại.',
-    );
+    _showSnack(bookingProvider.errorMessage ?? context.l10n.ratingSubmitFailed);
     return true;
   }
 
   static bool _isAlreadyRated(BookingProvider bookingProvider) {
-    final message = bookingProvider.errorMessage?.toLowerCase();
-    return bookingProvider.errorStatusCode == 409 &&
-        message != null &&
-        (message.contains('already') ||
-            message.contains('rated') ||
-            message.contains('đã đánh giá'));
+    return bookingProvider.errorStatusCode == 409;
   }
 
   @override
@@ -296,11 +290,9 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         if (_isWaitingForPayment) {
-          _showSnack('Vui lòng đợi thanh toán hoàn tất.');
+          _showSnack(context.l10n.waitForPayment);
         } else {
-          _showSnack(
-            'Vui lòng xác nhận trả xe và gửi đánh giá trước khi rời màn hình.',
-          );
+          _showSnack(context.l10n.completeRequirementsBeforeLeaving);
         }
       },
       child: Stack(
@@ -327,28 +319,28 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
                     children: [
                       Container(
                         padding: const EdgeInsets.all(16),
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           color: AppColors.primary,
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.check,
                           color: Colors.white,
                           size: 32,
                         ),
                       ),
-                      const SizedBox(height: 20),
-                      const Text(
-                        'Chuyến đi hoàn tất',
+                      SizedBox(height: 20),
+                      Text(
+                        context.l10n.tripComplete,
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w900,
                           color: Color(0xFF1D2939),
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Cảm ơn bạn đã sử dụng dịch vụ',
+                      SizedBox(height: 4),
+                      Text(
+                        context.l10n.thanksForUsingService,
                         style: TextStyle(
                           fontSize: 15,
                           color: Color(0xFF667085),
@@ -359,7 +351,7 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
                 ),
                 Expanded(
                   child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
+                    physics: BouncingScrollPhysics(),
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Column(
                       children: [
@@ -368,30 +360,32 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
                             Expanded(
                               child: _StatCard(
                                 icon: Icons.route_outlined,
-                                label: 'QUÃNG ĐƯỜNG',
+                                label: context.l10n.distanceUpper,
                                 value:
                                     '${(_booking.actualDistanceKm ?? _booking.estimatedDistanceKm).toStringAsFixed(1)} km',
                               ),
                             ),
-                            const SizedBox(width: 16),
+                            SizedBox(width: 16),
                             Expanded(
                               child: _StatCard(
                                 icon: Icons.access_time,
-                                label: 'THỜI GIAN',
-                                value:
-                                    '${_booking.actualDurationMinutes ?? _booking.estimatedDurationMinutes} phút',
+                                label: context.l10n.durationUpper,
+                                value: context.l10n.minutesValue(
+                                  _booking.actualDurationMinutes ??
+                                      _booking.estimatedDurationMinutes,
+                                ),
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 24),
+                        SizedBox(height: 24),
                         _PaymentDetails(
                           originalFare: originalFare,
                           discount: discount,
                           finalFare: finalFare,
                           formatCurrency: _formatCurrency,
                         ),
-                        const SizedBox(height: 24),
+                        SizedBox(height: 24),
                         _RatingCard(
                           rating: _rating,
                           enabled: !_isSubmittingRating,
@@ -403,7 +397,7 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
                             });
                           },
                         ),
-                        const SizedBox(height: 24),
+                        SizedBox(height: 24),
                         InkWell(
                           onTap: _isSubmittingRating
                               ? null
@@ -426,7 +420,7 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
                               border: Border.all(
                                 color: _vehicleReturned
                                     ? AppColors.primary
-                                    : const Color(0xFFD0D5DD),
+                                    : Color(0xFFD0D5DD),
                               ),
                             ),
                             child: Row(
@@ -437,12 +431,12 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
                                       : Icons.check_box_outline_blank,
                                   color: _vehicleReturned
                                       ? AppColors.primary
-                                      : const Color(0xFF667085),
+                                      : Color(0xFF667085),
                                 ),
-                                const SizedBox(width: 12),
-                                const Expanded(
+                                SizedBox(width: 12),
+                                Expanded(
                                   child: Text(
-                                    'Xác nhận tài xế đã trả lại phương tiện',
+                                    context.l10n.confirmVehicleReturned,
                                     style: TextStyle(
                                       fontWeight: FontWeight.w600,
                                       fontSize: 14,
@@ -454,7 +448,7 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 30),
+                        SizedBox(height: 30),
                       ],
                     ),
                   ),
@@ -474,15 +468,15 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
-                            disabledBackgroundColor: const Color(0xFFEAECF0),
-                            disabledForegroundColor: const Color(0xFF98A2B3),
+                            disabledBackgroundColor: Color(0xFFEAECF0),
+                            disabledForegroundColor: Color(0xFF98A2B3),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                             ),
                             elevation: 0,
                           ),
                           child: _isSubmittingRating
-                              ? const SizedBox(
+                              ? SizedBox(
                                   width: 22,
                                   height: 22,
                                   child: CircularProgressIndicator(
@@ -492,11 +486,11 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
                                     ),
                                   ),
                                 )
-                              : const Row(
+                              : Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     Text(
-                                      'Gửi đánh giá & chờ thanh toán',
+                                      context.l10n.sendRatingAndWaitPayment,
                                       style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w800,
@@ -509,7 +503,7 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
                         ),
                       ),
                       if (_canRateLater) ...[
-                        const SizedBox(height: 10),
+                        SizedBox(height: 10),
                         SizedBox(
                           width: double.infinity,
                           height: 48,
@@ -519,14 +513,16 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
                                 : _finishAndGoHome,
                             style: OutlinedButton.styleFrom(
                               foregroundColor: AppColors.primary,
-                              side: const BorderSide(color: AppColors.primary),
+                              side: BorderSide(color: AppColors.primary),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(14),
                               ),
                             ),
-                          child: const Text(
-                              'Xác nhận chuyến & đánh giá sau',
-                              style: TextStyle(fontWeight: FontWeight.w800),
+                            child: Text(
+                              context.l10n.confirmTripRateLater,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
                           ),
                         ),
@@ -541,7 +537,7 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
             Positioned.fill(
               child: Container(
                 color: Colors.black.withValues(alpha: 0.6),
-                child: const _WaitingPaymentPopup(),
+                child: _WaitingPaymentPopup(),
               ),
             ),
         ],
@@ -550,11 +546,11 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
   }
 
   String _formatCurrency(double value) {
-    final formatter = value.round().toString().replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-      (Match m) => '${m[1]}.',
-    );
-    return '$formatterđ';
+    return NumberFormat.currency(
+      locale: LocaleProvider.currentLocale.toLanguageTag(),
+      symbol: '₫',
+      decimalDigits: 0,
+    ).format(value);
   }
 
   static bool _isReturnConfirmedStatus(String? status) {
@@ -576,12 +572,12 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
       }
       return Map<String, dynamic>.from(data);
     }
-    throw const FormatException('Invalid payment status response.');
+    throw FormatException('Invalid payment status response.');
   }
 }
 
 class _PaymentDetails extends StatelessWidget {
-  const _PaymentDetails({
+  _PaymentDetails({
     required this.originalFare,
     required this.discount,
     required this.finalFare,
@@ -598,9 +594,9 @@ class _PaymentDetails extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
+        color: Color(0xFFF9FAFB),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFEAECF0)),
+        border: Border.all(color: Color(0xFFEAECF0)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -619,11 +615,11 @@ class _PaymentDetails extends StatelessWidget {
                     ),
                   ],
                 ),
-                child: const Icon(Icons.receipt_long_outlined, size: 20),
+                child: Icon(Icons.receipt_long_outlined, size: 20),
               ),
-              const SizedBox(width: 12),
-              const Text(
-                'Chi tiết thanh toán',
+              SizedBox(width: 12),
+              Text(
+                context.l10n.paymentDetails,
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
@@ -632,34 +628,37 @@ class _PaymentDetails extends StatelessWidget {
               ),
             ],
           ),
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
             child: Divider(height: 1, color: Color(0xFFEAECF0)),
           ),
           _PriceRow(
-            label: 'Cước phí cơ bản',
+            label: context.l10n.baseFare,
             value: formatCurrency(originalFare),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           _PriceRow(
-            label: 'Khuyến mãi',
+            label: context.l10n.promotion,
             value: '-${formatCurrency(discount)}',
             valueColor: AppColors.primary,
           ),
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
             child: Divider(height: 1, color: Color(0xFFEAECF0)),
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Tổng cộng',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              Text(
+                context.l10n.total,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               Text(
                 formatCurrency(finalFare),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w900,
                   color: AppColors.primary,
@@ -674,7 +673,7 @@ class _PaymentDetails extends StatelessWidget {
 }
 
 class _RatingCard extends StatelessWidget {
-  const _RatingCard({
+  _RatingCard({
     required this.rating,
     required this.enabled,
     required this.commentController,
@@ -692,43 +691,43 @@ class _RatingCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
+        color: Color(0xFFF9FAFB),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFEAECF0)),
+        border: Border.all(color: Color(0xFFEAECF0)),
       ),
       child: Column(
         children: [
-          const Text(
-            'Bạn thấy tài xế thế nào?',
+          Text(
+            context.l10n.driverRatingQuestion,
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w800,
               color: Color(0xFF1D2939),
             ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: List.generate(5, (index) {
               final selected = index < rating;
               return IconButton(
-                tooltip: '${index + 1} sao',
+                tooltip: context.l10n.ratingStars(index + 1),
                 onPressed: enabled ? () => onRatingChanged(index + 1) : null,
                 icon: Icon(
                   selected ? Icons.star_rounded : Icons.star_outline_rounded,
-                  color: selected ? Colors.amber : const Color(0xFFD0D5DD),
+                  color: selected ? Colors.amber : Color(0xFFD0D5DD),
                   size: 38,
                 ),
               );
             }),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           TextField(
             controller: commentController,
             enabled: enabled,
             decoration: InputDecoration(
-              hintText: 'Nhận xét về tài xế (không bắt buộc)',
-              hintStyle: const TextStyle(
+              hintText: context.l10n.driverCommentHint,
+              hintStyle: TextStyle(
                 fontSize: 14,
                 color: Color(0xFF98A2B3),
               ),
@@ -749,7 +748,7 @@ class _RatingCard extends StatelessWidget {
 }
 
 class _StatCard extends StatelessWidget {
-  const _StatCard({
+  _StatCard({
     required this.icon,
     required this.label,
     required this.value,
@@ -768,22 +767,22 @@ class _StatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
+        color: Color(0xFFF9FAFB),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFEAECF0)),
+        border: Border.all(color: Color(0xFFEAECF0)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, size: 16, color: const Color(0xFF667085)),
-              const SizedBox(width: 6),
+              Icon(icon, size: 16, color: Color(0xFF667085)),
+              SizedBox(width: 6),
               Flexible(
                 child: Text(
                   label,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     color: Color(0xFF667085),
@@ -792,13 +791,13 @@ class _StatCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           RichText(
             text: TextSpan(
               children: [
                 TextSpan(
                   text: number,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w900,
                     color: Color(0xFF1D2939),
@@ -806,7 +805,7 @@ class _StatCard extends StatelessWidget {
                 ),
                 TextSpan(
                   text: unit.isEmpty ? '' : ' $unit',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: Color(0xFF667085),
@@ -822,7 +821,7 @@ class _StatCard extends StatelessWidget {
 }
 
 class _PriceRow extends StatelessWidget {
-  const _PriceRow({required this.label, required this.value, this.valueColor});
+  _PriceRow({required this.label, required this.value, this.valueColor});
 
   final String label;
   final String value;
@@ -843,20 +842,20 @@ class _PriceRow extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
-                    color: const Color(0xFF475467),
+                    color: Color(0xFF475467),
                   ),
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(width: 12),
+        SizedBox(width: 12),
         Text(
           value,
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w700,
-            color: valueColor ?? const Color(0xFF1D2939),
+            color: valueColor ?? Color(0xFF1D2939),
           ),
         ),
       ],
@@ -865,7 +864,7 @@ class _PriceRow extends StatelessWidget {
 }
 
 class _WaitingPaymentPopup extends StatefulWidget {
-  const _WaitingPaymentPopup();
+  _WaitingPaymentPopup();
 
   @override
   State<_WaitingPaymentPopup> createState() => _WaitingPaymentPopupState();
@@ -880,7 +879,7 @@ class _WaitingPaymentPopupState extends State<_WaitingPaymentPopup>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 2),
+      duration: Duration(seconds: 2),
     )..repeat(reverse: true);
   }
 
@@ -903,7 +902,7 @@ class _WaitingPaymentPopupState extends State<_WaitingPaymentPopup>
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.15),
               blurRadius: 40,
-              offset: const Offset(0, 10),
+              offset: Offset(0, 10),
             ),
           ],
         ),
@@ -929,7 +928,7 @@ class _WaitingPaymentPopupState extends State<_WaitingPaymentPopup>
                       ),
                     ],
                   ),
-                  child: const Center(
+                  child: Center(
                     child: Icon(
                       Icons.qr_code_scanner_rounded,
                       color: AppColors.primary,
@@ -939,18 +938,18 @@ class _WaitingPaymentPopupState extends State<_WaitingPaymentPopup>
                 );
               },
             ),
-            const SizedBox(height: 32),
-            const Text(
-              'Đang chờ thanh toán',
+            SizedBox(height: 32),
+            Text(
+              context.l10n.waitingForPayment,
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w900,
                 color: Color(0xFF1D2939),
               ),
             ),
-            const SizedBox(height: 12),
-            const Text(
-              'Vui lòng quét mã QR từ điện thoại của tài xế hoặc chờ tài xế xác nhận nếu trả tiền mặt.',
+            SizedBox(height: 12),
+            Text(
+              context.l10n.paymentWaitingInstructions,
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 15,
@@ -958,8 +957,8 @@ class _WaitingPaymentPopupState extends State<_WaitingPaymentPopup>
                 color: Color(0xFF667085),
               ),
             ),
-            const SizedBox(height: 32),
-            const SizedBox(
+            SizedBox(height: 32),
+            SizedBox(
               width: 40,
               height: 40,
               child: CircularProgressIndicator(
@@ -973,4 +972,3 @@ class _WaitingPaymentPopupState extends State<_WaitingPaymentPopup>
     );
   }
 }
-

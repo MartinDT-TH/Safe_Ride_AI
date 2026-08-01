@@ -4,22 +4,13 @@ import '../datasources/home_remote_datasource.dart';
 
 import '../models/home_response.dart';
 
-class HomeRepositoryImpl
-    implements HomeRepository {
+class HomeRepositoryImpl implements HomeRepository {
+  final HomeRemoteDatasource datasource;
 
-  final HomeRemoteDatasource
-  datasource;
-
-  HomeRepositoryImpl(
-      this.datasource,
-      );
+  HomeRepositoryImpl(this.datasource);
 
   @override
-  Future<HomeResponse>
-  getHomeData() {
-
-    return datasource
-        .getHomeData();
+  Future<HomeResponse> getHomeData() {
+    return datasource.getHomeData();
   }
 }
-

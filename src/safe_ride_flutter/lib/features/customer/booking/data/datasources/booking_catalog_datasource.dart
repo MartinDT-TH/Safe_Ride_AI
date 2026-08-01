@@ -21,4 +21,3 @@ class BookingCatalogDatasource {
     return BookingCatalog.fromJson(Map<String, dynamic>.from(response.data));
   }
 }
-

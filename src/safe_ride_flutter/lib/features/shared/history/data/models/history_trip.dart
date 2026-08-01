@@ -34,21 +34,24 @@ class HistoryTrip {
   });
 
   factory HistoryTrip.fromJson(Map<String, dynamic> json) {
-    final occurredAt = json['occurredAt']?.toString() ??
+    final occurredAt =
+        json['occurredAt']?.toString() ??
         json['completedAt']?.toString() ??
         json['updatedAt']?.toString() ??
         json['scheduledAt']?.toString();
     final estimatedFare = (json['estimatedFare'] as num?)?.toDouble() ?? 0;
     final finalFare = (json['finalFare'] as num?)?.toDouble();
     final bookingStatus =
-        (json['bookingStatus'] ?? json['tripStatus'])?.toString().toLowerCase() ??
-            '';
-    final status = bookingStatus.contains('cancel') ||
-            bookingStatus.contains('expire')
+        (json['bookingStatus'] ?? json['tripStatus'])
+            ?.toString()
+            .toLowerCase() ??
+        '';
+    final status =
+        bookingStatus.contains('cancel') || bookingStatus.contains('expire')
         ? HistoryTripStatus.cancelled
         : bookingStatus.contains('complete')
-            ? HistoryTripStatus.completed
-            : HistoryTripStatus.booked;
+        ? HistoryTripStatus.completed
+        : HistoryTripStatus.booked;
 
     return HistoryTrip(
       id: (json['id'] as num?)?.toInt() ?? 0,

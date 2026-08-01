@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../../core/constants/app_colors.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../../core/maps/models/map_models.dart';
 import '../../../../../core/maps/models/map_api_models.dart';
 import '../../../../../core/maps/widgets/map_renderer_widget.dart';
@@ -13,7 +14,7 @@ import '../providers/booking_provider.dart';
 enum LocationPickerType { pickup, destination }
 
 class LocationPickerPage extends StatefulWidget {
-  const LocationPickerPage({
+  LocationPickerPage({
     super.key,
     required this.type,
     this.initialLocation,
@@ -71,7 +72,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
     }
 
     if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 500), () async {
+    _debounceTimer = Timer(Duration(milliseconds: 500), () async {
       setState(() => _isSearching = true);
       final focus = _autocompleteFocus;
       final results = await context.read<BookingProvider>().autocompleteAddress(
@@ -147,7 +148,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
     setState(() {
       _suggestions = [];
       _selectedLocation = BookingLocation(
-        address: 'Đang xác định địa chỉ...',
+        address: context.l10n.locatingAddress,
         latitude: position.latitude,
         longitude: position.longitude,
       );
@@ -169,17 +170,15 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
 
   Future<void> _useCurrentLocation() async {
     setState(() => _suggestions = []);
-    final location = await context
-        .read<BookingProvider>()
-        .getCurrentLocation();
+    final location = await context.read<BookingProvider>().getCurrentLocation();
     if (!mounted) return;
-    
+
     if (location == null) {
       final error = context.read<BookingProvider>().locationErrorMessage;
       if (error != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error)));
       }
       return;
     }
@@ -216,7 +215,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
     final initial = cameraLocation == null
         ? _defaultPosition
         : AppLatLng(cameraLocation.latitude, cameraLocation.longitude);
-    final color = _isPickup ? AppColors.primary : const Color(0xFFD71920);
+    final color = _isPickup ? AppColors.primary : Color(0xFFD71920);
 
     return Scaffold(
       body: Column(
@@ -258,14 +257,14 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                           children: [
                             Material(
                               color: Colors.white,
-                              shape: const CircleBorder(),
+                              shape: CircleBorder(),
                               elevation: 3,
                               child: IconButton(
                                 onPressed: () => Navigator.pop(context),
-                                icon: const Icon(Icons.arrow_back),
+                                icon: Icon(Icons.arrow_back),
                               ),
                             ),
-                            const SizedBox(width: 10),
+                            SizedBox(width: 10),
                             Expanded(
                               child: Material(
                                 color: Colors.white,
@@ -277,17 +276,17 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                                   onSubmitted: (_) => _search(),
                                   // enableSuggestions: false, // <-- Tắt gợi ý
                                   // autocorrect: false,        // <-- Tắt tự động sửa lỗi
-                                  // autofillHints: const [],   // <-- Tắt lưu trữ tự động điền của OS
+                                  // autofillHints: [],   // <-- Tắt lưu trữ tự động điền của OS
                                   decoration: InputDecoration(
                                     hintText: _isPickup
-                                        ? 'Tìm điểm đón'
-                                        : 'Tìm điểm đến',
+                                        ? context.l10n.searchPickup
+                                        : context.l10n.searchDestination,
                                     prefixIcon: Icon(
                                       Icons.search,
                                       color: color,
                                     ),
                                     suffixIcon: _isSearching
-                                        ? const Padding(
+                                        ? Padding(
                                             padding: EdgeInsets.all(12.0),
                                             child: SizedBox.square(
                                               dimension: 20,
@@ -300,7 +299,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                                             onPressed: provider.isLoading
                                                 ? null
                                                 : _search,
-                                            icon: const Icon(
+                                            icon: Icon(
                                               Icons.arrow_forward,
                                             ),
                                           ),
@@ -315,23 +314,23 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                           ],
                         ),
                         if (_suggestions.isNotEmpty) ...[
-                          const SizedBox(height: 8),
+                          SizedBox(height: 8),
                           Material(
                             elevation: 4,
                             borderRadius: BorderRadius.circular(12),
                             color: Colors.white,
                             child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxHeight: 280),
+                              constraints: BoxConstraints(maxHeight: 280),
                               child: ListView.separated(
                                 padding: EdgeInsets.zero,
                                 shrinkWrap: true,
                                 itemCount: _suggestions.length,
                                 separatorBuilder: (_, __) =>
-                                    const Divider(height: 1),
+                                    Divider(height: 1),
                                 itemBuilder: (context, index) {
                                   final s = _suggestions[index];
                                   return ListTile(
-                                    leading: const Icon(
+                                    leading: Icon(
                                       Icons.location_on,
                                       color: Colors.grey,
                                     ),
@@ -366,7 +365,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: Colors.white,
                 boxShadow: [
                   BoxShadow(
@@ -381,28 +380,29 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _isPickup ? 'Điểm đón đã chọn' : 'Điểm đến đã chọn',
-                    style: const TextStyle(
+                    _isPickup
+                        ? context.l10n.selectedPickup
+                        : context.l10n.selectedDestination,
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
                       color: Color(0xFF667174),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   Row(
                     children: [
                       Icon(
                         _isPickup ? Icons.my_location : Icons.location_on,
                         color: color,
                       ),
-                      const SizedBox(width: 10),
+                      SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          selected?.address ??
-                              'Tìm kiếm hoặc chạm vào bản đồ để chọn.',
+                          selected?.address ?? context.l10n.searchOrTapMap,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                           ),
@@ -411,13 +411,13 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                     ],
                   ),
                   if (provider.locationErrorMessage != null) ...[
-                    const SizedBox(height: 8),
+                    SizedBox(height: 8),
                     Text(
                       provider.locationErrorMessage!,
-                      style: const TextStyle(color: Colors.red),
+                      style: TextStyle(color: Colors.red),
                     ),
                   ],
-                  const SizedBox(height: 14),
+                  SizedBox(height: 14),
                   SizedBox(
                     width: double.infinity,
                     height: 52,
@@ -436,8 +436,8 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                             )
                           : Text(
                               _isPickup
-                                  ? 'Xác nhận điểm đón'
-                                  : 'Xác nhận điểm đến',
+                                  ? context.l10n.confirmPickup
+                                  : context.l10n.confirmDestination,
                             ),
                     ),
                   ),

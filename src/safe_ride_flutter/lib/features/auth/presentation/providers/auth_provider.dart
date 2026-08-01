@@ -130,10 +130,7 @@ class AuthProvider extends ChangeNotifier {
   bool get isProfileComplete {
     final name = _fullName?.trim() ?? '';
     final phone = _phoneNumber?.trim() ?? '';
-    return name.isNotEmpty &&
-        name != HomeStrings.defaultUser &&
-        phone.isNotEmpty &&
-        _phoneNumberConfirmed;
+    return name.isNotEmpty && phone.isNotEmpty && _phoneNumberConfirmed;
   }
 
   Future<bool> login(String phone) async {

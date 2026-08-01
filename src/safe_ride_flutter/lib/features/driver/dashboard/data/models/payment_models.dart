@@ -1,3 +1,5 @@
+import '../../../../../core/localization/locale_provider.dart';
+
 class QrPaymentResult {
   const QrPaymentResult({
     required this.tripId,
@@ -38,7 +40,7 @@ class QrPaymentResult {
       tripStatus: json['tripStatus']?.toString() ?? 'WAITING_PAYMENT',
       message:
           json['message']?.toString() ??
-          'Vui lòng thanh toán cho tài xế để hoàn tất chuyến đi.',
+          LocaleProvider.currentLocalizations.payDriverToComplete,
       qrCode: json['qrCode']?.toString(),
       checkoutUrl: json['checkoutUrl']?.toString(),
       createdAt: json['createdAt'] == null
@@ -96,7 +98,7 @@ class PaymentStatusResult {
       tripStatus: json['tripStatus']?.toString() ?? 'WAITING_PAYMENT',
       message:
           json['message']?.toString() ??
-          'Vui lòng thanh toán cho tài xế để hoàn tất chuyến đi.',
+          LocaleProvider.currentLocalizations.payDriverToComplete,
       paidAt: json['paidAt'] == null
           ? null
           : DateTime.tryParse(json['paidAt'].toString()),

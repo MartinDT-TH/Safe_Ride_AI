@@ -4,7 +4,7 @@ import '../constants/app_colors.dart';
 class AppLoadingScreen extends StatelessWidget {
   final String? message;
 
-  const AppLoadingScreen({super.key, this.message});
+  AppLoadingScreen({super.key, this.message});
 
   static BuildContext? _dialogContext;
 
@@ -27,17 +27,17 @@ class AppLoadingScreen extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const CircularProgressIndicator(
+                  CircularProgressIndicator(
                     valueColor: AlwaysStoppedAnimation<Color>(
                       AppColors.primary,
                     ),
                   ),
                   if (message != null) ...[
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     Text(
                       message,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         color: Color(0xFF667174),
                         fontWeight: FontWeight.w500,
@@ -67,20 +67,20 @@ class AppLoadingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7FAFA), // Màu nền nhạt phía sau
+      backgroundColor: Color(0xFFF7FAFA), // Màu nền nhạt phía sau
       body: SafeArea(
         bottom: false,
         child: Column(
           children: [
             // Khoảng trống phía trên (thay thế cho map/content nền)
-            const Spacer(flex: 3),
+            Spacer(flex: 3),
 
             // Panel trắng bo tròn phía dưới
             Expanded(
               flex: 7,
               child: Container(
                 width: double.infinity,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.vertical(
                     top: Radius.circular(32), // Bo tròn góc giống hình mẫu
@@ -95,31 +95,31 @@ class AppLoadingScreen extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    const SizedBox(height: 12),
+                    SizedBox(height: 12),
                     // Thanh handle bar giống hình mẫu
                     Container(
                       width: 40,
                       height: 5,
                       decoration: BoxDecoration(
-                        color: const Color(0xFFD8DCDD),
+                        color: Color(0xFFD8DCDD),
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-                    const Spacer(flex: 2),
-                    const CircularProgressIndicator(
+                    Spacer(flex: 2),
+                    CircularProgressIndicator(
                       valueColor: AlwaysStoppedAnimation<Color>(
                         AppColors.primary,
                       ),
                       strokeWidth: 3,
                     ),
                     if (message != null) ...[
-                      const SizedBox(height: 24),
+                      SizedBox(height: 24),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 32),
                         child: Text(
                           message!,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
                             color: Color(0xFF667174),
                             fontWeight: FontWeight.w500,
@@ -127,7 +127,7 @@ class AppLoadingScreen extends StatelessWidget {
                         ),
                       ),
                     ],
-                    const Spacer(flex: 3),
+                    Spacer(flex: 3),
                   ],
                 ),
               ),

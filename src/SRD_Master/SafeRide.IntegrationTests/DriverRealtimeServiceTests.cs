@@ -34,7 +34,10 @@ public sealed class DriverRealtimeServiceTests
                 driverId,
                 customerId,
                 TripStatus.IN_PROGRESS,
-                UtcNow.AddMinutes(-10))),
+                UtcNow.AddMinutes(-10),
+                "test-route-polyline",
+                10.780000,
+                106.680000)),
             TimeSpan.FromMinutes(30));
         await redis.SetIfNotExistsAsync(
             RedisKeys.DriverHeartbeatThrottle(driverId),
@@ -152,7 +155,10 @@ public sealed class DriverRealtimeServiceTests
                 driverId,
                 customerId,
                 TripStatus.IN_PROGRESS,
-                UtcNow.AddMinutes(-10))),
+                UtcNow.AddMinutes(-10),
+                "test-route-polyline",
+                10.780000,
+                106.680000)),
             TimeSpan.FromMinutes(30));
         await redis.SetIfNotExistsAsync(
             RedisKeys.DriverHeartbeatThrottle(driverId),

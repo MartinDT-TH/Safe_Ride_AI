@@ -4,10 +4,11 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../../core/constants/app_colors.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import '../../application/services/document_image_cropper.dart';
 
 class DocumentCameraPage extends StatefulWidget {
-  const DocumentCameraPage({
+  DocumentCameraPage({
     super.key,
     required this.title,
     required this.instruction,
@@ -61,7 +62,7 @@ class _DocumentCameraPageState extends State<DocumentCameraPage> {
     } catch (_) {
       if (!mounted) return;
       setState(
-        () => _errorMessage = 'Không thể mở camera. Vui lòng kiểm tra quyền.',
+        () => _errorMessage = context.l10n.cameraOpenFailed,
       );
     }
   }
@@ -80,7 +81,7 @@ class _DocumentCameraPageState extends State<DocumentCameraPage> {
       if (!mounted) return;
       setState(() => _isCapturing = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Không thể chụp ảnh. Vui lòng thử lại.')),
+        SnackBar(content: Text(context.l10n.photoCaptureFailed)),
       );
     }
   }
@@ -100,7 +101,7 @@ class _DocumentCameraPageState extends State<DocumentCameraPage> {
             );
           }
           if (controller == null || !controller.value.isInitialized) {
-            return const Center(
+            return Center(
               child: CircularProgressIndicator(color: Colors.white),
             );
           }
@@ -128,7 +129,7 @@ class _DocumentCameraPageState extends State<DocumentCameraPage> {
                           onPressed: _isCapturing
                               ? null
                               : () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.close),
+                          icon: Icon(Icons.close),
                           style: IconButton.styleFrom(
                             backgroundColor: Colors.white,
                             foregroundColor: Colors.black87,
@@ -145,12 +146,12 @@ class _DocumentCameraPageState extends State<DocumentCameraPage> {
                               border: Border.all(color: Colors.white, width: 4),
                             ),
                             child: DecoratedBox(
-                              decoration: const BoxDecoration(
+                              decoration: BoxDecoration(
                                 color: Colors.white,
                                 shape: BoxShape.circle,
                               ),
                               child: _isCapturing
-                                  ? const Padding(
+                                  ? Padding(
                                       padding: EdgeInsets.all(18),
                                       child: CircularProgressIndicator(
                                         strokeWidth: 3,
@@ -161,7 +162,7 @@ class _DocumentCameraPageState extends State<DocumentCameraPage> {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 48),
+                        SizedBox(width: 48),
                       ],
                     ),
                   ),
@@ -176,7 +177,7 @@ class _DocumentCameraPageState extends State<DocumentCameraPage> {
 }
 
 class _CameraPreviewCover extends StatelessWidget {
-  const _CameraPreviewCover({required this.controller});
+  _CameraPreviewCover({required this.controller});
 
   final CameraController controller;
 
@@ -198,7 +199,7 @@ class _CameraPreviewCover extends StatelessWidget {
 }
 
 class _DocumentFrameOverlay extends StatelessWidget {
-  const _DocumentFrameOverlay({required this.title, required this.instruction});
+  _DocumentFrameOverlay({required this.title, required this.instruction});
 
   final String title;
   final String instruction;
@@ -225,17 +226,17 @@ class _DocumentFrameOverlay extends StatelessWidget {
                     Text(
                       title,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white,
                         fontSize: 22,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: 8),
                     Text(
                       instruction,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white70,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -249,8 +250,8 @@ class _DocumentFrameOverlay extends StatelessWidget {
               left: frame.left,
               right: constraints.maxWidth - frame.right,
               top: frame.bottom + 18,
-              child: const Text(
-                'Canh 4 góc giấy tờ sát trong khung',
+              child: Text(
+                context.l10n.alignDocumentCorners,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white,
@@ -282,7 +283,7 @@ class _DocumentFrameOverlay extends StatelessWidget {
 }
 
 class _DocumentFramePainter extends CustomPainter {
-  const _DocumentFramePainter(this.frame);
+  _DocumentFramePainter(this.frame);
 
   final Rect frame;
 
@@ -343,7 +344,7 @@ class _DocumentFramePainter extends CustomPainter {
 }
 
 class _CameraError extends StatelessWidget {
-  const _CameraError({required this.message, required this.onBack});
+  _CameraError({required this.message, required this.onBack});
 
   final String message;
   final VoidCallback onBack;
@@ -356,21 +357,21 @@ class _CameraError extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.no_photography, color: Colors.white, size: 54),
-            const SizedBox(height: 18),
+            Icon(Icons.no_photography, color: Colors.white, size: 54),
+            SizedBox(height: 18),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white, fontSize: 16),
+              style: TextStyle(color: Colors.white, fontSize: 16),
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: 24),
             FilledButton(
               onPressed: onBack,
               style: FilledButton.styleFrom(
                 backgroundColor: Colors.white,
                 foregroundColor: Colors.black87,
               ),
-              child: const Text('Quay lại'),
+              child: Text(context.l10n.goBack),
             ),
           ],
         ),

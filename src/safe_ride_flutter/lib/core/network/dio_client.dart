@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../constants/app_strings.dart';
+import '../localization/locale_provider.dart';
 import 'auth_token_refresh_interceptor.dart';
 import '../../dependency_injection/injection.dart';
 import '../session/session_manager.dart';
@@ -68,24 +69,27 @@ class DioErrorInterceptor extends Interceptor {
   }
 
   void _handleError(DioException err) {
-    final isServerError = err.type == DioExceptionType.connectionTimeout ||
+    final isServerError =
+        err.type == DioExceptionType.connectionTimeout ||
         err.type == DioExceptionType.receiveTimeout ||
         err.type == DioExceptionType.sendTimeout ||
         err.type == DioExceptionType.connectionError ||
-        (err.response != null && err.response!.statusCode != null && err.response!.statusCode! >= 500);
+        (err.response != null &&
+            err.response!.statusCode != null &&
+            err.response!.statusCode! >= 500);
 
     if (isServerError) {
       // Use getIt to get ConnectivityService and show the notification globally
       try {
-        final connectivityService =
-            getIt<ConnectivityService>();
-        
+        final connectivityService = getIt<ConnectivityService>();
+
+        final l10n = LocaleProvider.currentLocalizations;
         AppSnackBar.showGlobal(
           connectivityService.messengerKey,
-          message: 'Lỗi kết nối máy chủ. Vui lòng kiểm tra lại hoặc tải lại.',
+          message: l10n.serverConnectionError,
           type: AppSnackBarType.serverError,
-          title: 'Lỗi máy chủ',
-          actionLabel: 'Đã hiểu',
+          title: l10n.serverConnectionErrorTitle,
+          actionLabel: l10n.dismiss,
           onAction: () {},
         );
       } catch (e) {

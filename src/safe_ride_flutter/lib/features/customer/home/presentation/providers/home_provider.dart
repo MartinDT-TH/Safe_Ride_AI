@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../../core/localization/locale_provider.dart';
 
 import '../../domain/repositories/home_repository.dart';
 
@@ -41,11 +42,10 @@ class HomeProvider extends ChangeNotifier {
       _errorMessage = null;
     } catch (e) {
       debugPrint('HomeProvider error: $e');
-      _errorMessage = 'Không thể kết nối đến máy chủ. Vui lòng thử lại.';
+      _errorMessage = LocaleProvider.currentLocalizations.genericError;
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 }
-

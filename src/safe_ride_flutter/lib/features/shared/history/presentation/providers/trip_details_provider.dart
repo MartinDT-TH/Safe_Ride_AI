@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../../../../core/localization/locale_provider.dart';
+import '../../../../../core/localization/api_error_localizer.dart';
 
 import '../../data/models/history_trip.dart';
 import '../../data/models/trip_details_view_data.dart';
@@ -51,8 +53,8 @@ class TripDetailsProvider extends ChangeNotifier {
 
     try {
       if (accessToken == null || accessToken.isEmpty) {
-        throw const TripDetailsRepositoryException(
-          'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
+        throw TripDetailsRepositoryException(
+          LocaleProvider.currentLocalizations.sessionExpired,
         );
       }
 
@@ -88,12 +90,15 @@ class TripDetailsProvider extends ChangeNotifier {
       );
       _hasLoadedRemoteDetails = true;
     } on TripDetailsRepositoryException catch (exception) {
-      _errorMessage = exception.message;
+      _errorMessage = ApiErrorLocalizer.translate(
+        LocaleProvider.currentLocalizations,
+        fallback: exception.message,
+      );
       if (!_hasLoadedRemoteDetails) {
         _tripDetailsViewData = TripDetailsViewData(historyTrip: _historyTrip);
       }
     } catch (_) {
-      _errorMessage = 'Không thể tải chi tiết chuyến đi. Vui lòng thử lại.';
+      _errorMessage = LocaleProvider.currentLocalizations.tripDetailsLoadFailed;
       if (!_hasLoadedRemoteDetails) {
         _tripDetailsViewData = TripDetailsViewData(historyTrip: _historyTrip);
       }

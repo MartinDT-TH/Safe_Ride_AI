@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/localization/locale_provider.dart';
 import '../../../../../core/network/auth_header.dart';
 import '../../../../../core/network/dio_client.dart';
 import '../../../../../core/session/session_manager.dart';
@@ -10,8 +11,8 @@ import '../models/ai_chat_models.dart';
 
 class AiChatService {
   AiChatService({Dio? dio, SessionManager? sessionManager})
-      : _dio = dio ?? DioClient().dio,
-        _sessionManager = sessionManager ?? getIt<SessionManager>();
+    : _dio = dio ?? DioClient().dio,
+      _sessionManager = sessionManager ?? getIt<SessionManager>();
 
   final Dio _dio;
   final SessionManager _sessionManager;
@@ -37,6 +38,7 @@ class AiChatService {
       data: {
         'message': message,
         'conversationId': conversationId,
+        'languageCode': LocaleProvider.currentLocale.languageCode,
         if (currentLocation != null)
           'currentLocation': {
             'address': currentLocation.address,
@@ -63,6 +65,7 @@ class AiChatService {
           contentType: DioMediaType.parse('audio/mp4'),
         ),
         if (conversationId != null) 'conversationId': conversationId,
+        'languageCode': LocaleProvider.currentLocale.languageCode,
         if (currentLocation != null) ...{
           'currentAddress': currentLocation.address,
           'currentLatitude': currentLocation.latitude.toString(),
@@ -95,13 +98,11 @@ class AiChatService {
   Future<Options> _authorizationOptions() async {
     final accessToken = await _sessionManager.getValidAccessToken();
     if (accessToken == null) {
-      throw StateError('Không tìm thấy phiên đăng nhập hợp lệ.');
+      throw StateError(LocaleProvider.currentLocalizations.sessionExpired);
     }
 
     return Options(
-      headers: {
-        ApiKeys.authorization: AuthHeader.bearer(accessToken),
-      },
+      headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
     );
   }
 }
