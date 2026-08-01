@@ -287,6 +287,7 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
                 .HasMaxLength(50)
                 .IsUnicode(false);
             entity.Property(e => e.Title).HasMaxLength(255);
+            entity.Property(e => e.TranslationsJson).HasColumnType("nvarchar(max)");
 
             entity.HasOne(d => d.User).WithMany(p => p.Notifications)
                 .HasForeignKey(d => d.UserId)

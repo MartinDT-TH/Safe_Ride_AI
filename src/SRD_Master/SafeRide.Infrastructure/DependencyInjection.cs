@@ -53,6 +53,10 @@ public static class DependencyInjection
         {
             client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
         });
+        services.AddHttpClient<ITextTranslationService, GeminiTextTranslationService>(client =>
+        {
+            client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
+        });
         services.AddHostedService<AiChatMongoInitializer>();
 
         services.AddDbContext<ApplicationDbContext>(
