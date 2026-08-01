@@ -75,6 +75,14 @@ public sealed class ApiExceptionMiddleware
                 exception.Code,
                 exception.Message);
         }
+        catch (ReportException exception)
+        {
+            await WriteProblemAsync(
+                context,
+                exception.StatusCode,
+                exception.Code,
+                exception.Message);
+        }
         catch (SafetyException exception)
         {
             await WriteProblemAsync(
