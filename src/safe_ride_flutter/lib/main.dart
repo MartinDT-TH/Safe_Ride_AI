@@ -9,6 +9,7 @@ import 'app.dart';
 import 'dependency_injection/injection.dart';
 
 import 'core/services/mobile_config_service.dart';
+import 'core/localization/locale_provider.dart';
 import 'features/auth/presentation/providers/auth_provider.dart';
 import 'features/shared/onboarding/presentation/providers/role_provider.dart';
 import 'features/customer/home/presentation/providers/home_provider.dart';
@@ -27,13 +28,20 @@ void main() async {
 
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
-  await initializeDateFormatting('vi_VN', null);
+  await Future.wait([
+    initializeDateFormatting('vi', null),
+    initializeDateFormatting('en', null),
+    initializeDateFormatting('ko', null),
+    initializeDateFormatting('ja', null),
+    initializeDateFormatting('zh', null),
+  ]);
   await setupDependencies();
   await getIt<MobileConfigService>().load();
 
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider.value(value: getIt<LocaleProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<AuthProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<RoleProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<HomeProvider>()),

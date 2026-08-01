@@ -1,6 +1,7 @@
 import 'package:get_it/get_it.dart';
 
 import '../core/services/connectivity_service.dart';
+import '../core/localization/locale_provider.dart';
 import '../core/services/device_identity_service.dart';
 import '../core/services/location_service.dart';
 import '../core/services/mobile_config_service.dart';
@@ -57,6 +58,10 @@ import '../features/shared/feedback/presentation/providers/feedback_provider.dar
 final getIt = GetIt.instance;
 
 Future<void> setupDependencies() async {
+  final localeProvider = LocaleProvider();
+  await localeProvider.load();
+  getIt.registerSingleton<LocaleProvider>(localeProvider);
+
   getIt.registerLazySingleton<SecureStorageService>(
     () => SecureStorageService(),
   );

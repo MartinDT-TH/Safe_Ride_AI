@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:signalr_netcore/signalr_client.dart';
 
 import '../constants/app_strings.dart';
+import '../localization/locale_provider.dart';
 import '../session/session_manager.dart';
 import 'mobile_config_service.dart';
 
@@ -105,7 +106,7 @@ class TripRouteRecalculatedUpdate {
       deviationMeters: (value('deviationMeters') as num?)?.toDouble() ?? 0,
       message:
           value('message')?.toString() ??
-          'SafeRide đã cập nhật tuyến đường.',
+          LocaleProvider.currentLocalizations.routeUpdated,
       shouldAlertCustomer: value('shouldAlertCustomer') == true,
     );
   }
@@ -150,7 +151,8 @@ class DriverOfferUpdate {
       offerId: offerId,
       driverId: _value(data, ApiKeys.driverId)?.toString() ?? '',
       message:
-          _value(data, ApiKeys.message)?.toString() ?? 'Bạn có chuyến mới.',
+          _value(data, ApiKeys.message)?.toString() ??
+              LocaleProvider.currentLocalizations.newTripMessage,
       expiresAt: expiresAtRaw == null
           ? null
           : DateTime.tryParse(expiresAtRaw.toString()),
