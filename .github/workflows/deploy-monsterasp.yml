@@ -11,16 +11,21 @@ permissions:
   contents: write
 
 env:
-  DOTNET_VERSION: "8.0.x" # CHANGE ME nếu project không dùng .NET 8
+  DOTNET_VERSION: "8.0.24" # CHANGE ME nếu project không dùng .NET 8
 
   API_PROJECT: "./src/SRD_Master/SafeRide.API/SafeRide.API.csproj"
   # CHANGE ME nếu đường dẫn API khác
 
   UNIT_TEST_PROJECT: "./src/SRD_Master/SafeRide.UnitTests/SafeRide.UnitTests.csproj"
-  # CHANGE ME nếu tên/đường dẫn project test khác
+  # CHANGE ME nếu đường dẫn project test khác
 
   PUBLISH_DIRECTORY: "./publish"
-  DEPLOY_BRANCH: "monsterasp-deploy" # CHANGE ME nếu muốn tên branch khác
+
+  DEPLOY_BRANCH: "monsterasp-deploy"
+  # CHANGE ME nếu muốn tên branch deploy khác
+
+  RUNTIME_IDENTIFIER: "win-x64"
+  # CHANGE ME nếu hosting yêu cầu runtime khác
 
 jobs:
   test:
@@ -35,6 +40,9 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Show .NET version
+        run: dotnet --version
 
       - name: Restore tests
         run: dotnet restore "${{ env.UNIT_TEST_PROJECT }}"
@@ -60,7 +68,8 @@ jobs:
     name: Publish to Deploy Branch
     runs-on: windows-latest
 
-    # Không có needs: test nên publish vẫn chạy dù test fail.
+    # Không có needs: test
+    # Vì vậy publish vẫn chạy dù test bị fail.
 
     steps:
       - name: Checkout source
@@ -71,16 +80,22 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Restore API
-        run: dotnet restore "${{ env.API_PROJECT }}"
+      - name: Show .NET version
+        run: dotnet --version
+
+      - name: Restore API for runtime
+        run: >
+          dotnet restore "${{ env.API_PROJECT }}"
+          --runtime "${{ env.RUNTIME_IDENTIFIER }}"
 
       - name: Publish API
         run: >
           dotnet publish "${{ env.API_PROJECT }}"
           --configuration Release
+          --framework net8.0
+          --runtime "${{ env.RUNTIME_IDENTIFIER }}"
+          --self-contained true
           --no-restore
-          --runtime win-x86
-          --self-contained false
           --output "${{ env.PUBLISH_DIRECTORY }}"
 
       - name: Verify publish output
@@ -88,6 +103,7 @@ jobs:
         run: |
           $requiredFiles = @(
             "${{ env.PUBLISH_DIRECTORY }}\SafeRide.API.dll",
+            "${{ env.PUBLISH_DIRECTORY }}\SafeRide.API.exe",
             "${{ env.PUBLISH_DIRECTORY }}\SafeRide.API.deps.json",
             "${{ env.PUBLISH_DIRECTORY }}\SafeRide.API.runtimeconfig.json",
             "${{ env.PUBLISH_DIRECTORY }}\web.config"
@@ -115,12 +131,15 @@ jobs:
           cd "${{ env.PUBLISH_DIRECTORY }}"
 
           git init
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git checkout -b "${{ env.DEPLOY_BRANCH }}"
+
           git add --all
           git commit -m "Deploy ${{ github.sha }}"
 
           git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+
           git push origin "${{ env.DEPLOY_BRANCH }}" --force
