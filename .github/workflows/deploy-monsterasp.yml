@@ -24,7 +24,7 @@ env:
   DEPLOY_BRANCH: "monsterasp-deploy"
   # CHANGE ME nếu muốn tên branch deploy khác
 
-  RUNTIME_IDENTIFIER: "win-x64"
+  RUNTIME_IDENTIFIER: "win-x86"
   # CHANGE ME nếu hosting yêu cầu runtime khác
 
 jobs:
