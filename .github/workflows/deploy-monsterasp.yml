@@ -1,0 +1,28 @@
+name: Deploy to MonsterASP
+
+on:
+  push:
+    branches:
+      - main_demo_project   # đổi thành branch bạn muốn deploy
+
+jobs:
+  deploy:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore ./src/SRD_Master/SafeRide.API/SafeRide.API.csproj
+
+      - name: Publish
+        run: |
+          dotnet publish ./src/SRD_Master/SafeRide.API/SafeRide.API.csproj `
+          -c Release `
+          -o publish
