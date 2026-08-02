@@ -1,5 +1,6 @@
 using MediatR;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Common.Realtime;
 using SafeRide.Contracts.Responses.Feedbacks;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
@@ -12,15 +13,18 @@ public sealed class SubmitBookingReportCommandHandler
     private readonly IReportRepository _reportRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly IAdminReportRealtimeService _adminReportRealtimeService;
 
     public SubmitBookingReportCommandHandler(
         IReportRepository reportRepository,
         IUnitOfWork unitOfWork,
-        IDateTimeProvider dateTimeProvider)
+        IDateTimeProvider dateTimeProvider,
+        IAdminReportRealtimeService adminReportRealtimeService)
     {
         _reportRepository = reportRepository;
         _unitOfWork = unitOfWork;
         _dateTimeProvider = dateTimeProvider;
+        _adminReportRealtimeService = adminReportRealtimeService;
     }
 
     public async Task<SubmitTripReportResponse> Handle(
@@ -77,6 +81,16 @@ public sealed class SubmitBookingReportCommandHandler
 
         await _reportRepository.AddReportAsync(report, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        await _adminReportRealtimeService.PublishReportCreatedAsync(
+            new ReportCreatedEvent(
+                report.Id,
+                trip.Id,
+                request.CustomerId,
+                subject,
+                report.Status,
+                utcNow),
+            cancellationToken);
 
         return new SubmitTripReportResponse(
             report.Id,

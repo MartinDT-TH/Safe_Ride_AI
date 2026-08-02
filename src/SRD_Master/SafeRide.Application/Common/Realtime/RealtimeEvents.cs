@@ -68,6 +68,14 @@ public sealed record SOSTriggeredEvent(
     DateTime CreatedAt,
     string Message);
 
+public sealed record ReportCreatedEvent(
+    long ReportId,
+    long TripId,
+    Guid ReporterUserId,
+    string Subject,
+    ReportStatus Status,
+    DateTime CreatedAt);
+
 public sealed record TripCreatedEvent(
     long TripId,
     long BookingId,

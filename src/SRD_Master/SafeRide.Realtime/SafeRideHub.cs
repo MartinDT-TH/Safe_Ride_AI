@@ -35,6 +35,12 @@ public sealed class SafeRideHub : Hub
                     Context.ConnectionId,
                     RealtimeGroups.Driver(userId));
             }
+            if (Context.User?.IsInRole("Admin") == true)
+            {
+                await Groups.AddToGroupAsync(
+                    Context.ConnectionId,
+                    RealtimeGroups.AdminReports);
+            }
         }
 
         await base.OnConnectedAsync();
@@ -74,6 +80,22 @@ public sealed class SafeRideHub : Hub
         return Groups.RemoveFromGroupAsync(
             Context.ConnectionId,
             RealtimeGroups.Trip(tripId));
+    }
+
+    [Authorize(Roles = "Admin")]
+    public Task JoinAdminReportsGroup()
+    {
+        return Groups.AddToGroupAsync(
+            Context.ConnectionId,
+            RealtimeGroups.AdminReports);
+    }
+
+    [Authorize(Roles = "Admin")]
+    public Task LeaveAdminReportsGroup()
+    {
+        return Groups.RemoveFromGroupAsync(
+            Context.ConnectionId,
+            RealtimeGroups.AdminReports);
     }
 
     public Task SendInAppCallOffer(InAppCallSignal signal)
