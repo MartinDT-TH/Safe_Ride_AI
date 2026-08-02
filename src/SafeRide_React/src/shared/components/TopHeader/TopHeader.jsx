@@ -4,7 +4,7 @@ import { faSearch, faStar, faBell, faThLarge, faUser } from '@fortawesome/free-s
 import { useAppDispatch, useAppSelector } from '../../../app/hooks';
 import { setHeaderSearchQuery } from '../../../features/ui/uiSlice';
 import './TopHeader.css';
-function TopHeader() {
+function TopHeader({ sosAlertCount = 0, onSOSAlertsClick }) {
     const dispatch = useAppDispatch();
     const searchQuery = useAppSelector((state) => state.ui.headerSearchQuery);
     const searchPlaceholder = useAppSelector((state) => state.ui.headerSearchPlaceholder);
@@ -35,9 +35,10 @@ function TopHeader() {
       {/* Actions */}
       <div className="header-actions">
         {/* Emergency alert */}
-        <button className="header-alert-btn" id="header-alert-btn" type="button">
+        <button className="header-alert-btn" id="header-alert-btn" type="button" onClick={onSOSAlertsClick}>
           <FontAwesomeIcon icon={faStar}/>
           <span>Cảnh báo khẩn cấp</span>
+          {sosAlertCount > 0 && <span className="header-alert-count">{sosAlertCount}</span>}
         </button>
 
         {/* Notification */}
