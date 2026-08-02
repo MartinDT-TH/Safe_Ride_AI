@@ -377,9 +377,9 @@ public sealed class BookingTests
             return Task.FromResult<IReadOnlyList<BookingHistoryItemDto>>([]);
         }
 
-        public Task<Booking?> GetCustomerBookingWithDetailsAsync(
+        public Task<Booking?> GetBookingWithDetailsForUserAsync(
             long bookingId,
-            Guid customerId,
+            Guid userId,
             CancellationToken cancellationToken)
         {
             return Task.FromResult<Booking?>(AddedBooking);

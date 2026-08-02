@@ -29,19 +29,19 @@ public sealed class GetBookingDetailsQueryHandler
         CancellationToken cancellationToken)
     {
         await _bookingRepository.ExpireStaleNowBookingsAsync(
-            request.CustomerId,
+            request.UserId,
             _dateTimeProvider.UtcNow,
             cancellationToken);
 
-        var booking = await _bookingRepository.GetCustomerBookingWithDetailsAsync(
+        var booking = await _bookingRepository.GetBookingWithDetailsForUserAsync(
             request.BookingId,
-            request.CustomerId,
+            request.UserId,
             cancellationToken);
         if (booking is null)
         {
             throw new BookingException(
                 "booking.not_found",
-                "Không tìm thấy chuyến của bạn.",
+                "Không tìm thấy chuyến hoặc bạn không có quyền xem chuyến này.",
                 404);
         }
 
