@@ -60,13 +60,32 @@ public sealed record SOSTriggeredEvent(
     long TripId,
     long BookingId,
     Guid CustomerId,
+    string? CustomerName,
+    string? CustomerPhoneNumber,
     Guid DriverId,
+    string? DriverName,
+    string? DriverPhoneNumber,
     double Latitude,
     double Longitude,
     string? EmergencyMessage,
     SOSStatus SOSStatus,
     DateTime CreatedAt,
     string Message);
+
+public sealed record AdminSOSTriggeredEvent(
+    long SosAlertId,
+    long TripId,
+    long BookingId,
+    Guid CustomerId,
+    string? CustomerName,
+    string? CustomerPhoneNumber,
+    Guid DriverId,
+    string? DriverName,
+    string? DriverPhoneNumber,
+    double Latitude,
+    double Longitude,
+    string? Message,
+    DateTime CreatedAt);
 
 public sealed record TripCreatedEvent(
     long TripId,

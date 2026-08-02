@@ -1,4 +1,6 @@
 using SafeRide.Domain.Entities;
+using SafeRide.Domain.Enums;
+using SafeRide.Application.Features.AdminSOSAlerts;
 
 namespace SafeRide.Application.Common.Interfaces;
 
@@ -14,5 +16,15 @@ public interface ISOSAlertRepository
 
     Task AddAsync(
         SOSAlert sosAlert,
+        CancellationToken cancellationToken = default);
+
+    Task<AdminSOSAlertPagedResult> GetAdminAlertsAsync(
+        SOSStatus? status,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
+
+    Task<AdminSOSAlertResponse?> GetAdminAlertByIdAsync(
+        long sosAlertId,
         CancellationToken cancellationToken = default);
 }

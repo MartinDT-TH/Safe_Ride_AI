@@ -164,6 +164,25 @@ public sealed class SignalRRealtimeNotificationService
                 notification.TripId,
                 "SOSTriggered",
                 notification,
+                cancellationToken),
+            _hubContext.Clients
+                .Group(RealtimeGroups.AdminSOS)
+                .SendAsync(
+                    "SOSTriggered",
+                    new AdminSOSTriggeredEvent(
+                        notification.SosAlertId,
+                        notification.TripId,
+                        notification.BookingId,
+                        notification.CustomerId,
+                        notification.CustomerName,
+                        notification.CustomerPhoneNumber,
+                        notification.DriverId,
+                        notification.DriverName,
+                        notification.DriverPhoneNumber,
+                        notification.Latitude,
+                        notification.Longitude,
+                        notification.EmergencyMessage,
+                        notification.CreatedAt),
                 cancellationToken));
     }
 
