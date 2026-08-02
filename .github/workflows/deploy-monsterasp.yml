@@ -1,28 +1,126 @@
-name: Deploy to MonsterASP
+name: Build and Publish for MonsterASP
 
 on:
   push:
     branches:
-      - main_demo_project   # đổi thành branch bạn muốn deploy
+      - main_demo_project # CHANGE ME: nhánh source cần theo dõi
+
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_VERSION: "8.0.x" # CHANGE ME nếu project không dùng .NET 8
+
+  API_PROJECT: "./src/SRD_Master/SafeRide.API/SafeRide.API.csproj"
+  # CHANGE ME nếu đường dẫn API khác
+
+  UNIT_TEST_PROJECT: "./src/SRD_Master/SafeRide.UnitTests/SafeRide.UnitTests.csproj"
+  # CHANGE ME nếu tên/đường dẫn project test khác
+
+  PUBLISH_DIRECTORY: "./publish"
+  DEPLOY_BRANCH: "monsterasp-deploy" # CHANGE ME nếu muốn tên branch khác
 
 jobs:
-  deploy:
+  test:
+    name: Build and Test
     runs-on: windows-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout source
         uses: actions/checkout@v4
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Restore
-        run: dotnet restore ./src/SRD_Master/SafeRide.API/SafeRide.API.csproj
+      - name: Restore tests
+        run: dotnet restore "${{ env.UNIT_TEST_PROJECT }}"
 
-      - name: Publish
+      - name: Run tests
+        run: >
+          dotnet test "${{ env.UNIT_TEST_PROJECT }}"
+          --configuration Release
+          --no-restore
+          --logger "trx;LogFileName=test-results.trx"
+          --results-directory "${{ github.workspace }}\TestResults"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SafeRide-test-results
+          path: TestResults
+          if-no-files-found: warn
+          retention-days: 7
+
+  publish:
+    name: Publish to Deploy Branch
+    runs-on: windows-latest
+
+    # Không có needs: test nên publish vẫn chạy dù test fail.
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore API
+        run: dotnet restore "${{ env.API_PROJECT }}"
+
+      - name: Publish API
+        run: >
+          dotnet publish "${{ env.API_PROJECT }}"
+          --configuration Release
+          --no-restore
+          --runtime win-x86
+          --self-contained false
+          --output "${{ env.PUBLISH_DIRECTORY }}"
+
+      - name: Verify publish output
+        shell: powershell
         run: |
-          dotnet publish ./src/SRD_Master/SafeRide.API/SafeRide.API.csproj `
-          -c Release `
-          -o publish
+          $requiredFiles = @(
+            "${{ env.PUBLISH_DIRECTORY }}\SafeRide.API.dll",
+            "${{ env.PUBLISH_DIRECTORY }}\SafeRide.API.deps.json",
+            "${{ env.PUBLISH_DIRECTORY }}\SafeRide.API.runtimeconfig.json",
+            "${{ env.PUBLISH_DIRECTORY }}\web.config"
+          )
+
+          foreach ($file in $requiredFiles) {
+            if (-not (Test-Path $file)) {
+              throw "Missing required publish file: $file"
+            }
+          }
+
+          Write-Host "Publish output is valid."
+
+      - name: Upload publish artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SafeRide-API-publish
+          path: ${{ env.PUBLISH_DIRECTORY }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Push publish output to deploy branch
+        shell: powershell
+        run: |
+          cd "${{ env.PUBLISH_DIRECTORY }}"
+
+          git init
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git checkout -b "${{ env.DEPLOY_BRANCH }}"
+          git add --all
+          git commit -m "Deploy ${{ github.sha }}"
+
+          git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          git push origin "${{ env.DEPLOY_BRANCH }}" --force
