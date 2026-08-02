@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 env:
-  DOTNET_VERSION: "8.0.24" # CHANGE ME nếu project không dùng .NET 8
+  DOTNET_VERSION: "10.0.203" # CHANGE ME nếu project không dùng .NET 8
 
   API_PROJECT: "./src/SRD_Master/SafeRide.API/SafeRide.API.csproj"
   # CHANGE ME nếu đường dẫn API khác
