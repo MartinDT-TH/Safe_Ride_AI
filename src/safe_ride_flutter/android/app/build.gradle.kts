@@ -68,7 +68,7 @@ android {
         versionName = flutter.versionName
         manifestPlaceholders["googleMapsApiKey"] = apiKey("GOOGLE_MAPS_API_KEY")
         manifestPlaceholders["tripShareScheme"] = buildValue("TRIP_SHARE_SCHEME", "https")
-        manifestPlaceholders["tripShareHost"] = buildValue("TRIP_SHARE_HOST", "app.saferide.vn")
+        manifestPlaceholders["tripShareHost"] = buildValue("TRIP_SHARE_HOST", "safe-ride-ai.onrender.com")
         manifestPlaceholders["tripSharePathPrefix"] = buildValue("TRIP_SHARE_PATH_PREFIX", "/trip-share")
         manifestPlaceholders["tripShareAutoVerify"] = buildValue("TRIP_SHARE_AUTO_VERIFY", "true")
         resValue(

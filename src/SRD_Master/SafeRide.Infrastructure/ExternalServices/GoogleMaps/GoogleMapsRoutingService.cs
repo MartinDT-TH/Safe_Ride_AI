@@ -57,17 +57,14 @@ public sealed class GoogleMapsRoutingService : IMapRoutingService
             units = "METRIC"
         };
 
-        var requestUrl = QueryHelpers.AddQueryString(
-            _options.RoutesApiUrl,
-            "key",
-            _options.ApiKey);
-
+        var requestUrl = $"{_options.RoutesApiUrl}?key={_options.ApiKey}";
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUrl)
         {
             Content = JsonContent.Create(requestBody)
         };
         httpRequest.Headers.Add("X-Goog-FieldMask", FieldMask);
-
+        // 2. BỔ SUNG THÊM: Gắn API Key trực tiếp vào Header
+        httpRequest.Headers.Add("X-Goog-Api-Key", _options.ApiKey);
         try
         {
             using var response = await _httpClient.SendAsync(

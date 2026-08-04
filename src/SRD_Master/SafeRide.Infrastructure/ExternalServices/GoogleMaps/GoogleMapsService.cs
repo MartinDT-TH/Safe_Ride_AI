@@ -56,10 +56,7 @@ public sealed class GoogleMapsService : IGoogleMapsService
             units = "METRIC"
         };
 
-        var requestUrl = QueryHelpers.AddQueryString(
-            _options.RoutesApiUrl,
-            "key",
-            _options.ApiKey);
+        var requestUrl = $"{_options.RoutesApiUrl}?key={_options.ApiKey}";
 
         using var request = new HttpRequestMessage(HttpMethod.Post, requestUrl)
         {
@@ -67,7 +64,8 @@ public sealed class GoogleMapsService : IGoogleMapsService
         };
         // request.Headers.Add("X-Goog-Api-Key", _options.ApiKey);
         request.Headers.Add("X-Goog-FieldMask", FieldMask);
-
+        // 2. BỔ SUNG THÊM: Gắn API Key trực tiếp vào Header
+        request.Headers.Add("X-Goog-Api-Key", _options.ApiKey);
         try
         {
             using var response = await _httpClient.SendAsync(

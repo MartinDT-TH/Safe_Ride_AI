@@ -11,15 +11,10 @@ class ReceivedTripSharesProvider extends ChangeNotifier {
 
   List<ReceivedTripShare> shares = const [];
   bool isLoading = false;
+  String? errorMessage;
   Timer? _refreshTimer;
-  String? _token;
 
-  Future<void> load(String? token) async {
-    if (token == null || token.isEmpty) return;
-    if (_token != null && _token != token) {
-      shares = const [];
-    }
-    _token = token;
+  Future<void> load() async {
     _refreshTimer ??= Timer.periodic(
       const Duration(seconds: 15),
       (_) => unawaited(refresh()),
@@ -28,17 +23,24 @@ class ReceivedTripSharesProvider extends ChangeNotifier {
   }
 
   Future<void> refresh() async {
-    final token = _token;
-    if (token == null || token.isEmpty) return;
     _removeExpired();
     isLoading = true;
+    errorMessage = null;
     notifyListeners();
     try {
-      shares = (await _datasource.received(token, activeOnly: true))
+      shares = (await _datasource.received(activeOnly: true))
           .where((share) => share.expiresAt.isAfter(DateTime.now().toUtc()))
           .toList(growable: false);
-    } catch (_) {
-      // Preserve the last valid list during transient network failures.
+    } on TripSharingApiException catch (error) {
+      if (error.statusCode == 401) {
+        debugPrint('Received share refresh returned 401: ${error.message}');
+      } else {
+        debugPrint('Received share refresh failed: ${error.message}');
+      }
+      errorMessage = error.message;
+    } catch (error) {
+      debugPrint('Received share refresh failed: $error');
+      errorMessage = 'Không thể tải danh sách chia sẻ. Vui lòng thử lại.';
     } finally {
       isLoading = false;
       notifyListeners();

@@ -6,7 +6,6 @@ import '../../../../core/maps/models/map_models.dart';
 import '../../../../core/maps/polyline_decoder.dart';
 import '../../../../core/maps/widgets/live_trip_map_widget.dart';
 import '../../../../core/services/socket_service.dart';
-import '../../../../core/session/session_manager.dart';
 import '../../../../dependency_injection/injection.dart';
 import '../../data/datasources/trip_sharing_remote_datasource.dart';
 import '../../data/models/trip_share_models.dart';
@@ -56,13 +55,8 @@ class _SharedTripTrackingPageState extends State<SharedTripTrackingPage> {
   }
 
   Future<void> _refresh({bool silent = false}) async {
-    final token = await getIt<SessionManager>().getValidAccessToken();
-    if (token == null) {
-      if (mounted) setState(() => _error = 'Phiên đăng nhập đã hết hạn.');
-      return;
-    }
     try {
-      final tracking = await _datasource.tracking(token, widget.tripShareId);
+      final tracking = await _datasource.tracking(widget.tripShareId);
       if (!mounted) return;
       if (const {
         'COMPLETED',

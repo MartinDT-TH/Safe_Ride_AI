@@ -373,8 +373,11 @@ public static class DependencyInjection
                             .CreateLogger("JwtAuthentication");
                         logger.LogWarning(
                             context.Exception,
-                            "JWT authentication failed for {Path}.",
-                            context.Request.Path);
+                            "JWT authentication failed for {Method} {Path}. FailureType={FailureType} TraceId={TraceId}.",
+                            context.Request.Method,
+                            context.Request.Path,
+                            context.Exception.GetType().Name,
+                            context.HttpContext.TraceIdentifier);
                         return Task.CompletedTask;
                     },
                     OnMessageReceived = context =>
@@ -391,6 +394,21 @@ public static class DependencyInjection
                     },
                     OnChallenge = async context =>
                     {
+                        var authorizationHeaders = context.Request.Headers.Authorization;
+                        var hasBearerHeader = authorizationHeaders.Any(value =>
+                            value?.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) == true);
+                        var logger = context.HttpContext.RequestServices
+                            .GetRequiredService<ILoggerFactory>()
+                            .CreateLogger("JwtAuthentication");
+                        logger.LogWarning(
+                            "JWT challenge for {Method} {Path}. HasBearerHeader={HasBearerHeader} AuthorizationHeaderCount={AuthorizationHeaderCount} FailureType={FailureType} TraceId={TraceId}.",
+                            context.Request.Method,
+                            context.Request.Path,
+                            hasBearerHeader,
+                            authorizationHeaders.Count,
+                            context.AuthenticateFailure?.GetType().Name ?? "none",
+                            context.HttpContext.TraceIdentifier);
+
                         context.HandleResponse();
                         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                         context.Response.ContentType = "application/problem+json";

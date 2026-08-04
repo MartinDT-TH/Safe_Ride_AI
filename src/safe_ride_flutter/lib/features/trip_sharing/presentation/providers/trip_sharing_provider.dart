@@ -11,19 +11,17 @@ class TripSharingProvider extends ChangeNotifier {
   String? errorMessage;
   List<TripShareListItem> shares = const [];
 
-  Future<void> load(String token, int tripId) async {
-    await _run(() async => shares = await _datasource.list(token, tripId));
+  Future<void> load(int tripId) async {
+    await _run(() async => shares = await _datasource.list(tripId));
   }
 
-  Future<CreatedTripShare?> create(
-    String token, {
+  Future<CreatedTripShare?> create({
     required int tripId,
     required String phoneNumber,
   }) async {
     CreatedTripShare? result;
     await _run(() async {
       result = await _datasource.create(
-        token,
         tripId: tripId,
         recipientPhoneNumber: phoneNumber,
       );
@@ -42,11 +40,11 @@ class TripSharingProvider extends ChangeNotifier {
     return result;
   }
 
-  Future<bool> revoke(String token, int tripId, int tripShareId) async {
+  Future<bool> revoke(int tripId, int tripShareId) async {
     var success = false;
     await _run(() async {
-      await _datasource.revoke(token, tripId, tripShareId);
-      shares = await _datasource.list(token, tripId);
+      await _datasource.revoke(tripId, tripShareId);
+      shares = await _datasource.list(tripId);
       success = true;
     });
     return success;

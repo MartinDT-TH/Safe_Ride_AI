@@ -11,7 +11,7 @@ public sealed class GoogleMapsOptions
 
     [Required]
     public string RoutesApiUrl { get; init; }
-        = "https://routes.googleapis.com/directions/v2:computeRoutes";
+        = "https://routes.googleapis.com/v2:computeRoutes";
 
     [Required]
     public string GeocodingApiUrl { get; init; }

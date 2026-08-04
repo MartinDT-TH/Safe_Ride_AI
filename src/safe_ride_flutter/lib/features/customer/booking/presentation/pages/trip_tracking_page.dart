@@ -1507,23 +1507,17 @@ class _ShareTripModalState extends State<ShareTripModal> {
   }
 
   Future<void> _loadShares() async {
-    final token = context.read<AuthProvider>().token;
-    if (token != null) {
-      await context.read<TripSharingProvider>().load(token, widget.tripId);
-    }
+    await context.read<TripSharingProvider>().load(widget.tripId);
   }
 
   Future<void> _createShare() async {
-    final token = context.read<AuthProvider>().token;
     final phone = PhoneNumberValidator.normalizePhone(_phoneController.text);
     if (phone.isEmpty) {
       setState(() => _validationError = 'Số điện thoại không hợp lệ.');
       return;
     }
-    if (token == null) return;
     setState(() => _validationError = null);
     final created = await context.read<TripSharingProvider>().create(
-      token,
       tripId: widget.tripId,
       phoneNumber: phone,
     );
@@ -1549,10 +1543,7 @@ class _ShareTripModalState extends State<ShareTripModal> {
   }
 
   Future<void> _revoke(TripShareListItem item) async {
-    final token = context.read<AuthProvider>().token;
-    if (token == null) return;
     await context.read<TripSharingProvider>().revoke(
-      token,
       widget.tripId,
       item.tripShareId,
     );

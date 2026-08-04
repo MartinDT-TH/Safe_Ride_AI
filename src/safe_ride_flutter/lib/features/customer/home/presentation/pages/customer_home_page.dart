@@ -81,7 +81,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
     context.read<HomeProvider>().loadHomeData();
     _loadActiveBooking(auth.token);
-    context.read<ReceivedTripSharesProvider>().load(auth.token);
+    context.read<ReceivedTripSharesProvider>().load();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         unawaited(
@@ -606,9 +606,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                         ),
                       );
                       if (context.mounted) {
-                        await context.read<ReceivedTripSharesProvider>().load(
-                          context.read<AuthProvider>().token,
-                        );
+                        await context.read<ReceivedTripSharesProvider>().load();
                       }
                     },
                   ),

@@ -71,7 +71,7 @@ class TripShareDeepLinkCoordinator {
 
     _processing = true;
     try {
-      final resolved = await _datasource.resolve(accessToken, pendingToken);
+      final resolved = await _datasource.resolve(pendingToken);
       await _storage.deletePendingTripShareToken();
       if (_openedTripShareId == resolved.tripShareId) return;
       _openedTripShareId = resolved.tripShareId;
@@ -92,7 +92,7 @@ class TripShareDeepLinkCoordinator {
       _showFailure(error.message);
     } catch (_) {
       _showFailure(
-        'KhÃ´ng thá»ƒ má»Ÿ chuyáº¿n Ä‘i Ä‘Æ°á»£c chia sáº». Vui lÃ²ng thá»­ láº¡i.',
+        'Không thể mở chuyến đi được chia sẻ. Vui lòng thử lại.',
       );
     } finally {
       _processing = false;
@@ -104,7 +104,7 @@ class TripShareDeepLinkCoordinator {
       SnackBar(
         content: Text(message),
         action: SnackBarAction(
-          label: 'Thá»­ láº¡i',
+          label: 'Thử lại',
           onPressed: () => unawaited(processPendingAfterNavigation()),
         ),
       ),
@@ -119,13 +119,29 @@ class TripShareDeepLinkCoordinator {
         configured.host.isEmpty) {
       return false;
     }
-    final expectedPath = configured.path.endsWith('/')
-        ? '${configured.path}trip-share'
-        : '${configured.path}/trip-share';
-    return incoming.scheme.toLowerCase() == configured.scheme.toLowerCase() &&
-        incoming.host.toLowerCase() == configured.host.toLowerCase() &&
+    // final expectedPath = configured.path.endsWith('/')
+    //     ? '${configured.path}trip-share'
+    //     : '${configured.path}/trip-share';
+    // return incoming.scheme.toLowerCase() == configured.scheme.toLowerCase() &&
+    //     incoming.host.toLowerCase() == configured.host.toLowerCase() &&
+    //     incoming.port == configured.port &&
+    //     incoming.path == expectedPath;
+
+
+    String normalizePath(String path) {
+      if (path.length > 1 && path.endsWith('/')) {
+        return path.substring(0, path.length - 1);
+      }
+      return path;
+    }
+
+    return incoming.scheme.toLowerCase() ==
+        configured.scheme.toLowerCase() &&
+        incoming.host.toLowerCase() ==
+            configured.host.toLowerCase() &&
         incoming.port == configured.port &&
-        incoming.path == expectedPath;
+        normalizePath(incoming.path) ==
+            normalizePath(configured.path);
   }
 
   Future<void> dispose() async {
