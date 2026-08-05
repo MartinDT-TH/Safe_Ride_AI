@@ -72,12 +72,21 @@ class TripSharingRemoteDatasource {
     return SharedTripTracking.fromJson(_map(response.data));
   }
 
-  Future<List<ReceivedTripShare>> received({bool activeOnly = true}) async {
+  Future<List<ReceivedTripShare>> received({
+    bool activeOnly = true,
+    bool suppressGlobalErrorSnackBar = false,
+  }) async {
     final response = await _request(
       () => _dio.get(
         '/trip-shares/received',
         queryParameters: {'activeOnly': activeOnly},
-        options: Options(extra: {ApiKeys.requiresAuth: true}),
+        options: Options(
+          extra: {
+            ApiKeys.requiresAuth: true,
+            if (suppressGlobalErrorSnackBar)
+              DioRequestExtras.suppressGlobalErrorSnackBar: true,
+          },
+        ),
       ),
     );
     return (response.data as List)

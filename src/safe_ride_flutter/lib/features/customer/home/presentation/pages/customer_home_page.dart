@@ -631,6 +631,9 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
           ),
         );
       },
+    );
+  }
+
   Widget _buildPromotionSection(BookingProvider bookingProvider) {
     if (bookingProvider.isLoadingPromotions &&
         bookingProvider.availablePromotions.isEmpty) {

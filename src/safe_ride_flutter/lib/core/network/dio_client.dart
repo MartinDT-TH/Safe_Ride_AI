@@ -61,6 +61,10 @@ class DioClient {
   }
 }
 
+abstract final class DioRequestExtras {
+  static const suppressGlobalErrorSnackBar = 'suppressGlobalErrorSnackBar';
+}
+
 class DioErrorInterceptor extends Interceptor {
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
@@ -69,6 +73,12 @@ class DioErrorInterceptor extends Interceptor {
   }
 
   void _handleError(DioException err) {
+    if (err.requestOptions.extra[DioRequestExtras
+            .suppressGlobalErrorSnackBar] ==
+        true) {
+      return;
+    }
+
     final isServerError =
         err.type == DioExceptionType.connectionTimeout ||
         err.type == DioExceptionType.receiveTimeout ||

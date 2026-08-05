@@ -106,6 +106,8 @@ public sealed class SafeRideHub : Hub
         return Groups.RemoveFromGroupAsync(
             Context.ConnectionId,
             RealtimeGroups.TripShare(tripShareId));
+    }
+
     [Authorize(Roles = "Admin")]
     public Task JoinAdminSOSGroup()
     {

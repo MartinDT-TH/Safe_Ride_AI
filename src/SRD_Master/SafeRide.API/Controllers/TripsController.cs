@@ -29,7 +29,7 @@ public sealed class TripsController : ControllerBase
     public TripsController(
         ITripStatusService tripStatusService,
         ISender sender,
-        ITripSharingService tripSharingService)
+        ITripSharingService tripSharingService,
         ITripChatService tripChatService,
         IHubContext<TripChatHub> tripChatHubContext)
     {
