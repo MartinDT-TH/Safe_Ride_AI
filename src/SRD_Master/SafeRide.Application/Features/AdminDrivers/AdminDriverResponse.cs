@@ -28,6 +28,8 @@ public sealed record AdminDriverResponse(
         var documents = user.DriverKycs
             .Select(AdminDriverDocumentResponse.From)
             .ToArray();
+        var idCard = user.DriverKycs.FirstOrDefault(
+            x => x.DocumentType == KycDocumentType.ID_CARD);
         var pendingKyc = documents.Any(x => x.KycStatus == KycStatus.Pending.ToString());
         var status = !user.IsActive
             ? "blocked"
@@ -38,7 +40,7 @@ public sealed record AdminDriverResponse(
         return new AdminDriverResponse(
             user.Id,
             $"SR-{user.CreatedAt:yyyyMMdd}-{user.Id.ToString()[..6].ToUpperInvariant()}",
-            user.FullName ?? user.UserName ?? "Tài xế",
+            idCard?.FullName ?? user.FullName ?? user.UserName ?? "Tài xế",
             user.Email,
             user.PhoneNumber,
             user.AvatarUrl,
@@ -47,14 +49,14 @@ public sealed record AdminDriverResponse(
                 : null,
             user.DriverProfile?.Ratings.Count ?? 0,
             user.CreatedAt,
-            user.DriverProfile?.HomeAddress,
+            idCard?.Address ?? user.DriverProfile?.HomeAddress,
             status,
             user.DriverProfile?.WorkStatus.ToString() ?? DriverWorkStatus.Offline.ToString(),
             user.IsActive,
             user.BanReason,
-            user.DriverProfile?.IdentityCardNumber,
-            user.DateOfBirth,
-            user.Gender,
+            idCard?.DocumentNumber ?? user.DriverProfile?.IdentityCardNumber,
+            idCard?.DateOfBirth ?? user.DateOfBirth,
+            idCard?.Gender ?? user.Gender,
             documents);
     }
 }

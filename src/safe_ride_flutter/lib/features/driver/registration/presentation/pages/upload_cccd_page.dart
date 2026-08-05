@@ -24,6 +24,9 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
   final TextEditingController _fullNameController = TextEditingController();
   final TextEditingController _documentNumberController =
       TextEditingController();
+  final TextEditingController _dateOfBirthController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
+  String? _gender;
   bool _isScanning = false;
   final IdentityOcrScanner _ocrScanner = IdentityOcrScanner();
   late final IdentityVerificationSubmission _submission;
@@ -33,6 +36,10 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
   bool get _hasFullName => _fullNameController.text.trim().isNotEmpty;
   bool get _hasDocumentNumber =>
       _documentNumberController.text.trim().isNotEmpty;
+  bool get _hasIdentityDetails =>
+      _parseDate(_dateOfBirthController.text) != null &&
+      _gender != null &&
+      _addressController.text.trim().isNotEmpty;
 
   @override
   void initState() {
@@ -42,6 +49,11 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
     _backImage = _submission.cccdBackImage;
     _fullNameController.text = _submission.cccdFullName ?? '';
     _documentNumberController.text = _submission.cccdNumber ?? '';
+    _dateOfBirthController.text = _submission.cccdDateOfBirth == null
+        ? ''
+        : _formatDisplayDate(_submission.cccdDateOfBirth!);
+    _gender = _submission.cccdGender;
+    _addressController.text = _submission.cccdAddress ?? '';
   }
 
   Future<void> _pickImage(bool isFront) async {
@@ -94,6 +106,11 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
         if (result.documentNumber != null) {
           _documentNumberController.text = result.documentNumber!;
         }
+        if (result.dateOfBirth != null) {
+          _dateOfBirthController.text = _formatDisplayDate(result.dateOfBirth!);
+        }
+        if (result.gender != null) _gender = result.gender;
+        if (result.address != null) _addressController.text = result.address!;
       });
       if (result.documentNumber != null || result.fullName != null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -114,6 +131,8 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
   void dispose() {
     _fullNameController.dispose();
     _documentNumberController.dispose();
+    _dateOfBirthController.dispose();
+    _addressController.dispose();
     super.dispose();
   }
 
@@ -231,8 +250,7 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
                     label: context.l10n.fullName,
                     child: TextField(
                       controller: _fullNameController,
-                      textCapitalization: TextCapitalization.words,
-                      onChanged: (_) => setState(() {}),
+                      readOnly: true,
                       decoration: InputDecoration(
                         hintText: context.l10n.idCardNameHint,
                         hintStyle: TextStyle(
@@ -261,7 +279,7 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
                     child: TextField(
                       controller: _documentNumberController,
                       keyboardType: TextInputType.number,
-                      onChanged: (_) => setState(() {}),
+                      readOnly: true,
                       decoration: InputDecoration(
                         hintText: context.l10n.idCardNumberHint,
                         hintStyle: TextStyle(
@@ -281,6 +299,43 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
                           horizontal: 12,
                           vertical: 14,
                         ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 20),
+                  _buildInputField(
+                    label: 'Ngày sinh',
+                    child: TextField(
+                      controller: _dateOfBirthController,
+                      keyboardType: TextInputType.datetime,
+                      readOnly: true,
+                      decoration: _fieldDecoration('dd/MM/yyyy'),
+                    ),
+                  ),
+                  SizedBox(height: 20),
+                  _buildInputField(
+                    label: 'Giới tính',
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _gender,
+                      decoration: _fieldDecoration('Chọn giới tính'),
+                      items: const [
+                        DropdownMenuItem(value: 'Male', child: Text('Nam')),
+                        DropdownMenuItem(value: 'Female', child: Text('Nữ')),
+                        DropdownMenuItem(value: 'Other', child: Text('Khác')),
+                      ],
+                      onChanged: null,
+                    ),
+                  ),
+                  SizedBox(height: 20),
+                  _buildInputField(
+                    label: 'Địa chỉ thường trú',
+                    child: TextField(
+                      controller: _addressController,
+                      readOnly: true,
+                      minLines: 2,
+                      maxLines: 3,
+                      decoration: _fieldDecoration(
+                        'Nhập địa chỉ thường trú trên CCCD',
                       ),
                     ),
                   ),
@@ -309,12 +364,16 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
             if (_hasFrontImage &&
                 _hasBackImage &&
                 _hasFullName &&
-                _hasDocumentNumber) {
+                _hasDocumentNumber &&
+                _hasIdentityDetails) {
               _submission
                 ..cccdFrontImage = _frontImage
                 ..cccdBackImage = _backImage
                 ..cccdFullName = _fullNameController.text.trim()
-                ..cccdNumber = _documentNumberController.text.trim();
+                ..cccdNumber = _documentNumberController.text.trim()
+                ..cccdDateOfBirth = _parseDate(_dateOfBirthController.text)
+                ..cccdGender = _gender
+                ..cccdAddress = _addressController.text.trim();
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -382,6 +441,21 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
     );
   }
 
+  InputDecoration _fieldDecoration(String hint) => InputDecoration(
+    hintText: hint,
+    hintStyle: TextStyle(color: Color(0xFF919191), fontSize: 15),
+    border: OutlineInputBorder(
+      borderSide: BorderSide(color: Color(0xFFCFD8DC)),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderSide: BorderSide(color: Color(0xFFCFD8DC)),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderSide: BorderSide(color: AppColors.primary),
+    ),
+    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+  );
+
   Widget _buildOcrStatus() {
     return Container(
       width: double.infinity,
@@ -416,6 +490,23 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
     );
   }
 }
+
+DateTime? _parseDate(String value) {
+  final match = RegExp(r'^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$')
+      .firstMatch(value.trim());
+  if (match == null) return null;
+  final day = int.parse(match.group(1)!);
+  final month = int.parse(match.group(2)!);
+  final year = int.parse(match.group(3)!);
+  final date = DateTime(year, month, day);
+  return date.year == year && date.month == month && date.day == day
+      ? date
+      : null;
+}
+
+String _formatDisplayDate(DateTime value) =>
+    '${value.day.toString().padLeft(2, '0')}/'
+    '${value.month.toString().padLeft(2, '0')}/${value.year}';
 
 class _PhotoUploadBox extends StatelessWidget {
   final String label;

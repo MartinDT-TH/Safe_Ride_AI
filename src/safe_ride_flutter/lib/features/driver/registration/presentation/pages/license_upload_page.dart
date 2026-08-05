@@ -126,33 +126,6 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
     }
   }
 
-  Future<void> _selectDate(BuildContext context, bool isIssued) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(1990),
-      lastDate: DateTime(2100),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(primary: AppColors.primary),
-          ),
-          child: child!,
-        );
-      },
-    );
-    if (picked != null) {
-      setState(() {
-        if (isIssued) {
-          _issuedDate = picked;
-        } else {
-          _expiryDate = picked;
-          _hasNoExpiryDate = false;
-        }
-      });
-    }
-  }
-
   @override
   void dispose() {
     _fullNameController.dispose();
@@ -242,8 +215,7 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
                     label: context.l10n.fullName,
                     child: TextField(
                       controller: _fullNameController,
-                      textCapitalization: TextCapitalization.words,
-                      onChanged: (_) => setState(() {}),
+                      readOnly: true,
                       decoration: InputDecoration(
                         hintText: context.l10n.licenseNameHint,
                         hintStyle: TextStyle(
@@ -271,7 +243,7 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
                     label: context.l10n.licenseNumber,
                     child: TextField(
                       controller: _licenseNumberController,
-                      onChanged: (_) => setState(() {}),
+                      readOnly: true,
                       decoration: InputDecoration(
                         hintText: context.l10n.licenseNumberHint,
                         hintStyle: TextStyle(
@@ -329,7 +301,7 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
                             ),
                           )
                           .toList(),
-                      onChanged: (val) => setState(() => _selectedGrade = val),
+                      onChanged: null,
                     ),
                   ),
                   SizedBox(height: 20),
@@ -340,7 +312,8 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
                           label: context.l10n.issueDate,
                           child: _DateSelector(
                             value: _issuedDate,
-                            onTap: () => _selectDate(context, true),
+                            enabled: false,
+                            onTap: () {},
                           ),
                         ),
                       ),
@@ -353,8 +326,8 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
                             placeholder: _hasNoExpiryDate
                                 ? context.l10n.unlimited
                                 : 'mm/dd/yyyy',
-                            enabled: !_hasNoExpiryDate,
-                            onTap: () => _selectDate(context, false),
+                            enabled: false,
+                            onTap: () {},
                           ),
                         ),
                       ),
@@ -363,14 +336,7 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
                   SizedBox(height: 12),
                   CheckboxListTile(
                     value: _hasNoExpiryDate,
-                    onChanged: (value) {
-                      setState(() {
-                        _hasNoExpiryDate = value ?? false;
-                        if (_hasNoExpiryDate) {
-                          _expiryDate = null;
-                        }
-                      });
-                    },
+                    onChanged: null,
                     contentPadding: EdgeInsets.zero,
                     controlAffinity: ListTileControlAffinity.leading,
                     activeColor: AppColors.primary,

@@ -298,7 +298,10 @@ public sealed class AiChatService : IAiChatService
                             item.BookingDraft.Destination.Latitude,
                             item.BookingDraft.Destination.Longitude),
                         item.BookingDraft.VehicleQuery,
-                        item.BookingDraft.PromotionCode),
+                        item.BookingDraft.PromotionCode,
+                        item.BookingDraft.VehicleType,
+                        item.BookingDraft.UseBestPromotion,
+                        item.BookingDraft.AutoBook),
                 item.IsAudio,
                 item.AudioUrl,
                 item.AudioMimeType,
@@ -375,8 +378,8 @@ public sealed class AiChatService : IAiChatService
         var prompt = $$"""
             Bạn là trợ lý SafeRide. Luôn trả lời bằng {{LanguageName(languageCode)}} (mã {{languageCode}}),
             kể cả khi lịch sử hội thoại dùng ngôn ngữ khác. Bạn hỗ trợ khách hàng sử dụng
-            ứng dụng và chuẩn bị thông tin đặt chuyến, nhưng không tự tạo booking, không tự xác nhận
-            giá và không khẳng định đã có tài xế.
+            ứng dụng, trích xuất chính xác ý định đặt chuyến để ứng dụng quyết định có tạo booking
+            tự động hay không, và không khẳng định đã có tài xế.
 
             Hãy nhận biết các cách diễn đạt như "đặt từ A đến B", "đón ở A đi B" hoặc tương đương.
             Các câu rút gọn như "đến X", "đi X", "đặt xe đến X" luôn có X là điểm đến;
@@ -391,8 +394,16 @@ public sealed class AiChatService : IAiChatService
             còn thiếu. Trả lời ngắn gọn, tự nhiên và không tuyên bố rằng chuyến xe đã được đặt.
 
             Nếu người dùng nhắc tên xe hoặc biển số xe, điền nguyên văn phần nhận diện đó vào
-            vehicleQuery. Nếu người dùng nhắc mã giảm giá, điền mã vào promotionCode. Không tự
-            bịa xe hoặc mã khi người dùng không cung cấp.
+            vehicleQuery. Nếu người dùng yêu cầu loại phương tiện chung, đặt vehicleType thành
+            "car" cho ô tô/xe hơi hoặc "motorbike" cho xe máy; không điền vehicleQuery bằng tên
+            loại phương tiện chung. Nếu người dùng nhắc mã giảm giá, điền mã vào promotionCode.
+            Nếu họ yêu cầu voucher/mã giảm giá tối ưu, tốt nhất hoặc giảm nhiều nhất thì đặt
+            useBestPromotion=true và không tự bịa promotionCode.
+
+            Đặt autoBook=true khi người dùng ra lệnh rõ ràng đặt xe/tìm tài xế ngay và đã có đủ
+            điểm đến (điểm đón có thể lấy từ GPS). autoBook=false nếu họ chỉ hỏi thông tin, đang
+            cân nhắc, hoặc yêu cầu chưa đủ rõ. Khi autoBook=true, trả lời rằng hệ thống đang chuẩn
+            bị đặt chuyến và tìm tài xế; không nói rằng đã tìm thấy tài xế.
 
             {{locationInstruction}}
             """;
@@ -416,12 +427,15 @@ public sealed class AiChatService : IAiChatService
                         pickupAddress = new { type = "STRING", nullable = true },
                         destinationAddress = new { type = "STRING", nullable = true },
                         vehicleQuery = new { type = "STRING", nullable = true },
-                        promotionCode = new { type = "STRING", nullable = true }
+                        promotionCode = new { type = "STRING", nullable = true },
+                        vehicleType = new { type = "STRING", nullable = true },
+                        useBestPromotion = new { type = "BOOLEAN" },
+                        autoBook = new { type = "BOOLEAN" }
                     },
                     required = new[]
                     {
                         "reply", "pickupAddress", "destinationAddress", "vehicleQuery",
-                        "promotionCode"
+                        "promotionCode", "vehicleType", "useBestPromotion", "autoBook"
                     }
                 }
             }
@@ -530,7 +544,10 @@ public sealed class AiChatService : IAiChatService
                     destination.Lat,
                     destination.Lng),
                 NormalizeHint(generated.VehicleQuery),
-                NormalizeHint(generated.PromotionCode)),
+                NormalizeHint(generated.PromotionCode),
+                NormalizeVehicleType(generated.VehicleType),
+                generated.UseBestPromotion,
+                generated.AutoBook),
             true,
             true,
             useCurrentLocation);
@@ -756,7 +773,10 @@ public sealed class AiChatService : IAiChatService
                     Longitude = bookingDraft.Destination.Longitude
                 },
                 VehicleQuery = bookingDraft.VehicleQuery,
-                PromotionCode = bookingDraft.PromotionCode
+                PromotionCode = bookingDraft.PromotionCode,
+                VehicleType = bookingDraft.VehicleType,
+                UseBestPromotion = bookingDraft.UseBestPromotion,
+                AutoBook = bookingDraft.AutoBook
             },
         CreatedAt = createdAt,
         ExpiresAt = expiresAt
@@ -780,7 +800,10 @@ public sealed class AiChatService : IAiChatService
                         message.BookingDraft.Destination.Latitude,
                         message.BookingDraft.Destination.Longitude),
                     message.BookingDraft.VehicleQuery,
-                    message.BookingDraft.PromotionCode),
+                    message.BookingDraft.PromotionCode,
+                    message.BookingDraft.VehicleType,
+                    message.BookingDraft.UseBestPromotion,
+                    message.BookingDraft.AutoBook),
             message.IsAudio,
             message.AudioUrl,
             message.AudioMimeType,
@@ -788,6 +811,14 @@ public sealed class AiChatService : IAiChatService
 
     private static string? NormalizeHint(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string? NormalizeVehicleType(string? value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            "car" => "car",
+            "motorbike" => "motorbike",
+            _ => null
+        };
 
     private void EnsureEnabled()
     {
@@ -869,7 +900,10 @@ public sealed class AiChatService : IAiChatService
         string? PickupAddress,
         string? DestinationAddress,
         string? VehicleQuery,
-        string? PromotionCode);
+        string? PromotionCode,
+        string? VehicleType,
+        bool UseBestPromotion,
+        bool AutoBook);
     private sealed record BookingDraftResolution(
         AiBookingDraftDto? Draft,
         bool PickupResolved,

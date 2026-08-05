@@ -14,6 +14,10 @@ public partial class DriverKyc
 
     public KycDocumentType DocumentType { get; set; }
     public string? DocumentNumber { get; set; }
+    public string? FullName { get; set; }
+    public DateOnly? DateOfBirth { get; set; }
+    public string? Gender { get; set; }
+    public string? Address { get; set; }
 
     public LicenseClass? LicenseClass { get; set; }
 

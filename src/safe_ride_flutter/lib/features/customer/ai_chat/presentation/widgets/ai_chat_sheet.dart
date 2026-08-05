@@ -191,7 +191,7 @@ class _AiChatSheetState extends State<AiChatSheet> {
         _draft = reply.bookingDraft;
       });
       if (reply.bookingDraft != null)
-        await _prepareBooking(reply.bookingDraft!);
+        await _prepareBooking(reply.bookingDraft!, allowAutoBook: true);
     } on DioException catch (exception) {
       if (!mounted) return;
       setState(() {
@@ -238,7 +238,7 @@ class _AiChatSheetState extends State<AiChatSheet> {
         _draft = reply.bookingDraft;
       });
       if (reply.bookingDraft != null) {
-        await _prepareBooking(reply.bookingDraft!);
+        await _prepareBooking(reply.bookingDraft!, allowAutoBook: true);
       }
     } on DioException catch (exception) {
       if (!mounted) return;
@@ -269,7 +269,10 @@ class _AiChatSheetState extends State<AiChatSheet> {
     });
   }
 
-  Future<void> _prepareBooking(AiBookingDraft draft) async {
+  Future<void> _prepareBooking(
+    AiBookingDraft draft, {
+    bool allowAutoBook = false,
+  }) async {
     if (_preparingBooking) return;
     final token = context.read<AuthProvider>().token;
     if (token == null || token.isEmpty) {
@@ -297,6 +300,11 @@ class _AiChatSheetState extends State<AiChatSheet> {
         : vehicles
               .where((item) => _matchesVehicle(item, draft.vehicleQuery!))
               .toList();
+    final typeMatches = switch (draft.vehicleType) {
+      'car' => vehicles.where((item) => !item.isMotorbike).toList(),
+      'motorbike' => vehicles.where((item) => item.isMotorbike).toList(),
+      _ => <BookingVehicleOption>[],
+    };
     final promoMatches = draft.promotionCode == null
         ? <PromoModel>[]
         : promotions
@@ -308,7 +316,9 @@ class _AiChatSheetState extends State<AiChatSheet> {
               .toList();
     setState(() {
       _selectedVehicle = draft.vehicleQuery == null
-          ? vehicles.firstOrNull
+          ? draft.vehicleType == null
+                ? vehicles.firstOrNull
+                : typeMatches.firstOrNull
           : vehicleMatches.length == 1
           ? vehicleMatches.single
           : null;
@@ -325,6 +335,32 @@ class _AiChatSheetState extends State<AiChatSheet> {
       _preparingBooking = false;
     });
     await _estimateFare();
+    if (!mounted) return;
+    if (draft.useBestPromotion && _fareEstimate != null) {
+      final bestPromotion = promotions
+          .where(
+            (promo) =>
+                _promotionDiscount(promo, _fareEstimate!.estimatedFare) > 0,
+          )
+          .fold<PromoModel?>(null, (best, promo) {
+            if (best == null) return promo;
+            final fare = _fareEstimate!.estimatedFare;
+            return _promotionDiscount(promo, fare) >
+                    _promotionDiscount(best, fare)
+                ? promo
+                : best;
+          });
+      setState(() => _selectedPromo = bestPromotion);
+    }
+    final canAutoBook = allowAutoBook &&
+        draft.autoBook &&
+        _selectedVehicle != null &&
+        _selectedService != null &&
+        _fareEstimate != null;
+    if (canAutoBook) {
+      await _confirmBooking();
+      return;
+    }
     _scrollToBottom();
   }
 
@@ -714,6 +750,20 @@ bool _matchesVehicle(BookingVehicleOption vehicle, String query) {
       needle.contains(name) ||
       plate.contains(needle) ||
       needle.contains(plate);
+}
+
+double _promotionDiscount(PromoModel promo, double fare) {
+  if (fare <= 0 || promo.remainingUsageCount == 0) return 0;
+  if (promo.minimumOrderValue > 0 && fare < promo.minimumOrderValue) return 0;
+
+  var discount = promo.discountType.toLowerCase().contains('percent')
+      ? fare * promo.discountValue / 100
+      : promo.discountValue;
+  if (promo.maximumDiscountValue > 0 &&
+      discount > promo.maximumDiscountValue) {
+    discount = promo.maximumDiscountValue;
+  }
+  return discount.clamp(0, fare).toDouble();
 }
 
 String? _buildSelectionNotice(

@@ -221,7 +221,7 @@ abstract final class LocationStrings {
 abstract final class AppConfig {
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://192.168.1.26:5026/api/',
+    defaultValue: 'https://saferidefpt.runasp.net/api/',
   );
   // https://safe-ride-ai.onrender.com
   // http://192.168.1.19:5026

@@ -40,6 +40,9 @@ internal sealed class AiBookingDraftDocument
     public AiBookingLocationDocument Destination { get; set; } = new();
     public string? VehicleQuery { get; set; }
     public string? PromotionCode { get; set; }
+    public string? VehicleType { get; set; }
+    public bool UseBestPromotion { get; set; }
+    public bool AutoBook { get; set; }
 }
 
 internal sealed class AiBookingLocationDocument
