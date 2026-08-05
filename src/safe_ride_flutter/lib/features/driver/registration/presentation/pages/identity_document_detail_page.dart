@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import '../../data/models/identity_document_model.dart';
 
 class IdentityDocumentDetailPage extends StatelessWidget {
-  const IdentityDocumentDetailPage({super.key, required this.document});
+  IdentityDocumentDetailPage({super.key, required this.document});
 
   final IdentityDocumentModel document;
 
@@ -19,12 +20,12 @@ class IdentityDocumentDetailPage extends StatelessWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF263238)),
+          icon: Icon(Icons.arrow_back, color: Color(0xFF263238)),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           document.title,
-          style: const TextStyle(
+          style: TextStyle(
             color: AppColors.primary,
             fontSize: 18,
             fontWeight: FontWeight.w700,
@@ -33,54 +34,54 @@ class IdentityDocumentDetailPage extends StatelessWidget {
         centerTitle: true,
       ),
       body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
+        physics: BouncingScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _StatusSummary(document: document, statusColor: statusColor),
-            const SizedBox(height: 24),
+            SizedBox(height: 24),
             _InfoSection(
-              title: 'Thông tin đã gửi',
+              title: context.l10n.submittedInformation,
               rows: [
                 if (_hasText(document.documentNumber))
-                  _InfoRow('Số giấy tờ', document.documentNumber!),
+                  _InfoRow(context.l10n.documentNumber, document.documentNumber!),
                 if (_hasText(document.licenseClass))
-                  _InfoRow('Hạng bằng', document.licenseClass!),
+                  _InfoRow(context.l10n.licenseClass, document.licenseClass!),
                 if (_hasText(document.issueDate))
-                  _InfoRow('Ngày cấp', document.issueDate!),
+                  _InfoRow(context.l10n.issueDate, document.issueDate!),
                 if (_hasText(document.expiryDate))
-                  _InfoRow('Ngày hết hạn', document.expiryDate!),
+                  _InfoRow(context.l10n.expiryDate, document.expiryDate!),
               ],
             ),
-            const SizedBox(height: 24),
-            const Text(
-              'Tài liệu',
+            SizedBox(height: 24),
+            Text(
+              context.l10n.documents,
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
                 color: Color(0xFF1F1F1F),
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             if (_hasText(document.frontImageUrl))
               _DocumentPreview(
-                label: 'Mặt trước',
+                label: context.l10n.frontSide,
                 url: document.frontImageUrl!,
               ),
             if (_hasText(document.backImageUrl)) ...[
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               _DocumentPreview(
-                label: 'Mặt sau',
+                label: context.l10n.backSide,
                 url: document.backImageUrl!,
               ),
             ],
             if (_hasText(document.fileUrl)) ...[
               if (_hasText(document.frontImageUrl) ||
                   _hasText(document.backImageUrl))
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
               _DocumentPreview(
-                label: 'Tệp đã nộp',
+                label: context.l10n.submittedFile,
                 url: document.fileUrl!,
               ),
             ],
@@ -95,16 +96,16 @@ class IdentityDocumentDetailPage extends StatelessWidget {
 
   static Color _statusColor(DocumentStatus status) {
     return switch (status) {
-      DocumentStatus.verified => const Color(0xFF2E7D32),
-      DocumentStatus.pending => const Color(0xFFFFA000),
-      DocumentStatus.rejected => const Color(0xFFD32F2F),
-      DocumentStatus.notSubmitted => const Color(0xFF757575),
+      DocumentStatus.verified => Color(0xFF2E7D32),
+      DocumentStatus.pending => Color(0xFFFFA000),
+      DocumentStatus.rejected => Color(0xFFD32F2F),
+      DocumentStatus.notSubmitted => Color(0xFF757575),
     };
   }
 }
 
 class _StatusSummary extends StatelessWidget {
-  const _StatusSummary({required this.document, required this.statusColor});
+  _StatusSummary({required this.document, required this.statusColor});
 
   final IdentityDocumentModel document;
   final Color statusColor;
@@ -122,23 +123,23 @@ class _StatusSummary extends StatelessWidget {
       child: Row(
         children: [
           Icon(document.icon, color: statusColor, size: 28),
-          const SizedBox(width: 12),
+          SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _statusLabel(document.status),
+                  _statusLabel(context, document.status),
                   style: TextStyle(
                     color: statusColor,
                     fontWeight: FontWeight.w800,
                     fontSize: 15,
                   ),
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: 4),
                 Text(
                   document.description,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Color(0xFF455A64),
                     fontWeight: FontWeight.w600,
                   ),
@@ -151,18 +152,18 @@ class _StatusSummary extends StatelessWidget {
     );
   }
 
-  String _statusLabel(DocumentStatus status) {
+  String _statusLabel(BuildContext context, DocumentStatus status) {
     return switch (status) {
-      DocumentStatus.verified => 'Đã duyệt',
-      DocumentStatus.pending => 'Đã nộp, đang chờ duyệt',
-      DocumentStatus.rejected => 'Bị từ chối',
-      DocumentStatus.notSubmitted => 'Chưa nộp',
+      DocumentStatus.verified => context.l10n.documentApproved,
+      DocumentStatus.pending => context.l10n.documentPendingReview,
+      DocumentStatus.rejected => context.l10n.documentRejected,
+      DocumentStatus.notSubmitted => context.l10n.documentNotSubmitted,
     };
   }
 }
 
 class _InfoSection extends StatelessWidget {
-  const _InfoSection({required this.title, required this.rows});
+  _InfoSection({required this.title, required this.rows});
 
   final String title;
   final List<_InfoRow> rows;
@@ -178,20 +179,20 @@ class _InfoSection extends StatelessWidget {
       children: [
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w800,
             color: Color(0xFF1F1F1F),
           ),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: 12),
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color(0xFFFAFAFA),
+            color: Color(0xFFFAFAFA),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE0E0E0)),
+            border: Border.all(color: Color(0xFFE0E0E0)),
           ),
           child: Column(
             children: rows
@@ -205,7 +206,7 @@ class _InfoSection extends StatelessWidget {
                           width: 110,
                           child: Text(
                             row.label,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: Color(0xFF78909C),
                               fontWeight: FontWeight.w700,
                             ),
@@ -214,7 +215,7 @@ class _InfoSection extends StatelessWidget {
                         Expanded(
                           child: Text(
                             row.value,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: Color(0xFF263238),
                               fontWeight: FontWeight.w700,
                             ),
@@ -233,14 +234,14 @@ class _InfoSection extends StatelessWidget {
 }
 
 class _InfoRow {
-  const _InfoRow(this.label, this.value);
+  _InfoRow(this.label, this.value);
 
   final String label;
   final String value;
 }
 
 class _DocumentPreview extends StatelessWidget {
-  const _DocumentPreview({required this.label, required this.url});
+  _DocumentPreview({required this.label, required this.url});
 
   final String label;
   final String url;
@@ -254,30 +255,30 @@ class _DocumentPreview extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFFAFAFA),
+        color: Color(0xFFFAFAFA),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE0E0E0)),
+        border: Border.all(color: Color(0xFFE0E0E0)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               color: Color(0xFF263238),
               fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
           if (isPdf)
             Row(
               children: [
-                const Icon(Icons.picture_as_pdf, color: Color(0xFFD32F2F)),
-                const SizedBox(width: 8),
+                Icon(Icons.picture_as_pdf, color: Color(0xFFD32F2F)),
+                SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     resolvedUrl,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: Color(0xFF455A64),
                       fontWeight: FontWeight.w600,
                     ),
@@ -296,7 +297,7 @@ class _DocumentPreview extends StatelessWidget {
                   if (loadingProgress == null) {
                     return child;
                   }
-                  return const SizedBox(
+                  return SizedBox(
                     height: 180,
                     child: Center(
                       child: CircularProgressIndicator(
@@ -311,7 +312,7 @@ class _DocumentPreview extends StatelessWidget {
                     alignment: Alignment.center,
                     child: Text(
                       resolvedUrl,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Color(0xFF455A64),
                         fontWeight: FontWeight.w600,
                       ),

@@ -34,7 +34,10 @@ public sealed class DriverRealtimeServiceTests
                 driverId,
                 customerId,
                 TripStatus.IN_PROGRESS,
-                UtcNow.AddMinutes(-10))),
+                UtcNow.AddMinutes(-10),
+                "test-route-polyline",
+                10.780000,
+                106.680000)),
             TimeSpan.FromMinutes(30));
         await redis.SetIfNotExistsAsync(
             RedisKeys.DriverHeartbeatThrottle(driverId),
@@ -152,7 +155,10 @@ public sealed class DriverRealtimeServiceTests
                 driverId,
                 customerId,
                 TripStatus.IN_PROGRESS,
-                UtcNow.AddMinutes(-10))),
+                UtcNow.AddMinutes(-10),
+                "test-route-polyline",
+                10.780000,
+                106.680000)),
             TimeSpan.FromMinutes(30));
         await redis.SetIfNotExistsAsync(
             RedisKeys.DriverHeartbeatThrottle(driverId),
@@ -251,6 +257,7 @@ public sealed class DriverRealtimeServiceTests
                     PathSampleIntervalSeconds = 1,
                     MaxInferredSpeedKmh = 130
                 }),
+            new MapRoutingServiceFake(),
             NullLogger<DriverRealtimeService>.Instance);
     }
 
@@ -391,6 +398,15 @@ public sealed class DriverRealtimeServiceTests
         public DateTime UtcNow { get; } = utcNow;
     }
 
+    private sealed class MapRoutingServiceFake : IMapRoutingService
+    {
+        public Task<RouteEstimateResult> GetRouteEstimateAsync(
+            RouteEstimateRequest request,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException(
+                "Routing should not be called by these tracking tests.");
+    }
+
     private sealed class RealtimeNotificationServiceFake : IRealtimeNotificationService
     {
         public List<DriverLocationUpdatedEvent> DriverLocationNotifications { get; } = [];
@@ -430,6 +446,11 @@ public sealed class DriverRealtimeServiceTests
 
         public Task PublishTripPaymentSucceededAsync(
             TripPaymentSucceededEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task PublishSOSTriggeredAsync(
+            SOSTriggeredEvent notification,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 

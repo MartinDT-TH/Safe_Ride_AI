@@ -38,6 +38,12 @@ public sealed class SafeRideHub : Hub
                     Context.ConnectionId,
                     RealtimeGroups.Driver(userId));
             }
+            if (Context.User?.IsInRole("Admin") == true)
+            {
+                await Groups.AddToGroupAsync(
+                    Context.ConnectionId,
+                    RealtimeGroups.AdminSOS);
+            }
         }
 
         await base.OnConnectedAsync();
@@ -100,6 +106,65 @@ public sealed class SafeRideHub : Hub
         return Groups.RemoveFromGroupAsync(
             Context.ConnectionId,
             RealtimeGroups.TripShare(tripShareId));
+    [Authorize(Roles = "Admin")]
+    public Task JoinAdminSOSGroup()
+    {
+        return Groups.AddToGroupAsync(
+            Context.ConnectionId,
+            RealtimeGroups.AdminSOS);
+    }
+
+    [Authorize(Roles = "Admin")]
+    public Task LeaveAdminSOSGroup()
+    {
+        return Groups.RemoveFromGroupAsync(
+            Context.ConnectionId,
+            RealtimeGroups.AdminSOS);
+    }
+
+    public Task SendInAppCallOffer(InAppCallSignal signal)
+    {
+        ValidateInAppCallSignal(signal);
+
+        return Clients
+            .OthersInGroup(RealtimeGroups.Trip(signal.TripId))
+            .SendAsync("InAppCallOffer", signal, Context.ConnectionAborted);
+    }
+
+    public Task SendInAppCallAnswer(InAppCallSignal signal)
+    {
+        ValidateInAppCallSignal(signal);
+
+        return Clients
+            .OthersInGroup(RealtimeGroups.Trip(signal.TripId))
+            .SendAsync("InAppCallAnswer", signal, Context.ConnectionAborted);
+    }
+
+    public Task SendInAppCallIceCandidate(InAppCallSignal signal)
+    {
+        ValidateInAppCallSignal(signal);
+
+        return Clients
+            .OthersInGroup(RealtimeGroups.Trip(signal.TripId))
+            .SendAsync("InAppCallIceCandidate", signal, Context.ConnectionAborted);
+    }
+
+    public Task RejectInAppCall(InAppCallSignal signal)
+    {
+        ValidateInAppCallSignal(signal);
+
+        return Clients
+            .OthersInGroup(RealtimeGroups.Trip(signal.TripId))
+            .SendAsync("InAppCallRejected", signal, Context.ConnectionAborted);
+    }
+
+    public Task EndInAppCall(InAppCallSignal signal)
+    {
+        ValidateInAppCallSignal(signal);
+
+        return Clients
+            .OthersInGroup(RealtimeGroups.Trip(signal.TripId))
+            .SendAsync("InAppCallEnded", signal, Context.ConnectionAborted);
     }
 
     [Authorize(Roles = "Driver")]
@@ -231,4 +296,27 @@ public sealed class SafeRideHub : Hub
             throw new HubException("Driver location coordinates are invalid.");
         }
     }
+
+    private static void ValidateInAppCallSignal(InAppCallSignal signal)
+    {
+        if (signal.TripId <= 0)
+        {
+            throw new HubException("Trip id is required for in-app call signaling.");
+        }
+
+        if (string.IsNullOrWhiteSpace(signal.CallId))
+        {
+            throw new HubException("Call id is required for in-app call signaling.");
+        }
+    }
 }
+
+public sealed record InAppCallSignal(
+    long TripId,
+    long? BookingId,
+    string CallId,
+    string? Sdp,
+    string? SdpType,
+    string? Candidate,
+    string? SdpMid,
+    int? SdpMLineIndex);

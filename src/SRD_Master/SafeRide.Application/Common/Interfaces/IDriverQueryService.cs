@@ -16,7 +16,18 @@ public interface IDriverQueryService
         Guid driverId,
         CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<DriverTripRequestDto>> GetOpenTripRequestsAsync(
+        Guid driverId,
+        CancellationToken cancellationToken);
+
     Task<bool> HasActiveTripAsync(
         Guid driverId,
+        CancellationToken cancellationToken);
+
+    Task<DriverWalletDto> GetWalletAsync(
+        Guid driverId,
+        WalletPeriod period,
+        int utcOffsetMinutes,
+        int recentLimit,
         CancellationToken cancellationToken);
 }

@@ -8,13 +8,18 @@ import 'package:http_parser/http_parser.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/network/auth_header.dart';
 import '../../../../../core/network/dio_client.dart';
+import '../../../../../core/localization/locale_provider.dart';
+import '../../../../../core/localization/api_error_localizer.dart';
 import '../../../../../core/services/socket_service.dart';
 import '../../../../../core/session/session_manager.dart';
+import '../../../trip_requests/data/datasources/driver_trip_request_remote_datasource.dart';
+import '../../../trip_requests/data/models/driver_trip_request_model.dart';
+import '../../../trip_requests/domain/repositories/driver_trip_request_repository.dart';
 
 enum DriverStatus { offline, online }
 
 class _PendingDriverLocationUpdate {
-  const _PendingDriverLocationUpdate({
+  _PendingDriverLocationUpdate({
     required this.latitude,
     required this.longitude,
     this.clientTimestampUtc,
@@ -57,8 +62,10 @@ class DriverDashboardProvider extends ChangeNotifier {
     SocketService? socketService,
     Dio? dio,
     SessionManager? sessionManager,
+    DriverTripRequestRepository? tripRequestRepository,
   }) : _socketService = socketService ?? SocketService(),
-       _dio = dio ?? DioClient().dio {
+       _dio = dio ?? DioClient().dio,
+       _tripRequestRepository = tripRequestRepository {
     _sessionExpiredSubscription = sessionManager?.sessionExpiredStream.listen((
       _,
     ) {
@@ -68,6 +75,7 @@ class DriverDashboardProvider extends ChangeNotifier {
 
   final SocketService _socketService;
   final Dio _dio;
+  final DriverTripRequestRepository? _tripRequestRepository;
   String? _accessToken;
   StreamSubscription<void>? _sessionExpiredSubscription;
   static const int _maxPendingLocationUpdates = 20;
@@ -90,6 +98,9 @@ class DriverDashboardProvider extends ChangeNotifier {
 
   TripRequest? _currentRequest;
   TripRequest? get currentRequest => _currentRequest;
+  final List<TripRequest> _openTripRequests = [];
+  UnmodifiableListView<TripRequest> get openTripRequests =>
+      UnmodifiableListView(_openTripRequests);
 
   bool _isResponding = false;
   bool get isResponding => _isResponding;
@@ -103,6 +114,16 @@ class DriverDashboardProvider extends ChangeNotifier {
 
   bool _isDemoMode = false;
   bool get isDemoMode => _isDemoMode;
+
+  String? _snackbarMessage;
+  String? get snackbarMessage => _snackbarMessage;
+
+  void clearSnackbarMessage() {
+    if (_snackbarMessage != null) {
+      _snackbarMessage = null;
+      notifyListeners();
+    }
+  }
 
   ActiveDriverTrip? _activeTrip;
   ActiveDriverTrip? get activeTrip => _activeTrip;
@@ -141,9 +162,13 @@ class DriverDashboardProvider extends ChangeNotifier {
 
   bool _isLoadingActiveTrip = false;
   bool get isLoadingActiveTrip => _isLoadingActiveTrip;
+  bool _isLoadingTripRequests = false;
+  bool get isLoadingTripRequests => _isLoadingTripRequests;
 
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
+  String? _tripRequestsErrorMessage;
+  String? get tripRequestsErrorMessage => _tripRequestsErrorMessage;
 
   Future<void> initializeRealtime(String accessToken) async {
     if (accessToken.isEmpty) {
@@ -158,6 +183,11 @@ class DriverDashboardProvider extends ChangeNotifier {
     } catch (error) {
       debugPrint('DRIVER_DASHBOARD: load active trip failed: $error');
     }
+    try {
+      await loadOpenTripRequests();
+    } catch (error) {
+      debugPrint('DRIVER_DASHBOARD: load trip requests failed: $error');
+    }
   }
 
   void _registerRealtimeHandlers() {
@@ -166,20 +196,44 @@ class DriverDashboardProvider extends ChangeNotifier {
         offerId: offer.offerId,
         bookingId: offer.bookingId,
         expectedIncome: 0,
-        pickupDistance: 'Đang tính',
-        pickupTime: offer.expiresAt == null ? '30 giây' : 'Sắp hết hạn',
+        pickupDistance: LocaleProvider.currentLocalizations.calculating,
+        pickupTime: offer.expiresAt == null
+            ? LocaleProvider.currentLocalizations.secondsRemaining(30)
+            : LocaleProvider.currentLocalizations.expiresSoon,
         pickupAddress: offer.message,
-        destinationAddress: 'Mở chi tiết chuyến sau khi nhận',
+        destinationAddress:
+            LocaleProvider.currentLocalizations.viewTripAfterAccept,
       );
       _hasNewRequest = true;
       notifyListeners();
+      loadOpenTripRequests();
     }, key: 'driverDashboardOfferReceived');
-    _socketService.onDriverOfferClosed((offerId) {
-      if (_currentRequest?.offerId == offerId) {
+    _socketService.onDriverOfferClosed(({offerId, bookingId}) {
+      final currentOfferId = _currentRequest?.offerId;
+      final currentBookingId = _currentRequest?.bookingId;
+
+      bool isMatch = false;
+      if (offerId != null && currentOfferId == offerId) isMatch = true;
+      if (bookingId != null && currentBookingId == bookingId) isMatch = true;
+
+      // Robust check: if we are waiting for confirmation and get any closed offer event for this driver,
+      // it's likely the one we are waiting for.
+      if (isMatch ||
+          (offerId == null &&
+              bookingId == null &&
+              _isWaitingForCustomerConfirmation)) {
+        if (currentBookingId != null) {
+          _socketService.leaveBooking(currentBookingId);
+        }
         _hasNewRequest = false;
         _currentRequest = null;
         _isWaitingForCustomerConfirmation = false;
+        _snackbarMessage =
+            LocaleProvider.currentLocalizations.customerCancelledDriverRequest;
         notifyListeners();
+      }
+      if (_activeTrip == null) {
+        loadOpenTripRequests();
       }
     }, key: 'driverDashboardOfferClosed');
     _socketService.onTripStatusChanged((update) {
@@ -259,7 +313,7 @@ class DriverDashboardProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('Failed to go online: $e');
-      _errorMessage = 'Không thể online. Vui lòng thử lại.';
+      _errorMessage = LocaleProvider.currentLocalizations.onlineFailed;
       notifyListeners();
       rethrow;
     }
@@ -297,10 +351,13 @@ class DriverDashboardProvider extends ChangeNotifier {
     _isDemoMode = false;
     _demoLat = null;
     _demoLng = null;
+    _openTripRequests.clear();
     _pendingLocationUpdates.clear();
     _isFlushingLocationUpdates = false;
     _isLoadingActiveTrip = false;
+    _isLoadingTripRequests = false;
     _errorMessage = null;
+    _tripRequestsErrorMessage = null;
     _tripAwaitingPaymentId = null;
     _clearActiveTrip();
     _status = DriverStatus.offline;
@@ -332,10 +389,13 @@ class DriverDashboardProvider extends ChangeNotifier {
       bookingId: 0,
       expectedIncome: 120000,
       pickupDistance: '1.5 km',
-      pickupTime: '5 phút',
+      pickupTime: LocaleProvider.currentLocalizations.minutesValue(5),
       pickupAddress: '80 Trần Duy Hưng, Cầu Giấy',
       destinationAddress: 'Sân bay Nội Bài, Sóc Sơn',
     );
+    _openTripRequests
+      ..clear()
+      ..add(_currentRequest!);
     _hasNewRequest = true;
     notifyListeners();
   }
@@ -360,12 +420,17 @@ class DriverDashboardProvider extends ChangeNotifier {
           headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
         ),
       );
+      // Join booking group to receive updates (like cancellation)
+      await _socketService.joinBooking(request.bookingId);
+
       // Wait for SignalR 'BookingDriverAssigned' event.
       _errorMessage = null;
+      loadOpenTripRequests();
       _isWaitingForCustomerConfirmation = true;
+      loadOpenTripRequests();
     } catch (e) {
       debugPrint('Failed to accept request: $e');
-      _errorMessage = 'Không thể nhận chuyến. Vui lòng thử lại.';
+      _errorMessage = LocaleProvider.currentLocalizations.acceptTripFailed;
       _hasNewRequest = false;
       _currentRequest = null;
     } finally {
@@ -391,13 +456,54 @@ class DriverDashboardProvider extends ChangeNotifier {
         ),
       );
       _errorMessage = null;
+      loadOpenTripRequests();
     } catch (e) {
       debugPrint('Failed to decline request: $e');
-      _errorMessage = 'Không thể từ chối chuyến. Vui lòng thử lại.';
+      _errorMessage = LocaleProvider.currentLocalizations.declineTripFailed;
     } finally {
       _hasNewRequest = false;
       _currentRequest = null;
       _isResponding = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadOpenTripRequests() async {
+    final token = _accessToken;
+    final repository = _tripRequestRepository;
+    if (token == null || token.isEmpty || repository == null) {
+      _openTripRequests.clear();
+      _tripRequestsErrorMessage = null;
+      _isLoadingTripRequests = false;
+      notifyListeners();
+      return;
+    }
+
+    if (_isLoadingTripRequests) {
+      return;
+    }
+
+    _isLoadingTripRequests = true;
+    _tripRequestsErrorMessage = null;
+    notifyListeners();
+
+    try {
+      final requests = await repository.getOpenTripRequests(token);
+      _openTripRequests
+        ..clear()
+        ..addAll(requests.map(_mapTripRequest));
+      _applyTripRequestState(requests);
+    } on DriverTripRequestApiException catch (exception) {
+      _tripRequestsErrorMessage = ApiErrorLocalizer.translate(
+        LocaleProvider.currentLocalizations,
+        fallback: exception.message,
+      );
+    } catch (e) {
+      debugPrint('Failed to load trip requests: $e');
+      _tripRequestsErrorMessage =
+          LocaleProvider.currentLocalizations.tripRequestsLoadFailed;
+    } finally {
+      _isLoadingTripRequests = false;
       notifyListeners();
     }
   }
@@ -578,7 +684,9 @@ class DriverDashboardProvider extends ChangeNotifier {
     final token = _accessToken;
     if (token == null) throw Exception('Not authenticated');
     if (evidenceFiles.isEmpty || evidenceFiles.length > 3) {
-      throw Exception('Cần từ 1 đến 3 ảnh bằng chứng.');
+      throw Exception(
+        LocaleProvider.currentLocalizations.evidencePhotoCountError,
+      );
     }
 
     final formFields = <String, dynamic>{};
@@ -679,8 +787,7 @@ class DriverDashboardProvider extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('Error loading active trip: $e');
-      _errorMessage =
-          'Không thể tải dữ liệu chuyến đi hiện tại. Vui lòng thử lại.';
+      _errorMessage = LocaleProvider.currentLocalizations.activeTripLoadFailed;
     } finally {
       _isLoadingActiveTrip = false;
       notifyListeners();
@@ -733,23 +840,33 @@ class DriverDashboardProvider extends ChangeNotifier {
     if (update.status == 'Cancelled' || update.status == 'Expired') {
       var changed = false;
       if (_activeTrip?.bookingId == update.bookingId) {
+        _socketService.leaveBooking(update.bookingId);
         _clearActiveTrip();
         changed = true;
       }
       if (_currentRequest?.bookingId == update.bookingId) {
+        _socketService.leaveBooking(update.bookingId);
         _hasNewRequest = false;
         _currentRequest = null;
         _isWaitingForCustomerConfirmation = false;
+        if (update.status == 'Cancelled') {
+          _snackbarMessage = LocaleProvider
+              .currentLocalizations
+              .customerCancelledDriverRequest;
+        }
         changed = true;
       }
       if (changed) {
         notifyListeners();
       }
+      loadOpenTripRequests();
     } else if (update.status == 'DriverAssigned' || update.tripId != null) {
       if (update.tripId != null) {
+        _socketService.leaveBooking(update.bookingId);
         _hasNewRequest = false;
         _currentRequest = null;
         _isWaitingForCustomerConfirmation = false;
+        _openTripRequests.clear();
         final oldTrip = _activeTrip;
         final sameTrip = oldTrip?.tripId == update.tripId!;
         _activeTrip = ActiveDriverTrip(
@@ -841,7 +958,7 @@ class DriverDashboardProvider extends ChangeNotifier {
         );
 
         if (response.statusCode == 204 && remainingRetries > 0) {
-          await Future.delayed(const Duration(seconds: 1));
+          await Future.delayed(Duration(seconds: 1));
           continue;
         }
 
@@ -904,6 +1021,85 @@ class DriverDashboardProvider extends ChangeNotifier {
     _activeTripDetailsFetches.clear();
   }
 
+  void _applyTripRequestState(List<DriverTripRequestModel> requests) {
+    if (_activeTrip != null) {
+      return;
+    }
+
+    DriverTripRequestModel? waitingRequest;
+    DriverTripRequestModel? sentRequest;
+    for (final request in requests) {
+      if (request.isDriverAccepted) {
+        waitingRequest ??= request;
+        continue;
+      }
+      if (request.isSent) {
+        sentRequest ??= request;
+      }
+    }
+
+    final selectedRequest = waitingRequest ?? sentRequest;
+    if (selectedRequest == null) {
+      _hasNewRequest = false;
+      _currentRequest = null;
+      _isWaitingForCustomerConfirmation = false;
+      return;
+    }
+
+    _currentRequest = _mapTripRequest(selectedRequest);
+    _hasNewRequest = selectedRequest.isSent;
+    _isWaitingForCustomerConfirmation = selectedRequest.isDriverAccepted;
+  }
+
+  TripRequest _mapTripRequest(DriverTripRequestModel request) {
+    return TripRequest(
+      offerId: request.offerId,
+      bookingId: request.bookingId,
+      expectedIncome: request.expectedIncome,
+      pickupDistance: _formatPickupDistance(request.pickupDistanceKm),
+      pickupTime: _formatPickupTime(
+        request.pickupDurationMinutes,
+        request.expiresAt,
+      ),
+      pickupAddress: request.pickupAddress,
+      destinationAddress: request.destinationAddress.trim().isEmpty
+          ? LocaleProvider.currentLocalizations.noDestination
+          : request.destinationAddress,
+    );
+  }
+
+  static String _formatPickupDistance(double? distanceKm) {
+    if (distanceKm == null || distanceKm <= 0) {
+      return LocaleProvider.currentLocalizations.calculating;
+    }
+
+    if (distanceKm < 1) {
+      return '${(distanceKm * 1000).round()} m';
+    }
+
+    final rounded = distanceKm >= 10 || distanceKm == distanceKm.roundToDouble()
+        ? distanceKm.toStringAsFixed(0)
+        : distanceKm.toStringAsFixed(1);
+    return '$rounded km';
+  }
+
+  static String _formatPickupTime(
+    int? pickupDurationMinutes,
+    DateTime? expiresAt,
+  ) {
+    if (pickupDurationMinutes != null && pickupDurationMinutes > 0) {
+      return LocaleProvider.currentLocalizations.minutesValue(
+        pickupDurationMinutes,
+      );
+    }
+
+    if (expiresAt != null) {
+      return LocaleProvider.currentLocalizations.expiresSoon;
+    }
+
+    return LocaleProvider.currentLocalizations.calculating;
+  }
+
   static String? _normalizeTripStatus(Object? value) {
     if (value == null) {
       return null;
@@ -947,7 +1143,7 @@ class DriverDashboardProvider extends ChangeNotifier {
 }
 
 class ActiveDriverTrip {
-  const ActiveDriverTrip({
+  ActiveDriverTrip({
     required this.bookingId,
     required this.tripId,
     required this.tripStatus,

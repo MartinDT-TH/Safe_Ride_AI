@@ -5,6 +5,7 @@ import 'package:pin_code_fields/pin_code_fields.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../../core/widgets/custom_button.dart';
 import '../providers/auth_provider.dart';
 import '../../../shared/onboarding/presentation/pages/role_selection_page.dart';
@@ -17,7 +18,7 @@ import '../../../driver/dashboard/presentation/pages/driver_dashboard_page.dart'
 class OtpPage extends StatefulWidget {
   final String phoneNumber;
 
-  const OtpPage({super.key, required this.phoneNumber});
+  OtpPage({super.key, required this.phoneNumber});
 
   @override
   State<OtpPage> createState() => _OtpPageState();
@@ -52,7 +53,7 @@ class _OtpPageState extends State<OtpPage> {
   void _startResendTimer() {
     _resendTimer?.cancel();
     setState(() => _resendRemainingSeconds = 60);
-    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    _resendTimer = Timer.periodic(Duration(seconds: 1), (timer) {
       if (!mounted) {
         timer.cancel();
         return;
@@ -75,7 +76,7 @@ class _OtpPageState extends State<OtpPage> {
   void _startOtpLockTimer(int seconds) {
     _otpLockTimer?.cancel();
     setState(() => _otpLockRemainingSeconds = seconds);
-    _otpLockTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    _otpLockTimer = Timer.periodic(Duration(seconds: 1), (timer) {
       if (!mounted) {
         timer.cancel();
         return;
@@ -113,14 +114,14 @@ class _OtpPageState extends State<OtpPage> {
     if (activeBooking != null) {
       // Force customer role
       roleProvider.setRole(AppValues.roleCustomer);
-      return const CustomerHomePage();
+      return CustomerHomePage();
     }
 
     // 2. No active booking, fallback to role logic
     if (roleProvider.isDriver) {
-      return const DriverDashboardPage();
+      return DriverDashboardPage();
     }
-    return const CustomerHomePage();
+    return CustomerHomePage();
   }
 
   @override
@@ -131,11 +132,11 @@ class _OtpPageState extends State<OtpPage> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF006B70)),
+          icon: Icon(Icons.arrow_back, color: Color(0xFF006B70)),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          AppStrings.appName,
+        title: Text(
+          context.l10n.appName,
           style: TextStyle(
             color: Color(0xFF006B70),
             fontWeight: FontWeight.bold,
@@ -156,43 +157,43 @@ class _OtpPageState extends State<OtpPage> {
                 child: SingleChildScrollView(
                   child: Column(
                     children: [
-                      const SizedBox(height: 48),
+                      SizedBox(height: 48),
                       // Lock Icon circular container
                       Center(
                         child: Container(
                           width: 120,
                           height: 120,
-                          decoration: const BoxDecoration(
+                          decoration: BoxDecoration(
                             color: Color(0xFFE8F2F2),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.lock_person_outlined,
                             size: 60,
                             color: Color(0xFF006B70),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 32),
-                      const Text(
-                        AuthStrings.otpTitle,
+                      SizedBox(height: 32),
+                      Text(
+                        context.l10n.otpTitle,
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFF1A1A1A),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: 16),
                       Text(
-                        AuthStrings.otpDescription(widget.phoneNumber),
+                        context.l10n.otpDescription(widget.phoneNumber),
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 15,
                           color: Color(0xFF666666),
                           height: 1.5,
                         ),
                       ),
-                      const SizedBox(height: 40),
+                      SizedBox(height: 40),
                       PinCodeTextField(
                         appContext: context,
                         length: 6,
@@ -206,8 +207,8 @@ class _OtpPageState extends State<OtpPage> {
                           borderRadius: BorderRadius.circular(12),
                           fieldHeight: 56,
                           fieldWidth: 46,
-                          activeColor: const Color(0xFF006B70),
-                          selectedColor: const Color(0xFF006B70),
+                          activeColor: Color(0xFF006B70),
+                          selectedColor: Color(0xFF006B70),
                           inactiveColor: Colors.grey.shade300,
                           activeFillColor: Colors.white,
                           inactiveFillColor: Colors.white,
@@ -215,38 +216,38 @@ class _OtpPageState extends State<OtpPage> {
                           borderWidth: 1,
                         ),
                         enableActiveFill: true,
-                        cursorColor: const Color(0xFF006B70),
+                        cursorColor: Color(0xFF006B70),
                         animationType: AnimationType.fade,
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: 16),
                       AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 200),
+                        duration: Duration(milliseconds: 200),
                         child: _canVerifyOtp
-                            ? const SizedBox(height: 20)
+                            ? SizedBox(height: 20)
                             : Text(
-                                '${AuthStrings.otpLockedPrefix}${_formatOtpLockTime()}',
-                                key: const ValueKey('otp-lock-countdown'),
+                                '${context.l10n.otpLockedPrefix}${_formatOtpLockTime()}',
+                                key: ValueKey('otp-lock-countdown'),
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 14,
                                   color: Color(0xFFC62828),
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: 16),
                       RichText(
                         text: TextSpan(
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 15,
                             color: Colors.grey,
                           ),
                           children: [
-                            const TextSpan(text: AuthStrings.resendAfter),
+                            TextSpan(text: context.l10n.resendAfter),
                             TextSpan(
                               text: _formatResendTime(),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: Color(0xFF006B70),
                                 fontWeight: FontWeight.bold,
                               ),
@@ -254,7 +255,7 @@ class _OtpPageState extends State<OtpPage> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      SizedBox(height: 8),
                       TextButton(
                         onPressed: _canResendOtp
                             ? () async {
@@ -270,18 +271,18 @@ class _OtpPageState extends State<OtpPage> {
                                   SnackBar(
                                     content: Text(
                                       ok
-                                          ? AuthStrings.otpResent
-                                          : AuthStrings.resendOtpFailed,
+                                          ? context.l10n.otpResent
+                                          : context.l10n.resendOtpFailed,
                                     ),
                                   ),
                                 );
                               }
                             : null,
                         child: Text(
-                          AuthStrings.resendOtp,
+                          context.l10n.resendOtp,
                           style: TextStyle(
                             color: _canResendOtp
-                                ? const Color(0xFF006B70)
+                                ? Color(0xFF006B70)
                                 : Colors.grey,
                             fontSize: 15,
                             fontWeight: _canResendOtp
@@ -297,14 +298,14 @@ class _OtpPageState extends State<OtpPage> {
               Consumer<AuthProvider>(
                 builder: (_, provider, child) {
                   return CustomButton(
-                    text: AppStrings.confirm,
+                    text: context.l10n.confirm,
                     isLoading: provider.isLoading,
                     onPressed: _canVerifyOtp
                         ? () async {
                             if (otpCode.length != 6) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(AuthStrings.otpRequired),
+                                SnackBar(
+                                  content: Text(context.l10n.otpRequired),
                                 ),
                               );
                               return;
@@ -336,7 +337,7 @@ class _OtpPageState extends State<OtpPage> {
                                       widget.phoneNumber,
                                 ),
                                 AuthNextStep.selectRole =>
-                                  const RoleSelectionPage(),
+                                  RoleSelectionPage(),
                                 AuthNextStep.customerHome =>
                                   await _getDestination(
                                     context,
@@ -365,8 +366,8 @@ class _OtpPageState extends State<OtpPage> {
                                 SnackBar(
                                   content: Text(
                                     retryAfterSeconds == null
-                                        ? AuthStrings.invalidOtp
-                                        : '${AuthStrings.otpLockedPrefix}${_formatDuration(retryAfterSeconds)}',
+                                        ? context.l10n.invalidOtp
+                                        : '${context.l10n.otpLockedPrefix}${_formatDuration(retryAfterSeconds)}',
                                   ),
                                 ),
                               );
@@ -376,7 +377,7 @@ class _OtpPageState extends State<OtpPage> {
                   );
                 },
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: 24),
             ],
           ),
         ),

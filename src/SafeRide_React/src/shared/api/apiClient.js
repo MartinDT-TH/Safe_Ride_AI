@@ -44,6 +44,28 @@ export async function apiRequest(path, { auth = true, headers, body, ...init } =
     }
     return response.json();
 }
+
+/** Download a protected API response without forcing JSON parsing. */
+export async function apiDownload(path, { auth = true, headers, ...init } = {}) {
+    const requestHeaders = new Headers(headers);
+    if (auth) {
+        const token = getAccessToken();
+        if (token) requestHeaders.set('Authorization', `Bearer ${token}`);
+    }
+    const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers: requestHeaders });
+    if (!response.ok) throw new ApiError(await readErrorMessage(response), response.status);
+    return {
+        blob: await response.blob(),
+        fileName: getDownloadFileName(response.headers.get('Content-Disposition')),
+    };
+}
+
+function getDownloadFileName(disposition) {
+    if (!disposition) return undefined;
+    const utf8 = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+    if (utf8) return decodeURIComponent(utf8[1]);
+    return disposition.match(/filename="?([^";]+)"?/i)?.[1];
+}
 async function readErrorMessage(response) {
     try {
         const payload = await response.json();

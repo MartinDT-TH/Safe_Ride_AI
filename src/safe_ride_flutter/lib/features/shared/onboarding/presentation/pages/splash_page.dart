@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:provider/provider.dart';
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../../core/session/session_manager.dart';
 import '../../../../../dependency_injection/injection.dart';
 import '../../../../auth/presentation/pages/login_page.dart';
@@ -15,7 +16,7 @@ import '../providers/role_provider.dart';
 import '../../presentation/pages/role_selection_page.dart';
 
 class SplashPage extends StatefulWidget {
-  const SplashPage({super.key});
+  SplashPage({super.key});
 
   @override
   State<SplashPage> createState() => _SplashPageState();
@@ -36,43 +37,43 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
     
     _moveController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 3500),
+      duration: Duration(milliseconds: 3500),
     );
 
     _wheelController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 400),
+      duration: Duration(milliseconds: 400),
     )..repeat();
 
     _vibrateController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 100),
+      duration: Duration(milliseconds: 100),
     )..repeat(reverse: true);
 
     _moveAnimation = Tween<double>(begin: -400.0, end: 0.0).animate(
       CurvedAnimation(
         parent: _moveController,
-        curve: const Interval(0.0, 0.8, curve: Curves.easeOutQuart),
+        curve: Interval(0.0, 0.8, curve: Curves.easeOutQuart),
       ),
     );
 
     _opacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _moveController,
-        curve: const Interval(0.0, 0.2, curve: Curves.easeIn),
+        curve: Interval(0.0, 0.2, curve: Curves.easeIn),
       ),
     );
 
     _textOpacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _moveController,
-        curve: const Interval(0.7, 1.0, curve: Curves.easeIn),
+        curve: Interval(0.7, 1.0, curve: Curves.easeIn),
       ),
     );
 
     _moveController.forward();
 
-    Timer(const Duration(seconds: 4), () {
+    Timer(Duration(seconds: 4), () {
       if (mounted) {
         _checkSessionAndNavigate();
       }
@@ -83,7 +84,7 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
     final auth = context.read<AuthProvider>();
     if (auth.isRestoringSession) {
       // If still restoring, wait a bit longer and check again
-      Future.delayed(const Duration(milliseconds: 500), _checkSessionAndNavigate);
+      Future.delayed(Duration(milliseconds: 500), _checkSessionAndNavigate);
       return;
     }
     unawaited(_navigateToNext(context));
@@ -108,25 +109,25 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
         final isDriverContinuation =
             restoredRole == AppValues.roleDriver || auth.isDriverEligible;
         destination = isDriverContinuation
-            ? const DriverDashboardPage()
-            : const CustomerHomePage();
+            ? DriverDashboardPage()
+            : CustomerHomePage();
       } else
       if (auth.isProfileComplete) {
         destination = restoredRole == AppValues.roleDriver
-            ? const DriverDashboardPage()
-            : const CustomerHomePage();
+            ? DriverDashboardPage()
+            : CustomerHomePage();
       } else if (auth.nextStep == AuthNextStep.completeProfile) {
         destination = EditProfilePage(
           requiredCompletion: true,
           phoneNumber: auth.phoneNumber,
         );
       } else if (auth.nextStep == AuthNextStep.selectRole) {
-        destination = const RoleSelectionPage();
+        destination = RoleSelectionPage();
       } else {
-        destination = const CustomerHomePage();
+        destination = CustomerHomePage();
       }
     } else {
-      destination = const LoginPage();
+      destination = LoginPage();
     }
 
     navigator.pushReplacement(
@@ -135,7 +136,7 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(opacity: animation, child: child);
         },
-        transitionDuration: const Duration(milliseconds: 800),
+        transitionDuration: Duration(milliseconds: 800),
       ),
     );
   }
@@ -211,7 +212,7 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
                         ),
                         // Car Body
                         CustomPaint(
-                          size: const Size(250, 120),
+                          size: Size(250, 120),
                           painter: SportCarPainter(primaryColor: AppColors.primary),
                         ),
                         // Rear Wheel
@@ -231,24 +232,24 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
                   ),
                 ),
                 
-                const SizedBox(height: 50),
+                SizedBox(height: 50),
                 
                 FadeTransition(
                   opacity: _textOpacityAnimation,
                   child: Column(
                     children: [
                       Text(
-                        AppStrings.appName.toUpperCase(),
-                        style: const TextStyle(
+                        context.l10n.appName.toUpperCase(),
+                        style: TextStyle(
                           fontSize: 42,
                           fontWeight: FontWeight.w900,
                           color: AppColors.primary,
                           letterSpacing: 14,
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      SizedBox(height: 12),
                       Text(
-                        AuthStrings.slogan,
+                        context.l10n.slogan,
                         style: TextStyle(
                           fontSize: 16,
                           color: AppColors.textSecondary.withOpacity(0.6),
@@ -295,7 +296,7 @@ class SportCarPainter extends CustomPainter {
     canvas.drawPath(bodyPath, paint);
 
     // 2. Windows - Dark Tinted
-    final windowPaint = Paint()..color = const Color(0xFF1A1A1A).withOpacity(0.85);
+    final windowPaint = Paint()..color = Color(0xFF1A1A1A).withOpacity(0.85);
     final windowPath = Path();
     windowPath.moveTo(65, 30);
     windowPath.lineTo(125, 30);
@@ -314,10 +315,10 @@ class SportCarPainter extends CustomPainter {
       ..color = Colors.black.withOpacity(0.2)
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
-    canvas.drawLine(const Offset(40, 75), const Offset(180, 75), accentPaint);
+    canvas.drawLine(Offset(40, 75), Offset(180, 75), accentPaint);
 
     // Headlight (Yellow-White)
-    final lightPaint = Paint()..color = const Color(0xFFFFFFD0);
+    final lightPaint = Paint()..color = Color(0xFFFFFFD0);
     canvas.drawRRect(
       RRect.fromLTRBR(220, 68, 232, 75, const Radius.circular(2)),
       lightPaint,
@@ -337,7 +338,7 @@ class SportCarPainter extends CustomPainter {
 class _SportWheel extends StatelessWidget {
   final AnimationController controller;
 
-  const _SportWheel({required this.controller});
+  _SportWheel({required this.controller});
 
   @override
   Widget build(BuildContext context) {
@@ -353,9 +354,9 @@ class _SportWheel extends StatelessWidget {
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          color: const Color(0xFF111111),
+          color: Color(0xFF111111),
           shape: BoxShape.circle,
-          border: Border.all(color: const Color(0xFF222222), width: 4),
+          border: Border.all(color: Color(0xFF222222), width: 4),
         ),
         child: Stack(
           alignment: Alignment.center,
@@ -388,7 +389,7 @@ class _SportWheel extends StatelessWidget {
             Container(
               width: 6,
               height: 6,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: Colors.black,
                 shape: BoxShape.circle,
               ),

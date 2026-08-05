@@ -4,6 +4,7 @@ namespace SafeRide.Contracts.Responses.Bookings;
 
 public sealed record BookingHistoryResponse(
     long Id,
+    long? TripId,
     string PickupAddress,
     string DestinationAddress,
     DateTime OccurredAt,
@@ -15,4 +16,5 @@ public sealed record BookingHistoryResponse(
     bool IsMotorbike,
     string? DriverName,
     double? DriverRating,
-    string? DriverAvatarUrl);
+    string? DriverAvatarUrl,
+    bool HasReported);

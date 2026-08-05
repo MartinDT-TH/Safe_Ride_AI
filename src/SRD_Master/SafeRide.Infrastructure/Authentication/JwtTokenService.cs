@@ -73,30 +73,24 @@ public sealed class JwtTokenService : IJwtTokenService
 
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
 
+        var accessTokenLifetime = roles.Contains("Admin", StringComparer.OrdinalIgnoreCase)
+            ? TimeSpan.FromDays(_options.AdminAccessTokenDays)
+            : TimeSpan.FromMinutes(_options.AccessTokenMinutes);
+
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.SecretKey));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
         var accessTokenMinutes = context.AccessTokenMinutes ?? _options.AccessTokenMinutes;
         var token = new JwtSecurityToken(
-            new JwtHeader(credentials),
-            new JwtPayload(
-                _options.Issuer,
-                _options.Audience,
-                claims,
-                notBefore: null,
-                expires: DateTime.UtcNow.AddMinutes(accessTokenMinutes)));
-        if (roles.Count > 0)
-        {
-            object rolePayload = roles.Count == 1
-                ? roles[0]
-                : roles.ToArray();
-            token.Payload["role"] = rolePayload;
-            token.Payload[ClaimTypes.Role] = rolePayload;
-        }
+            issuer: _options.Issuer,
+            audience: _options.Audience,
+            claims: claims,
+            expires: DateTime.UtcNow.Add(accessTokenLifetime),
+            signingCredentials: credentials);
 
         return Task.FromResult((
             new JwtSecurityTokenHandler().WriteToken(token),
             jwtId,
-            accessTokenMinutes * 60));
+            checked((int)accessTokenLifetime.TotalSeconds)));
     }
 
     public string GenerateRawRefreshToken()

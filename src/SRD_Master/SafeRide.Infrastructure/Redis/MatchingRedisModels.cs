@@ -38,4 +38,7 @@ public sealed record DriverActiveTripCache(
     Guid DriverId,
     Guid CustomerId,
     TripStatus TripStatus,
-    DateTime DriverAssignedAt);
+    DateTime DriverAssignedAt,
+    string? RoutePolyline = null,
+    double? DestinationLatitude = null,
+    double? DestinationLongitude = null);

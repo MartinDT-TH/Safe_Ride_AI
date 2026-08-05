@@ -126,6 +126,84 @@ namespace SafeRide.Infrastructure.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("SafeRide.Domain.Entities.AdminNotification", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasMaxLength(140)
+                        .HasColumnType("nvarchar(140)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("(getutcdate())");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("NotificationType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<DateTime?>("RejectedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("RejectedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("RejectedReason")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasDefaultValueSql("('Pending')");
+
+                    b.Property<string>("TargetAudience")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_AdminNotifications");
+
+                    b.HasIndex("ApprovedBy");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("NotificationType");
+
+                    b.HasIndex("RejectedBy");
+
+                    b.HasIndex("TargetAudience");
+
+                    b.HasIndex("Status", "CreatedAt");
+
+                    b.ToTable("AdminNotifications", (string)null);
+                });
+
             modelBuilder.Entity("SafeRide.Domain.Entities.AspNetRole", b =>
                 {
                     b.Property<Guid>("Id")
@@ -657,6 +735,9 @@ namespace SafeRide.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("TranslationsJson")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uniqueidentifier");
@@ -1700,6 +1781,34 @@ namespace SafeRide.Infrastructure.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.AdminNotification", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.AspNetUser", "ApprovedByUser")
+                        .WithMany()
+                        .HasForeignKey("ApprovedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_AdminNotifications_ApprovedByUser");
+
+                    b.HasOne("SafeRide.Domain.Entities.AspNetUser", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_AdminNotifications_CreatedByUser");
+
+                    b.HasOne("SafeRide.Domain.Entities.AspNetUser", "RejectedByUser")
+                        .WithMany()
+                        .HasForeignKey("RejectedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_AdminNotifications_RejectedByUser");
+
+                    b.Navigation("ApprovedByUser");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("RejectedByUser");
                 });
 
             modelBuilder.Entity("SafeRide.Domain.Entities.Booking", b =>

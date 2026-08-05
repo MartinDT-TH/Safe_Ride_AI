@@ -51,6 +51,14 @@ abstract class BookingRepository {
 
   Future<void> completeTrip(String accessToken, {required int tripId});
 
+  Future<void> triggerSOS(
+    String accessToken, {
+    required int tripId,
+    required double latitude,
+    required double longitude,
+    required String message,
+  });
+
   Future<void> confirmCustomerReturn(String accessToken, {required int tripId});
 
   Future<void> submitTripRating(
@@ -58,6 +66,13 @@ abstract class BookingRepository {
     required int tripId,
     required int ratingScore,
     String? comment,
+  });
+
+  Future<void> submitTripReport(
+    String accessToken, {
+    required int bookingId,
+    required String subject,
+    required String description,
   });
 
   Future<BookingResponse> rejectDriver(

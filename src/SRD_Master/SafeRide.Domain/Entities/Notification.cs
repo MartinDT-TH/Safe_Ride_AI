@@ -15,6 +15,7 @@ public partial class Notification
     public string Content { get; set; } = null!;
     public string? NotificationType { get; set; }
     public long? ReferenceId { get; set; }
+    public string? TranslationsJson { get; set; }
 
     public bool IsRead { get; set; } = false;
     public DateTime SentAt { get; set; } = DateTime.UtcNow;

@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../application/services/identity_ocr_scanner.dart';
 import '../../../../../core/constants/app_colors.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../../core/storage/secure_storage_service.dart';
 import '../../../../../core/widgets/custom_button.dart';
 import '../../../../../dependency_injection/injection.dart';
@@ -15,7 +16,7 @@ import '../../data/datasources/identity_verification_remote_datasource.dart';
 import '../../data/models/identity_verification_submission.dart';
 
 class CriminalRecordUploadPage extends StatefulWidget {
-  const CriminalRecordUploadPage({super.key, this.submission});
+  CriminalRecordUploadPage({super.key, this.submission});
 
   final IdentityVerificationSubmission? submission;
 
@@ -46,15 +47,15 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
   Future<void> _pickFile() async {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) => SafeArea(
         child: Wrap(
           children: [
             ListTile(
-              leading: const Icon(Icons.camera_alt),
-              title: const Text('Chụp ảnh'),
+              leading: Icon(Icons.camera_alt),
+              title: Text(context.l10n.takePhoto),
               onTap: () async {
                 Navigator.pop(context);
                 final XFile? image = await _picker.pickImage(source: ImageSource.camera);
@@ -62,8 +63,8 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.photo_library),
-              title: const Text('Chọn từ thư viện'),
+              leading: Icon(Icons.photo_library),
+              title: Text(context.l10n.chooseFromGallery),
               onTap: () async {
                 Navigator.pop(context);
                 final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
@@ -84,11 +85,11 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF263238)),
+          icon: Icon(Icons.arrow_back, color: Color(0xFF263238)),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          'Xác minh danh tính',
+        title: Text(
+          context.l10n.identityVerification,
           style: TextStyle(
             color: AppColors.primary,
             fontSize: 18,
@@ -99,21 +100,21 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
       ),
       body: Column(
         children: [
-          const Divider(height: 1, color: Color(0xFFF0F0F0)),
+          Divider(height: 1, color: Color(0xFFF0F0F0)),
           Expanded(
             child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
+              physics: BouncingScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 20),
+                  SizedBox(height: 20),
                   _buildStepHeader(),
-                  const SizedBox(height: 32),
+                  SizedBox(height: 32),
                   
-                  const Center(
+                  Center(
                     child: Text(
-                      'Lý lịch tư pháp',
+                      context.l10n.criminalRecord,
                       style: TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.w800,
@@ -122,9 +123,9 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Vui lòng cung cấp Lý lịch tư pháp (Bản số 1 hoặc số 2) được cấp không quá 6 tháng để đảm bảo an toàn cho hành khách.',
+                  SizedBox(height: 12),
+                  Text(
+                    context.l10n.criminalRecordInstruction,
                     style: TextStyle(
                       fontSize: 16,
                       color: Color(0xFF607D8B),
@@ -133,26 +134,26 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 24),
+                  SizedBox(height: 24),
                   
                   _buildRequirementsBox(),
-                  const SizedBox(height: 32),
+                  SizedBox(height: 32),
                   
                   _buildUploadArea(),
                   if (_isScanning || _ocrRawText != null) ...[
-                    const SizedBox(height: 12),
+                    SizedBox(height: 12),
                     _buildOcrStatus(),
                   ],
-                  const SizedBox(height: 24),
+                  SizedBox(height: 24),
                   
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.access_time, color: Color(0xFF607D8B), size: 24),
-                      const SizedBox(width: 12),
-                      const Expanded(
+                      Icon(Icons.access_time, color: Color(0xFF607D8B), size: 24),
+                      SizedBox(width: 12),
+                      Expanded(
                         child: Text(
-                          'Hồ sơ của bạn sẽ được xét duyệt trong vòng 24-48 giờ làm việc.',
+                          context.l10n.reviewWithinHours,
                           style: TextStyle(
                             fontSize: 15,
                             color: Color(0xFF455A64),
@@ -163,7 +164,7 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 40),
+                  SizedBox(height: 40),
                 ],
               ),
             ),
@@ -178,12 +179,12 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
             BoxShadow(
               color: Colors.black.withOpacity(0.05),
               blurRadius: 10,
-              offset: const Offset(0, -5),
+              offset: Offset(0, -5),
             ),
           ],
         ),
         child: CustomButton(
-          text: _isSubmitting ? 'Đang gửi hồ sơ...' : 'Hoàn tất & Gửi hồ sơ',
+          text: _isSubmitting ? context.l10n.submittingApplication : context.l10n.completeAndSubmit,
           onPressed: _hasSelectedFile && !_isSubmitting ? _submitProfile : null,
         ),
       ),
@@ -195,9 +196,9 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: const [
+          children: [
             Text(
-              'Bước 3/3',
+              context.l10n.stepThreeOfThree,
               style: TextStyle(
                 color: AppColors.primary,
                 fontWeight: FontWeight.w800,
@@ -205,7 +206,7 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
               ),
             ),
             Text(
-              'Tải lên Lý lịch tư pháp',
+              context.l10n.uploadCriminalRecord,
               style: TextStyle(
                 color: Color(0xFF78909C),
                 fontWeight: FontWeight.w600,
@@ -214,10 +215,10 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: 12),
         ClipRRect(
           borderRadius: BorderRadius.circular(10),
-          child: const LinearProgressIndicator(
+          child: LinearProgressIndicator(
             value: 1.0,
             minHeight: 8,
             backgroundColor: Color(0xFFF0F0F0),
@@ -232,30 +233,30 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFE1EAEB),
+        color: Color(0xFFE1EAEB),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline, color: AppColors.primary, size: 24),
-          const SizedBox(width: 12),
+          Icon(Icons.info_outline, color: AppColors.primary, size: 24),
+          SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Yêu cầu tải lên',
+                Text(
+                  context.l10n.uploadRequirements,
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
                     color: Color(0xFF263238),
                   ),
                 ),
-                const SizedBox(height: 4),
-                _buildBulletPoint('Ảnh chụp rõ nét, không bị lóa sáng.'),
-                _buildBulletPoint('Hiển thị đầy đủ 4 góc của tài liệu.'),
-                _buildBulletPoint('Định dạng hỗ trợ: JPG, PNG, PDF (Tối đa 10MB).'),
+                SizedBox(height: 4),
+                _buildBulletPoint(context.l10n.clearNoGlare),
+                _buildBulletPoint(context.l10n.allFourCorners),
+                _buildBulletPoint(context.l10n.supportedDocumentFormats),
               ],
             ),
           ),
@@ -269,7 +270,7 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
       padding: const EdgeInsets.only(top: 4),
       child: Text(
         '• $text',
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 14,
           color: Color(0xFF455A64),
           height: 1.4,
@@ -284,7 +285,7 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
       onTap: _pickFile,
       child: CustomPaint(
         painter: _DashedRectPainter(
-          color: _hasSelectedFile ? AppColors.primary : const Color(0xFFCFD8DC),
+          color: _hasSelectedFile ? AppColors.primary : Color(0xFFCFD8DC),
         ),
         child: Container(
           width: double.infinity,
@@ -297,19 +298,19 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
               if (!_hasSelectedFile) ...[
                 Container(
                   padding: const EdgeInsets.all(16),
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     color: Color(0xFFF5F5F5),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.file_upload_outlined,
                     color: AppColors.primary,
                     size: 36,
                   ),
                 ),
-                const SizedBox(height: 24),
-                const Text(
-                  'Nhấn để tải lên hoặc kéo thả file vào đây',
+                SizedBox(height: 24),
+                Text(
+                  context.l10n.tapToUploadDocument,
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
@@ -317,24 +318,24 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Hỗ trợ ảnh chụp hoặc file scan (.pdf)',
+                SizedBox(height: 8),
+                Text(
+                  context.l10n.photoOrPdfSupported,
                   style: TextStyle(
                     fontSize: 14,
                     color: Color(0xFF78909C),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 24),
+                SizedBox(height: 24),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEEEEEE),
+                    color: Color(0xFFEEEEEE),
                     borderRadius: BorderRadius.circular(100),
                   ),
-                  child: const Text(
-                    'Chọn tài liệu',
+                  child: Text(
+                    context.l10n.chooseDocument,
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w800,
@@ -354,20 +355,20 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
                         )
                       : const SizedBox.shrink(),
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.check_circle, color: Colors.green, size: 20),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Đã chọn tài liệu',
+                    Icon(Icons.check_circle, color: Colors.green, size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      context.l10n.documentSelected,
                       style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(width: 16),
+                    SizedBox(width: 16),
                     TextButton(
                       onPressed: _pickFile,
-                      child: const Text('Thay đổi'),
+                      child: Text(context.l10n.change),
                     ),
                   ],
                 ),
@@ -384,9 +385,9 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF8E1),
+        color: Color(0xFFFFF8E1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFFFE082)),
+        border: Border.all(color: Color(0xFFFFE082)),
       ),
       child: Row(
         children: [
@@ -395,13 +396,13 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
             color: AppColors.primary,
             size: 20,
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: 8),
           Expanded(
             child: Text(
               _isScanning
-                  ? 'Đang quét OCR trên thiết bị...'
-                  : 'OCR đã đọc nội dung lý lịch tư pháp',
-              style: const TextStyle(
+                  ? context.l10n.ocrScanningOnDevice
+                  : context.l10n.criminalRecordOcrRead,
+              style: TextStyle(
                 color: Color(0xFF455A64),
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
@@ -428,12 +429,12 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
       if (!mounted) return;
       setState(() => _ocrRawText = result.rawText);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đã quét OCR lý lịch tư pháp.')),
+        SnackBar(content: Text(context.l10n.criminalRecordScanned)),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Không thể quét OCR từ tài liệu này.')),
+        SnackBar(content: Text(context.l10n.documentOcrFailed)),
       );
     } finally {
       if (mounted) setState(() => _isScanning = false);
@@ -449,28 +450,28 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(height: 20),
-            const Icon(Icons.check_circle_outline, color: AppColors.primary, size: 80),
-            const SizedBox(height: 24),
-            const Text(
-              'Gửi hồ sơ thành công!',
+            SizedBox(height: 20),
+            Icon(Icons.check_circle_outline, color: AppColors.primary, size: 80),
+            SizedBox(height: 24),
+            Text(
+              context.l10n.applicationSubmitted,
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 12),
-            const Text(
-              'Hồ sơ của bạn đang được xử lý. Chúng tôi sẽ thông báo kết quả cho bạn sớm nhất.',
+            SizedBox(height: 12),
+            Text(
+              context.l10n.applicationProcessing,
               textAlign: TextAlign.center,
               style: TextStyle(color: Color(0xFF78909C), height: 1.4),
             ),
-            const SizedBox(height: 32),
+            SizedBox(height: 32),
             CustomButton(
-              text: 'Về trang chủ',
+              text: context.l10n.backToHome,
               onPressed: () {
                 Navigator.of(dialogContext).pop();
                 if (!mounted) return;
                 Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const CustomerHomePage()),
+                  MaterialPageRoute(builder: (_) => CustomerHomePage()),
                   (route) => false,
                 );
               },
@@ -489,7 +490,7 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
 
     if (token == null || token.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')),
+        SnackBar(content: Text(context.l10n.sessionExpired)),
       );
       return;
     }
@@ -509,7 +510,7 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Không thể gửi hồ sơ. Vui lòng thử lại.')),
+        SnackBar(content: Text(context.l10n.applicationSubmitFailed)),
       );
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
@@ -522,7 +523,7 @@ class _CriminalRecordUploadPageState extends State<CriminalRecordUploadPage> {
       return data['message'].toString();
     }
 
-    return 'Không thể gửi hồ sơ. Vui lòng thử lại.';
+    return context.l10n.applicationSubmitFailed;
   }
 }
 

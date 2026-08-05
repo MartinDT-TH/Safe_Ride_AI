@@ -108,6 +108,23 @@ class BookingRepositoryImpl implements BookingRepository {
   }
 
   @override
+  Future<void> triggerSOS(
+    String accessToken, {
+    required int tripId,
+    required double latitude,
+    required double longitude,
+    required String message,
+  }) {
+    return _remoteDatasource.triggerSOS(
+      accessToken,
+      tripId: tripId,
+      latitude: latitude,
+      longitude: longitude,
+      message: message,
+    );
+  }
+
+  @override
   Future<void> confirmCustomerReturn(
     String accessToken, {
     required int tripId,
@@ -127,6 +144,21 @@ class BookingRepositoryImpl implements BookingRepository {
       tripId: tripId,
       ratingScore: ratingScore,
       comment: comment,
+    );
+  }
+
+  @override
+  Future<void> submitTripReport(
+    String accessToken, {
+    required int bookingId,
+    required String subject,
+    required String description,
+  }) {
+    return _remoteDatasource.submitTripReport(
+      accessToken,
+      bookingId: bookingId,
+      subject: subject,
+      description: description,
     );
   }
 

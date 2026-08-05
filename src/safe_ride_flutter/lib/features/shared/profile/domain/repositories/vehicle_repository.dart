@@ -9,4 +9,3 @@ abstract class VehicleRepository {
 
   Future<void> deleteVehicle(String accessToken, int id);
 }
-

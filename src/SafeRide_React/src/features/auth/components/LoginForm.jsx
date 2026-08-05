@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faEnvelope, faLock, faEye, faEyeSlash, faArrowRight } from '@fortawesome/free-solid-svg-icons';
-import { faGoogle } from '@fortawesome/free-brands-svg-icons';
 import { useAppDispatch } from '../../../app/hooks';
 import { loginSuccess } from '../authSlice';
 import { apiRequest, saveAuthTokens } from '../../../shared/api/apiClient';
@@ -20,15 +19,13 @@ function LoginForm() {
         setError(null);
         setIsSubmitting(true);
         try {
-            const response = await apiRequest('/auth/demo-login', {
+            const response = await apiRequest('/admin/auth/login', {
                 auth: false,
                 method: 'POST',
                 body: JSON.stringify({
-                    provider: 'Google',
-                    email: email || 'admin@saferide.com',
-                    fullName: 'Quản trị viên',
-                    role: 'Admin',
-                    deviceName: 'SafeRide Admin Console',
+                    email,
+                    password,
+                    deviceName: 'SafeRide Admin Web',
                 }),
             });
             saveAuthTokens(response.accessToken, response.refreshToken);
@@ -48,10 +45,6 @@ function LoginForm() {
             setIsSubmitting(false);
         }
     };
-    const handleGoogleLogin = () => {
-        // TODO: integrate with Google OAuth
-        console.log('Google login clicked');
-    };
     const passwordToggle = (<button type="button" className="password-toggle-btn" id="toggle-password" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}>
       <FontAwesomeIcon icon={showPassword ? faEyeSlash : faEye}/>
     </button>);
@@ -69,9 +62,9 @@ function LoginForm() {
 
       {/* Form */}
       <form className="login-form" id="login-form" onSubmit={handleSubmit}>
-        <FormInput label="Email hoặc Tên đăng nhập" inputId="login-email" type="text" placeholder="admin@saferide.com" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" leftIcon={<FontAwesomeIcon icon={faEnvelope}/>}/>
+        <FormInput label="Email quản trị" inputId="login-email" type="email" placeholder="admin@saferide.com" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" required leftIcon={<FontAwesomeIcon icon={faEnvelope}/>}/>
 
-        <FormInput label="Mật khẩu" inputId="login-password" type={showPassword ? 'text' : 'password'} placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" leftIcon={<FontAwesomeIcon icon={faLock}/>} rightAction={passwordToggle}/>
+        <FormInput label="Mật khẩu" inputId="login-password" type={showPassword ? 'text' : 'password'} placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required leftIcon={<FontAwesomeIcon icon={faLock}/>} rightAction={passwordToggle}/>
 
         <FormCheckbox label="Ghi nhớ đăng nhập" checkboxId="remember-me" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)}/>
 
@@ -85,16 +78,6 @@ function LoginForm() {
         </Button>
       </form>
 
-      {/* Divider */}
-      <div className="login-divider" id="login-divider">
-        <span>HOẶC</span>
-      </div>
-
-      {/* Google login */}
-      <Button type="button" variant="outline" id="google-login-btn" onClick={handleGoogleLogin}>
-        <FontAwesomeIcon icon={faGoogle} style={{ color: '#4285F4' }}/>
-        <span>Đăng nhập với Google</span>
-      </Button>
     </>);
 }
 export default LoginForm;

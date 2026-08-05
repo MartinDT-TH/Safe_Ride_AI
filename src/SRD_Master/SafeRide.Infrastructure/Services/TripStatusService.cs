@@ -436,6 +436,10 @@ public sealed class TripStatusService : ITripStatusService
         {
             await _redisService.RemoveAsync(RedisKeys.TripLive(trip.Id));
             await _redisService.RemoveAsync(RedisKeys.DriverActiveTrip(trip.DriverId));
+            await _redisService.ExpireAsync(
+                RedisKeys.TripChatMessages(trip.Id),
+                TimeSpan.FromHours(2),
+                cancellationToken);
         }
         else
         {
@@ -505,7 +509,10 @@ public sealed class TripStatusService : ITripStatusService
             trip.DriverId,
             trip.Booking.CustomerId,
             trip.TripStatus,
-            assignedAt);
+            assignedAt,
+            trip.Booking.RoutePolyline,
+            trip.Booking.DestinationLocation?.Y,
+            trip.Booking.DestinationLocation?.X);
 
         await _redisService.SetAsync(
             RedisKeys.TripLive(trip.Id),

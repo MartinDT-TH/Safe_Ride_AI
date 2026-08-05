@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 
 class RecentTripCard extends StatelessWidget {
   final String pickup;
@@ -6,7 +7,7 @@ class RecentTripCard extends StatelessWidget {
   final String time;
   final VoidCallback? onRebook;
 
-  const RecentTripCard({
+  RecentTripCard({
     super.key,
     required this.pickup,
     required this.destination,
@@ -29,12 +30,8 @@ class RecentTripCard extends StatelessWidget {
             children: [
               Column(
                 children: [
-                  const Icon(Icons.circle, color: Color(0xFF006B70), size: 10),
-                  Container(
-                    width: 1,
-                    height: 24,
-                    color: Colors.grey.shade300,
-                  ),
+                  Icon(Icons.circle, color: Color(0xFF006B70), size: 10),
+                  Container(width: 1, height: 24, color: Colors.grey.shade300),
                   Container(
                     width: 10,
                     height: 10,
@@ -44,28 +41,36 @@ class RecentTripCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(width: 16),
+              SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       pickup,
-                      style: const TextStyle(fontSize: 15, color: Color(0xFF333333), fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: Color(0xFF333333),
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                    const SizedBox(height: 14),
+                    SizedBox(height: 14),
                     Text(
                       destination,
-                      style: const TextStyle(fontSize: 15, color: Color(0xFF333333), fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: Color(0xFF333333),
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           Divider(color: Colors.grey.shade100, height: 1),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -78,16 +83,16 @@ class RecentTripCard extends StatelessWidget {
                 child: ElevatedButton(
                   onPressed: onRebook ?? () {},
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE8F2F2),
-                    foregroundColor: const Color(0xFF006B70),
+                    backgroundColor: Color(0xFFE8F2F2),
+                    foregroundColor: Color(0xFF006B70),
                     elevation: 0,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
                     ),
                   ),
-                  child: const Text(
-                    'Đặt lại',
+                  child: Text(
+                    context.l10n.rebook,
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -99,4 +104,3 @@ class RecentTripCard extends StatelessWidget {
     );
   }
 }
-

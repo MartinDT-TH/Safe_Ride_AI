@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import '../providers/home_provider.dart';
 import '../widgets/customer_bottom_nav_bar.dart';
 import '../widgets/quick_action_item.dart';
@@ -21,14 +21,17 @@ import '../../../../customer/booking/presentation/pages/booking_options_page.dar
 import '../../../../customer/booking/presentation/pages/promotion_page.dart';
 import '../../../../customer/booking/presentation/pages/trip_tracking_page.dart';
 import '../../../../customer/booking/presentation/providers/booking_provider.dart';
+import '../../../../customer/ai_chat/presentation/widgets/ai_chat_sheet.dart';
 import '../../../../shared/history/presentation/pages/history_page.dart';
 import '../../../../trip_sharing/trip_share_deep_link_coordinator.dart';
 import '../../../../trip_sharing/presentation/pages/shared_trip_tracking_page.dart';
 import '../../../../trip_sharing/presentation/providers/received_trip_shares_provider.dart';
 import '../../../../../dependency_injection/injection.dart';
+import '../../../../shared/notifications/presentation/pages/notifications_page.dart';
+import '../../../../shared/notifications/presentation/providers/notification_provider.dart';
 
 class CustomerHomePage extends StatefulWidget {
-  const CustomerHomePage({super.key});
+  CustomerHomePage({super.key});
 
   @override
   State<CustomerHomePage> createState() => _CustomerHomePageState();
@@ -80,6 +83,8 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     }
 
     context.read<HomeProvider>().loadHomeData();
+    context.read<BookingProvider>().loadAvailablePromotions(auth.token!);
+    context.read<NotificationProvider>().initialize(auth.token);
     _loadActiveBooking(auth.token);
     context.read<ReceivedTripSharesProvider>().load();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -106,6 +111,9 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     final auth = context.watch<AuthProvider>();
     final bookingProvider = context.watch<BookingProvider>();
     final homeProvider = context.watch<HomeProvider>();
+    final hasUnreadNotifications = context.select<NotificationProvider, bool>(
+      (provider) => provider.unreadCount > 0,
+    );
 
     final activeBooking = bookingProvider.activeBooking;
     final activePickup = bookingProvider.activePickup ?? activeBooking?.pickup;
@@ -125,8 +133,8 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
               vehicle: activeVehicle,
               onSwitchTab: (index) => homeProvider.setSelectedIndex(index),
             )
-          : const HistoryPage(),
-      const ProfilePage(),
+          : HistoryPage(),
+      ProfilePage(),
     ];
 
     final selectedIndex = homeProvider.selectedIndex;
@@ -145,22 +153,20 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),
-              title: const Text('Thoát ứng dụng?'),
-              content: const Text(
-                'Bạn có chắc chắn muốn thoát khỏi SafeRide không?',
-              ),
+              title: Text(context.l10n.exitAppQuestion),
+              content: Text(context.l10n.exitAppDescription),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context, false),
-                  child: const Text(
-                    'Hủy',
+                  child: Text(
+                    context.l10n.cancel,
                     style: TextStyle(color: Colors.grey),
                   ),
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(context, true),
                   style: TextButton.styleFrom(foregroundColor: Colors.red),
-                  child: const Text('Thoát'),
+                  child: Text(context.l10n.exit),
                 ),
               ],
             ),
@@ -172,7 +178,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
         }
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFFFCF9F9),
+        backgroundColor: Color(0xFFFCF9F9),
         appBar: selectedIndex == 0
             ? AppBar(
                 backgroundColor: Colors.white,
@@ -182,12 +188,12 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                   child: Padding(
                     padding: const EdgeInsets.only(left: 16, top: 8, bottom: 8),
                     child: CircleAvatar(
-                      backgroundColor: const Color(0xFFE8F2F2),
+                      backgroundColor: Color(0xFFE8F2F2),
                       backgroundImage: _avatarImage(auth.avatarUrl),
                       child: _avatarImage(auth.avatarUrl) == null
                           ? Text(
                               _initials(auth.fullName),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: Color(0xFF006B70),
                                 fontWeight: FontWeight.bold,
                               ),
@@ -196,8 +202,8 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                     ),
                   ),
                 ),
-                title: const Text(
-                  AppStrings.appName,
+                title: Text(
+                  'SafeRide',
                   style: TextStyle(
                     color: Color(0xFF006B70),
                     fontWeight: FontWeight.bold,
@@ -210,36 +216,43 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                     alignment: Alignment.center,
                     children: [
                       IconButton(
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.notifications_none_rounded,
                           color: Color(0xFF006B70),
                           size: 28,
                         ),
-                        onPressed: () {},
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => NotificationsPage(),
+                            ),
+                          );
+                        },
                       ),
-                      Positioned(
-                        top: 14,
-                        right: 14,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
+                      if (hasUnreadNotifications)
+                        Positioned(
+                          top: 14,
+                          right: 14,
+                          child: Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
                           ),
                         ),
-                      ),
                     ],
                   ),
-                  const SizedBox(width: 8),
+                  SizedBox(width: 8),
                 ],
               )
             : (selectedIndex == 1 && activeBooking == null
                   ? AppBar(
                       backgroundColor: Colors.white,
                       elevation: 0,
-                      title: const Text(
-                        'Hoạt động',
+                      title: Text(
+                        context.l10n.activity,
                         style: TextStyle(
                           color: Color(0xFF1A1A1A),
                           fontWeight: FontWeight.bold,
@@ -249,6 +262,15 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                     )
                   : null),
         body: IndexedStack(index: selectedIndex, children: pages),
+        floatingActionButton: selectedIndex == 0
+            ? FloatingActionButton(
+                onPressed: () => AiChatSheet.show(context),
+                backgroundColor: Color(0xFF006B70),
+                foregroundColor: Colors.white,
+                tooltip: context.l10n.safeRideAssistant,
+                child: Icon(Icons.smart_toy_outlined),
+              )
+            : null,
         bottomNavigationBar: CustomerBottomNavBar(
           currentIndex: selectedIndex,
           onTap: (index) {
@@ -266,7 +288,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     return Consumer<HomeProvider>(
       builder: (_, provider, child) {
         if (provider.isLoading && provider.recentTrips.isEmpty) {
-          return const Center(
+          return Center(
             child: CircularProgressIndicator(color: Color(0xFF006B70)),
           );
         }
@@ -282,7 +304,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 return SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
+                  physics: AlwaysScrollableScrollPhysics(),
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
                       minHeight: constraints.maxHeight,
@@ -293,42 +315,42 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.cloud_off_rounded,
                               size: 80,
                               color: Colors.grey,
                             ),
-                            const SizedBox(height: 16),
-                            const Text(
-                              'Lỗi kết nối máy chủ',
+                            SizedBox(height: 16),
+                            Text(
+                              context.l10n.serverConnectionErrorTitle,
                               style: TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
                                 color: Color(0xFF1A1A1A),
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(height: 8),
                             Text(
                               provider.errorMessage!,
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 15,
                                 color: Colors.black54,
                               ),
                             ),
-                            const SizedBox(height: 32),
+                            SizedBox(height: 32),
                             ElevatedButton.icon(
                               onPressed: () => provider.loadHomeData(),
-                              icon: const Icon(Icons.refresh_rounded),
-                              label: const Text(
-                                'Thử lại',
+                              icon: Icon(Icons.refresh_rounded),
+                              label: Text(
+                                context.l10n.tryAgain,
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF006B70),
+                                backgroundColor: Color(0xFF006B70),
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 32,
@@ -357,35 +379,33 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
             await provider.loadHomeData();
             await receivedShares.refresh();
           },
-          color: const Color(0xFF006B70),
+          color: Color(0xFF006B70),
           child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
+            physics: AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  HomeStrings.greeting(_displayName(auth.fullName)),
-                  style: const TextStyle(
+                  context.l10n.greeting(_displayName(auth.fullName)),
+                  style: TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF1A1A1A),
                   ),
                 ),
-                const Text(
-                  HomeStrings.destinationQuestion,
+                Text(
+                  context.l10n.destinationQuestion,
                   style: TextStyle(fontSize: 16, color: Color(0xFF666666)),
                 ),
-                const SizedBox(height: 24),
+                SizedBox(height: 24),
 
                 _buildReceivedShares(),
 
                 InkWell(
                   onTap: hasActiveBooking
                       ? () {
-                          _showMessage(
-                            'Bạn đang có chuyến đang hoạt động. Vui lòng theo dõi ở mục Hoạt động.',
-                          );
+                          _showMessage(context.l10n.activeTripNotice);
                           homeProvider.setSelectedIndex(1);
                         }
                       : () => _openBooking(context, BookingType.now),
@@ -396,7 +416,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                     decoration: BoxDecoration(
                       color: hasActiveBooking
                           ? Colors.grey.shade400
-                          : const Color(0xFF006B70),
+                          : Color(0xFF006B70),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
@@ -406,7 +426,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              HomeStrings.bookNow,
+                              context.l10n.bookNow,
                               style: TextStyle(
                                 color: hasActiveBooking
                                     ? Colors.white70
@@ -415,11 +435,11 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            const SizedBox(height: 4),
+                            SizedBox(height: 4),
                             Text(
                               hasActiveBooking
-                                  ? 'Đang theo dõi chuyến đi'
-                                  : HomeStrings.bookNowDescription,
+                                  ? context.l10n.trackingTrip
+                                  : context.l10n.bookNowDescription,
                               style: TextStyle(
                                 color: hasActiveBooking
                                     ? Colors.white60
@@ -429,7 +449,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                             ),
                           ],
                         ),
-                        const Icon(
+                        Icon(
                           Icons.directions_car_rounded,
                           color: Colors.white,
                           size: 54,
@@ -438,7 +458,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
 
                 InkWell(
                   onTap: () => _openBooking(context, BookingType.scheduled),
@@ -454,7 +474,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: Colors.grey.shade200),
                     ),
-                    child: const Row(
+                    child: Row(
                       children: [
                         Icon(
                           Icons.calendar_month_outlined,
@@ -463,7 +483,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                         ),
                         SizedBox(width: 12),
                         Text(
-                          HomeStrings.scheduleBooking,
+                          context.l10n.scheduleBooking,
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -480,94 +500,89 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 32),
+                SizedBox(height: 32),
 
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     QuickActionItem(
                       icon: Icons.history_rounded,
-                      title: HomeStrings.history,
-                      backgroundColor: const Color(0xFFF2F2F2),
+                      title: context.l10n.history,
+                      backgroundColor: Color(0xFFF2F2F2),
                       iconColor: Colors.black,
                       onTap: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const HistoryPage(),
+                            builder: (context) => HistoryPage(),
                           ),
                         );
                       },
                     ),
                     QuickActionItem(
                       icon: Icons.directions_car_filled_rounded,
-                      title: HomeStrings.myVehicles,
-                      backgroundColor: const Color(0xFFF2F2F2),
+                      title: context.l10n.myVehiclesShort,
+                      backgroundColor: Color(0xFFF2F2F2),
                       iconColor: Colors.black,
                       onTap: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const MyVehiclesPage(),
+                            builder: (context) => MyVehiclesPage(),
                           ),
                         );
                       },
                     ),
                     QuickActionItem(
                       icon: Icons.local_offer_rounded,
-                      title: HomeStrings.promotions,
-                      backgroundColor: const Color(0xFFF2F2F2),
+                      title: context.l10n.promotions,
+                      backgroundColor: Color(0xFFF2F2F2),
                       iconColor: Colors.black,
                       onTap: () {
                         showModalBottomSheet(
                           context: context,
                           isScrollControlled: true,
                           backgroundColor: Colors.transparent,
-                          builder: (context) => const PromotionPage(),
+                          builder: (context) => PromotionPage(),
                         );
                       },
                     ),
                     QuickActionItem(
                       icon: Icons.star_rounded,
-                      title: HomeStrings.sos,
-                      backgroundColor: const Color(0xFFFFE8E8),
+                      title: context.l10n.sos,
+                      backgroundColor: Color(0xFFFFE8E8),
                       iconColor: Colors.red,
                       textColor: Colors.red,
-                      onTap: () {},
+                      onTap: () {
+                        final activeTrip =
+                            bookingProvider.activeBooking?.tripId != null;
+                        if (!activeTrip) {
+                          _showMessage(context.l10n.noActiveTripForSos);
+                          return;
+                        }
+                        homeProvider.setSelectedIndex(1);
+                      },
                     ),
                   ],
                 ),
-                const SizedBox(height: 32),
+                SizedBox(height: 32),
 
-                const Text(
-                  HomeStrings.recentTrips,
+                Text(
+                  context.l10n.recentTrips,
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF1A1A1A),
                   ),
                 ),
-                const SizedBox(height: 16),
-                const RecentTripCard(
-                  pickup: HomeStrings.recentPickup,
-                  destination: HomeStrings.recentDestination,
-                  time: HomeStrings.recentTime,
+                SizedBox(height: 16),
+                RecentTripCard(
+                  pickup: context.l10n.sampleRecentPickup,
+                  destination: context.l10n.sampleRecentDestination,
+                  time: context.l10n.sampleRecentTime,
                 ),
-                const SizedBox(height: 24),
-                GestureDetector(
-                  onTap: () {
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (context) => const PromotionPage(),
-                    );
-                  },
-                  child: const PromoBanner(
-                    title: HomeStrings.promotionTitle,
-                    code: HomeStrings.promotionCode,
-                  ),
-                ),
+                SizedBox(height: 24),
+                _buildPromotionSection(bookingProvider),
               ],
             ),
           ),
@@ -616,20 +631,104 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
           ),
         );
       },
+  Widget _buildPromotionSection(BookingProvider bookingProvider) {
+    if (bookingProvider.isLoadingPromotions &&
+        bookingProvider.availablePromotions.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader(context.l10n.promotions),
+          SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            height: 176,
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Center(
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (bookingProvider.availablePromotions.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _buildSectionHeader(context.l10n.promotions),
+            TextButton(
+              onPressed: () {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (context) => PromotionPage(),
+                );
+              },
+              child: Text(
+                context.l10n.viewAll,
+                style: TextStyle(
+                  color: Color(0xFF006B70),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 8),
+        SizedBox(
+          height: 176,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: bookingProvider.availablePromotions.length,
+            separatorBuilder: (context, index) => SizedBox(width: 16),
+            itemBuilder: (context, index) {
+              final promo = bookingProvider.availablePromotions[index];
+              return GestureDetector(
+                onTap: () {
+                  bookingProvider.selectPromo(promo);
+                  _openBooking(context, BookingType.now);
+                },
+                child: PromoBanner(promo: promo),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Text(
+      title,
+      style: TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.bold,
+        color: Color(0xFF1A1A1A),
+      ),
     );
   }
 
   String _displayName(String? fullName) {
     final value = fullName?.trim() ?? '';
-    if (value.isEmpty || value == HomeStrings.defaultUser) {
-      return HomeStrings.friendlyUser;
+    if (value.isEmpty) {
+      return context.l10n.friendlyUser;
     }
     return value;
   }
 
   String _initials(String? fullName) {
     final name = _displayName(fullName);
-    if (name == HomeStrings.friendlyUser) return HomeStrings.defaultInitials;
+    if (name == context.l10n.friendlyUser) return 'SR';
     final words = name.split(RegExp(r'\s+'));
     return words.take(2).map((word) => word[0].toUpperCase()).join();
   }

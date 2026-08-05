@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import '../../data/models/vehicle_model.dart';
 
 class VehicleCard extends StatelessWidget {
@@ -6,7 +7,7 @@ class VehicleCard extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
-  const VehicleCard({
+  VehicleCard({
     super.key,
     required this.vehicle,
     required this.onEdit,
@@ -40,7 +41,7 @@ class VehicleCard extends StatelessWidget {
                         width: 52,
                         height: 52,
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF3F4F6),
+                          color: Color(0xFFF3F4F6),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
@@ -51,23 +52,23 @@ class VehicleCard extends StatelessWidget {
                           size: 28,
                         ),
                       ),
-                      const SizedBox(width: 16),
+                      SizedBox(width: 16),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               vehicle.name,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
                                 color: Color(0xFF1F2937),
                               ),
                             ),
-                            const SizedBox(height: 4),
+                            SizedBox(height: 4),
                             Text(
-                              _summaryText(vehicle),
-                              style: const TextStyle(
+                              _summaryText(context, vehicle),
+                              style: TextStyle(
                                 fontSize: 14,
                                 color: Color(0xFF6B7280),
                               ),
@@ -77,16 +78,16 @@ class VehicleCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  const Divider(height: 1, color: Color(0xFFF3F4F6)),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
+                  Divider(height: 1, color: Color(0xFFF3F4F6)),
+                  SizedBox(height: 12),
                   Row(
                     children: [
-                      const Spacer(),
+                      Spacer(),
                       InkWell(
                         onTap: onEdit,
-                        child: const Text(
-                          'Sửa',
+                        child: Text(
+                          context.l10n.edit,
                           style: TextStyle(
                             color: Color(0xFF4B5563),
                             fontWeight: FontWeight.w600,
@@ -94,11 +95,11 @@ class VehicleCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 24),
+                      SizedBox(width: 24),
                       InkWell(
                         onTap: onDelete,
-                        child: const Text(
-                          'Xóa',
+                        child: Text(
+                          context.l10n.delete,
                           style: TextStyle(
                             color: Color(0xFFEF4444),
                             fontWeight: FontWeight.w600,
@@ -116,7 +117,8 @@ class VehicleCard extends StatelessWidget {
       ),
     );
   }
-static String _summaryText(VehicleModel vehicle) {
+
+  static String _summaryText(BuildContext context, VehicleModel vehicle) {
     final details = <String>[
       vehicle.plateNumber,
       if (vehicle.color.trim().isNotEmpty) vehicle.color,
@@ -124,10 +126,9 @@ static String _summaryText(VehicleModel vehicle) {
           vehicle.engineCapacityCc != null)
         '${vehicle.engineCapacityCc}cc',
       if (vehicle.requiredLicenseClass.trim().isNotEmpty)
-        'Bằng ${vehicle.requiredLicenseClass}',
+        context.l10n.requiredLicense(vehicle.requiredLicenseClass!),
     ];
 
     return details.join(' • ');
   }
 }
-

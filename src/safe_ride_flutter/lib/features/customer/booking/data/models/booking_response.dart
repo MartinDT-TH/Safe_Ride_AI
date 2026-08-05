@@ -1,4 +1,5 @@
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/localization/locale_provider.dart';
 import 'booking_catalog.dart';
 import 'booking_location.dart';
 
@@ -24,6 +25,7 @@ class BookingResponse {
     this.vehicle,
     this.tripId,
     this.tripStatus,
+    this.isSOSActivated = false,
     this.originalFare,
     this.promotionCode,
     this.discountAmount,
@@ -55,6 +57,7 @@ class BookingResponse {
   final BookingVehicleOption? vehicle;
   final int? tripId;
   final String? tripStatus;
+  final bool isSOSActivated;
   final double? originalFare;
   final String? promotionCode;
   final double? discountAmount;
@@ -139,7 +142,7 @@ class BookingResponse {
           : DateTime.tryParse(_value(json, ApiKeys.tripEndedAt).toString()),
       message:
           _value(json, ApiKeys.message)?.toString() ??
-          BookingStrings.bookingSuccess,
+          LocaleProvider.currentLocalizations.bookingSuccess,
       driverOffer: driverOfferRaw is Map
           ? BookingDriverOffer.fromJson(
               Map<String, dynamic>.from(driverOfferRaw),
@@ -156,6 +159,9 @@ class BookingResponse {
           : null,
       tripId: (_value(json, ApiKeys.tripId) as num?)?.toInt(),
       tripStatus: _normalizeTripStatus(_value(json, ApiKeys.tripStatus)),
+      isSOSActivated:
+          _value(json, ApiKeys.isSOSActivated)?.toString().toLowerCase() ==
+          'true',
       originalFare: originalFareValue,
       promotionCode: _value(json, ApiKeys.promotionCode)?.toString(),
       discountAmount: discountAmountValue,
@@ -195,6 +201,7 @@ class BookingResponse {
     BookingVehicleOption? vehicle,
     int? tripId,
     String? tripStatus,
+    bool? isSOSActivated,
     double? originalFare,
     String? promotionCode,
     double? discountAmount,
@@ -229,6 +236,7 @@ class BookingResponse {
       vehicle: vehicle ?? this.vehicle,
       tripId: tripId ?? this.tripId,
       tripStatus: tripStatus ?? this.tripStatus,
+      isSOSActivated: isSOSActivated ?? this.isSOSActivated,
       originalFare: originalFare ?? this.originalFare,
       promotionCode: promotionCode ?? this.promotionCode,
       discountAmount: discountAmount ?? this.discountAmount,
@@ -463,7 +471,7 @@ class TripPaymentSummary {
           : DateTime.tryParse(_value(json, ApiKeys.paidAt).toString()),
       message:
           _value(json, ApiKeys.message)?.toString() ??
-          'Vui lòng thanh toán cho tài xế để hoàn tất chuyến đi.',
+          LocaleProvider.currentLocalizations.payDriverToComplete,
     );
   }
 

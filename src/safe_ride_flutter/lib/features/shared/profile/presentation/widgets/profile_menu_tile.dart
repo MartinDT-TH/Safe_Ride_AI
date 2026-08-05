@@ -8,7 +8,7 @@ class ProfileMenuTile extends StatelessWidget {
   final VoidCallback? onTap;
   final bool showDivider;
 
-  const ProfileMenuTile({
+  ProfileMenuTile({
     super.key,
     required this.icon,
     required this.title,
@@ -31,7 +31,7 @@ class ProfileMenuTile extends StatelessWidget {
           leading: Icon(icon, color: Colors.grey.shade600, size: 24),
           title: Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w400,
               color: Color(0xFF333333),
@@ -50,7 +50,7 @@ class ProfileMenuTile extends StatelessWidget {
                         color: Colors.grey.shade500,
                       ),
                     ),
-                  const SizedBox(width: 4),
+                  SizedBox(width: 4),
                   Icon(
                     Icons.chevron_right,
                     color: Colors.grey.shade400,
@@ -70,4 +70,3 @@ class ProfileMenuTile extends StatelessWidget {
     );
   }
 }
-

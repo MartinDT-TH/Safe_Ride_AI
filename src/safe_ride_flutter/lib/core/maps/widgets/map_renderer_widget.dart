@@ -9,6 +9,7 @@ import 'package:vietmap_flutter_gl/vietmap_flutter_gl.dart' as vmap;
 import '../map_config.dart';
 import '../models/map_models.dart';
 import '../../config/api_keys_config.dart';
+import '../../localization/localization_extensions.dart';
 
 class MapRendererWidget extends StatefulWidget {
   final AppCameraPosition initialCameraPosition;
@@ -21,7 +22,7 @@ class MapRendererWidget extends StatefulWidget {
   final bool myLocationButtonEnabled;
   final EdgeInsets padding;
 
-  const MapRendererWidget({
+  MapRendererWidget({
     super.key,
     required this.initialCameraPosition,
     this.markers = const {},
@@ -93,17 +94,17 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
 
     switch (type) {
       case AppMarkerType.pickup:
-        color = const Color(0xFF1565C0);
+        color = Color(0xFF1565C0);
         iconData = Icons.person_pin_circle_rounded;
         iconSize = 28.0;
         break;
       case AppMarkerType.destination:
-        color = const Color(0xFFC62828);
+        color = Color(0xFFC62828);
         iconData = Icons.flag_rounded;
         iconSize = 24.0;
         break;
       case AppMarkerType.driver:
-        color = const Color(0xFF006B70);
+        color = Color(0xFF006B70);
         iconData = Icons.directions_car_filled_rounded;
         iconSize = 28.0;
         break;
@@ -352,14 +353,14 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
   Widget build(BuildContext context) {
     if (MapConfig.activeMapProvider == MapRenderProvider.googleMaps) {
       if (!ApiKeysConfig.hasGoogleMapsKey) {
-        return const _MissingConfigWidget(
-          message: 'Thiếu cấu hình Google Maps.',
+        return _MissingConfigWidget(
+          message: context.l10n.mapsConfigMissing,
         );
       }
       return _buildGoogleMap();
     } else {
       if (!ApiKeysConfig.hasVietMapKey) {
-        return const _MissingConfigWidget(message: 'Thiếu cấu hình VietMap.');
+        return _MissingConfigWidget(message: context.l10n.mapsConfigMissing);
       }
       return _buildVietMap();
     }
@@ -398,8 +399,8 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
       }
 
       final anchor = m.markerType == AppMarkerType.driver
-          ? const Offset(0.5, 0.5)
-          : const Offset(0.5, 0.889);
+          ? Offset(0.5, 0.5)
+          : Offset(0.5, 0.889);
 
       return gmap.Marker(
         markerId: gmap.MarkerId(m.id),
@@ -421,8 +422,11 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
         width: p.width,
         zIndex: p.zIndex,
         patterns: p.isDashed
-            ? <gmap.PatternItem>[gmap.PatternItem.dash(12), gmap.PatternItem.gap(8)]
-            : const <gmap.PatternItem>[],
+            ? <gmap.PatternItem>[
+                gmap.PatternItem.dash(12),
+                gmap.PatternItem.gap(8),
+              ]
+            : <gmap.PatternItem>[],
         startCap: p.endCapRound ? gmap.Cap.roundCap : gmap.Cap.buttCap,
         endCap: p.endCapRound ? gmap.Cap.roundCap : gmap.Cap.buttCap,
         jointType: gmap.JointType.round,
@@ -501,9 +505,13 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
               final alignment = m.markerType == AppMarkerType.driver
                   ? Alignment.center
                   : Alignment.bottomCenter;
-                  
-              final double width = m.markerType == AppMarkerType.driver ? 40.0 : 32.0;
-              final double height = m.markerType == AppMarkerType.driver ? 40.0 : 44.0;
+
+              final double width = m.markerType == AppMarkerType.driver
+                  ? 40.0
+                  : 32.0;
+              final double height = m.markerType == AppMarkerType.driver
+                  ? 40.0
+                  : 44.0;
 
               return vmap.Marker(
                 width: width,
@@ -521,9 +529,9 @@ class _MapRendererWidgetState extends State<MapRendererWidget> {
   Widget _buildMarkerWidget(AppMarker marker) {
     switch (marker.markerType) {
       case AppMarkerType.pickup:
-        return const _PickupMarkerWidget();
+        return _PickupMarkerWidget();
       case AppMarkerType.destination:
-        return const _DestinationMarkerWidget();
+        return _DestinationMarkerWidget();
       case AppMarkerType.driver:
         return _DriverMarkerWidget(heading: marker.rotation);
       case AppMarkerType.custom:
@@ -540,7 +548,7 @@ class _TeardropPinWidget extends StatelessWidget {
   final Color color;
   final IconData icon;
 
-  const _TeardropPinWidget({required this.color, required this.icon});
+  _TeardropPinWidget({required this.color, required this.icon});
 
   @override
   Widget build(BuildContext context) {
@@ -548,7 +556,7 @@ class _TeardropPinWidget extends StatelessWidget {
     const double height = 44.0;
 
     return CustomPaint(
-      size: const Size(width, height),
+      size: Size(width, height),
       painter: _PinPainter(color),
       child: SizedBox(
         width: width,
@@ -568,11 +576,11 @@ class _TeardropPinWidget extends StatelessWidget {
 
 /// Blue pin for pickup location
 class _PickupMarkerWidget extends StatelessWidget {
-  const _PickupMarkerWidget();
+  _PickupMarkerWidget();
 
   @override
   Widget build(BuildContext context) {
-    return const _TeardropPinWidget(
+    return _TeardropPinWidget(
       color: Color(0xFF1565C0),
       icon: Icons.person_pin_circle_rounded,
     );
@@ -581,11 +589,11 @@ class _PickupMarkerWidget extends StatelessWidget {
 
 /// Red pin for destination
 class _DestinationMarkerWidget extends StatelessWidget {
-  const _DestinationMarkerWidget();
+  _DestinationMarkerWidget();
 
   @override
   Widget build(BuildContext context) {
-    return const _TeardropPinWidget(
+    return _TeardropPinWidget(
       color: Color(0xFFC62828),
       icon: Icons.flag_rounded,
     );
@@ -595,7 +603,7 @@ class _DestinationMarkerWidget extends StatelessWidget {
 /// Animated car icon for driver, rotates based on heading
 class _DriverMarkerWidget extends StatelessWidget {
   final double heading;
-  const _DriverMarkerWidget({this.heading = 0});
+  _DriverMarkerWidget({this.heading = 0});
 
   @override
   Widget build(BuildContext context) {
@@ -605,17 +613,17 @@ class _DriverMarkerWidget extends StatelessWidget {
         width: 40,
         height: 40,
         decoration: BoxDecoration(
-          color: const Color(0xFF006B70),
+          color: Color(0xFF006B70),
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.35),
               blurRadius: 8,
-              offset: const Offset(0, 3),
+              offset: Offset(0, 3),
             ),
           ],
         ),
-        child: const Icon(
+        child: Icon(
           Icons.directions_car_filled_rounded,
           color: Colors.white,
           size: 22,
@@ -628,7 +636,7 @@ class _DriverMarkerWidget extends StatelessWidget {
 /// Fallback pin using hue
 class _DefaultPinWidget extends StatelessWidget {
   final double? hue;
-  const _DefaultPinWidget({this.hue});
+  _DefaultPinWidget({this.hue});
 
   @override
   Widget build(BuildContext context) {
@@ -641,7 +649,7 @@ class _DefaultPinWidget extends StatelessWidget {
 
 class _PinPainter extends CustomPainter {
   final Color color;
-  const _PinPainter(this.color);
+  _PinPainter(this.color);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -831,12 +839,12 @@ class _VietMapControllerWrapper implements AppMapController {
 class _MissingConfigWidget extends StatelessWidget {
   final String message;
 
-  const _MissingConfigWidget({required this.message});
+  _MissingConfigWidget({required this.message});
 
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: const Color(0xFFE9EEEE),
+      color: Color(0xFFE9EEEE),
       child: Center(child: Text(message, textAlign: TextAlign.center)),
     );
   }

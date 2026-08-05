@@ -55,6 +55,38 @@ public sealed record TripPaymentSucceededEvent(
     string Message,
     BookingStatus? BookingStatus = null);
 
+public sealed record SOSTriggeredEvent(
+    long SosAlertId,
+    long TripId,
+    long BookingId,
+    Guid CustomerId,
+    string? CustomerName,
+    string? CustomerPhoneNumber,
+    Guid DriverId,
+    string? DriverName,
+    string? DriverPhoneNumber,
+    double Latitude,
+    double Longitude,
+    string? EmergencyMessage,
+    SOSStatus SOSStatus,
+    DateTime CreatedAt,
+    string Message);
+
+public sealed record AdminSOSTriggeredEvent(
+    long SosAlertId,
+    long TripId,
+    long BookingId,
+    Guid CustomerId,
+    string? CustomerName,
+    string? CustomerPhoneNumber,
+    Guid DriverId,
+    string? DriverName,
+    string? DriverPhoneNumber,
+    double Latitude,
+    double Longitude,
+    string? Message,
+    DateTime CreatedAt);
+
 public sealed record TripCreatedEvent(
     long TripId,
     long BookingId,
@@ -82,6 +114,19 @@ public sealed record DriverLocationUpdatedEvent(
     double Latitude,
     double Longitude,
     DateTime UpdatedAt);
+
+public sealed record TripRouteRecalculatedEvent(
+    long TripId,
+    long BookingId,
+    Guid CustomerId,
+    Guid DriverId,
+    string EncodedPolyline,
+    double DistanceMeters,
+    double DurationSeconds,
+    double DeviationMeters,
+    DateTime UpdatedAt,
+    string Message,
+    bool ShouldAlertCustomer);
 
 public sealed record DriverOfferCreatedEvent(
     long BookingId,

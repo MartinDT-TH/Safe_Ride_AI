@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../../../../../core/constants/app_colors.dart';
+import '../../../../../core/localization/localization_extensions.dart';
+import '../../../../../core/localization/locale_provider.dart';
+import '../../../../../core/localization/trip_status_localizer.dart';
 import '../../../../../core/widgets/custom_button.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/models/booking_catalog.dart';
@@ -13,7 +17,7 @@ import '../../../home/presentation/providers/home_provider.dart';
 // import 'trip_tracking_page.dart';
 
 class ConfirmBookingPage extends StatelessWidget {
-  const ConfirmBookingPage({
+  ConfirmBookingPage({
     super.key,
     required this.pickup,
     this.booking,
@@ -24,7 +28,7 @@ class ConfirmBookingPage extends StatelessWidget {
     BookingServiceOption? service,
     this.vehicle,
     int? estimatedHours,
-    this.driverName = 'Nguyễn Văn An',
+    this.driverName = 'SafeRide Driver',
     this.driverRating = 4.9,
     this.driverTripCount = 1200,
     this.driverExperienceYears = 5,
@@ -42,8 +46,14 @@ class ConfirmBookingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fare = booking?.finalFare ?? booking?.estimatedFare ?? fareEstimate?.estimatedFare;
-    final originalFare = booking?.originalFare ?? booking?.estimatedFare ?? fareEstimate?.estimatedFare;
+    final fare =
+        booking?.finalFare ??
+        booking?.estimatedFare ??
+        fareEstimate?.estimatedFare;
+    final originalFare =
+        booking?.originalFare ??
+        booking?.estimatedFare ??
+        fareEstimate?.estimatedFare;
     final discount = booking?.discountAmount ?? 0;
     final promoCode = booking?.promotionCode;
 
@@ -59,11 +69,11 @@ class ConfirmBookingPage extends StatelessWidget {
         backgroundColor: Colors.white,
         appBar: AppBar(
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.black),
+            icon: Icon(Icons.arrow_back, color: Colors.black),
             onPressed: () => Navigator.pop(context),
           ),
-          title: const Text(
-            'Xác nhận thuê tài xế',
+          title: Text(
+            context.l10n.confirmHireDriver,
             style: TextStyle(
               color: Colors.black,
               fontWeight: FontWeight.bold,
@@ -75,82 +85,97 @@ class ConfirmBookingPage extends StatelessWidget {
           backgroundColor: Colors.white,
         ),
         body: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
+          physics: BouncingScrollPhysics(),
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
               _DriverCard(
                 name: driverName,
                 rating: driverRating,
                 tripCount: driverTripCount,
                 experienceYears: driverExperienceYears,
               ),
-              const SizedBox(height: 18),
+              SizedBox(height: 18),
               if (vehicle != null) ...[
                 _VehicleCard(vehicle: vehicle!),
-                const SizedBox(height: 18),
+                SizedBox(height: 18),
               ],
               _RouteTimeline(
                 pickup: pickup.address,
-                destination: destination?.address ?? 'Thuê theo giờ',
+                destination: destination?.address ?? context.l10n.hourlyHire,
               ),
-              const SizedBox(height: 24),
-              const Text(
-                'Chi tiết chuyến đi',
+              SizedBox(height: 24),
+              Text(
+                context.l10n.tripDetailsHeading,
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               _InfoRow(
-                label: 'Mã chuyến',
-                value: booking == null ? 'Chưa tạo' : '#${booking!.bookingId}',
+                label: context.l10n.tripCode,
+                value: booking == null
+                    ? context.l10n.notCreated
+                    : '#${booking!.bookingId}',
               ),
               _InfoRow(
-                label: 'Trạng thái',
-                value: booking?.bookingStatus ?? 'Chờ xác nhận',
+                    label: context.l10n.statusLabel,
+                value: booking == null
+                    ? context.l10n.awaitingConfirmation
+                    : TripStatusLocalizer.translate(
+                        context.l10n,
+                        booking!.bookingStatus,
+                      ),
               ),
               if (distance != null)
                 _InfoRow(
-                  label: 'Quãng đường',
+                  label: context.l10n.distance,
                   value: '${distance.toStringAsFixed(1)} km',
                 ),
               if (duration != null)
-                _InfoRow(label: 'Thời gian dự kiến', value: '$duration phút'),
-              const Padding(
+                _InfoRow(
+                  label: context.l10n.estimatedDuration,
+                  value: context.l10n.minutesValue(duration),
+                ),
+              Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Divider(thickness: 1, color: Color(0xFFEEEEEE)),
               ),
               if (discount > 0 || promoCode != null) ...[
                 _InfoRow(
-                  label: 'Giá gốc',
-                  value: originalFare == null ? 'Đang cập nhật' : _formatCurrency(originalFare),
+                  label: context.l10n.baseFare,
+                  value: originalFare == null
+                      ? context.l10n.updating
+                      : _formatCurrency(originalFare),
                 ),
                 _InfoRow(
-                  label: 'Khuyến mãi ${promoCode != null ? '($promoCode)' : ''}',
+                  label:
+                      '${context.l10n.promotion} ${promoCode != null ? '($promoCode)' : ''}',
                   value: '-${_formatCurrency(discount)}',
                   valueColor: Colors.red,
                 ),
               ],
               _InfoRow(
-                label: 'Tổng thanh toán dự kiến',
-                value: fare == null ? 'Đang cập nhật' : _formatCurrency(fare),
+                label: context.l10n.estimatedTotalPayment,
+                value: fare == null
+                    ? context.l10n.updating
+                    : _formatCurrency(fare),
                 isTotal: true,
               ),
-              const SizedBox(height: 24),
-              const _NoticeCard(),
-              const SizedBox(height: 40),
+              SizedBox(height: 24),
+              _NoticeCard(),
+              SizedBox(height: 40),
             ],
           ),
         ),
         bottomNavigationBar: Container(
           padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: Colors.white,
             border: Border(top: BorderSide(color: Color(0xFFF5F5F5))),
           ),
           child: CustomButton(
-            text: 'Xác nhận thuê tài xế',
+            text: context.l10n.confirmHireDriver,
             onPressed: () => _confirmDriver(context),
           ),
         ),
@@ -160,27 +185,27 @@ class ConfirmBookingPage extends StatelessWidget {
 
   Future<void> _confirmDriver(BuildContext context) async {
     if (booking == null) {
-      _showMessage(context, 'Chưa có mã chuyến để xác nhận tài xế.');
+      _showMessage(context, context.l10n.missingTripToConfirmDriver);
       return;
     }
 
     final token = context.read<AuthProvider>().token;
     if (token == null || token.isEmpty) {
-      _showMessage(context, 'Phiên đăng nhập đã hết hạn.');
+      _showMessage(context, context.l10n.sessionExpired);
       return;
     }
 
     final offerId = booking!.driverOffer?.offerId;
     if (offerId == null) {
-      _showMessage(context, 'Không tìm thấy thông tin đề nghị của tài xế.');
+      _showMessage(context, context.l10n.driverOfferNotFound);
       return;
     }
 
     final result = await context.read<BookingProvider>().confirmDriverOffer(
-          token,
-          bookingId: booking!.bookingId,
-          offerId: offerId,
-        );
+      token,
+      bookingId: booking!.bookingId,
+      offerId: offerId,
+    );
     if (!context.mounted) {
       return;
     }
@@ -189,31 +214,31 @@ class ConfirmBookingPage extends StatelessWidget {
       _showMessage(
         context,
         context.read<BookingProvider>().errorMessage ??
-            'Không thể xác nhận tài xế. Vui lòng thử lại.',
+            context.l10n.confirmDriverFailed,
       );
       return;
     }
 
     // Set active booking in provider
     context.read<BookingProvider>().setActiveBooking(
-          booking: result,
-          pickup: pickup,
-          destination: destination,
-          vehicle: vehicle,
-        );
+      booking: result,
+      pickup: pickup,
+      destination: destination,
+      vehicle: vehicle,
+    );
 
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        icon: const Icon(
+        icon: Icon(
           Icons.check_circle,
           color: AppColors.primary,
           size: 52,
         ),
-        title: const Text('Đã xác nhận thuê tài xế'),
+        title: Text(context.l10n.driverConfirmed),
         content: Text(
-          '$driverName sẽ nhận chuyến #${booking!.bookingId}. Đang chờ hệ thống điều phối...',
+          context.l10n.driverConfirmedMessage(driverName, booking!.bookingId),
           textAlign: TextAlign.center,
         ),
         actions: [
@@ -225,7 +250,7 @@ class ConfirmBookingPage extends StatelessWidget {
               homeProvider.setSelectedIndex(1);
               Navigator.of(context).popUntil((route) => route.isFirst);
             },
-            child: const Text('Đồng ý'),
+            child: Text(context.l10n.agree),
           ),
         ],
       ),
@@ -239,16 +264,16 @@ class ConfirmBookingPage extends StatelessWidget {
   }
 
   String _formatCurrency(double value) {
-    final formatter = value.round().toString().replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-      (Match m) => '${m[1]}.',
-    );
-    return '${formatter}đ';
+    return NumberFormat.currency(
+      locale: LocaleProvider.currentLocale.toLanguageTag(),
+      symbol: 'VND',
+      decimalDigits: 0,
+    ).format(value);
   }
 }
 
 class _DriverCard extends StatelessWidget {
-  const _DriverCard({
+  _DriverCard({
     required this.name,
     required this.rating,
     required this.tripCount,
@@ -265,37 +290,41 @@ class _DriverCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFEAF4F4),
+        color: Color(0xFFEAF4F4),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         children: [
-          const CircleAvatar(
+          CircleAvatar(
             radius: 28,
             backgroundColor: AppColors.primary,
             child: Icon(Icons.person, color: Colors.white, size: 30),
           ),
-          const SizedBox(width: 14),
+          SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   name,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 16,
                   ),
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: 4),
                 Text(
-                  '${rating.toStringAsFixed(1)} sao • $tripCount chuyến • $experienceYears năm',
-                  style: const TextStyle(color: Color(0xFF667174)),
+                  context.l10n.driverRatingSummary(
+                    rating.toStringAsFixed(1),
+                    tripCount,
+                    experienceYears,
+                  ),
+                  style: TextStyle(color: Color(0xFF667174)),
                 ),
               ],
             ),
           ),
-          const Icon(Icons.verified, color: AppColors.primary),
+          Icon(Icons.verified, color: AppColors.primary),
         ],
       ),
     );
@@ -303,7 +332,7 @@ class _DriverCard extends StatelessWidget {
 }
 
 class _VehicleCard extends StatelessWidget {
-  const _VehicleCard({required this.vehicle});
+  _VehicleCard({required this.vehicle});
   final BookingVehicleOption vehicle;
 
   @override
@@ -322,11 +351,11 @@ class _VehicleCard extends StatelessWidget {
                 : Icons.directions_car_rounded,
             color: AppColors.primary,
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: 12),
           Expanded(
             child: Text(
               '${vehicle.name} • ${vehicle.plateNumber}',
-              style: const TextStyle(fontWeight: FontWeight.w700),
+              style: TextStyle(fontWeight: FontWeight.w700),
             ),
           ),
         ],
@@ -336,7 +365,7 @@ class _VehicleCard extends StatelessWidget {
 }
 
 class _RouteTimeline extends StatelessWidget {
-  const _RouteTimeline({required this.pickup, required this.destination});
+  _RouteTimeline({required this.pickup, required this.destination});
 
   final String pickup;
   final String destination;
@@ -347,13 +376,13 @@ class _RouteTimeline extends StatelessWidget {
       children: [
         _RouteItem(
           icon: Icons.location_searching,
-          label: 'Điểm đón',
+          label: context.l10n.pickupPoint,
           address: pickup,
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: 12),
         _RouteItem(
           icon: Icons.near_me,
-          label: 'Điểm đến',
+          label: context.l10n.destinationPoint,
           address: destination,
           filled: true,
         ),
@@ -363,7 +392,7 @@ class _RouteTimeline extends StatelessWidget {
 }
 
 class _RouteItem extends StatelessWidget {
-  const _RouteItem({
+  _RouteItem({
     required this.icon,
     required this.label,
     required this.address,
@@ -382,27 +411,27 @@ class _RouteItem extends StatelessWidget {
       children: [
         CircleAvatar(
           radius: 18,
-          backgroundColor: filled ? AppColors.primary : const Color(0xFFF0F0F0),
+          backgroundColor: filled ? AppColors.primary : Color(0xFFF0F0F0),
           child: Icon(
             icon,
             size: 18,
             color: filled ? Colors.white : Colors.black,
           ),
         ),
-        const SizedBox(width: 12),
+        SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 label,
-                style: const TextStyle(color: Color(0xFF667174), fontSize: 12),
+                style: TextStyle(color: Color(0xFF667174), fontSize: 12),
               ),
               Text(
                 address,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w700),
+                style: TextStyle(fontWeight: FontWeight.w700),
               ),
             ],
           ),
@@ -413,7 +442,7 @@ class _RouteItem extends StatelessWidget {
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({
+  _InfoRow({
     required this.label,
     required this.value,
     this.isTotal = false,
@@ -432,7 +461,7 @@ class _InfoRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: Color(0xFF667174))),
+          Text(label, style: TextStyle(color: Color(0xFF667174))),
           Text(
             value,
             style: TextStyle(
@@ -448,24 +477,24 @@ class _InfoRow extends StatelessWidget {
 }
 
 class _NoticeCard extends StatelessWidget {
-  const _NoticeCard();
+  _NoticeCard();
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF8E1),
+        color: Color(0xFFFFF8E1),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: const Row(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(Icons.info_outline, color: Color(0xFFFFA000), size: 20),
           SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Bước này xác nhận lựa chọn tài xế. Khi backend có API nhận chuyến/assign driver, nút này sẽ gọi API đó.',
+              context.l10n.confirmDriverNotice,
               style: TextStyle(color: Color(0xFF6B5B00), height: 1.35),
             ),
           ),

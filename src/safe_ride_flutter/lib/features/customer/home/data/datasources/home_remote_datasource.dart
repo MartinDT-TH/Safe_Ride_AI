@@ -19,6 +19,7 @@
 // }
 
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/localization/locale_provider.dart';
 import '../../../../../core/network/dio_client.dart';
 import '../models/home_response.dart';
 
@@ -31,10 +32,9 @@ class HomeRemoteDatasource {
       // For development, if /api/home doesn't exist yet, return a mock response
       // so the UI doesn't continuously show a server connection error widget.
       return HomeResponse(
-        userName: HomeStrings.defaultUser,
+        userName: LocaleProvider.currentLocalizations.friendlyUser,
         recentTrips: [],
       );
     }
   }
 }
-

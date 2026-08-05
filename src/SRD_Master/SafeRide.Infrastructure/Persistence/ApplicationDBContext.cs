@@ -289,6 +289,7 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
             entity.HasIndex(e => new { e.UserId, e.NotificationType, e.ReferenceId })
                 .HasDatabaseName("IX_Notifications_UserId_Type_Reference");
             entity.Property(e => e.Title).HasMaxLength(255);
+            entity.Property(e => e.TranslationsJson).HasColumnType("nvarchar(max)");
 
             entity.HasOne(d => d.User).WithMany(p => p.Notifications)
                 .HasForeignKey(d => d.UserId)

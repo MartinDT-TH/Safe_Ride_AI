@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:signalr_netcore/signalr_client.dart';
 
 import '../constants/app_strings.dart';
+import '../localization/locale_provider.dart';
 import '../session/session_manager.dart';
 import 'mobile_config_service.dart';
 
@@ -57,6 +58,60 @@ class DriverLocationUpdate {
   }
 }
 
+class TripRouteRecalculatedUpdate {
+  const TripRouteRecalculatedUpdate({
+    required this.tripId,
+    required this.encodedPolyline,
+    required this.distanceMeters,
+    required this.durationSeconds,
+    required this.deviationMeters,
+    required this.message,
+    required this.shouldAlertCustomer,
+  });
+
+  final int tripId;
+  final String encodedPolyline;
+  final double distanceMeters;
+  final double durationSeconds;
+  final double deviationMeters;
+  final String message;
+  final bool shouldAlertCustomer;
+
+  static TripRouteRecalculatedUpdate? fromSignalRArguments(
+    List<Object?>? arguments,
+  ) {
+    if (arguments == null || arguments.isEmpty || arguments.first is! Map) {
+      return null;
+    }
+
+    final data = Map<String, dynamic>.from(arguments.first as Map);
+    Object? value(String key) {
+      final pascalKey = '${key[0].toUpperCase()}${key.substring(1)}';
+      return data[key] ?? data[pascalKey];
+    }
+
+    final tripId = (value('tripId') as num?)?.toInt();
+    final encodedPolyline = value('encodedPolyline')?.toString();
+    if (tripId == null ||
+        encodedPolyline == null ||
+        encodedPolyline.isEmpty) {
+      return null;
+    }
+
+    return TripRouteRecalculatedUpdate(
+      tripId: tripId,
+      encodedPolyline: encodedPolyline,
+      distanceMeters: (value('distanceMeters') as num?)?.toDouble() ?? 0,
+      durationSeconds: (value('durationSeconds') as num?)?.toDouble() ?? 0,
+      deviationMeters: (value('deviationMeters') as num?)?.toDouble() ?? 0,
+      message:
+          value('message')?.toString() ??
+          LocaleProvider.currentLocalizations.routeUpdated,
+      shouldAlertCustomer: value('shouldAlertCustomer') == true,
+    );
+  }
+}
+
 class DriverOfferUpdate {
   const DriverOfferUpdate({
     required this.bookingId,
@@ -96,7 +151,8 @@ class DriverOfferUpdate {
       offerId: offerId,
       driverId: _value(data, ApiKeys.driverId)?.toString() ?? '',
       message:
-          _value(data, ApiKeys.message)?.toString() ?? 'Bạn có chuyến mới.',
+          _value(data, ApiKeys.message)?.toString() ??
+              LocaleProvider.currentLocalizations.newTripMessage,
       expiresAt: expiresAtRaw == null
           ? null
           : DateTime.tryParse(expiresAtRaw.toString()),
@@ -196,6 +252,25 @@ class TripStatusUpdate {
   }
 }
 
+class SOSTriggeredUpdate {
+  const SOSTriggeredUpdate({required this.tripId});
+
+  final int tripId;
+
+  static SOSTriggeredUpdate? fromSignalRArguments(
+    List<Object?>? arguments,
+  ) {
+    if (arguments == null || arguments.isEmpty || arguments.first is! Map) {
+      return null;
+    }
+
+    final data = Map<String, dynamic>.from(arguments.first as Map);
+    final value = data[ApiKeys.tripId] ?? data['TripId'];
+    final tripId = (value as num?)?.toInt();
+    return tripId == null ? null : SOSTriggeredUpdate(tripId: tripId);
+  }
+}
+
 class TripPaymentUpdate {
   const TripPaymentUpdate({
     required this.tripId,
@@ -273,6 +348,66 @@ class TripPaymentUpdate {
       occurredAt: occurredAtRaw == null
           ? null
           : DateTime.tryParse(occurredAtRaw.toString()),
+    );
+  }
+
+  static Object? _value(Map<String, dynamic> data, String key) {
+    final pascalKey = key.isEmpty
+        ? key
+        : '${key[0].toUpperCase()}${key.substring(1)}';
+    return data[key] ?? data[pascalKey];
+  }
+}
+
+class SystemNotificationUpdate {
+  const SystemNotificationUpdate({
+    required this.id,
+    required this.title,
+    required this.content,
+    required this.notificationType,
+    required this.sentAt,
+  });
+
+  final int id;
+  final String title;
+  final String content;
+  final String notificationType;
+  final DateTime sentAt;
+
+  static SystemNotificationUpdate? fromSignalRArguments(
+    List<Object?>? arguments,
+  ) {
+    if (arguments == null || arguments.isEmpty || arguments.first is! Map) {
+      return null;
+    }
+
+    final data = Map<String, dynamic>.from(arguments.first as Map);
+    final id = (_value(data, 'id') as num?)?.toInt();
+    final title = _value(data, 'title')?.toString();
+    final content = _value(data, 'content')?.toString();
+    final sentAtRaw = _value(data, 'sentAt');
+
+    if (id == null ||
+        title == null ||
+        title.isEmpty ||
+        content == null ||
+        content.isEmpty ||
+        sentAtRaw == null) {
+      return null;
+    }
+
+    final sentAt = DateTime.tryParse(sentAtRaw.toString());
+    if (sentAt == null) {
+      return null;
+    }
+
+    return SystemNotificationUpdate(
+      id: id,
+      title: title,
+      content: content,
+      notificationType:
+          _value(data, 'notificationType')?.toString() ?? 'System Update',
+      sentAt: sentAt,
     );
   }
 
@@ -393,8 +528,8 @@ class BookingUpdate {
       'BookingDriverAssigned' ||
       'TripCreated' ||
       'CustomerConfirmedDriverOffer' => 'DriverAssigned',
-      'BookingExpired' => 'Expired',
-      'BookingCancelled' => 'Cancelled',
+      'BookingExpired' || 'DriverOfferExpired' => 'Expired',
+      'BookingCancelled' || 'DriverOfferCancelled' => 'Cancelled',
       _ => null,
     };
   }
@@ -432,6 +567,72 @@ class BookingUpdate {
   }
 }
 
+class InAppCallSignal {
+  const InAppCallSignal({
+    required this.tripId,
+    required this.callId,
+    this.bookingId,
+    this.sdp,
+    this.sdpType,
+    this.candidate,
+    this.sdpMid,
+    this.sdpMLineIndex,
+  });
+
+  final int tripId;
+  final int? bookingId;
+  final String callId;
+  final String? sdp;
+  final String? sdpType;
+  final String? candidate;
+  final String? sdpMid;
+  final int? sdpMLineIndex;
+
+  Map<String, dynamic> toJson() {
+    return {
+      ApiKeys.tripId: tripId,
+      ApiKeys.bookingId: bookingId,
+      'callId': callId,
+      'sdp': sdp,
+      'sdpType': sdpType,
+      'candidate': candidate,
+      'sdpMid': sdpMid,
+      'sdpMLineIndex': sdpMLineIndex,
+    };
+  }
+
+  static InAppCallSignal? fromSignalRArguments(List<Object?>? arguments) {
+    if (arguments == null || arguments.isEmpty || arguments.first is! Map) {
+      return null;
+    }
+
+    final data = Map<String, dynamic>.from(arguments.first as Map);
+    final tripId = (_value(data, ApiKeys.tripId) as num?)?.toInt();
+    final callId = _value(data, 'callId')?.toString();
+    if (tripId == null || callId == null || callId.isEmpty) {
+      return null;
+    }
+
+    return InAppCallSignal(
+      tripId: tripId,
+      bookingId: (_value(data, ApiKeys.bookingId) as num?)?.toInt(),
+      callId: callId,
+      sdp: _value(data, 'sdp')?.toString(),
+      sdpType: _value(data, 'sdpType')?.toString(),
+      candidate: _value(data, 'candidate')?.toString(),
+      sdpMid: _value(data, 'sdpMid')?.toString(),
+      sdpMLineIndex: (_value(data, 'sdpMLineIndex') as num?)?.toInt(),
+    );
+  }
+
+  static Object? _value(Map<String, dynamic> data, String key) {
+    final pascalKey = key.isEmpty
+        ? key
+        : '${key[0].toUpperCase()}${key.substring(1)}';
+    return data[key] ?? data[pascalKey];
+  }
+}
+
 class SocketService {
   SocketService({
     MobileConfigService? mobileConfigService,
@@ -450,28 +651,49 @@ class SocketService {
   StreamSubscription<void>? _sessionExpiredSubscription;
   HubConnection? _connection;
   bool _driverLocationListenerAttached = false;
+  bool _tripRouteRecalculatedListenerAttached = false;
   bool _tripStatusListenerAttached = false;
+  bool _sosTriggeredListenerAttached = false;
   bool _tripPaymentListenerAttached = false;
   bool _driverOfferReceivedListenerAttached = false;
   bool _driverOfferClosedListenerAttached = false;
   bool _bookingListenerAttached = false;
   bool _sharedTripListenersAttached = false;
+  bool _systemNotificationListenerAttached = false;
+  bool _inAppCallListenerAttached = false;
   final List<void Function()> _connectionLostHandlers = [];
   final Map<String, void Function(DriverLocationUpdate update)>
   _driverLocationHandlers = {};
+  final Map<String, void Function(TripRouteRecalculatedUpdate update)>
+  _tripRouteRecalculatedHandlers = {};
   final Map<String, void Function(TripStatusUpdate update)>
   _tripStatusHandlers = {};
+  final Map<String, void Function(SOSTriggeredUpdate update)>
+  _sosTriggeredHandlers = {};
   final Map<String, void Function(TripPaymentUpdate update)>
   _tripPaymentHandlers = {};
   final Map<String, void Function(DriverOfferUpdate update)>
   _driverOfferReceivedHandlers = {};
-  final Map<String, void Function(int offerId)> _driverOfferClosedHandlers = {};
+  final Map<String, void Function({int? offerId, int? bookingId})>
+  _driverOfferClosedHandlers = {};
 
   final Map<String, void Function(BookingUpdate update)> _bookingHandlers = {};
   final Map<String, void Function(Map<String, dynamic> update)>
   _sharedTripLocationHandlers = {};
   final Map<String, void Function(String event, Map<String, dynamic> update)>
   _sharedTripStatusHandlers = {};
+  final Map<String, void Function(SystemNotificationUpdate update)>
+  _systemNotificationHandlers = {};
+  final Map<String, void Function(InAppCallSignal signal)>
+  _inAppCallOfferHandlers = {};
+  final Map<String, void Function(InAppCallSignal signal)>
+  _inAppCallAnswerHandlers = {};
+  final Map<String, void Function(InAppCallSignal signal)>
+  _inAppCallIceCandidateHandlers = {};
+  final Map<String, void Function(InAppCallSignal signal)>
+  _inAppCallRejectedHandlers = {};
+  final Map<String, void Function(InAppCallSignal signal)>
+  _inAppCallEndedHandlers = {};
 
   final Set<int> _desiredTripGroups = {};
   final Set<int> _joinedTripGroups = {};
@@ -547,12 +769,16 @@ class SocketService {
       debugPrint('SOCKET: Connection permanently closed. error=$error');
       _connection = null;
       _driverLocationListenerAttached = false;
+      _tripRouteRecalculatedListenerAttached = false;
       _tripStatusListenerAttached = false;
+      _sosTriggeredListenerAttached = false;
       _tripPaymentListenerAttached = false;
       _driverOfferReceivedListenerAttached = false;
       _driverOfferClosedListenerAttached = false;
       _bookingListenerAttached = false;
       _sharedTripListenersAttached = false;
+      _systemNotificationListenerAttached = false;
+      _inAppCallListenerAttached = false;
       _joinedTripGroups.clear();
       _joinedBookingGroups.clear();
       _joinedSharedTripGroups.clear();
@@ -577,8 +803,15 @@ class SocketService {
         !_driverLocationListenerAttached) {
       _attachDriverLocationListener();
     }
+    if (_tripRouteRecalculatedHandlers.isNotEmpty &&
+        !_tripRouteRecalculatedListenerAttached) {
+      _attachTripRouteRecalculatedListener();
+    }
     if (_tripStatusHandlers.isNotEmpty && !_tripStatusListenerAttached) {
       _attachTripStatusListener();
+    }
+    if (_sosTriggeredHandlers.isNotEmpty && !_sosTriggeredListenerAttached) {
+      _attachSOSTriggeredListener();
     }
     if (_tripPaymentHandlers.isNotEmpty && !_tripPaymentListenerAttached) {
       _attachTripPaymentListeners();
@@ -598,6 +831,13 @@ class SocketService {
             _sharedTripStatusHandlers.isNotEmpty) &&
         !_sharedTripListenersAttached) {
       _attachSharedTripListeners();
+    }
+    if (_systemNotificationHandlers.isNotEmpty &&
+        !_systemNotificationListenerAttached) {
+      _attachSystemNotificationListener();
+    }
+    if (_hasInAppCallHandlers && !_inAppCallListenerAttached) {
+      _attachInAppCallListeners();
     }
     if (_desiredTripGroups.isNotEmpty ||
         _desiredBookingGroups.isNotEmpty ||
@@ -637,6 +877,36 @@ class SocketService {
     _driverLocationHandlers.remove(key);
   }
 
+  void onTripRouteRecalculated(
+    void Function(TripRouteRecalculatedUpdate update) handler, {
+    String key = 'default',
+  }) {
+    _tripRouteRecalculatedHandlers[key] = handler;
+    _attachTripRouteRecalculatedListener();
+  }
+
+  void _attachTripRouteRecalculatedListener() {
+    if (_connection == null || _tripRouteRecalculatedListenerAttached) {
+      return;
+    }
+
+    _tripRouteRecalculatedListenerAttached = true;
+    _connection!.on('TripRouteRecalculated', (arguments) {
+      final update = TripRouteRecalculatedUpdate.fromSignalRArguments(
+        arguments,
+      );
+      if (update != null) {
+        for (final handler in List.of(_tripRouteRecalculatedHandlers.values)) {
+          handler(update);
+        }
+      }
+    });
+  }
+
+  void removeTripRouteRecalculatedHandler(String key) {
+    _tripRouteRecalculatedHandlers.remove(key);
+  }
+
   void onDriverOfferReceived(
     void Function(DriverOfferUpdate update) handler, {
     String key = 'default',
@@ -667,7 +937,7 @@ class SocketService {
   }
 
   void onDriverOfferClosed(
-    void Function(int offerId) handler, {
+    void Function({int? offerId, int? bookingId}) handler, {
     String key = 'default',
   }) {
     _driverOfferClosedHandlers[key] = handler;
@@ -687,9 +957,14 @@ class SocketService {
 
       final data = Map<String, dynamic>.from(arguments.first as Map);
       final offerId = (data[ApiKeys.offerId] ?? data['OfferId']) as num?;
-      if (offerId != null) {
+      final bookingId = (data[ApiKeys.bookingId] ?? data['BookingId']) as num?;
+
+      if (offerId != null || bookingId != null) {
         for (final handler in List.of(_driverOfferClosedHandlers.values)) {
-          handler(offerId.toInt());
+          handler(
+            offerId: offerId?.toInt(),
+            bookingId: bookingId?.toInt(),
+          );
         }
       }
     }
@@ -731,6 +1006,36 @@ class SocketService {
 
   void removeTripStatusChangedHandler(String key) {
     _tripStatusHandlers.remove(key);
+  }
+
+  void onSOSTriggered(
+    void Function(SOSTriggeredUpdate update) handler, {
+    String key = 'default',
+  }) {
+    _sosTriggeredHandlers[key] = handler;
+    _attachSOSTriggeredListener();
+  }
+
+  void _attachSOSTriggeredListener() {
+    if (_connection == null || _sosTriggeredListenerAttached) {
+      return;
+    }
+
+    _sosTriggeredListenerAttached = true;
+    _connection!.on(_configService.config.realtime.events.sosTriggered, (
+      arguments,
+    ) {
+      final update = SOSTriggeredUpdate.fromSignalRArguments(arguments);
+      if (update != null) {
+        for (final handler in List.of(_sosTriggeredHandlers.values)) {
+          handler(update);
+        }
+      }
+    });
+  }
+
+  void removeSOSTriggeredHandler(String key) {
+    _sosTriggeredHandlers.remove(key);
   }
 
   void onTripPaymentUpdated(
@@ -870,6 +1175,128 @@ class SocketService {
     }
   }
 
+  void onSystemNotificationReceived(
+    void Function(SystemNotificationUpdate update) handler, {
+    String key = 'default',
+  }) {
+    _systemNotificationHandlers[key] = handler;
+    _attachSystemNotificationListener();
+  }
+
+  void _attachSystemNotificationListener() {
+    if (_connection == null || _systemNotificationListenerAttached) {
+      return;
+    }
+
+    _systemNotificationListenerAttached = true;
+    _connection!.on('SystemNotificationReceived', (arguments) {
+      final update = SystemNotificationUpdate.fromSignalRArguments(arguments);
+      if (update != null) {
+        for (final handler in List.of(_systemNotificationHandlers.values)) {
+          handler(update);
+        }
+      }
+    });
+  }
+
+  void removeSystemNotificationReceivedHandler(String key) {
+    _systemNotificationHandlers.remove(key);
+  }
+
+  void onInAppCallOffer(
+    void Function(InAppCallSignal signal) handler, {
+    String key = 'default',
+  }) {
+    _inAppCallOfferHandlers[key] = handler;
+    _attachInAppCallListeners();
+  }
+
+  void removeInAppCallOfferHandler(String key) {
+    _inAppCallOfferHandlers.remove(key);
+  }
+
+  void onInAppCallAnswer(
+    void Function(InAppCallSignal signal) handler, {
+    String key = 'default',
+  }) {
+    _inAppCallAnswerHandlers[key] = handler;
+    _attachInAppCallListeners();
+  }
+
+  void removeInAppCallAnswerHandler(String key) {
+    _inAppCallAnswerHandlers.remove(key);
+  }
+
+  void onInAppCallIceCandidate(
+    void Function(InAppCallSignal signal) handler, {
+    String key = 'default',
+  }) {
+    _inAppCallIceCandidateHandlers[key] = handler;
+    _attachInAppCallListeners();
+  }
+
+  void removeInAppCallIceCandidateHandler(String key) {
+    _inAppCallIceCandidateHandlers.remove(key);
+  }
+
+  void onInAppCallRejected(
+    void Function(InAppCallSignal signal) handler, {
+    String key = 'default',
+  }) {
+    _inAppCallRejectedHandlers[key] = handler;
+    _attachInAppCallListeners();
+  }
+
+  void removeInAppCallRejectedHandler(String key) {
+    _inAppCallRejectedHandlers.remove(key);
+  }
+
+  void onInAppCallEnded(
+    void Function(InAppCallSignal signal) handler, {
+    String key = 'default',
+  }) {
+    _inAppCallEndedHandlers[key] = handler;
+    _attachInAppCallListeners();
+  }
+
+  void removeInAppCallEndedHandler(String key) {
+    _inAppCallEndedHandlers.remove(key);
+  }
+
+  void _attachInAppCallListeners() {
+    if (_connection == null || _inAppCallListenerAttached) {
+      return;
+    }
+
+    _inAppCallListenerAttached = true;
+    void attach(
+      String event,
+      Map<String, void Function(InAppCallSignal signal)> handlers,
+    ) {
+      _connection!.on(event, (arguments) {
+        final signal = InAppCallSignal.fromSignalRArguments(arguments);
+        if (signal != null) {
+          for (final handler in List.of(handlers.values)) {
+            handler(signal);
+          }
+        }
+      });
+    }
+
+    attach('InAppCallOffer', _inAppCallOfferHandlers);
+    attach('InAppCallAnswer', _inAppCallAnswerHandlers);
+    attach('InAppCallIceCandidate', _inAppCallIceCandidateHandlers);
+    attach('InAppCallRejected', _inAppCallRejectedHandlers);
+    attach('InAppCallEnded', _inAppCallEndedHandlers);
+  }
+
+  bool get _hasInAppCallHandlers =>
+      _inAppCallOfferHandlers.isNotEmpty ||
+      _inAppCallAnswerHandlers.isNotEmpty ||
+      _inAppCallIceCandidateHandlers.isNotEmpty ||
+      _inAppCallRejectedHandlers.isNotEmpty ||
+      _inAppCallEndedHandlers.isNotEmpty;
+
   Future<void> joinTrip(int tripId) async {
     final firstRequest = _desiredTripGroups.add(tripId);
     if (!firstRequest && _joinedTripGroups.contains(tripId)) {
@@ -961,6 +1388,26 @@ class SocketService {
     await _invokeSafely('SetDriverOffline', []);
   }
 
+  Future<void> sendInAppCallOffer(InAppCallSignal signal) async {
+    await _invokeSafely('SendInAppCallOffer', [signal.toJson()]);
+  }
+
+  Future<void> sendInAppCallAnswer(InAppCallSignal signal) async {
+    await _invokeSafely('SendInAppCallAnswer', [signal.toJson()]);
+  }
+
+  Future<void> sendInAppCallIceCandidate(InAppCallSignal signal) async {
+    await _invokeSafely('SendInAppCallIceCandidate', [signal.toJson()]);
+  }
+
+  Future<void> rejectInAppCall(InAppCallSignal signal) async {
+    await _invokeSafely('RejectInAppCall', [signal.toJson()]);
+  }
+
+  Future<void> endInAppCall(InAppCallSignal signal) async {
+    await _invokeSafely('EndInAppCall', [signal.toJson()]);
+  }
+
   void _rejoinGroups() {
     _joinedTripGroups.clear();
     _joinedBookingGroups.clear();
@@ -1027,13 +1474,17 @@ class SocketService {
     }
     _connection = null;
     _driverLocationListenerAttached = false;
+    _tripRouteRecalculatedListenerAttached = false;
     _tripStatusListenerAttached = false;
     _tripPaymentListenerAttached = false;
     _driverOfferReceivedListenerAttached = false;
     _driverOfferClosedListenerAttached = false;
     _bookingListenerAttached = false;
     _sharedTripListenersAttached = false;
+    _systemNotificationListenerAttached = false;
+    _inAppCallListenerAttached = false;
     _driverLocationHandlers.clear();
+    _tripRouteRecalculatedHandlers.clear();
     _tripStatusHandlers.clear();
     _tripPaymentHandlers.clear();
     _driverOfferReceivedHandlers.clear();
@@ -1041,6 +1492,12 @@ class SocketService {
     _bookingHandlers.clear();
     _sharedTripLocationHandlers.clear();
     _sharedTripStatusHandlers.clear();
+    _systemNotificationHandlers.clear();
+    _inAppCallOfferHandlers.clear();
+    _inAppCallAnswerHandlers.clear();
+    _inAppCallIceCandidateHandlers.clear();
+    _inAppCallRejectedHandlers.clear();
+    _inAppCallEndedHandlers.clear();
     _desiredTripGroups.clear();
     _joinedTripGroups.clear();
     _desiredBookingGroups.clear();

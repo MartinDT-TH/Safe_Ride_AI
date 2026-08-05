@@ -1,6 +1,7 @@
 import 'package:get_it/get_it.dart';
 
 import '../core/services/connectivity_service.dart';
+import '../core/localization/locale_provider.dart';
 import '../core/services/device_identity_service.dart';
 import '../core/services/location_service.dart';
 import '../core/services/mobile_config_service.dart';
@@ -35,16 +36,36 @@ import '../features/shared/history/data/datasources/history_remote_datasource.da
 import '../features/shared/history/data/repositories/history_repository_impl.dart';
 import '../features/shared/history/domain/repositories/history_repository.dart';
 import '../features/shared/history/presentation/providers/history_provider.dart';
+import '../features/shared/notifications/data/datasources/notification_remote_datasource.dart';
+import '../features/shared/notifications/data/repositories/notification_repository_impl.dart';
+import '../features/shared/notifications/domain/repositories/notification_repository.dart';
+import '../features/shared/notifications/presentation/providers/notification_provider.dart';
 import '../features/driver/dashboard/presentation/providers/driver_dashboard_provider.dart';
+import '../features/driver/wallet/data/datasources/driver_wallet_remote_datasource.dart';
+import '../features/driver/wallet/data/repositories/driver_wallet_repository_impl.dart';
+import '../features/driver/wallet/domain/repositories/driver_wallet_repository.dart';
+import '../features/driver/wallet/presentation/providers/driver_wallet_provider.dart';
+import '../features/driver/trip_requests/data/datasources/driver_trip_request_remote_datasource.dart';
+import '../features/driver/trip_requests/data/repositories/driver_trip_request_repository_impl.dart';
+import '../features/driver/trip_requests/domain/repositories/driver_trip_request_repository.dart';
 import '../features/driver/registration/data/datasources/identity_verification_remote_datasource.dart';
 import '../features/trip_sharing/data/datasources/trip_sharing_remote_datasource.dart';
 import '../features/trip_sharing/presentation/providers/trip_sharing_provider.dart';
 import '../features/trip_sharing/presentation/providers/received_trip_shares_provider.dart';
 import '../features/trip_sharing/trip_share_deep_link_coordinator.dart';
+import '../features/shared/chat/presentation/providers/trip_chat_provider.dart';
+import '../features/shared/feedback/data/datasources/feedback_remote_datasource.dart';
+import '../features/shared/feedback/data/repositories/feedback_repository_impl.dart';
+import '../features/shared/feedback/domain/repositories/feedback_repository.dart';
+import '../features/shared/feedback/presentation/providers/feedback_provider.dart';
 
 final getIt = GetIt.instance;
 
 Future<void> setupDependencies() async {
+  final localeProvider = LocaleProvider();
+  await localeProvider.load();
+  getIt.registerSingleton<LocaleProvider>(localeProvider);
+
   getIt.registerLazySingleton<SecureStorageService>(
     () => SecureStorageService(),
   );
@@ -156,11 +177,47 @@ Future<void> setupDependencies() async {
     () => HistoryProvider(getIt<HistoryRepository>()),
   );
 
+  getIt.registerLazySingleton<NotificationRemoteDatasource>(
+    () => NotificationRemoteDatasource(),
+  );
+
+  getIt.registerLazySingleton<NotificationRepository>(
+    () => NotificationRepositoryImpl(getIt<NotificationRemoteDatasource>()),
+  );
+
+  getIt.registerLazySingleton<NotificationProvider>(
+    () => NotificationProvider(
+      getIt<NotificationRepository>(),
+      getIt<SocketService>(),
+    ),
+  );
+
+  getIt.registerLazySingleton<DriverTripRequestRemoteDatasource>(
+    () => DriverTripRequestRemoteDatasource(),
+  );
+
+  getIt.registerLazySingleton<DriverTripRequestRepository>(
+    () => DriverTripRequestRepositoryImpl(
+      getIt<DriverTripRequestRemoteDatasource>(),
+    ),
+  );
+
   getIt.registerFactory<DriverDashboardProvider>(
     () => DriverDashboardProvider(
       socketService: getIt<SocketService>(),
       sessionManager: getIt<SessionManager>(),
+      tripRequestRepository: getIt<DriverTripRequestRepository>(),
     ),
+  );
+
+  getIt.registerLazySingleton<DriverWalletRemoteDatasource>(
+    () => DriverWalletRemoteDatasource(),
+  );
+  getIt.registerLazySingleton<DriverWalletRepository>(
+    () => DriverWalletRepositoryImpl(getIt<DriverWalletRemoteDatasource>()),
+  );
+  getIt.registerFactory<DriverWalletProvider>(
+    () => DriverWalletProvider(getIt<DriverWalletRepository>()),
   );
 
   getIt.registerLazySingleton<IdentityVerificationRemoteDatasource>(
@@ -183,4 +240,16 @@ Future<void> setupDependencies() async {
   getIt.registerFactory<ReceivedTripSharesProvider>(
     () => ReceivedTripSharesProvider(getIt<TripSharingRemoteDatasource>()),
   );
+
+  getIt.registerLazySingleton<FeedbackRemoteDatasource>(
+    () => FeedbackRemoteDatasource(),
+  );
+  getIt.registerLazySingleton<FeedbackRepository>(
+    () => FeedbackRepositoryImpl(getIt<FeedbackRemoteDatasource>()),
+  );
+  getIt.registerFactory<FeedbackProvider>(
+    () => FeedbackProvider(getIt<FeedbackRepository>()),
+  );
+
+  getIt.registerFactory<TripChatProvider>(() => TripChatProvider());
 }

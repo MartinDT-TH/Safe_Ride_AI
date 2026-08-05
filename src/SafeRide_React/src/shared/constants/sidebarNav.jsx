@@ -11,7 +11,7 @@ export const SIDEBAR_NAV_ITEMS = [
     { id: 'pricing', label: 'Cấu hình Giá', icon: <FontAwesomeIcon icon={faDollarSign}/> },
     { id: 'revenue', label: 'Doanh thu', icon: <FontAwesomeIcon icon={faChartBar}/> },
     { id: 'notifications', label: 'Thông báo', icon: <FontAwesomeIcon icon={faBell}/> },
-    { id: 'reports', label: 'Báo Cáo', icon: <FontAwesomeIcon icon={faChartPie}/> },
+    { id: 'reports', label: 'Báo cáo', icon: <FontAwesomeIcon icon={faChartPie}/> },
 ];
 export const SIDEBAR_FOOTER_DEFS = [
     { id: 'support', label: 'Hỗ trợ', icon: <FontAwesomeIcon icon={faQuestionCircle}/> },

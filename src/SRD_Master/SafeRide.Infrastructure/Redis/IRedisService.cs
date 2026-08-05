@@ -30,6 +30,24 @@ namespace SafeRide.Infrastructure.Redis
 
         Task RemoveAsync(string key);
 
+        Task ExpireAsync(
+            string key,
+            TimeSpan expiration,
+            CancellationToken cancellationToken = default);
+
+        Task ListRightPushTrimAndExpireAsync(
+            string key,
+            string value,
+            int maxLength,
+            TimeSpan expiration,
+            CancellationToken cancellationToken = default);
+
+        Task<IReadOnlyList<string>> ListRangeAsync(
+            string key,
+            long start = 0,
+            long stop = -1,
+            CancellationToken cancellationToken = default);
+
         Task<long> IncrementAsync(string key, TimeSpan expiration);
 
         Task GeoAddAsync(

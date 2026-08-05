@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import 'package:provider/provider.dart';
 import '../../../../../core/widgets/app_dialog.dart';
 import '../../data/models/vehicle_model.dart';
@@ -7,7 +8,7 @@ import '../widgets/vehicle_card.dart';
 import '../widgets/vehicle_form_sheet.dart';
 
 class MyVehiclesPage extends StatefulWidget {
-  const MyVehiclesPage({super.key});
+  MyVehiclesPage({super.key});
 
   @override
   State<MyVehiclesPage> createState() => _MyVehiclesPageState();
@@ -53,11 +54,10 @@ class _MyVehiclesPageState extends State<MyVehiclesPage> {
     AppDialog.show(
       context: context,
       icon: Icons.delete_forever_rounded,
-      title: 'Xóa phương tiện?',
-      description:
-          'Bạn có chắc chắn muốn xóa phương tiện "${vehicle.name}"? Hành động này không thể hoàn tác.',
-      confirmText: 'Xóa ngay',
-      cancelText: 'Hủy bỏ',
+      title: context.l10n.deleteVehicleQuestion,
+      description: context.l10n.deleteVehicleDescription(vehicle.name),
+      confirmText: context.l10n.deleteNow,
+      cancelText: context.l10n.dismiss,
       onConfirm: () async {
         Navigator.pop(context);
         final provider = context.read<VehicleProvider>();
@@ -73,7 +73,7 @@ class _MyVehiclesPageState extends State<MyVehiclesPage> {
   void _showError(VehicleProvider provider) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(provider.errorMessage ?? 'Không thể xử lý yêu cầu.'),
+        content: Text(provider.errorMessage ?? context.l10n.requestFailed),
       ),
     );
   }
@@ -83,16 +83,16 @@ class _MyVehiclesPageState extends State<MyVehiclesPage> {
     const tealColor = Color(0xFF006B70);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFCF9F9),
+      backgroundColor: Color(0xFFFCF9F9),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0.5,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: tealColor),
+          icon: Icon(Icons.arrow_back, color: tealColor),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          'Xe của tôi',
+        title: Text(
+          context.l10n.myVehicles,
           style: TextStyle(
             color: tealColor,
             fontWeight: FontWeight.bold,
@@ -117,9 +117,9 @@ class _MyVehiclesPageState extends State<MyVehiclesPage> {
                         onPressed: provider.isLoading || provider.isMutating
                             ? null
                             : _onAddVehicle,
-                        icon: const Icon(Icons.add, size: 22),
-                        label: const Text(
-                          'Thêm phương tiện mới',
+                        icon: Icon(Icons.add, size: 22),
+                        label: Text(
+                          context.l10n.addVehicle,
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -154,17 +154,17 @@ class _MyVehiclesPageState extends State<MyVehiclesPage> {
 
   Widget _buildContent(VehicleProvider provider) {
     if (provider.isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return Center(child: CircularProgressIndicator());
     }
 
     if (provider.errorMessage != null && provider.vehicles.isEmpty) {
       return RefreshIndicator(
         onRefresh: provider.loadVehicles,
-        color: const Color(0xFF006B70),
+        color: Color(0xFF006B70),
         child: LayoutBuilder(
           builder: (context, constraints) {
             return SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
+              physics: AlwaysScrollableScrollPhysics(),
               child: ConstrainedBox(
                 constraints: BoxConstraints(minHeight: constraints.maxHeight),
                 child: Center(
@@ -173,39 +173,47 @@ class _MyVehiclesPageState extends State<MyVehiclesPage> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.cloud_off_rounded,
                           size: 80,
                           color: Colors.grey,
                         ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Lỗi kết nối máy chủ',
+                        SizedBox(height: 16),
+                        Text(
+                          context.l10n.serverConnectionErrorTitle,
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
                             color: Color(0xFF1A1A1A),
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        SizedBox(height: 8),
                         Text(
                           provider.errorMessage!,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 15, color: Colors.black54),
+                          style: TextStyle(
+                            fontSize: 15,
+                            color: Colors.black54,
+                          ),
                         ),
-                        const SizedBox(height: 32),
+                        SizedBox(height: 32),
                         ElevatedButton.icon(
                           onPressed: provider.loadVehicles,
-                          icon: const Icon(Icons.refresh_rounded),
-                          label: const Text(
-                            'Thử lại',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          icon: Icon(Icons.refresh_rounded),
+                          label: Text(
+                            context.l10n.retry,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF006B70),
+                            backgroundColor: Color(0xFF006B70),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 32, vertical: 14),
+                              horizontal: 32,
+                              vertical: 14,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                             ),
@@ -226,20 +234,20 @@ class _MyVehiclesPageState extends State<MyVehiclesPage> {
     return RefreshIndicator(
       onRefresh: provider.loadVehicles,
       child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
+        physics: AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(20),
         children: [
-          const Text(
-            'Quản lý phương tiện cá nhân của bạn để sử dụng cho các dịch vụ gửi xe hoặc hỗ trợ lái xe.',
+          Text(
+            context.l10n.vehicleManagementDescription,
             style: TextStyle(
               fontSize: 14,
               color: Color(0xFF6B7280),
               height: 1.5,
             ),
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: 24),
           if (provider.vehicles.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 64),
               child: Column(
                 children: [
@@ -250,7 +258,7 @@ class _MyVehiclesPageState extends State<MyVehiclesPage> {
                   ),
                   SizedBox(height: 16),
                   Text(
-                    'Bạn chưa có phương tiện nào.',
+                    context.l10n.noVehicles,
                     style: TextStyle(color: Color(0xFF6B7280), fontSize: 15),
                   ),
                 ],
@@ -269,4 +277,3 @@ class _MyVehiclesPageState extends State<MyVehiclesPage> {
     );
   }
 }
-

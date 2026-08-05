@@ -193,6 +193,7 @@ public sealed class BookingsController : ControllerBase
         return Ok(result
             .Select(item => new BookingHistoryResponse(
                 item.Id,
+                item.TripId,
                 item.PickupAddress,
                 item.DestinationAddress,
                 item.OccurredAt,
@@ -204,7 +205,8 @@ public sealed class BookingsController : ControllerBase
                 item.IsMotorbike,
                 item.DriverName,
                 item.DriverRating,
-                item.DriverAvatarUrl))
+                item.DriverAvatarUrl,
+                item.HasReported))
             .ToList());
     }
 
@@ -239,13 +241,13 @@ public sealed class BookingsController : ControllerBase
         long bookingId,
         CancellationToken cancellationToken)
     {
-        if (!TryGetCustomerId(out var customerId))
+        if (!TryGetCurrentUserId(out var userId))
         {
             return Unauthorized(CreateUnauthorizedProblem());
         }
 
         var result = await _sender.Send(
-            new GetBookingDetailsQuery(customerId, bookingId),
+            new GetBookingDetailsQuery(userId, bookingId),
             cancellationToken);
 
         return Ok(ToResponse(result));

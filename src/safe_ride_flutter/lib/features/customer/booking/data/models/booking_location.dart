@@ -9,4 +9,3 @@ class BookingLocation {
   final double latitude;
   final double longitude;
 }
-

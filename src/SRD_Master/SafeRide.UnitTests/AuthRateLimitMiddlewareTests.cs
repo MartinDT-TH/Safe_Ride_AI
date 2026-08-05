@@ -60,6 +60,22 @@ public sealed class AuthRateLimitMiddlewareTests
                     .Distinct(StringComparer.Ordinal)
                     .ToDictionary(key => key, _ => (string?)null));
         public Task RemoveAsync(string key) => Task.CompletedTask;
+        public Task ExpireAsync(
+            string key,
+            TimeSpan expiration,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task ListRightPushTrimAndExpireAsync(
+            string key,
+            string value,
+            int maxLength,
+            TimeSpan expiration,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<IReadOnlyList<string>> ListRangeAsync(
+            string key,
+            long start = 0,
+            long stop = -1,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<string>>([]);
         public Task SetAsync(string key, string value, TimeSpan expiration) => Task.CompletedTask;
         public Task<bool> SetIfNotExistsAsync(string key, string value, TimeSpan expiration) =>
             Task.FromResult(true);

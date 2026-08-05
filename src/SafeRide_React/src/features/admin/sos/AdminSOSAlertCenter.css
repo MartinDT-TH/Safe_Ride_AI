@@ -1,0 +1,224 @@
+.admin-sos-panel {
+  position: fixed;
+  top: 72px;
+  right: 24px;
+  z-index: 1100;
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100vh - 88px);
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid #efb3b7;
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 16px 40px rgba(39, 18, 21, 0.22);
+}
+
+.admin-sos-panel > header,
+.admin-sos-modal > header,
+.admin-sos-card__title,
+.admin-sos-card__actions,
+.admin-sos-modal footer {
+  display: flex;
+  align-items: center;
+}
+
+.admin-sos-panel > header,
+.admin-sos-modal > header,
+.admin-sos-modal footer {
+  justify-content: space-between;
+}
+
+.admin-sos-panel > header {
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.admin-sos-panel > header span,
+.admin-sos-modal > header span {
+  color: #ba2635;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.admin-sos-panel h2,
+.admin-sos-modal h2 {
+  color: #3a2023;
+  font-size: 18px;
+}
+
+.admin-sos-panel > header button,
+.admin-sos-modal > header button {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  background: #f5eeee;
+  color: #78464c;
+}
+
+.admin-sos-connection-error,
+.admin-sos-load-error,
+.admin-sos-empty {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #fff2f3;
+  color: #a72331;
+  font-size: 13px;
+}
+
+.admin-sos-empty {
+  background: #f6f8f8;
+  color: var(--sr-gray-600);
+}
+
+.admin-sos-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-sos-card {
+  display: grid;
+  gap: 8px;
+  padding: 13px;
+  border-left: 4px solid #d73545;
+  border-radius: 6px;
+  background: #fff6f7;
+}
+
+.admin-sos-card__title {
+  gap: 10px;
+  min-width: 0;
+  color: #c12635;
+}
+
+.admin-sos-card__title > svg {
+  flex: 0 0 auto;
+  font-size: 20px;
+}
+
+.admin-sos-card__title div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.admin-sos-card__title strong,
+.admin-sos-card__title span,
+.admin-sos-card p,
+.admin-sos-detail-grid dd {
+  overflow-wrap: anywhere;
+}
+
+.admin-sos-card__title strong {
+  color: #3a2023;
+}
+
+.admin-sos-card__title span,
+.admin-sos-card small {
+  color: #87585d;
+  font-size: 12px;
+}
+
+.admin-sos-card p {
+  color: #5e3a3e;
+  font-size: 13px;
+}
+
+.admin-sos-card__message {
+  line-height: 1.5;
+}
+
+.admin-sos-card__actions {
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.admin-sos-card__actions button,
+.admin-sos-modal footer button {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+.admin-sos-card__actions button:first-child {
+  background: #c92839;
+  color: white;
+}
+
+.admin-sos-card__actions button:last-child,
+.admin-sos-modal footer button {
+  border: 1px solid #d9b9bd;
+  background: white;
+  color: #78464c;
+}
+
+.admin-sos-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(25, 12, 14, 0.52);
+}
+
+.admin-sos-modal {
+  width: min(620px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 18px 48px rgba(25, 12, 14, 0.28);
+}
+
+.admin-sos-modal > header {
+  gap: 16px;
+}
+
+.admin-sos-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 18px;
+  padding: 16px;
+  border-radius: 8px;
+  background: #faf6f6;
+}
+
+.admin-sos-detail-grid > div {
+  min-width: 0;
+}
+
+.admin-sos-detail-grid dt {
+  margin-bottom: 4px;
+  color: var(--sr-gray-500);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-sos-detail-grid dd {
+  margin: 0;
+  color: var(--sr-gray-800);
+  line-height: 1.45;
+}
+
+.admin-sos-modal footer {
+  justify-content: flex-end;
+}
+
+@media (max-width: 720px) {
+  .admin-sos-panel {
+    top: 68px;
+    right: 12px;
+  }
+
+  .admin-sos-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}

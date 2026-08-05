@@ -16,6 +16,7 @@ using SafeRide.Application.Common.Models;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Domain.Entities;
 using SafeRide.Infrastructure.Authentication;
+using SafeRide.Infrastructure.AiChat;
 using SafeRide.Infrastructure.BackgroundJobs;
 using SafeRide.Infrastructure.ExternalServices;
 using SafeRide.Infrastructure.ExternalServices.GoogleMaps;
@@ -59,6 +60,22 @@ public static class DependencyInjection
     {
         var backgroundJobsEnabled = configuration.GetValue<bool>("BackgroundJobs:Enabled");
 
+        services
+            .AddOptions<AiChatOptions>()
+            .Bind(configuration.GetSection(AiChatOptions.SectionName))
+            .PostConfigure(options =>
+                options.MongoConnectionString =
+                    configuration.GetConnectionString("MongoDB") ?? "");
+        services.AddHttpClient<IAiChatService, AiChatService>(client =>
+        {
+            client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
+        });
+        services.AddHttpClient<ITextTranslationService, GeminiTextTranslationService>(client =>
+        {
+            client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
+        });
+        services.AddHostedService<AiChatMongoInitializer>();
+
         services.AddDbContext<ApplicationDbContext>(
             options => options.UseSqlServer(
                 configuration.GetConnectionString("DefaultConnection"),
@@ -97,13 +114,25 @@ public static class DependencyInjection
         services
             .AddOptions<PayOsOptions>()
             .Bind(configuration.GetSection(PayOsOptions.SectionName));
+        var googleMapsIsPrimaryProvider = string.Equals(
+            configuration["MapServices:PrimaryProvider"],
+            "GoogleMaps",
+            StringComparison.OrdinalIgnoreCase);
         services
             .AddOptions<GoogleMapsOptions>()
             .Bind(configuration.GetSection(GoogleMapsOptions.SectionName))
-            .ValidateDataAnnotations()
-            .Validate(options => options.TimeoutSeconds > 0, "MapServices:GoogleMaps:TimeoutSeconds must be greater than zero.");
-            // NOTE: ValidateOnStart removed — Google Maps is a fallback provider.
-            // URL validation is skipped when VietMap is the primary provider.
+            .Validate(
+                options => !googleMapsIsPrimaryProvider || !string.IsNullOrWhiteSpace(options.ApiKey),
+                "MapServices:GoogleMaps:ApiKey must be configured when GoogleMaps is the primary provider.")
+            .Validate(
+                options => !googleMapsIsPrimaryProvider
+                    || (Uri.TryCreate(options.RoutesApiUrl, UriKind.Absolute, out var uri)
+                        && uri.Scheme == Uri.UriSchemeHttps),
+                "MapServices:GoogleMaps:RoutesApiUrl must be an absolute HTTPS URI when GoogleMaps is the primary provider.")
+            .Validate(
+                options => !googleMapsIsPrimaryProvider || options.TimeoutSeconds > 0,
+                "MapServices:GoogleMaps:TimeoutSeconds must be greater than zero when GoogleMaps is the primary provider.")
+            .ValidateOnStart();
         services
             .AddOptions<OpenRouteServiceOptions>()
             .Bind(configuration.GetSection(OpenRouteServiceOptions.SectionName))
@@ -181,6 +210,15 @@ public static class DependencyInjection
             .Validate(options => options.MaxInferredSpeedKmh > 0, "TripTracking:MaxInferredSpeedKmh must be greater than zero.")
             .Validate(options => options.MaxAccuracyMeters > 0, "TripTracking:MaxAccuracyMeters must be greater than zero.")
             .Validate(options => options.FinalizeLockSeconds > 0, "TripTracking:FinalizeLockSeconds must be greater than zero.")
+            .Validate(options => options.RouteDeviationThresholdMeters > 0, "TripTracking:RouteDeviationThresholdMeters must be greater than zero.")
+            .Validate(options => options.RouteDeviationRequiredSamples > 0, "TripTracking:RouteDeviationRequiredSamples must be greater than zero.")
+            .Validate(options => options.RouteDeviationStateTtlMinutes > 0, "TripTracking:RouteDeviationStateTtlMinutes must be greater than zero.")
+            .Validate(options => options.RouteRerouteCooldownSeconds > 0, "TripTracking:RouteRerouteCooldownSeconds must be greater than zero.")
+            .Validate(options => options.CustomerDeviationAlertCooldownMinutes > 0, "TripTracking:CustomerDeviationAlertCooldownMinutes must be greater than zero.")
+            .Validate(options => options.ActiveRouteTtlHours > 0, "TripTracking:ActiveRouteTtlHours must be greater than zero.")
+            .Validate(options => options.ReverseProgressThresholdMeters > 0, "TripTracking:ReverseProgressThresholdMeters must be greater than zero.")
+            .Validate(options => options.ReverseRequiredSamples > 0, "TripTracking:ReverseRequiredSamples must be greater than zero.")
+            .Validate(options => options.CustomerAlertDistanceIncreaseMeters > 0, "TripTracking:CustomerAlertDistanceIncreaseMeters must be greater than zero.")
             .ValidateOnStart();
 
         services
@@ -240,17 +278,29 @@ public static class DependencyInjection
         services.AddScoped<ITripSessionQueryService, TripSessionQueryService>();
         services.AddScoped<ITripContinuationAccessService, TripContinuationAccessService>();
         services.AddScoped<IBookingRepository, BookingRepository>();
+        services.AddScoped<IAdminPricingRuleRepository, AdminPricingRuleRepository>();
         services.AddScoped<IPromotionRepository, PromotionRepository>();
+        services.AddScoped<IAdminPromotionRepository, PromotionRepository>();
         services.AddScoped<IRatingRepository, RatingRepository>();
+        services.AddScoped<IReportRepository, ReportRepository>();
+        services.AddScoped<ISOSAlertRepository, SOSAlertRepository>();
+        services.AddScoped<IAdminCustomerAccountService, AdminCustomerAccountService>();
+        services.AddScoped<IAdminDriverAccountService, AdminDriverAccountService>();
+        services.AddScoped<IAdminBookingManagementService, AdminBookingManagementService>();
+        services.AddScoped<IAdminTripManagementService, AdminTripManagementService>();
+        services.AddScoped<IAdminNotificationManagementService, AdminNotificationManagementService>();
+        services.AddScoped<IUserNotificationService, UserNotificationService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddSingleton<IMatchingPolicyProvider, MatchingPolicyProvider>();
         services.AddScoped<IBookingMatchingService, BookingMatchingService>();
         services.AddScoped<IBookingAssignmentService, BookingAssignmentService>();
         services.AddScoped<IDriverQueryService, DriverQueryService>();
+        services.AddScoped<IDriverWalletService, DriverWalletService>();
         services.AddScoped<IDriverRealtimeService, DriverRealtimeService>();
         services.AddScoped<TripFareFinalizationService>();
         services.AddScoped<ITripStatusService, TripStatusService>();
         services.AddScoped<ITripSharingService, TripSharingService>();
+        services.AddScoped<ITripChatService, TripChatService>();
         services.AddHttpClient<ISpeedSmsService, InfobipSmsService>();
         services.AddHttpClient<IPaymentService, PayOsPaymentService>((provider, client) =>
         {
@@ -297,7 +347,13 @@ public static class DependencyInjection
             }
             else
             {
-                services.AddSingleton<IMapGeocodingService, NoOpGeocodingService>();
+                services.AddHttpClient<IMapGeocodingService, VietMapGeocodingService>(client =>
+                {
+                    var timeoutSeconds = configuration.GetValue<int>(
+                        "MapServices:VietMap:TimeoutSeconds",
+                        15);
+                    client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+                });
             }
             
         }

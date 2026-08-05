@@ -174,6 +174,41 @@ public sealed class ResilientRedisServiceTests
             return _storage.RemoveAsync(key);
         }
 
+        public Task ExpireAsync(
+            string key,
+            TimeSpan expiration,
+            CancellationToken cancellationToken = default)
+        {
+            BeforeCall();
+            return _storage.ExpireAsync(key, expiration, cancellationToken);
+        }
+
+        public Task ListRightPushTrimAndExpireAsync(
+            string key,
+            string value,
+            int maxLength,
+            TimeSpan expiration,
+            CancellationToken cancellationToken = default)
+        {
+            BeforeCall();
+            return _storage.ListRightPushTrimAndExpireAsync(
+                key,
+                value,
+                maxLength,
+                expiration,
+                cancellationToken);
+        }
+
+        public Task<IReadOnlyList<string>> ListRangeAsync(
+            string key,
+            long start = 0,
+            long stop = -1,
+            CancellationToken cancellationToken = default)
+        {
+            BeforeCall();
+            return _storage.ListRangeAsync(key, start, stop, cancellationToken);
+        }
+
         public Task<long> IncrementAsync(
             string key,
             TimeSpan expiration)

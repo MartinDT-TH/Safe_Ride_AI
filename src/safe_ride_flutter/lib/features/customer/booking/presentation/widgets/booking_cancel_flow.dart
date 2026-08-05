@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../auth/presentation/providers/auth_provider.dart';
@@ -56,7 +57,7 @@ Future<void> handleBookingBack(
   final token = context.read<AuthProvider>().token;
   if (token == null || token.isEmpty) {
     debugPrint('CANCEL_FLOW: No token found for cancellation');
-    _showMessage(context, 'Phiên đăng nhập đã hết hạn.');
+    _showMessage(context, context.l10n.sessionExpired);
     return;
   }
 
@@ -74,7 +75,7 @@ Future<void> handleBookingBack(
   if (result == null) {
     final error = context.read<BookingProvider>().errorMessage;
     debugPrint('CANCEL_FLOW: Cancellation failed: $error');
-    _showMessage(context, error ?? 'Không thể hủy chuyến. Vui lòng thử lại.');
+    _showMessage(context, error ?? context.l10n.cancelTripFailed);
     return;
   }
 
@@ -90,8 +91,8 @@ Future<void> handleBookingBack(
   _showMessage(
     context,
     result.bookingStatus == 'Expired'
-        ? 'Chuyến đã hết thời gian chờ và được kết thúc.'
-        : 'Đã hủy chuyến thành công.',
+        ? context.l10n.tripWaitExpired
+        : context.l10n.tripCancelledSuccessfully,
   );
 
   // Navigate back to home (root)

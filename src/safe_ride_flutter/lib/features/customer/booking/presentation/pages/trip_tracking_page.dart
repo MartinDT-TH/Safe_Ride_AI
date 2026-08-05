@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../../../../core/constants/app_colors.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
 import '../../../../../core/maps/models/map_models.dart';
 import '../../../../../core/maps/widgets/live_trip_map_widget.dart';
@@ -21,13 +23,18 @@ import '../../data/models/booking_location.dart';
 import '../../data/models/booking_response.dart';
 import '../providers/booking_provider.dart';
 import '../widgets/booking_cancel_flow.dart';
+import 'customer_trip_prepayment_page.dart';
 
+import '../../../../shared/call/presentation/pages/in_app_voice_call_page.dart';
+import '../../../../shared/call/services/call_tone_player.dart';
 import '../../../../shared/feedback/presentation/pages/trip_summary_page.dart';
+import '../../../../shared/feedback/presentation/pages/driver_reviews_page.dart';
+import '../../../../shared/chat/presentation/pages/trip_chat_page.dart';
 
 enum TripTrackingState { arriving, inProgress }
 
 class TripTrackingPage extends StatefulWidget {
-  const TripTrackingPage({
+  TripTrackingPage({
     super.key,
     required this.state,
     required this.booking,
@@ -56,6 +63,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   final MapApiService _mapApiService = MapApiService();
   final List<AppLatLng> _arrivalRoutePoints = [];
   final List<AppLatLng> _tripRoutePoints = [];
+  final List<AppLatLng> _actualPathPoints = [];
   AppLatLng? _driverPosition;
   double _driverHeading = 0;
   DateTime? _lastCameraFitAt;
@@ -69,6 +77,11 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   bool _summaryOpened = false;
   bool _isCompletingTrip = false;
   bool _arrivalRouteRefreshInProgress = false;
+  bool _incomingCallDialogOpen = false;
+  bool _deviationAlertOpen = false;
+  bool _isSendingSOS = false;
+  late bool _isSOSActivated;
+  late bool _isPrepaid;
   late String? _currentTripStatus;
   static const _tealColor = Color(0xFF006B70);
   static const double _arrivalRerouteThresholdMeters = 35;
@@ -89,13 +102,15 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     super.initState();
     _pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 2),
+      duration: Duration(seconds: 2),
     )..repeat(reverse: true);
     _currentTripStatus =
         widget.booking.tripStatus ??
         (widget.state == TripTrackingState.inProgress
             ? 'IN_PROGRESS'
             : 'DRIVER_ARRIVING');
+    _isPrepaid = widget.booking.payment?.isSuccess == true;
+    _isSOSActivated = widget.booking.isSOSActivated;
     _initializeRoutes();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -116,6 +131,11 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         if (!mounted) return;
         _openSummaryIfPostTrip(widget.booking.tripStatus);
       });
+    }
+    if (!oldWidget.booking.isSOSActivated &&
+        widget.booking.isSOSActivated &&
+        !_isSOSActivated) {
+      _isSOSActivated = true;
     }
 
     if (oldWidget.booking.tripId == null && widget.booking.tripId != null) {
@@ -152,6 +172,11 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       _socketService.removeTripStatusChangedHandler(
         _tripStatusHandlerKey(tripId),
       );
+      _socketService.removeTripRouteRecalculatedHandler(
+        _tripRouteHandlerKey(tripId),
+      );
+      _socketService.removeSOSTriggeredHandler(_sosHandlerKey(tripId));
+      _socketService.removeInAppCallOfferHandler(_callOfferHandlerKey(tripId));
       await _socketService.leaveTrip(tripId);
     } catch (e) {
       debugPrint('Tracking: Error during socket cleanup: $e');
@@ -167,9 +192,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     _joinedTripId = null;
     _tripSocketConnecting = false;
     if (mounted) {
-      _showMessage('Mất kết nối tới máy chủ. Đang thử kết nối lại...');
+      _showMessage(context.l10n.serverDisconnectedRetrying);
       _tripSocketRetryTimer?.cancel();
-      _tripSocketRetryTimer = Timer(const Duration(seconds: 3), () {
+      _tripSocketRetryTimer = Timer(Duration(seconds: 3), () {
         if (mounted) unawaited(_connectTripSocket());
       });
     }
@@ -199,6 +224,20 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         }
       } on FormatException {
         _tripRoutePoints.clear();
+      }
+    }
+
+    final actualPolyline = booking.actualEncodedPolyline;
+    if (actualPolyline != null && actualPolyline.isNotEmpty) {
+      try {
+        final points = decodePolyline(actualPolyline);
+        if (points.isNotEmpty) {
+          _actualPathPoints
+            ..clear()
+            ..addAll(points);
+        }
+      } on FormatException {
+        _actualPathPoints.clear();
       }
     }
 
@@ -237,6 +276,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
 
       setState(() {
         _currentTripStatus = booking.tripStatus ?? _currentTripStatus;
+        _isPrepaid = booking.payment?.isSuccess == true;
+        _isSOSActivated = _isSOSActivated || booking.isSOSActivated;
         _initializeRoutes(booking);
       });
       _openSummaryIfPostTrip(booking.tripStatus);
@@ -280,6 +321,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
             _driverHeading = _calculateHeading(_driverPosition!, rawPosition);
           }
           _driverPosition = rawPosition;
+          if (_trackingState == TripTrackingState.inProgress) {
+            _actualPathPoints.add(rawPosition);
+          }
         });
 
         _fitMapToVisibleRoute(throttled: true);
@@ -302,10 +346,53 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         if (_shouldOpenTripSummary(update.tripStatus)) {
           _openSummaryPage();
         } else if (update.tripStatus == 'CANCELLED') {
-          _showMessage('Chuyến đi đã được hủy.');
+          _showMessage(context.l10n.tripCancelled);
           Navigator.of(context).popUntil((route) => route.isFirst);
         }
       }, key: _tripStatusHandlerKey(tripId));
+
+      _socketService.onTripRouteRecalculated((update) {
+        if (!mounted || update.tripId != tripId) {
+          return;
+        }
+
+        try {
+          final points = decodePolyline(update.encodedPolyline);
+          if (points.length < 2) {
+            return;
+          }
+
+          setState(() {
+            _tripRoutePoints
+              ..clear()
+              ..addAll(points);
+          });
+          _fitMapToVisibleRoute();
+          if (update.shouldAlertCustomer) {
+            unawaited(_showRouteDeviationAlert(update.message));
+          }
+        } on FormatException {
+          debugPrint('Tracking: Invalid recalculated trip polyline.');
+        }
+      }, key: _tripRouteHandlerKey(tripId));
+
+      _socketService.onSOSTriggered((update) {
+        if (!mounted || update.tripId != tripId || _isSOSActivated) {
+          return;
+        }
+        context.read<BookingProvider>().markSOSActivated(tripId);
+        setState(() {
+          _isSOSActivated = true;
+          _isSendingSOS = false;
+        });
+      }, key: _sosHandlerKey(tripId));
+
+      _socketService.onInAppCallOffer((signal) {
+        if (!mounted || signal.tripId != tripId || signal.sdp == null) {
+          return;
+        }
+        _showIncomingCallDialog(signal);
+      }, key: _callOfferHandlerKey(tripId));
 
       await _socketService.joinTrip(tripId);
       debugPrint('Tracking: Joined Trip Group $tripId');
@@ -317,11 +404,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     } catch (e) {
       debugPrint('Tracking Error: $e');
       if (mounted) {
-        _showMessage(
-          'Không thể kết nối theo dõi vị trí tài xế. Đang thử lại...',
-        );
+        _showMessage(context.l10n.driverLocationTrackingRetrying);
         _tripSocketRetryTimer?.cancel();
-        _tripSocketRetryTimer = Timer(const Duration(seconds: 3), () {
+        _tripSocketRetryTimer = Timer(Duration(seconds: 3), () {
           if (mounted) {
             unawaited(_connectTripSocket());
           }
@@ -453,6 +538,118 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       );
   }
 
+  Future<void> _showRouteDeviationAlert(String message) async {
+    if (!mounted || _deviationAlertOpen) return;
+    _deviationAlertOpen = true;
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          icon: Icon(
+            Icons.health_and_safety_outlined,
+            color: Colors.orange,
+            size: 34,
+          ),
+          title: Text(context.l10n.safetyCheck),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _showMessage(context.l10n.safetyConfirmed);
+              },
+              child: Text(context.l10n.iAmSafe),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                unawaited(_startInAppCall());
+              },
+              child: Text(context.l10n.callDriver),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      _deviationAlertOpen = false;
+    }
+  }
+
+  bool get _canTriggerSOS {
+    final status = _currentTripStatus?.toUpperCase();
+    return status == 'ACCEPTED' ||
+        status == 'ARRIVED' ||
+        status == 'IN_PROGRESS';
+  }
+
+  Future<void> _confirmAndTriggerSOS() async {
+    if (_isSendingSOS || _isSOSActivated || !_canTriggerSOS) {
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.l10n.activateSosQuestion),
+        content: Text(context.l10n.activateSosDescription),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(context.l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: Text(context.l10n.activateSos),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    final tripId = widget.booking.tripId;
+    final token = context.read<AuthProvider>().token;
+    if (tripId == null || token == null || token.isEmpty) {
+      _showMessage(context.l10n.sosActivationFailed);
+      return;
+    }
+
+    setState(() => _isSendingSOS = true);
+    final bookingProvider = context.read<BookingProvider>();
+    final location = await bookingProvider.getCurrentLocation();
+    if (!mounted) return;
+    if (location == null) {
+      setState(() => _isSendingSOS = false);
+      _showMessage(context.l10n.sosLocationFailed);
+      return;
+    }
+
+    final success = await bookingProvider.triggerSOS(
+      token,
+      tripId: tripId,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      message: context.l10n.emergencyHelpMessage,
+    );
+    if (!mounted) return;
+
+    final duplicate = bookingProvider.errorStatusCode == 409;
+    setState(() {
+      _isSendingSOS = false;
+      _isSOSActivated = success || duplicate;
+    });
+    if (duplicate) {
+      bookingProvider.markSOSActivated(tripId);
+      _showMessage(context.l10n.sosActivatedForTrip);
+    } else if (success) {
+      _showMessage(context.l10n.sosActivatedHelpComing);
+    } else {
+      _showMessage(context.l10n.sosActivationFailed);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -476,6 +673,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
           : null,
       arrivalRoutePoints: _arrivalRoutePoints,
       tripRoutePoints: _tripRoutePoints,
+      actualPathPoints: _actualPathPoints,
       driverPosition: _driverPosition,
       driverHeading: _driverHeading,
       padding: const EdgeInsets.only(
@@ -717,7 +915,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                     widget.onSwitchTab?.call(0);
                   },
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Expanded(
                   child: Container(
                     padding: const EdgeInsets.symmetric(
@@ -731,7 +929,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.12),
                           blurRadius: 16,
-                          offset: const Offset(0, 4),
+                          offset: Offset(0, 4),
                         ),
                       ],
                     ),
@@ -739,17 +937,21 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         _buildLiveIndicator(),
-                        const SizedBox(width: 8),
+                        SizedBox(width: 8),
                         Flexible(
                           child: Text(
                             _currentTripStatus == 'ARRIVED'
-                                ? 'Tài xế đã đến điểm đón'
+                                ? context.l10n.driverAtPickup
                                 : _currentTripStatus == 'WAITING_PAYMENT'
-                                ? 'Chờ thanh toán cho tài xế'
+                                ? context.l10n.waitingDriverPayment
                                 : isArriving
-                                ? 'Tài xế đang đến • ${_getArrivalDurationMinutes()} phút'
-                                : 'Đang di chuyển • ${_getTripDurationMinutes()} phút',
-                            style: const TextStyle(
+                                ? context.l10n.driverArrivingMinutes(
+                                    _getArrivalDurationMinutes(),
+                                  )
+                                : context.l10n.movingMinutes(
+                                    _getTripDurationMinutes(),
+                                  ),
+                            style: TextStyle(
                               fontWeight: FontWeight.w800,
                               fontSize: 13,
                               color: _tealColor,
@@ -761,8 +963,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
-                const Opacity(
+                SizedBox(width: 12),
+                Opacity(
                   opacity: 0,
                   child: _CircleIconButton(
                     icon: Icons.arrow_back,
@@ -772,7 +974,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
               ],
             ),
             if (!isArriving && widget.destination != null) ...[
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 18,
@@ -785,23 +987,23 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.08),
                       blurRadius: 12,
-                      offset: const Offset(0, 4),
+                      offset: Offset(0, 4),
                     ),
                   ],
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.location_on_rounded,
                       color: Colors.redAccent,
                       size: 18,
                     ),
-                    const SizedBox(width: 8),
+                    SizedBox(width: 8),
                     Flexible(
                       child: Text(
                         widget.destination!.address,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 14,
                           color: Color(0xFF1D2939),
@@ -825,7 +1027,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       child: Container(
         width: 10,
         height: 10,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: Colors.red,
           shape: BoxShape.circle,
           boxShadow: [
@@ -840,7 +1042,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     final bool isArriving = _trackingState == TripTrackingState.arriving;
     final offer = widget.booking.driverOffer;
     final vehicle = widget.vehicle;
-    final plateParts = vehicle?.plateNumber.split('-') ?? const [];
+    final plateParts = vehicle?.plateNumber.split('-') ?? [];
 
     return Positioned(
       bottom: 0,
@@ -848,7 +1050,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       right: 0,
       child: Container(
         padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
           boxShadow: [
@@ -875,7 +1077,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Row(
+                  Row(
                     children: [
                       Icon(
                         Icons.check_circle_rounded,
@@ -884,7 +1086,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                       ),
                       SizedBox(width: 10),
                       Text(
-                        'Bạn đang đi đúng lộ trình',
+                        context.l10n.onCorrectRoute,
                         style: TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 15,
@@ -894,11 +1096,13 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                     ],
                   ),
                   _SosButton(
-                    onTap: () => _showMessage('Đã gửi tín hiệu SOS khẩn cấp!'),
+                    isActivated: _isSOSActivated,
+                    isLoading: _isSendingSOS,
+                    onTap: _canTriggerSOS ? _confirmAndTriggerSOS : null,
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: 24),
             ],
             Row(
               children: [
@@ -911,7 +1115,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                           ? NetworkImage(offer!.driverAvatarUrl!)
                           : null,
                       child: offer?.driverAvatarUrl == null
-                          ? const Icon(
+                          ? Icon(
                               Icons.person,
                               size: 30,
                               color: Colors.grey,
@@ -929,21 +1133,21 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(12),
-                          boxShadow: const [
+                          boxShadow: [
                             BoxShadow(color: Colors.black12, blurRadius: 4),
                           ],
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.star_rounded,
                               color: Colors.amber,
                               size: 14,
                             ),
                             Text(
                               offer == null ? ' --' : ' ${offer.rating}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w800,
                               ),
@@ -954,23 +1158,78 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                     ),
                   ],
                 ),
-                const SizedBox(width: 16),
+                SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        offer?.driverName ?? 'Tài xế SafeRide',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFF1A1A1A),
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              offer?.driverName ??
+                                  context.l10n.safeRideDriverName,
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF1A1A1A),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (offer != null) ...[
+                            SizedBox(width: 4),
+                            InkWell(
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => DriverReviewsPage(
+                                      driverId: offer.driverId,
+                                      driverName: offer.driverName,
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.1,
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.star_outline_rounded,
+                                      size: 16,
+                                      color: AppColors.primary,
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      context.l10n.viewReviews,
+                                      style: TextStyle(
+                                        color: AppColors.primary,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                      const SizedBox(height: 4),
+                      SizedBox(height: 4),
                       Text(
                         vehicle == null
-                            ? 'Đang cập nhật xe'
+                            ? context.l10n.updatingVehicle
                             : '${vehicle.name} - ${vehicle.color}',
                         style: TextStyle(
                           color: Colors.grey[600],
@@ -987,14 +1246,14 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF2F4F7),
+                    color: Color(0xFFF2F4F7),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
                     children: [
                       Text(
                         plateParts.isNotEmpty ? plateParts.first.trim() : '--',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                           color: Color(0xFF667085),
@@ -1002,7 +1261,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                       ),
                       Text(
                         plateParts.length > 1 ? plateParts.last.trim() : '--',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w900,
                           color: Color(0xFF1D2939),
@@ -1013,25 +1272,70 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                 ),
               ],
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: 24),
             if (isArriving) ...[
+              SizedBox(
+                width: double.infinity,
+                child: _isPrepaid
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: Color(0xFFE5F5F0),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.check_circle_rounded,
+                              color: Color(0xFF0A8F62),
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              context.l10n.prepaid,
+                              style: TextStyle(
+                                color: Color(0xFF08734F),
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ElevatedButton.icon(
+                        onPressed: _openPrepayment,
+                        icon: Icon(Icons.qr_code_2_rounded),
+                        label: Text(context.l10n.prepayWithPayos),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _tealColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 15),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          textStyle: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+              ),
+              SizedBox(height: 14),
               Row(
                 children: [
                   Expanded(
                     child: _ActionButton(
                       icon: Icons.chat_bubble_rounded,
-                      label: 'Nhắn tin',
-                      onPressed: () =>
-                          _showMessage('Chức năng nhắn tin đang phát triển'),
+                      label: context.l10n.message,
+                      onPressed: _openChat,
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: 12),
                   Expanded(
                     flex: 2,
                     child: ElevatedButton.icon(
-                      onPressed: () => _showMessage('Đang kết nối cuộc gọi...'),
-                      icon: const Icon(Icons.phone_in_talk_rounded),
-                      label: const Text('Gọi điện'),
+                      onPressed: _startInAppCall,
+                      icon: Icon(Icons.phone_in_talk_rounded),
+                      label: Text(context.l10n.call),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _tealColor,
                         foregroundColor: Colors.white,
@@ -1040,28 +1344,30 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
-                        textStyle: const TextStyle(
+                        textStyle: TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 16,
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: 12),
                   _SosButton(
                     isCircle: true,
-                    onTap: () => _showMessage('Đã gửi tín hiệu SOS khẩn cấp!'),
+                    isActivated: _isSOSActivated,
+                    isLoading: _isSendingSOS,
+                    onTap: _canTriggerSOS ? _confirmAndTriggerSOS : null,
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   InkWell(
                     onTap: _showShareModal,
                     borderRadius: BorderRadius.circular(8),
-                    child: const Padding(
+                    child: Padding(
                       padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       child: Row(
                         children: [
@@ -1072,7 +1378,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                           ),
                           SizedBox(width: 8),
                           Text(
-                            'Chia sẻ',
+                            context.l10n.share,
                             style: TextStyle(
                               color: Colors.black87,
                               fontWeight: FontWeight.w600,
@@ -1086,8 +1392,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                   TextButton(
                     onPressed: () =>
                         handleBookingBack(context, booking: widget.booking),
-                    child: const Text(
-                      'Hủy chuyến',
+                    child: Text(
+                      context.l10n.cancelBooking,
                       style: TextStyle(
                         color: Color(0xFFE53935),
                         fontWeight: FontWeight.w700,
@@ -1103,25 +1409,25 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                   width: double.infinity,
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE8F2F2),
+                    color: Color(0xFFE8F2F2),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: const Color(0xFF006B70).withValues(alpha: 0.28),
+                      color: Color(0xFF006B70).withValues(alpha: 0.28),
                     ),
                   ),
                   child: Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.payments_rounded,
                         color: _tealColor,
                         size: 22,
                       ),
-                      const SizedBox(width: 10),
+                      SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           widget.booking.payment?.message ??
-                              'Vui lòng thanh toán cho tài xế để hoàn tất chuyến đi.',
-                          style: const TextStyle(
+                              context.l10n.payDriverToComplete,
+                          style: TextStyle(
                             color: Color(0xFF00545A),
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
@@ -1132,44 +1438,52 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
               ],
               Row(
                 children: [
                   Expanded(
                     child: _CircleActionButton(
-                      icon: Icons.share_rounded,
-                      onPressed: _showShareModal,
-                      label: 'Chia sẻ',
+                      icon: Icons.chat_bubble_rounded,
+                      onPressed: _openChat,
+                      label: context.l10n.message,
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  SizedBox(width: 16),
+                  Expanded(
+                    child: _CircleActionButton(
+                      icon: Icons.share_rounded,
+                      onPressed: _showShareModal,
+                      label: context.l10n.share,
+                    ),
+                  ),
+                  SizedBox(width: 16),
                   Expanded(
                     child: _CircleActionButton(
                       icon: Icons.phone_in_talk_rounded,
-                      onPressed: () {},
-                      label: 'Gọi điện',
+                      onPressed: _startInAppCall,
+                      label: context.l10n.call,
                     ),
                   ),
                 ],
               ),
               if (_currentTripStatus == 'IN_PROGRESS') ...[
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     onPressed: _isCompletingTrip ? null : _completeTrip,
                     icon: _isCompletingTrip
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.check_circle_rounded),
+                        : Icon(Icons.check_circle_rounded),
                     label: Text(
                       _isCompletingTrip
-                          ? 'Đang kết thúc...'
-                          : 'Kết thúc chuyến',
+                          ? context.l10n.endingTrip
+                          : context.l10n.endTrip,
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _tealColor,
@@ -1198,6 +1512,173 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     showDialog(
       context: context,
       builder: (context) => Center(child: ShareTripModal(tripId: tripId)),
+    );
+  }
+
+  Future<void> _openPrepayment() async {
+    final tripId = widget.booking.tripId;
+    if (tripId == null) {
+      _showMessage(context.l10n.tripNotReadyForPayment);
+      return;
+    }
+
+    final paid = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => CustomerTripPrepaymentPage(tripId: tripId),
+      ),
+    );
+    if (!mounted) return;
+    if (paid == true) {
+      setState(() => _isPrepaid = true);
+      unawaited(_refreshTrackingSnapshot());
+    }
+  }
+
+  void _openChat() {
+    final tripId = widget.booking.tripId;
+    final auth = context.read<AuthProvider>();
+    final accessToken = auth.token;
+    final currentUserId = auth.userId;
+    final driverName = widget.booking.driverOffer?.driverName;
+
+    if (tripId == null) {
+      _showMessage(context.l10n.tripNotReadyForChat);
+      return;
+    }
+    if (accessToken == null || accessToken.isEmpty) {
+      _showMessage(context.l10n.sessionExpired);
+      return;
+    }
+    if (currentUserId == null) {
+      _showMessage(context.l10n.chatAccountUnknown);
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TripChatPage(
+          tripId: tripId,
+          currentUserId: currentUserId,
+          receiverName: driverName,
+          canSendMessage: _canSendChat(_currentTripStatus),
+        ),
+      ),
+    );
+  }
+
+  bool _canSendChat(String? status) {
+    if (status == null) return true;
+    final normalized = status.trim().toUpperCase();
+    return normalized != 'CANCELLED' &&
+        normalized != 'CANCELED' &&
+        normalized != 'EXPIRED';
+  }
+
+  Future<void> _startInAppCall() async {
+    final tripId = widget.booking.tripId;
+    final accessToken = context.read<AuthProvider>().token;
+    if (tripId == null || accessToken == null || accessToken.isEmpty) {
+      _showMessage(context.l10n.tripNotReadyForCall);
+      return;
+    }
+
+    await _socketService.connect(accessToken);
+    await _socketService.joinTrip(tripId);
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => InAppVoiceCallPage(
+          tripId: tripId,
+          bookingId: widget.booking.bookingId,
+          peerName:
+              widget.booking.driverOffer?.driverName ??
+              context.l10n.safeRideDriverName,
+          accessToken: accessToken,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showIncomingCallDialog(InAppCallSignal signal) async {
+    if (_incomingCallDialogOpen) return;
+    _incomingCallDialogOpen = true;
+    final callTonePlayer = CallTonePlayer();
+    final endedHandlerKey = 'incomingTone:${signal.tripId}:${signal.callId}';
+    BuildContext? incomingDialogContext;
+    var endedByPeer = false;
+    _socketService.onInAppCallEnded((endedSignal) {
+      if (endedSignal.tripId != signal.tripId ||
+          endedSignal.callId != signal.callId) {
+        return;
+      }
+      endedByPeer = true;
+      final dialogContext = incomingDialogContext;
+      if (dialogContext != null && dialogContext.mounted) {
+        Navigator.of(dialogContext).pop();
+      }
+    }, key: endedHandlerKey);
+    await callTonePlayer.playIncoming();
+    if (!mounted || endedByPeer) {
+      _socketService.removeInAppCallEndedHandler(endedHandlerKey);
+      await callTonePlayer.dispose();
+      _incomingCallDialogOpen = false;
+      return;
+    }
+    final accessToken = context.read<AuthProvider>().token;
+    bool? accepted;
+    try {
+      accepted = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          incomingDialogContext = dialogContext;
+          return AlertDialog(
+            title: Text(context.l10n.incomingCall),
+            content: Text(
+              context.l10n.driverCalling(
+                widget.booking.driverOffer?.driverName ??
+                    context.l10n.safeRideDriverName,
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(context.l10n.decline),
+              ),
+              FilledButton.icon(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                icon: Icon(Icons.call_rounded),
+                label: Text(context.l10n.answer),
+              ),
+            ],
+          );
+        },
+      );
+    } finally {
+      _socketService.removeInAppCallEndedHandler(endedHandlerKey);
+      await callTonePlayer.dispose();
+    }
+    _incomingCallDialogOpen = false;
+
+    if (!mounted || accessToken == null || accessToken.isEmpty) return;
+    if (endedByPeer) return;
+    if (accepted != true) {
+      await _socketService.rejectInAppCall(signal);
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => InAppVoiceCallPage(
+          tripId: signal.tripId,
+          bookingId: signal.bookingId ?? widget.booking.bookingId,
+          peerName:
+              widget.booking.driverOffer?.driverName ??
+              context.l10n.safeRideDriverName,
+          accessToken: accessToken,
+          initialOffer: signal,
+        ),
+      ),
     );
   }
 
@@ -1241,7 +1722,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       await _openSummaryPage(booking);
     } else if (booking.tripStatus == 'CANCELLED' ||
         booking.bookingStatus == 'Cancelled') {
-      _showMessage('Chuyến đi đã được hủy.');
+      _showMessage(context.l10n.tripCancelled);
       Navigator.of(context).popUntil((route) => route.isFirst);
     } else {
       setState(() {
@@ -1254,7 +1735,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     final tripId = widget.booking.tripId;
     final accessToken = context.read<AuthProvider>().token;
     if (tripId == null || accessToken == null || accessToken.isEmpty) {
-      _showMessage('Không thể kết thúc chuyến lúc này.');
+      _showMessage(context.l10n.tripCannotEndNow);
       return;
     }
 
@@ -1269,7 +1750,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     if (!ok) {
       _showMessage(
         context.read<BookingProvider>().errorMessage ??
-            'Không thể kết thúc chuyến. Vui lòng thử lại.',
+            context.l10n.tripEndFailed,
       );
       return;
     }
@@ -1317,8 +1798,11 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   }
 
   static String _tripStatusHandlerKey(int tripId) => 'tripTracking:$tripId';
+  static String _sosHandlerKey(int tripId) => 'tripTrackingSOS:$tripId';
   static String _driverLocationHandlerKey(int tripId) =>
       'tripTrackingLocation:$tripId';
+  static String _tripRouteHandlerKey(int tripId) => 'tripTrackingRoute:$tripId';
+  static String _callOfferHandlerKey(int tripId) => 'tripTrackingCall:$tripId';
   static bool _shouldOpenTripSummary(String? status) {
     if (status == null) return false;
     final s = status.toUpperCase();
@@ -1339,7 +1823,7 @@ class _RouteProgress {
   final double progress;
   final double distanceMeters;
 
-  const _RouteProgress({
+  _RouteProgress({
     required this.point,
     required this.segmentIndex,
     required this.progress,
@@ -1350,7 +1834,7 @@ class _RouteProgress {
 class _CircleIconButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onPressed;
-  const _CircleIconButton({required this.icon, this.onPressed});
+  _CircleIconButton({required this.icon, this.onPressed});
 
   @override
   Widget build(BuildContext context) {
@@ -1362,7 +1846,7 @@ class _CircleIconButton extends StatelessWidget {
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 10,
-            offset: const Offset(0, 4),
+            offset: Offset(0, 4),
           ),
         ],
       ),
@@ -1378,7 +1862,7 @@ class _ActionButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onPressed;
-  const _ActionButton({
+  _ActionButton({
     required this.icon,
     required this.label,
     required this.onPressed,
@@ -1391,11 +1875,11 @@ class _ActionButton extends StatelessWidget {
       icon: Icon(icon, size: 20),
       label: Text(label),
       style: OutlinedButton.styleFrom(
-        foregroundColor: const Color(0xFF1A1A1A),
+        foregroundColor: Color(0xFF1A1A1A),
         side: BorderSide(color: Colors.grey[200]!, width: 1.5),
         padding: const EdgeInsets.symmetric(vertical: 16),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+        textStyle: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
       ),
     );
   }
@@ -1405,7 +1889,7 @@ class _CircleActionButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;
   final String? label;
-  const _CircleActionButton({
+  _CircleActionButton({
     required this.icon,
     required this.onPressed,
     this.label,
@@ -1419,18 +1903,18 @@ class _CircleActionButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color: const Color(0xFFEAF4F4),
+          color: Color(0xFFEAF4F4),
           borderRadius: BorderRadius.circular(30),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: const Color(0xFF006B70), size: 22),
+            Icon(icon, color: Color(0xFF006B70), size: 22),
             if (label != null) ...[
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               Text(
                 label!,
-                style: const TextStyle(
+                style: TextStyle(
                   color: Color(0xFF006B70),
                   fontWeight: FontWeight.w800,
                   fontSize: 15,
@@ -1446,31 +1930,52 @@ class _CircleActionButton extends StatelessWidget {
 
 class _SosButton extends StatelessWidget {
   final bool isCircle;
+  final bool isActivated;
+  final bool isLoading;
   final VoidCallback? onTap;
-  const _SosButton({this.isCircle = false, this.onTap});
+  _SosButton({
+    this.isCircle = false,
+    this.isActivated = false,
+    this.isLoading = false,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final enabled = onTap != null && !isActivated && !isLoading;
+    final useCircle = isCircle && !isActivated && !isLoading;
     return GestureDetector(
-      onTap: onTap,
+      onTap: enabled ? onTap : null,
       child: Container(
-        padding: isCircle
+        padding: useCircle
             ? const EdgeInsets.all(16)
             : const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: const Color(0xFFE53935),
-          shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
-          borderRadius: isCircle ? null : BorderRadius.circular(20),
+          color: isActivated
+              ? Color(0xFF667085)
+              : enabled || isLoading
+              ? Color(0xFFE53935)
+              : Color(0xFFB0B0B0),
+          shape: useCircle ? BoxShape.circle : BoxShape.rectangle,
+          borderRadius: useCircle ? null : BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFE53935).withValues(alpha: 0.3),
+              color:
+                  (isActivated
+                          ? Color(0xFF667085)
+                          : Color(0xFFE53935))
+                      .withValues(alpha: 0.3),
               blurRadius: 8,
-              offset: const Offset(0, 4),
+              offset: Offset(0, 4),
             ),
           ],
         ),
-        child: const Text(
-          'SOS',
+        child: Text(
+          isActivated
+              ? context.l10n.sosActivated
+              : isLoading
+              ? context.l10n.sendingSos
+              : 'SOS',
           style: TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.w900,

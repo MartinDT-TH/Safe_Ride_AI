@@ -3,6 +3,7 @@ import 'package:geocoding/geocoding.dart' as native_geo;
 import 'package:geolocator/geolocator.dart';
 
 import '../constants/app_strings.dart';
+import '../localization/locale_provider.dart';
 import '../../features/customer/booking/data/models/booking_location.dart';
 import '../maps/models/map_api_models.dart';
 import 'map_api_service.dart';
@@ -15,7 +16,9 @@ class LocationService {
 
   Future<BookingLocation> getCurrentLocation() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
-      throw const LocationServiceException(LocationStrings.serviceDisabled);
+      throw LocationServiceException(
+        LocaleProvider.currentLocalizations.serviceDisabled,
+      );
     }
 
     var permission = await Geolocator.checkPermission();
@@ -25,7 +28,9 @@ class LocationService {
 
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
-      throw const LocationServiceException(LocationStrings.permissionRequired);
+      throw LocationServiceException(
+        LocaleProvider.currentLocalizations.permissionRequired,
+      );
     }
 
     final lastKnown = await Geolocator.getLastKnownPosition();
@@ -45,8 +50,8 @@ class LocationService {
         ).catchError((_) async {
           final lastKnown = await Geolocator.getLastKnownPosition();
           if (lastKnown != null) return lastKnown;
-          throw const LocationServiceException(
-            LocationStrings.locationNotFound,
+          throw LocationServiceException(
+            LocaleProvider.currentLocalizations.locationNotFound,
           );
         });
     return await _toBookingLocation(position);
@@ -68,7 +73,9 @@ class LocationService {
   Future<BookingLocation> resolveAddress(String address) async {
     final normalizedAddress = address.trim();
     if (normalizedAddress.isEmpty) {
-      throw const LocationServiceException(LocationStrings.destinationRequired);
+      throw LocationServiceException(
+        LocaleProvider.currentLocalizations.destinationRequired,
+      );
     }
 
     // 1st attempt: backend API
@@ -91,8 +98,9 @@ class LocationService {
     // 2nd attempt: native device geocoder (Android Geocoder / iOS CLGeocoder)
     try {
       debugPrint("native");
-      final nativeLocations =
-          await native_geo.locationFromAddress(normalizedAddress);
+      final nativeLocations = await native_geo.locationFromAddress(
+        normalizedAddress,
+      );
       if (nativeLocations.isNotEmpty) {
         final loc = nativeLocations.first;
         // Reverse geocode to normalize the address text instead of returning raw coordinates or user input
@@ -101,8 +109,9 @@ class LocationService {
           loc.longitude,
         );
         return BookingLocation(
-          address:
-              normalizedText.isNotEmpty ? normalizedText : normalizedAddress,
+          address: normalizedText.isNotEmpty
+              ? normalizedText
+              : normalizedAddress,
           latitude: loc.latitude,
           longitude: loc.longitude,
         );
@@ -111,7 +120,9 @@ class LocationService {
       // Native geocoding also failed
     }
 
-    throw const LocationServiceException(LocationStrings.locationNotFound);
+    throw LocationServiceException(
+      LocaleProvider.currentLocalizations.locationNotFound,
+    );
   }
 
   Future<BookingLocation> resolvePlaceId(String placeId) async {
@@ -131,7 +142,9 @@ class LocationService {
       } catch (_) {
         // Parse error, fall through to error
       }
-      throw const LocationServiceException(LocationStrings.locationNotFound);
+      throw LocationServiceException(
+        LocaleProvider.currentLocalizations.locationNotFound,
+      );
     }
 
     try {
@@ -142,7 +155,9 @@ class LocationService {
         longitude: place.longitude,
       );
     } catch (_) {
-      throw const LocationServiceException(LocationStrings.locationNotFound);
+      throw LocationServiceException(
+        LocaleProvider.currentLocalizations.locationNotFound,
+      );
     }
   }
 

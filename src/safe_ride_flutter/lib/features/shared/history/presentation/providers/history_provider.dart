@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/localization/locale_provider.dart';
+import '../../../../../core/localization/api_error_localizer.dart';
 import '../../data/datasources/history_remote_datasource.dart';
 import '../../data/models/history_trip.dart';
 import '../../domain/repositories/history_repository.dart';
@@ -45,10 +47,7 @@ class HistoryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadHistory(
-    String? accessToken, {
-    String? role,
-  }) async {
+  Future<void> loadHistory(String? accessToken, {String? role}) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -56,15 +55,18 @@ class HistoryProvider extends ChangeNotifier {
     try {
       if (accessToken == null || accessToken.isEmpty) {
         _allTrips = [];
-        _errorMessage = BookingStrings.sessionExpired;
+        _errorMessage = LocaleProvider.currentLocalizations.sessionExpired;
         return;
       }
 
       _allTrips = await _repository.getBookingHistory(accessToken, role: role);
     } on HistoryApiException catch (exception) {
-      _errorMessage = exception.message;
+      _errorMessage = ApiErrorLocalizer.translate(
+        LocaleProvider.currentLocalizations,
+        fallback: exception.message,
+      );
     } catch (_) {
-      _errorMessage = AppStrings.genericError;
+      _errorMessage = LocaleProvider.currentLocalizations.genericError;
     } finally {
       _isLoading = false;
       notifyListeners();

@@ -3,7 +3,7 @@ import { setActiveSidebar } from '../../../features/ui/uiSlice';
 import { logout } from '../../../features/auth/authSlice';
 import { SIDEBAR_NAV_ITEMS, SIDEBAR_FOOTER_DEFS } from '../../constants/sidebarNav';
 import { Sidebar } from '../../components/Sidebar';
-import { TopHeader } from '../../components/TopHeader';
+import AdminSOSAlertCenter from '../../../features/admin/sos/AdminSOSAlertCenter';
 import { clearAuthTokens } from '../../api/apiClient';
 import './AdminLayout.css';
 /** Main admin layout: sidebar (left) + top header + content area */
@@ -27,7 +27,7 @@ function AdminLayout({ children }) {
     return (<div className="admin-layout" id="admin-layout">
       <Sidebar items={sidebarItems} footerItems={footerItems}/>
       <div className="admin-main">
-        <TopHeader />
+        <AdminSOSAlertCenter />
         <main className="admin-content" id="admin-content">
           {children}
         </main>

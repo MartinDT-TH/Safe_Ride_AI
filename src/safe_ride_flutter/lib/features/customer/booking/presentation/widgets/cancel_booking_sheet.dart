@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../../core/constants/app_colors.dart';
 
 class CancelBookingSheet extends StatefulWidget {
-  const CancelBookingSheet({super.key, this.bookingId});
+  CancelBookingSheet({super.key, this.bookingId});
 
   final int? bookingId;
 
@@ -22,12 +23,12 @@ class CancelBookingSheet extends StatefulWidget {
 class _CancelBookingSheetState extends State<CancelBookingSheet> {
   late String _selectedReason = _reasons.first;
 
-  final List<String> _reasons = [
-    'Thay đổi kế hoạch',
-    'Thời gian chờ quá lâu',
-    'Đặt nhầm địa điểm',
-    'Không còn cần tài xế',
-    'Lý do khác',
+  List<String> get _reasons => [
+    context.l10n.cancelReasonPlanChanged,
+    context.l10n.cancelReasonWaitTooLong,
+    context.l10n.cancelReasonWrongLocation,
+    context.l10n.cancelReasonNoLongerNeeded,
+    context.l10n.cancelReasonOther,
   ];
 
   @override
@@ -35,7 +36,7 @@ class _CancelBookingSheetState extends State<CancelBookingSheet> {
     return SafeArea(
       top: false,
       child: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
         ),
@@ -54,77 +55,77 @@ class _CancelBookingSheetState extends State<CancelBookingSheet> {
                 ),
               ),
             ),
-          const SizedBox(height: 24),
-            const Text(
-              'Hủy chuyến đi?',
+            SizedBox(height: 24),
+            Text(
+              context.l10n.cancelTripQuestion,
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
                 color: Color(0xFF1A1A1A),
               ),
             ),
-          const SizedBox(height: 8),
+            SizedBox(height: 8),
             Text(
               widget.bookingId == null
-                  ? 'Bạn có chắc chắn muốn hủy yêu cầu tìm tài xế này không?'
-                  : 'Bạn có chắc chắn muốn hủy chuyến #${widget.bookingId} không?',
+                  ? context.l10n.cancelSearchConfirmation
+                  : context.l10n.cancelBookingConfirmation(widget.bookingId!),
               style: TextStyle(
                 fontSize: 15,
                 color: Colors.grey[700],
                 height: 1.5,
               ),
             ),
-          const SizedBox(height: 24),
-            const Text(
-              'Lý do hủy chuyến',
+            SizedBox(height: 24),
+            Text(
+              context.l10n.cancelReason,
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
                 color: Color(0xFF1A1A1A),
               ),
             ),
-           const SizedBox(height: 16),
+            SizedBox(height: 16),
             ..._reasons.map(_buildReasonOption),
-            const SizedBox(height: 28),
+            SizedBox(height: 28),
             SizedBox(
               width: double.infinity,
               height: 56,
               child: ElevatedButton(
                 onPressed: () => Navigator.pop(context, _selectedReason),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFC62828),
+                  backgroundColor: Color(0xFFC62828),
                   foregroundColor: Colors.white,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
                 ),
-                child: const Text(
-                  'Xác nhận hủy',
+                child: Text(
+                  context.l10n.confirmCancellation,
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
             ),
-          const SizedBox(height: 12),
+            SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               height: 56,
               child: TextButton(
                 onPressed: () => Navigator.pop(context),
                 style: TextButton.styleFrom(
-                  backgroundColor: const Color(0xFFE8F2F2),
+                  backgroundColor: Color(0xFFE8F2F2),
                   foregroundColor: AppColors.primary,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
                 ),
-                child: const Text(
-                  'Không, quay lại',
+                child: Text(
+                  context.l10n.goBack,
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
             ),
-         ],
+          ],
         ),
       ),
     );
@@ -138,7 +139,7 @@ class _CancelBookingSheetState extends State<CancelBookingSheet> {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFE8F2F2) : const Color(0xFFF8F9FA),
+          color: isSelected ? Color(0xFFE8F2F2) : Color(0xFFF8F9FA),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected ? AppColors.primary : Colors.transparent,
@@ -153,7 +154,9 @@ class _CancelBookingSheetState extends State<CancelBookingSheet> {
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  color: isSelected ? AppColors.primary : const Color(0xFF1A1A1A),
+                  color: isSelected
+                      ? AppColors.primary
+                      : Color(0xFF1A1A1A),
                 ),
               ),
             ),
@@ -169,7 +172,7 @@ class _CancelBookingSheetState extends State<CancelBookingSheet> {
                 color: isSelected ? AppColors.primary : Colors.transparent,
               ),
               child: isSelected
-                  ? const Center(
+                  ? Center(
                       child: Icon(Icons.circle, size: 8, color: Colors.white),
                     )
                   : null,
