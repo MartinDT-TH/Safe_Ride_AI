@@ -7,7 +7,8 @@ class TripChatSocketService {
 
   bool get isConnected => _connection?.state == HubConnectionState.Connected;
 
-  Future<void> connect(String token, {
+  Future<void> connect(
+    String token, {
     required Function(List<Object?>?) onMessageReceived,
   }) async {
     if (_connection?.state == HubConnectionState.Connected) return;

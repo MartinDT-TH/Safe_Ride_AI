@@ -501,7 +501,10 @@ public sealed class TripStatusService : ITripStatusService
             trip.DriverId,
             trip.Booking.CustomerId,
             trip.TripStatus,
-            assignedAt);
+            assignedAt,
+            trip.Booking.RoutePolyline,
+            trip.Booking.DestinationLocation?.Y,
+            trip.Booking.DestinationLocation?.X);
 
         await _redisService.SetAsync(
             RedisKeys.TripLive(trip.Id),

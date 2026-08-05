@@ -8,7 +8,7 @@ class CurrentLocationButton extends StatelessWidget {
   final Color? iconColor;
   final String heroTag;
 
-  const CurrentLocationButton({
+  CurrentLocationButton({
     super.key,
     required this.onPressed,
     this.isLoading = false,
@@ -33,7 +33,7 @@ class CurrentLocationButton extends StatelessWidget {
                 color: color,
               ),
             )
-          : const Icon(Icons.my_location),
+          : Icon(Icons.my_location),
     );
   }
 }

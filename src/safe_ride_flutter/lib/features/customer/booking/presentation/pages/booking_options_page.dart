@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 
 import '../../../../../core/maps/models/map_models.dart';
 import '../../../../../core/maps/widgets/map_renderer_widget.dart';
 import '../../../../../core/constants/app_colors.dart';
+import '../../../../../core/localization/localization_extensions.dart';
+import '../../../../../core/localization/locale_provider.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
 import '../../../../../core/widgets/app_loading_screen.dart';
@@ -23,14 +26,18 @@ import '../widgets/select_promo_sheet.dart';
 import 'searching_driver_page.dart';
 
 class BookingOptionsPage extends StatefulWidget {
-  const BookingOptionsPage({
+  BookingOptionsPage({
     super.key,
     this.initialMode = BookingServiceMode.perTrip,
     this.showSchedule = false,
+    this.initialPickup,
+    this.initialDestination,
   });
 
   final BookingServiceMode initialMode;
   final bool showSchedule;
+  final BookingLocation? initialPickup;
+  final BookingLocation? initialDestination;
 
   @override
   State<BookingOptionsPage> createState() => _BookingOptionsPageState();
@@ -50,6 +57,8 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
   @override
   void initState() {
     super.initState();
+    _pickup = widget.initialPickup;
+    _destination = widget.initialDestination;
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadInitialData());
   }
 
@@ -62,7 +71,7 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
   Future<void> _loadInitialData() async {
     final token = context.read<AuthProvider>().token;
     if (token == null || token.isEmpty) {
-      _showMessage(BookingStrings.sessionExpired);
+      _showMessage(context.l10n.sessionExpired);
       return;
     }
 
@@ -80,7 +89,7 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
         _service = _selectInitialService(catalog.services);
         _vehicle = catalog.vehicles.firstOrNull;
         if (widget.showSchedule) {
-          _scheduledAt = DateTime.now().add(const Duration(minutes: 31));
+          _scheduledAt = DateTime.now().add(Duration(minutes: 31));
         }
       });
     } else if (provider.errorMessage != null) {
@@ -89,8 +98,12 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
     }
 
     final currentLocation = await currentLocationFuture.catchError((_) => null);
-    if (mounted && currentLocation != null) {
+    if (!mounted) return;
+
+    if (_pickup == null && currentLocation != null) {
       setState(() => _pickup = currentLocation);
+    }
+    if (_pickup != null) {
       await _refreshEstimate();
     }
   }
@@ -130,25 +143,25 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
   Future<void> _selectSchedule() async {
     final now = DateTime.now();
     final initial =
-        (_scheduledAt ?? now.add(const Duration(minutes: 31))).isBefore(
-          now.add(const Duration(minutes: 31)),
+        (_scheduledAt ?? now.add(Duration(minutes: 31))).isBefore(
+          now.add(Duration(minutes: 31)),
         )
-        ? now.add(const Duration(minutes: 31))
-        : _scheduledAt ?? now.add(const Duration(minutes: 31));
+        ? now.add(Duration(minutes: 31))
+        : _scheduledAt ?? now.add(Duration(minutes: 31));
 
     final date = await showDatePicker(
       context: context,
       firstDate: now,
-      lastDate: now.add(const Duration(days: 90)),
+      lastDate: now.add(Duration(days: 90)),
       initialDate: initial,
-      helpText: BookingStrings.selectPickupDate,
+      helpText: context.l10n.selectPickupDate,
     );
     if (date == null || !mounted) return;
 
     final time = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(initial),
-      helpText: BookingStrings.selectPickupTimeHelp,
+      helpText: context.l10n.selectPickupTimeHelp,
     );
     if (time == null) return;
 
@@ -159,8 +172,8 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
       time.hour,
       time.minute,
     );
-    if (scheduledAt.isBefore(now.add(const Duration(minutes: 30)))) {
-      _showMessage(BookingStrings.invalidSchedule);
+    if (scheduledAt.isBefore(now.add(Duration(minutes: 30)))) {
+      _showMessage(context.l10n.invalidSchedule);
       return;
     }
     setState(() => _scheduledAt = scheduledAt);
@@ -201,27 +214,27 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
     final estimate = context.read<BookingProvider>().fareEstimate;
 
     if (token == null || token.isEmpty) {
-      _showMessage(BookingStrings.sessionExpired);
+      _showMessage(context.l10n.sessionExpired);
       return;
     }
     if (pickup == null) {
-      _showMessage('Vui lòng chọn điểm đón.');
+      _showMessage(context.l10n.selectPickupRequired);
       return;
     }
     if (service == null || vehicle == null) {
-      _showMessage(BookingStrings.selectServiceAndVehicle);
+      _showMessage(context.l10n.selectServiceAndVehicle);
       return;
     }
     if (!_isHourly && _destination == null) {
-      _showMessage('Vui lòng chọn điểm đến.');
+      _showMessage(context.l10n.selectDestinationRequired);
       return;
     }
     if (widget.showSchedule && _scheduledAt == null) {
-      _showMessage(BookingStrings.selectPickupTimeRequired);
+      _showMessage(context.l10n.selectPickupTimeRequired);
       return;
     }
     if (!widget.showSchedule && estimate == null) {
-      _showMessage('Chưa có giá dự kiến. Vui lòng kiểm tra lại tuyến đường.');
+      _showMessage(context.l10n.fareEstimateUnavailable);
       return;
     }
 
@@ -247,13 +260,13 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
     if (result == null) {
       _showMessage(
         context.read<BookingProvider>().errorMessage ??
-            BookingStrings.bookingFailed,
+            context.l10n.bookingFailed,
       );
       return;
     }
 
     if (widget.showSchedule) {
-      _showMessage(BookingStrings.bookingSuccess);
+      _showMessage(context.l10n.bookingSuccess);
       Navigator.of(context).popUntil((route) => route.isFirst);
       return;
     }
@@ -296,8 +309,7 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
         if (!mounted) return false;
         if (!saved) {
           _showMessage(
-            vehicleProvider.errorMessage ??
-                'Không thể thêm xe. Vui lòng thử lại.',
+            vehicleProvider.errorMessage ?? context.l10n.addVehicleFailed,
           );
           return false;
         }
@@ -327,7 +339,7 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
 
     setState(() => _vehicle = selectedVehicle);
     await _refreshEstimate();
-    _showMessage('Đã thêm xe mới.');
+    _showMessage(context.l10n.vehicleAdded);
     return selectedVehicle;
   }
 
@@ -336,7 +348,7 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) => Container(
@@ -350,17 +362,17 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                 width: 38,
                 height: 5,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFD8DCDD),
+                  color: Color(0xFFD8DCDD),
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
             ),
-            const SizedBox(height: 20),
-            const Text(
-              BookingStrings.selectVehicle,
+            SizedBox(height: 20),
+            Text(
+              context.l10n.selectYourVehicle,
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             ConstrainedBox(
               constraints: BoxConstraints(
                 maxHeight: MediaQuery.of(context).size.height * 0.6,
@@ -376,7 +388,7 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                         });
                       },
                     ),
-                    const SizedBox(height: 10),
+                    SizedBox(height: 10),
                     ...vehicles.map(
                       (vehicle) => _VehicleCard(
                         vehicle: vehicle,
@@ -417,11 +429,11 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
 
     // Show loading only if catalog is null AND there is no error message
     if (catalog == null && !hasError) {
-      return const AppLoadingScreen(message: 'Đang tải thông tin dịch vụ...');
+      return AppLoadingScreen(message: context.l10n.loadingServices);
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7FAFA),
+      backgroundColor: Color(0xFFF7FAFA),
       body: Stack(
         children: [
           // Lớp dưới cùng: Bản đồ
@@ -448,7 +460,7 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.vertical(
                   top: Radius.circular(32),
@@ -468,12 +480,12 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                       width: 38,
                       height: 5,
                       decoration: BoxDecoration(
-                        color: const Color(0xFFD8DCDD),
+                        color: Color(0xFFD8DCDD),
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 18),
+                  SizedBox(height: 18),
                   if (catalog == null || catalog.services.isEmpty) ...[
                     if (hasError)
                       Padding(
@@ -484,7 +496,7 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                         ),
                       )
                     else
-                      const _EmptyCatalogMessage(),
+                      _EmptyCatalogMessage(),
                   ] else ...[
                     _ServiceSelector(
                       services: catalog.services,
@@ -494,14 +506,14 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                           _service = service;
                           if (widget.showSchedule) {
                             _scheduledAt ??= DateTime.now().add(
-                              const Duration(minutes: 31),
+                              Duration(minutes: 31),
                             );
                           }
                         });
                         await _refreshEstimate();
                       },
                     ),
-                    const SizedBox(height: 18),
+                    SizedBox(height: 18),
                     _RouteSummary(
                       pickup: _pickup,
                       destination: _isHourly ? null : _destination,
@@ -523,7 +535,7 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                         ),
                       ),
                     if (_isHourly) ...[
-                      const SizedBox(height: 16),
+                      SizedBox(height: 16),
                       _HourInput(
                         value: _estimatedHours,
                         onChanged: (value) async {
@@ -533,21 +545,21 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                       ),
                     ],
                     if (widget.showSchedule) ...[
-                      const SizedBox(height: 16),
+                      SizedBox(height: 16),
                       _ScheduleCard(
                         scheduledAt: _scheduledAt,
                         onTap: _selectSchedule,
                       ),
                     ],
-                    const SizedBox(height: 18),
-                    const Text(
-                      BookingStrings.selectVehicle,
+                    SizedBox(height: 18),
+                    Text(
+                      context.l10n.selectYourVehicle,
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    SizedBox(height: 10),
                     if (_vehicle != null)
                       _VehicleCard(
                         vehicle: _vehicle!,
@@ -558,29 +570,29 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                     else
                       _AddVehiclePrompt(onTap: _showAddVehicleSheet),
                   ],
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   _PromoTile(
                     selectedPromo: provider.selectedPromo,
                     onTap: _showPromoSheet,
                     onClear: provider.clearSelectedPromo,
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   TextField(
                     controller: _specialRequestController,
                     maxLength: 500,
                     decoration: InputDecoration(
-                      hintText: BookingStrings.specialRequest,
-                      prefixIcon: const Icon(Icons.notes),
+                      hintText: context.l10n.specialRequest,
+                      prefixIcon: Icon(Icons.notes),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
                   ),
-                  const Text(
-                    BookingStrings.fareCalculationNote,
+                  Text(
+                    context.l10n.fareCalculationNote,
                     style: TextStyle(color: Color(0xFF667174), fontSize: 13),
                   ),
-                  const SizedBox(
+                  SizedBox(
                     height: 100,
                   ), // Khoảng trống cho nút bấm phía dưới
                 ],
@@ -609,14 +621,14 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                 ),
               ),
               child: provider.isLoading
-                  ? const CircularProgressIndicator(color: Colors.white)
+                  ? CircularProgressIndicator(color: Colors.white)
                   : Text(
                       widget.showSchedule
-                          ? BookingStrings.confirmScheduled
+                          ? context.l10n.confirmScheduled
                           : _isHourly
-                          ? 'Xác nhận thuê theo giờ'
-                          : BookingStrings.confirmNow,
-                      style: const TextStyle(
+                          ? context.l10n.confirmHourlyHire
+                          : context.l10n.confirmNow,
+                      style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
                       ),
@@ -640,7 +652,7 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
 }
 
 class _MapPreview extends StatefulWidget {
-  const _MapPreview({
+  _MapPreview({
     required this.pickup,
     required this.destination,
     required this.estimate,
@@ -660,12 +672,12 @@ class _MapPreviewState extends State<_MapPreview> {
   static const _fallback = AppLatLng(10.7769, 106.7009);
   AppMapController? _controller;
 
-  List<AppLatLng> _cachedPoints = const [];
+  List<AppLatLng> _cachedPoints = [];
   String? _lastEncodedPolyline;
 
   List<AppLatLng> get _routePoints {
     final encoded = widget.estimate?.encodedPolyline;
-    if (encoded == null || encoded.isEmpty) return const [];
+    if (encoded == null || encoded.isEmpty) return [];
 
     if (encoded == _lastEncodedPolyline) {
       return _cachedPoints;
@@ -676,7 +688,7 @@ class _MapPreviewState extends State<_MapPreview> {
       _cachedPoints = decodePolyline(encoded);
       return _cachedPoints;
     } on FormatException {
-      return const [];
+      return [];
     }
   }
 
@@ -802,7 +814,7 @@ class _MapPreviewState extends State<_MapPreview> {
                 backgroundColor: Colors.white,
                 child: IconButton(
                   onPressed: widget.onBack,
-                  icon: const Icon(Icons.arrow_back, color: Color(0xFF263334)),
+                  icon: Icon(Icons.arrow_back, color: Color(0xFF263334)),
                 ),
               ),
             ),
@@ -814,7 +826,7 @@ class _MapPreviewState extends State<_MapPreview> {
 }
 
 class _RouteSummary extends StatelessWidget {
-  const _RouteSummary({
+  _RouteSummary({
     required this.pickup,
     required this.destination,
     required this.estimate,
@@ -837,39 +849,39 @@ class _RouteSummary extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F6F6),
+        color: Color(0xFFF8F6F6),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE6E1E1)),
+        border: Border.all(color: Color(0xFFE6E1E1)),
       ),
       child: Column(
         children: [
           _RouteRow(
             icon: Icons.person_pin_circle_rounded,
-            color: const Color(0xFF1565C0),
-            label: BookingStrings.pickupLabel,
-            value: pickup?.address ?? 'Chọn điểm đón',
+            color: Color(0xFF1565C0),
+            label: context.l10n.pickupPoint.toUpperCase(),
+            value: pickup?.address ?? context.l10n.selectPickup,
             onTap: onPickupTap,
           ),
           if (onDestinationTap != null) ...[
-            const Divider(height: 22),
+            Divider(height: 22),
             _RouteRow(
               icon: Icons.flag_rounded,
-              color: const Color(0xFFC62828),
-              label: BookingStrings.destinationLabel,
-              value: destination?.address ?? 'Chọn điểm đến',
+              color: Color(0xFFC62828),
+              label: context.l10n.destinationPoint.toUpperCase(),
+              value: destination?.address ?? context.l10n.selectDestination,
               onTap: onDestinationTap!,
             ),
           ],
-          const Divider(height: 22),
+          Divider(height: 22),
           if (isLoading)
-            const Row(
+            Row(
               children: [
                 SizedBox.square(
                   dimension: 18,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
                 SizedBox(width: 10),
-                Text('Đang tính giá dự kiến...'),
+                Text(context.l10n.calculatingFare),
               ],
             )
           else if (estimate != null) ...[
@@ -880,15 +892,19 @@ class _RouteSummary extends StatelessWidget {
                     icon: Icons.route,
                     value: estimatedHours == null
                         ? '${estimate!.estimatedDistanceKm.toStringAsFixed(1)} km'
-                        : '$estimatedHours giờ',
+                        : context.l10n.hoursValue(estimatedHours!),
                   ),
                 ),
                 Expanded(
                   child: _EstimateValue(
                     icon: Icons.schedule,
                     value: estimatedHours == null
-                        ? '${estimate!.estimatedDurationMinutes} phút'
-                        : '${estimate!.estimatedDurationMinutes} phút',
+                        ? context.l10n.minutesValue(
+                            estimate!.estimatedDurationMinutes,
+                          )
+                        : context.l10n.minutesValue(
+                            estimate!.estimatedDurationMinutes,
+                          ),
                   ),
                 ),
                 Expanded(
@@ -906,15 +922,15 @@ class _RouteSummary extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.trending_up,
                       color: Colors.orange,
                       size: 18,
                     ),
-                    const SizedBox(width: 6),
+                    SizedBox(width: 6),
                     Text(
-                      'Giá đang tăng do nhu cầu cao (x${estimate!.surgeMultiplier})',
-                      style: const TextStyle(
+                      context.l10n.surgePricing(estimate!.surgeMultiplier!),
+                      style: TextStyle(
                         color: Colors.orange,
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
@@ -930,18 +946,16 @@ class _RouteSummary extends StatelessWidget {
   }
 
   static String _formatEstimateCurrency(double value) {
-    final digits = value.round().toString();
-    final buffer = StringBuffer();
-    for (var index = 0; index < digits.length; index++) {
-      if (index > 0 && (digits.length - index) % 3 == 0) buffer.write('.');
-      buffer.write(digits[index]);
-    }
-    return '$bufferđ';
+    return NumberFormat.currency(
+      locale: LocaleProvider.currentLocale.toLanguageTag(),
+      symbol: 'VND',
+      decimalDigits: 0,
+    ).format(value);
   }
 }
 
 class _RouteRow extends StatelessWidget {
-  const _RouteRow({
+  _RouteRow({
     required this.icon,
     required this.color,
     required this.label,
@@ -962,25 +976,25 @@ class _RouteRow extends StatelessWidget {
       child: Row(
         children: [
           Icon(icon, color: color),
-          const SizedBox(width: 12),
+          SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     color: Color(0xFF626A6C),
                   ),
                 ),
-                const SizedBox(height: 3),
+                SizedBox(height: 3),
                 Text(value, maxLines: 2, overflow: TextOverflow.ellipsis),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right, size: 18),
+          Icon(Icons.chevron_right, size: 18),
         ],
       ),
     );
@@ -988,7 +1002,7 @@ class _RouteRow extends StatelessWidget {
 }
 
 class _HourInput extends StatelessWidget {
-  const _HourInput({required this.value, required this.onChanged});
+  _HourInput({required this.value, required this.onChanged});
 
   final int value;
   final ValueChanged<int> onChanged;
@@ -998,20 +1012,20 @@ class _HourInput extends StatelessWidget {
     return Container(
       height: 58,
       decoration: BoxDecoration(
-        color: const Color(0xFFEAF4F4),
+        color: Color(0xFFEAF4F4),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         children: [
           IconButton(
             onPressed: value > 1 ? () => onChanged(value - 1) : null,
-            icon: const Icon(Icons.remove_circle_outline),
+            icon: Icon(Icons.remove_circle_outline),
           ),
           Expanded(
             child: Center(
               child: Text(
-                '$value giờ thuê dự kiến',
-                style: const TextStyle(
+                context.l10n.estimatedRentalHours(value),
+                style: TextStyle(
                   color: AppColors.primary,
                   fontWeight: FontWeight.w800,
                 ),
@@ -1020,7 +1034,7 @@ class _HourInput extends StatelessWidget {
           ),
           IconButton(
             onPressed: value < 24 ? () => onChanged(value + 1) : null,
-            icon: const Icon(Icons.add_circle_outline),
+            icon: Icon(Icons.add_circle_outline),
           ),
         ],
       ),
@@ -1029,7 +1043,7 @@ class _HourInput extends StatelessWidget {
 }
 
 class _PromoTile extends StatelessWidget {
-  const _PromoTile({
+  _PromoTile({
     required this.onTap,
     this.selectedPromo,
     required this.onClear,
@@ -1048,8 +1062,8 @@ class _PromoTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: selectedPromo != null
-              ? const Color(0xFFEAF4F4)
-              : const Color(0xFFF8F6F6),
+              ? Color(0xFFEAF4F4)
+              : Color(0xFFF8F6F6),
           borderRadius: BorderRadius.circular(12),
           border: selectedPromo != null
               ? Border.all(color: AppColors.primary)
@@ -1057,15 +1071,15 @@ class _PromoTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Icon(Icons.local_offer, color: AppColors.primary),
-            const SizedBox(width: 12),
+            Icon(Icons.local_offer, color: AppColors.primary),
+            SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    selectedPromo?.promotionCode ?? 'Thêm mã khuyến mãi',
-                    style: const TextStyle(
+                    selectedPromo?.promotionCode ?? context.l10n.addPromoCode,
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       color: AppColors.primary,
@@ -1074,7 +1088,7 @@ class _PromoTile extends StatelessWidget {
                   if (selectedPromo != null)
                     Text(
                       selectedPromo!.shortDescription,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         color: Color(0xFF626A6C),
                       ),
@@ -1087,12 +1101,12 @@ class _PromoTile extends StatelessWidget {
             if (selectedPromo != null)
               IconButton(
                 onPressed: onClear,
-                icon: const Icon(Icons.cancel, color: Colors.grey, size: 20),
+                icon: Icon(Icons.cancel, color: Colors.grey, size: 20),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
+                constraints: BoxConstraints(),
               )
             else
-              const Icon(Icons.chevron_right),
+              Icon(Icons.chevron_right),
           ],
         ),
       ),
@@ -1101,7 +1115,7 @@ class _PromoTile extends StatelessWidget {
 }
 
 class _ScheduleCard extends StatelessWidget {
-  const _ScheduleCard({required this.scheduledAt, required this.onTap});
+  _ScheduleCard({required this.scheduledAt, required this.onTap});
 
   final DateTime? scheduledAt;
   final VoidCallback onTap;
@@ -1114,25 +1128,25 @@ class _ScheduleCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: const Color(0xFFEAF4F4),
+          color: Color(0xFFEAF4F4),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: AppColors.primary),
         ),
         child: Row(
           children: [
-            const Icon(Icons.calendar_month, color: AppColors.primary),
-            const SizedBox(width: 12),
+            Icon(Icons.calendar_month, color: AppColors.primary),
+            SizedBox(width: 12),
             Expanded(
               child: Text(
                 scheduledAt == null
-                    ? BookingStrings.selectPickupTime
+                    ? context.l10n.selectPickupTimeHelp
                     : '${scheduledAt!.day}/${scheduledAt!.month}/${scheduledAt!.year} '
                           '${scheduledAt!.hour.toString().padLeft(2, '0')}:'
                           '${scheduledAt!.minute.toString().padLeft(2, '0')}',
-                style: const TextStyle(fontWeight: FontWeight.w700),
+                style: TextStyle(fontWeight: FontWeight.w700),
               ),
             ),
-            const Icon(Icons.chevron_right),
+            Icon(Icons.chevron_right),
           ],
         ),
       ),
@@ -1141,7 +1155,7 @@ class _ScheduleCard extends StatelessWidget {
 }
 
 class _ServiceSelector extends StatelessWidget {
-  const _ServiceSelector({
+  _ServiceSelector({
     required this.services,
     required this.selected,
     required this.onSelected,
@@ -1162,7 +1176,7 @@ class _ServiceSelector extends StatelessWidget {
           .map(
             (service) => ButtonSegment(
               value: service.id,
-              label: Text(_translateServiceName(service)),
+              label: Text(_translateServiceName(context, service)),
             ),
           )
           .toList(),
@@ -1177,19 +1191,22 @@ class _ServiceSelector extends StatelessWidget {
       style: ButtonStyle(
         backgroundColor: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.selected)
-              ? const Color(0xFFE1F1F2)
-              : const Color(0xFFF4F1F1),
+              ? Color(0xFFE1F1F2)
+              : Color(0xFFF4F1F1),
         ),
       ),
     );
   }
 
-  String _translateServiceName(BookingServiceOption service) {
+  String _translateServiceName(
+    BuildContext context,
+    BookingServiceOption service,
+  ) {
     if (service.name.toLowerCase() == 'pertrip') {
-      return BookingStrings.tripService;
+      return context.l10n.tripService;
     }
     if (service.name.toLowerCase() == 'hourly') {
-      return BookingStrings.hourlyService;
+      return context.l10n.hourlyService;
     }
     // Fallback if the name is already Vietnamese or something else
     return service.name;
@@ -1197,7 +1214,7 @@ class _ServiceSelector extends StatelessWidget {
 }
 
 class _AddVehiclePrompt extends StatelessWidget {
-  const _AddVehiclePrompt({required this.onTap});
+  _AddVehiclePrompt({required this.onTap});
 
   final VoidCallback onTap;
 
@@ -1209,28 +1226,28 @@ class _AddVehiclePrompt extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: const Color(0xFFFFF8EC),
+          color: Color(0xFFFFF8EC),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFFFC56D), width: 1.2),
+          border: Border.all(color: Color(0xFFFFC56D), width: 1.2),
         ),
         child: Row(
           children: [
-            const CircleAvatar(
+            CircleAvatar(
               backgroundColor: Color(0xFFFFE8BD),
               child: Icon(Icons.add_road_rounded, color: Color(0xFF9A5A00)),
             ),
-            const SizedBox(width: 14),
-            const Expanded(
+            SizedBox(width: 14),
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Thêm xe mới',
+                    context.l10n.addNewVehicle,
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
                   ),
                   SizedBox(height: 2),
                   Text(
-                    'Lưu xe vào tài khoản rồi tiếp tục đặt chuyến.',
+                    context.l10n.saveVehicleAndContinue,
                     style: TextStyle(color: Color(0xFF626A6C), fontSize: 13),
                   ),
                 ],
@@ -1238,8 +1255,8 @@ class _AddVehiclePrompt extends StatelessWidget {
             ),
             FilledButton.icon(
               onPressed: onTap,
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Thêm'),
+              icon: Icon(Icons.add, size: 18),
+              label: Text(context.l10n.add),
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
@@ -1254,7 +1271,7 @@ class _AddVehiclePrompt extends StatelessWidget {
 }
 
 class _AddVehicleTile extends StatelessWidget {
-  const _AddVehicleTile({required this.onTap});
+  _AddVehicleTile({required this.onTap});
 
   final VoidCallback onTap;
 
@@ -1266,11 +1283,11 @@ class _AddVehicleTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: const Color(0xFFEAF4F4),
+          color: Color(0xFFEAF4F4),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: AppColors.primary, width: 1.2),
         ),
-        child: const Row(
+        child: Row(
           children: [
             CircleAvatar(
               backgroundColor: Colors.white,
@@ -1279,7 +1296,7 @@ class _AddVehicleTile extends StatelessWidget {
             SizedBox(width: 14),
             Expanded(
               child: Text(
-                'Thêm xe mới',
+                context.l10n.addNewVehicle,
                 style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
               ),
             ),
@@ -1292,7 +1309,7 @@ class _AddVehicleTile extends StatelessWidget {
 }
 
 class _VehicleCard extends StatelessWidget {
-  const _VehicleCard({
+  _VehicleCard({
     required this.vehicle,
     required this.selected,
     required this.onTap,
@@ -1313,43 +1330,43 @@ class _VehicleCard extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFFE2F0F1) : Colors.white,
+          color: selected ? Color(0xFFE2F0F1) : Colors.white,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: selected ? AppColors.primary : const Color(0xFFD2DCDE),
+            color: selected ? AppColors.primary : Color(0xFFD2DCDE),
             width: selected ? 2 : 1,
           ),
         ),
         child: Row(
           children: [
             CircleAvatar(
-              backgroundColor: const Color(0xFFF3F1F1),
+              backgroundColor: Color(0xFFF3F1F1),
               child: Icon(
                 vehicle.isMotorbike ? Icons.two_wheeler : Icons.directions_car,
                 color: AppColors.primary,
               ),
             ),
-            const SizedBox(width: 14),
+            SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     vehicle.name,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
-                  Text(BookingStrings.plateNumber(vehicle.plateNumber)),
-                  Text(BookingStrings.vehicleColor(vehicle.color)),
+                  Text(context.l10n.plateNumberLabel(vehicle.plateNumber)),
+                  Text(context.l10n.vehicleColorLabel(vehicle.color)),
                 ],
               ),
             ),
             if (isDropdown)
-              const Icon(Icons.keyboard_arrow_down, color: Color(0xFF626A6C))
+              Icon(Icons.keyboard_arrow_down, color: Color(0xFF626A6C))
             else if (selected)
-              const Icon(Icons.check_circle, color: AppColors.primary),
+              Icon(Icons.check_circle, color: AppColors.primary),
           ],
         ),
       ),
@@ -1358,7 +1375,7 @@ class _VehicleCard extends StatelessWidget {
 }
 
 class _EstimateValue extends StatelessWidget {
-  const _EstimateValue({required this.icon, required this.value});
+  _EstimateValue({required this.icon, required this.value});
 
   final IconData icon;
   final String value;
@@ -1368,11 +1385,11 @@ class _EstimateValue extends StatelessWidget {
     return Column(
       children: [
         Icon(icon, color: AppColors.primary, size: 20),
-        const SizedBox(height: 4),
+        SizedBox(height: 4),
         Text(
           value,
           textAlign: TextAlign.center,
-          style: const TextStyle(fontWeight: FontWeight.w700),
+          style: TextStyle(fontWeight: FontWeight.w700),
         ),
       ],
     );
@@ -1380,22 +1397,22 @@ class _EstimateValue extends StatelessWidget {
 }
 
 class _EmptyCatalogMessage extends StatelessWidget {
-  const _EmptyCatalogMessage();
+  _EmptyCatalogMessage();
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF4E5),
+        color: Color(0xFFFFF4E5),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFFFCC80)),
+        border: Border.all(color: Color(0xFFFFCC80)),
       ),
-      child: const Row(
+      child: Row(
         children: [
           Icon(Icons.directions_car_filled_outlined, color: Color(0xFFB26A00)),
           SizedBox(width: 12),
-          Expanded(child: Text(BookingStrings.noBookableVehicles)),
+          Expanded(child: Text(context.l10n.noBookableVehicles)),
         ],
       ),
     );
@@ -1403,21 +1420,21 @@ class _EmptyCatalogMessage extends StatelessWidget {
 }
 
 class _MapConfigurationError extends StatelessWidget {
-  const _MapConfigurationError({required this.onBack});
+  _MapConfigurationError({required this.onBack});
 
   final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: const Color(0xFFE7EEEE),
+      color: Color(0xFFE7EEEE),
       child: Stack(
         children: [
-          const Center(
+          Center(
             child: Padding(
               padding: EdgeInsets.all(32),
               child: Text(
-                'Thiếu GOOGLE_MAPS_API_KEY. Hãy chạy app bằng cấu hình local.',
+                context.l10n.mapsConfigMissing,
                 textAlign: TextAlign.center,
               ),
             ),
@@ -1429,7 +1446,7 @@ class _MapConfigurationError extends StatelessWidget {
               backgroundColor: Colors.white,
               child: IconButton(
                 onPressed: onBack,
-                icon: const Icon(Icons.arrow_back),
+                icon: Icon(Icons.arrow_back),
               ),
             ),
           ),

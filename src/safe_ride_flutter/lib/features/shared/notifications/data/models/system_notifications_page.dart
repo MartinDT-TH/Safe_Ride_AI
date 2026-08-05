@@ -23,12 +23,12 @@ class SystemNotificationsPage {
     final rawItems = json['items'];
     final items = rawItems is List
         ? rawItems
-            .map(
-              (item) => SystemNotificationItem.fromJson(
-                Map<String, dynamic>.from(item as Map),
-              ),
-            )
-            .toList()
+              .map(
+                (item) => SystemNotificationItem.fromJson(
+                  Map<String, dynamic>.from(item as Map),
+                ),
+              )
+              .toList()
         : <SystemNotificationItem>[];
 
     return SystemNotificationsPage(

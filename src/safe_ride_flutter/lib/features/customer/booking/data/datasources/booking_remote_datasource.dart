@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/network/auth_header.dart';
 import '../../../../../core/network/dio_client.dart';
+import '../../../../../core/localization/locale_provider.dart';
 import '../models/promo_model.dart';
 import '../models/booking_response.dart';
 import '../models/booking_fare_estimate.dart';
@@ -35,7 +36,9 @@ class BookingRemoteDatasource {
           .map((item) => PromoModel.fromJson(Map<String, dynamic>.from(item)))
           .toList();
     } on FormatException {
-      throw const BookingApiException(BookingStrings.sessionExpired);
+      throw BookingApiException(
+        LocaleProvider.currentLocalizations.sessionExpired,
+      );
     } on DioException catch (exception) {
       final data = exception.response?.data;
       if (data is Map) {
@@ -45,8 +48,8 @@ class BookingRemoteDatasource {
           throw BookingApiException(detail, code: code);
         }
       }
-      throw const BookingApiException(
-        'Không thể lấy danh sách khuyến mãi. Vui lòng thử lại.',
+      throw BookingApiException(
+        LocaleProvider.currentLocalizations.genericError,
       );
     }
   }
@@ -81,7 +84,9 @@ class BookingRemoteDatasource {
         Map<String, dynamic>.from(response.data as Map),
       );
     } on FormatException {
-      throw const BookingApiException(BookingStrings.sessionExpired);
+      throw BookingApiException(
+        LocaleProvider.currentLocalizations.sessionExpired,
+      );
     } on DioException catch (exception) {
       final data = exception.response?.data;
       if (data is Map) {
@@ -91,8 +96,8 @@ class BookingRemoteDatasource {
           throw BookingApiException(detail, code: code);
         }
       }
-      throw const BookingApiException(
-        'Không thể tính tuyến đường. Vui lòng thử lại.',
+      throw BookingApiException(
+        LocaleProvider.currentLocalizations.genericError,
       );
     }
   }
@@ -114,7 +119,9 @@ class BookingRemoteDatasource {
         Map<String, dynamic>.from(response.data as Map),
       );
     } on FormatException {
-      throw const BookingApiException(BookingStrings.sessionExpired);
+      throw BookingApiException(
+        LocaleProvider.currentLocalizations.sessionExpired,
+      );
     } on DioException catch (exception) {
       final data = exception.response?.data;
       if (data is Map) {
@@ -124,7 +131,9 @@ class BookingRemoteDatasource {
           throw BookingApiException(detail, code: code);
         }
       }
-      throw const BookingApiException(BookingStrings.bookingFailed);
+      throw BookingApiException(
+        LocaleProvider.currentLocalizations.bookingFailed,
+      );
     }
   }
 
@@ -144,7 +153,9 @@ class BookingRemoteDatasource {
         Map<String, dynamic>.from(response.data as Map),
       );
     } on FormatException {
-      throw const BookingApiException(BookingStrings.sessionExpired);
+      throw BookingApiException(
+        LocaleProvider.currentLocalizations.sessionExpired,
+      );
     } on DioException catch (exception) {
       final data = exception.response?.data;
       if (data is Map) {
@@ -154,8 +165,8 @@ class BookingRemoteDatasource {
           throw BookingApiException(detail, code: code);
         }
       }
-      throw const BookingApiException(
-        'Không thể lấy thông tin chuyến đi. Vui lòng thử lại.',
+      throw BookingApiException(
+        LocaleProvider.currentLocalizations.tripDetailsLoadFailed,
       );
     }
   }
@@ -177,7 +188,9 @@ class BookingRemoteDatasource {
         Map<String, dynamic>.from(response.data as Map),
       );
     } on FormatException {
-      throw const BookingApiException(BookingStrings.sessionExpired);
+      throw BookingApiException(
+        LocaleProvider.currentLocalizations.sessionExpired,
+      );
     } on DioException catch (exception) {
       final data = exception.response?.data;
       if (data is Map) {
@@ -187,8 +200,8 @@ class BookingRemoteDatasource {
           throw BookingApiException(detail, code: code);
         }
       }
-      throw const BookingApiException(
-        'Không thể lấy chuyến đang hoạt động. Vui lòng thử lại.',
+      throw BookingApiException(
+        LocaleProvider.currentLocalizations.genericError,
       );
     }
   }
@@ -222,7 +235,9 @@ class BookingRemoteDatasource {
       );
     } on FormatException catch (e) {
       debugPrint('CANCEL_BOOKING: FormatException: $e');
-      throw const BookingApiException(BookingStrings.sessionExpired);
+      throw BookingApiException(
+        LocaleProvider.currentLocalizations.sessionExpired,
+      );
     } on DioException catch (exception) {
       final status = exception.response?.statusCode;
       final data = exception.response?.data;
@@ -234,22 +249,22 @@ class BookingRemoteDatasource {
       }
 
       if (status == 401) {
-        throw const BookingApiException(
-          'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
+        throw BookingApiException(
+          LocaleProvider.currentLocalizations.sessionExpired,
         );
       } else if (status == 403) {
-        throw const BookingApiException(
-          'Bạn không có quyền hủy chuyến đi này.',
+        throw BookingApiException(
+          LocaleProvider.currentLocalizations.cancelTripFailed,
         );
       }
 
-      throw const BookingApiException(
-        'Không thể hủy chuyến. Vui lòng thử lại.',
+      throw BookingApiException(
+        LocaleProvider.currentLocalizations.cancelTripFailed,
       );
     } catch (e) {
       debugPrint('CANCEL_BOOKING: Unknown Error: $e');
-      throw const BookingApiException(
-        'Đã xảy ra lỗi không xác định khi hủy chuyến.',
+      throw BookingApiException(
+        LocaleProvider.currentLocalizations.cancelTripFailed,
       );
     }
   }
@@ -270,7 +285,9 @@ class BookingRemoteDatasource {
         Map<String, dynamic>.from(response.data as Map),
       );
     } on FormatException {
-      throw const BookingApiException(BookingStrings.sessionExpired);
+      throw BookingApiException(
+        LocaleProvider.currentLocalizations.sessionExpired,
+      );
     } on DioException catch (exception) {
       final data = exception.response?.data;
       if (data is Map) {
@@ -280,8 +297,8 @@ class BookingRemoteDatasource {
           throw BookingApiException(detail, code: code);
         }
       }
-      throw const BookingApiException(
-        'Không thể xác nhận tài xế. Vui lòng thử lại.',
+      throw BookingApiException(
+        LocaleProvider.currentLocalizations.confirmDriverFailed,
       );
     }
   }
@@ -303,7 +320,9 @@ class BookingRemoteDatasource {
         Map<String, dynamic>.from(response.data as Map),
       );
     } on FormatException {
-      throw const BookingApiException(BookingStrings.sessionExpired);
+      throw BookingApiException(
+        LocaleProvider.currentLocalizations.sessionExpired,
+      );
     } on DioException catch (exception) {
       final data = exception.response?.data;
       if (data is Map) {
@@ -313,8 +332,8 @@ class BookingRemoteDatasource {
           throw BookingApiException(detail, code: code);
         }
       }
-      throw const BookingApiException(
-        'Không thể xác nhận thuê tài xế. Vui lòng thử lại.',
+      throw BookingApiException(
+        LocaleProvider.currentLocalizations.confirmDriverFailed,
       );
     }
   }
@@ -336,8 +355,44 @@ class BookingRemoteDatasource {
           throw BookingApiException(detail, code: code);
         }
       }
-      throw const BookingApiException(
-        'Không thể kết thúc chuyến. Vui lòng thử lại.',
+      throw BookingApiException(
+        LocaleProvider.currentLocalizations.tripEndFailed,
+      );
+    }
+  }
+
+  Future<void> triggerSOS(
+    String accessToken, {
+    required int tripId,
+    required double latitude,
+    required double longitude,
+    required String message,
+  }) async {
+    try {
+      await _dio.post(
+        ApiEndpoints.triggerTripSOS(tripId),
+        data: {
+          ApiKeys.latitude: latitude,
+          ApiKeys.longitude: longitude,
+          ApiKeys.message: message,
+        },
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+        ),
+      );
+    } on DioException catch (exception) {
+      final statusCode = exception.response?.statusCode;
+      final data = exception.response?.data;
+      if (data is Map) {
+        final detail = data[ApiKeys.detail]?.toString();
+        final code = data[ApiKeys.code]?.toString();
+        if (detail != null) {
+          throw BookingApiException(detail, code: code, statusCode: statusCode);
+        }
+      }
+      throw BookingApiException(
+        LocaleProvider.currentLocalizations.sosActivationFailed,
+        statusCode: statusCode,
       );
     }
   }
@@ -365,7 +420,7 @@ class BookingRemoteDatasource {
         }
       }
       throw BookingApiException(
-        'Không thể xác nhận trả xe. Vui lòng thử lại.',
+        LocaleProvider.currentLocalizations.returnConfirmationFailed,
         statusCode: statusCode,
       );
     }
@@ -403,13 +458,13 @@ class BookingRemoteDatasource {
 
       if (statusCode != null && statusCode >= 500) {
         throw BookingApiException(
-          'Máy chủ đang gặp sự cố. Bạn có thể thử lại hoặc đánh giá sau.',
+          LocaleProvider.currentLocalizations.genericError,
           statusCode: statusCode,
         );
       }
 
       throw BookingApiException(
-        'Không thể gửi đánh giá. Vui lòng thử lại.',
+        LocaleProvider.currentLocalizations.ratingSubmitFailed,
         statusCode: statusCode,
       );
     }
@@ -446,13 +501,13 @@ class BookingRemoteDatasource {
 
       if (statusCode != null && statusCode >= 500) {
         throw BookingApiException(
-          'Máy chủ đang gặp sự cố. Vui lòng thử lại sau.',
+          LocaleProvider.currentLocalizations.genericError,
           statusCode: statusCode,
         );
       }
 
       throw BookingApiException(
-        'Không thể gửi báo cáo. Vui lòng thử lại.',
+        LocaleProvider.currentLocalizations.reportSendFailed,
         statusCode: statusCode,
       );
     }
@@ -474,7 +529,9 @@ class BookingRemoteDatasource {
         Map<String, dynamic>.from(response.data as Map),
       );
     } on FormatException {
-      throw const BookingApiException(BookingStrings.sessionExpired);
+      throw BookingApiException(
+        LocaleProvider.currentLocalizations.sessionExpired,
+      );
     } on DioException catch (exception) {
       final data = exception.response?.data;
       if (data is Map) {
@@ -484,8 +541,8 @@ class BookingRemoteDatasource {
           throw BookingApiException(detail, code: code);
         }
       }
-      throw const BookingApiException(
-        'Không thể từ chối tài xế. Vui lòng thử lại.',
+      throw BookingApiException(
+        LocaleProvider.currentLocalizations.genericError,
       );
     }
   }

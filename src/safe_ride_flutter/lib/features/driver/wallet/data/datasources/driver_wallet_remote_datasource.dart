@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/network/auth_header.dart';
 import '../../../../../core/network/dio_client.dart';
+import '../../../../../core/localization/locale_provider.dart';
 import '../models/driver_wallet_model.dart';
 
 class DriverWalletRemoteDatasource {
@@ -19,24 +20,27 @@ class DriverWalletRemoteDatasource {
       final payload = response.data;
       final data = payload is Map ? payload['data'] : null;
       if (data is! List) {
-        throw const DriverWalletApiException(
-          'Không thể tải danh sách ngân hàng.',
+        throw DriverWalletApiException(
+          LocaleProvider.currentLocalizations.bankListLoadFailed,
         );
       }
-      final banks = data
-          .map((item) => VietnamBankModel.fromJson(
-                Map<String, dynamic>.from(item as Map),
-              ))
-          .where((bank) => bank.code.isNotEmpty && bank.name.isNotEmpty)
-          .toList(growable: false)
-        ..sort((a, b) => a.shortName.compareTo(b.shortName));
+      final banks =
+          data
+              .map(
+                (item) => VietnamBankModel.fromJson(
+                  Map<String, dynamic>.from(item as Map),
+                ),
+              )
+              .where((bank) => bank.code.isNotEmpty && bank.name.isNotEmpty)
+              .toList(growable: false)
+            ..sort((a, b) => a.shortName.compareTo(b.shortName));
       _bankCache = banks;
       return banks;
     } on DriverWalletApiException {
       rethrow;
     } on DioException {
-      throw const DriverWalletApiException(
-        'Không thể tải danh sách ngân hàng.',
+      throw DriverWalletApiException(
+        LocaleProvider.currentLocalizations.bankListLoadFailed,
       );
     }
   }
@@ -53,9 +57,9 @@ class DriverWalletRemoteDatasource {
           'utcOffsetMinutes': DateTime.now().timeZoneOffset.inMinutes,
           'recentLimit': 10,
         },
-        options: Options(headers: {
-          ApiKeys.authorization: AuthHeader.bearer(accessToken),
-        }),
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+        ),
       );
       return DriverWalletModel.fromJson(
         Map<String, dynamic>.from(response.data as Map),
@@ -81,9 +85,9 @@ class DriverWalletRemoteDatasource {
           'bankAccountNumber': bankAccountNumber,
           'bankAccountName': bankAccountName,
         },
-        options: Options(headers: {
-          ApiKeys.authorization: AuthHeader.bearer(accessToken),
-        }),
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+        ),
       );
     } on DioException catch (error) {
       throw DriverWalletApiException(_messageFrom(error));
@@ -94,7 +98,7 @@ class DriverWalletRemoteDatasource {
     final data = error.response?.data;
     return data is Map && data['detail'] != null
         ? data['detail'].toString()
-        : 'Không thể kết nối dịch vụ Ví.';
+        : LocaleProvider.currentLocalizations.genericError;
   }
 }
 

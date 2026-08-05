@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import '../../../../../core/localization/locale_provider.dart';
+import '../../../../../core/localization/api_error_localizer.dart';
 
 import '../../data/datasources/driver_wallet_remote_datasource.dart';
 import '../../data/models/driver_wallet_model.dart';
@@ -18,7 +20,7 @@ class DriverWalletProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   String _period = 'Week';
   String get period => _period;
-  List<VietnamBankModel> _banks = const [];
+  List<VietnamBankModel> _banks = [];
   List<VietnamBankModel> get banks => _banks;
   bool _isLoadingBanks = false;
   bool get isLoadingBanks => _isLoadingBanks;
@@ -32,10 +34,13 @@ class DriverWalletProvider extends ChangeNotifier {
       _banks = await _repository.getVietnamBanks();
       return _banks.isNotEmpty;
     } on DriverWalletApiException catch (error) {
-      _errorMessage = error.message;
+      _errorMessage = ApiErrorLocalizer.translate(
+        LocaleProvider.currentLocalizations,
+        fallback: error.message,
+      );
       return false;
     } catch (_) {
-      _errorMessage = 'Không thể tải danh sách ngân hàng.';
+      _errorMessage = LocaleProvider.currentLocalizations.bankListLoadFailed;
       return false;
     } finally {
       _isLoadingBanks = false;
@@ -45,7 +50,7 @@ class DriverWalletProvider extends ChangeNotifier {
 
   Future<void> load(String? token, {String? period}) async {
     if (token == null || token.isEmpty) {
-      _errorMessage = 'Phiên đăng nhập đã hết hạn.';
+      _errorMessage = LocaleProvider.currentLocalizations.sessionExpired;
       notifyListeners();
       return;
     }
@@ -56,9 +61,12 @@ class DriverWalletProvider extends ChangeNotifier {
     try {
       _wallet = await _repository.getWallet(token, period: _period);
     } on DriverWalletApiException catch (error) {
-      _errorMessage = error.message;
+      _errorMessage = ApiErrorLocalizer.translate(
+        LocaleProvider.currentLocalizations,
+        fallback: error.message,
+      );
     } catch (_) {
-      _errorMessage = 'Không thể tải dữ liệu Ví.';
+      _errorMessage = LocaleProvider.currentLocalizations.genericError;
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -87,10 +95,14 @@ class DriverWalletProvider extends ChangeNotifier {
       await load(token);
       return true;
     } on DriverWalletApiException catch (error) {
-      _errorMessage = error.message;
+      _errorMessage = ApiErrorLocalizer.translate(
+        LocaleProvider.currentLocalizations,
+        fallback: error.message,
+      );
       return false;
     } catch (_) {
-      _errorMessage = 'Không thể gửi yêu cầu rút tiền.';
+      _errorMessage =
+          LocaleProvider.currentLocalizations.withdrawalRequestFailed;
       return false;
     } finally {
       _isSubmitting = false;

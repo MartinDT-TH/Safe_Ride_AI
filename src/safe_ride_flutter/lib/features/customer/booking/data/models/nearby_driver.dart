@@ -14,7 +14,8 @@ class NearbyDriver {
     return NearbyDriver(
       driverId: (json['driverId'] ?? json['DriverId'])?.toString() ?? '',
       latitude: (json['latitude'] ?? json['Latitude'] as num?)?.toDouble() ?? 0,
-      longitude: (json['longitude'] ?? json['Longitude'] as num?)?.toDouble() ?? 0,
+      longitude:
+          (json['longitude'] ?? json['Longitude'] as num?)?.toDouble() ?? 0,
     );
   }
 }

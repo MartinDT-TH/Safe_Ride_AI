@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/localization/localization_extensions.dart';
+import '../../../../../core/localization/locale_provider.dart';
 import '../../../../../core/storage/secure_storage_service.dart';
 import '../../../../../core/widgets/custom_button.dart';
 import '../../../../../dependency_injection/injection.dart';
@@ -15,7 +17,7 @@ import 'license_upload_page.dart';
 import 'criminal_record_upload_page.dart';
 
 class IdentityVerificationPage extends StatefulWidget {
-  const IdentityVerificationPage({super.key});
+  IdentityVerificationPage({super.key});
 
   @override
   State<IdentityVerificationPage> createState() =>
@@ -45,7 +47,7 @@ class _IdentityVerificationPageState extends State<IdentityVerificationPage> {
     if (token == null || token.isEmpty) {
       setState(() {
         _isLoading = false;
-        _loadError = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+        _loadError = context.l10n.sessionExpired;
       });
       return;
     }
@@ -69,7 +71,7 @@ class _IdentityVerificationPageState extends State<IdentityVerificationPage> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _loadError = 'Không thể tải trạng thái hồ sơ. Vui lòng thử lại.';
+        _loadError = context.l10n.profileStatusLoadFailed;
       });
     }
   }
@@ -88,11 +90,11 @@ class _IdentityVerificationPageState extends State<IdentityVerificationPage> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF263238)),
+          icon: Icon(Icons.arrow_back, color: Color(0xFF263238)),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          'Xác minh danh tính',
+        title: Text(
+          context.l10n.identityVerification,
           style: TextStyle(
             color: AppColors.primary,
             fontSize: 18,
@@ -102,7 +104,7 @@ class _IdentityVerificationPageState extends State<IdentityVerificationPage> {
         centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.help_outline, color: AppColors.primary),
+            icon: Icon(Icons.help_outline, color: AppColors.primary),
             onPressed: () {},
           ),
         ],
@@ -111,29 +113,29 @@ class _IdentityVerificationPageState extends State<IdentityVerificationPage> {
         onRefresh: _loadDocuments,
         color: AppColors.primary,
         child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(
+          physics: AlwaysScrollableScrollPhysics(
             parent: BouncingScrollPhysics(),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 20),
         child: Column(
           children: [
-            const SizedBox(height: 32),
+            SizedBox(height: 32),
             // Header Icon
             Container(
               padding: const EdgeInsets.all(30),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: Color(0xFFF5F5F5),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.shield_outlined,
                 size: 60,
                 color: AppColors.primary,
               ),
             ),
-            const SizedBox(height: 24),
-            const Text(
-              'Hoàn tất hồ sơ của bạn',
+            SizedBox(height: 24),
+            Text(
+              context.l10n.completeYourProfile,
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.w800,
@@ -142,9 +144,9 @@ class _IdentityVerificationPageState extends State<IdentityVerificationPage> {
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 12),
-            const Text(
-              'Để bắt đầu nhận chuyến và đảm bảo an toàn cho hành khách, vui lòng xác minh danh tính và cung cấp các giấy tờ cần thiết.',
+            SizedBox(height: 12),
+            Text(
+              context.l10n.identityVerificationIntro,
               style: TextStyle(
                 fontSize: 15,
                 color: Color(0xFF78909C),
@@ -156,26 +158,26 @@ class _IdentityVerificationPageState extends State<IdentityVerificationPage> {
 
             // Rejection Alert Box
             if (rejectedDoc != null) ...[
-              const SizedBox(height: 32),
+              SizedBox(height: 32),
               _buildRejectionAlert(rejectedDoc.rejectionReason ?? ''),
             ],
 
-            const SizedBox(height: 32),
+            SizedBox(height: 32),
             if (_isLoading) ...[
-              const LinearProgressIndicator(
+              LinearProgressIndicator(
                 color: AppColors.primary,
                 minHeight: 3,
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
             ],
             if (_loadError != null) ...[
               _buildLoadError(_loadError!),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
             ],
-            const Align(
+            Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                'Danh sách tài liệu cần nộp',
+                context.l10n.requiredDocuments,
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
@@ -183,7 +185,7 @@ class _IdentityVerificationPageState extends State<IdentityVerificationPage> {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
 
             // Document List
             ..._documents.map((doc) => Padding(
@@ -204,7 +206,7 @@ class _IdentityVerificationPageState extends State<IdentityVerificationPage> {
                         return;
                       }
 
-                      if (doc.title.contains('CCCD')) {
+                      if (doc.documentType == 'ID_CARD') {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -213,7 +215,7 @@ class _IdentityVerificationPageState extends State<IdentityVerificationPage> {
                             ),
                           ),
                         );
-                      } else if (doc.title.contains('Bằng lái')) {
+                      } else if (doc.documentType == 'DRIVING_LICENSE') {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -222,7 +224,7 @@ class _IdentityVerificationPageState extends State<IdentityVerificationPage> {
                             ),
                           ),
                         );
-                      } else if (doc.title.contains('Lý lịch')) {
+                      } else if (doc.documentType == 'CRIMINAL_RECORD') {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -236,7 +238,7 @@ class _IdentityVerificationPageState extends State<IdentityVerificationPage> {
                   ),
                 )),
 
-            const SizedBox(height: 32),
+            SizedBox(height: 32),
           ],
         ),
       ),
@@ -249,7 +251,7 @@ class _IdentityVerificationPageState extends State<IdentityVerificationPage> {
             BoxShadow(
               color: Colors.black.withOpacity(0.05),
               blurRadius: 10,
-              offset: const Offset(0, -5),
+              offset: Offset(0, -5),
             ),
           ],
         ),
@@ -257,7 +259,7 @@ class _IdentityVerificationPageState extends State<IdentityVerificationPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             CustomButton(
-              text: 'Nộp hồ sơ ngay',
+              text: context.l10n.submitApplicationNow,
               onPressed: () {
                 // Navigate to the first step (CCCD Upload)
                 Navigator.push(
@@ -270,9 +272,9 @@ class _IdentityVerificationPageState extends State<IdentityVerificationPage> {
                 );
               },
             ),
-            const SizedBox(height: 12),
-            const Text(
-              'Quá trình xác minh thường mất từ 1-3 ngày làm việc.',
+            SizedBox(height: 12),
+            Text(
+              context.l10n.verificationTime,
               style: TextStyle(
                 fontSize: 13,
                 color: Color(0xFF90A4AE),
@@ -289,31 +291,31 @@ class _IdentityVerificationPageState extends State<IdentityVerificationPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFEBEE),
+        color: Color(0xFFFFEBEE),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFFFCDD2)),
+        border: Border.all(color: Color(0xFFFFCDD2)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.error_outline, color: Color(0xFFD32F2F), size: 24),
-          const SizedBox(width: 12),
+          Icon(Icons.error_outline, color: Color(0xFFD32F2F), size: 24),
+          SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Hồ sơ trước đó bị từ chối',
+                Text(
+                  context.l10n.previousApplicationRejected,
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
                     color: Color(0xFFB71C1C),
                   ),
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: 4),
                 Text(
                   reason,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     color: Color(0xFFD32F2F),
                     height: 1.4,
@@ -339,38 +341,38 @@ class _IdentityVerificationPageState extends State<IdentityVerificationPage> {
           BoxShadow(
             color: Colors.black.withOpacity(0.08),
             blurRadius: 16,
-            offset: const Offset(0, 4),
+            offset: Offset(0, 4),
           ),
         ],
       ),
       child: Column(
         children: [
-          const Icon(Icons.cloud_off_rounded, size: 64, color: Colors.grey),
-          const SizedBox(height: 16),
-          const Text(
-            'Lỗi kết nối máy chủ',
+          Icon(Icons.cloud_off_rounded, size: 64, color: Colors.grey),
+          SizedBox(height: 16),
+          Text(
+            context.l10n.serverConnectionErrorTitle,
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
               color: Color(0xFF1F1F1F),
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Text(
             message,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               color: Color(0xFF78909C),
               height: 1.4,
             ),
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: 24),
           ElevatedButton.icon(
             onPressed: _loadDocuments,
-            icon: const Icon(Icons.refresh_rounded),
-            label: const Text(
-              'Thử lại',
+            icon: Icon(Icons.refresh_rounded),
+            label: Text(
+              context.l10n.tryAgain,
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             style: ElevatedButton.styleFrom(
@@ -389,23 +391,24 @@ class _IdentityVerificationPageState extends State<IdentityVerificationPage> {
   }
 
   List<IdentityDocumentModel> _defaultDocuments() {
-    return const [
+    final l10n = LocaleProvider.currentLocalizations;
+    return [
       IdentityDocumentModel(
         documentType: 'ID_CARD',
-        title: 'CCCD / Hộ chiếu',
-        description: 'Mặt trước và mặt sau',
+        title: l10n.idCardOrPassport,
+        description: l10n.frontAndBack,
         icon: Icons.badge_outlined,
       ),
       IdentityDocumentModel(
         documentType: 'DRIVING_LICENSE',
-        title: 'Bằng lái xe (GPLX)',
-        description: 'Ảnh bằng lái và thông tin GPLX',
+        title: l10n.drivingLicense,
+        description: l10n.licensePhotoAndInfo,
         icon: Icons.directions_car_outlined,
       ),
       IdentityDocumentModel(
         documentType: 'CRIMINAL_RECORD',
-        title: 'Lý lịch tư pháp',
-        description: 'Bản gốc, cấp trong 6 tháng',
+        title: l10n.criminalRecord,
+        description: l10n.originalIssuedWithinSixMonths,
         icon: Icons.security_outlined,
       ),
     ];
@@ -450,10 +453,11 @@ class _IdentityVerificationPageState extends State<IdentityVerificationPage> {
     IdentityDocumentModel document,
     DocumentStatus status,
   ) {
+    final l10n = LocaleProvider.currentLocalizations;
     return switch (status) {
-      DocumentStatus.pending => 'Đã nộp, đang chờ duyệt',
-      DocumentStatus.verified => 'Đã duyệt',
-      DocumentStatus.rejected => 'Cần nộp lại',
+      DocumentStatus.pending => l10n.documentPendingReview,
+      DocumentStatus.verified => l10n.documentApproved,
+      DocumentStatus.rejected => l10n.resubmissionRequired,
       DocumentStatus.notSubmitted => document.description,
     };
   }
@@ -463,7 +467,7 @@ class _DocumentItem extends StatelessWidget {
   final IdentityDocumentModel document;
   final VoidCallback onTap;
 
-  const _DocumentItem({required this.document, required this.onTap});
+  _DocumentItem({required this.document, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -498,20 +502,20 @@ class _DocumentItem extends StatelessWidget {
                 size: 24,
               ),
             ),
-            const SizedBox(width: 16),
+            SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     document.title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       color: Color(0xFF263238),
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  SizedBox(height: 2),
                   Text(
                     document.description,
                     style: TextStyle(
@@ -523,7 +527,7 @@ class _DocumentItem extends StatelessWidget {
                 ],
               ),
             ),
-            _buildStatusBadge(document.status),
+            _buildStatusBadge(context, document.status),
           ],
         ),
       ),
@@ -533,53 +537,53 @@ class _DocumentItem extends StatelessWidget {
   Color _statusColor(DocumentStatus status) {
     switch (status) {
       case DocumentStatus.notSubmitted:
-        return const Color(0xFF757575);
+        return Color(0xFF757575);
       case DocumentStatus.pending:
-        return const Color(0xFFFFA000);
+        return Color(0xFFFFA000);
       case DocumentStatus.verified:
-        return const Color(0xFF2E7D32);
+        return Color(0xFF2E7D32);
       case DocumentStatus.rejected:
-        return const Color(0xFFD32F2F);
+        return Color(0xFFD32F2F);
     }
   }
 
   Color _statusBackgroundColor(DocumentStatus status) {
     switch (status) {
       case DocumentStatus.notSubmitted:
-        return const Color(0xFFFAFAFA);
+        return Color(0xFFFAFAFA);
       case DocumentStatus.pending:
-        return const Color(0xFFFFFDF5);
+        return Color(0xFFFFFDF5);
       case DocumentStatus.verified:
-        return const Color(0xFFF1F8E9);
+        return Color(0xFFF1F8E9);
       case DocumentStatus.rejected:
-        return const Color(0xFFFFFBFA);
+        return Color(0xFFFFFBFA);
     }
   }
 
   Color _statusBorderColor(DocumentStatus status) {
     switch (status) {
       case DocumentStatus.notSubmitted:
-        return const Color(0xFFE0E0E0);
+        return Color(0xFFE0E0E0);
       case DocumentStatus.pending:
-        return const Color(0xFFFFE082);
+        return Color(0xFFFFE082);
       case DocumentStatus.verified:
-        return const Color(0xFFC8E6C9);
+        return Color(0xFFC8E6C9);
       case DocumentStatus.rejected:
-        return const Color(0xFFFFCDD2);
+        return Color(0xFFFFCDD2);
     }
   }
 
-  Widget _buildStatusBadge(DocumentStatus status) {
+  Widget _buildStatusBadge(BuildContext context, DocumentStatus status) {
     switch (status) {
       case DocumentStatus.notSubmitted:
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: const Color(0xFFEEEEEE),
+            color: Color(0xFFEEEEEE),
             borderRadius: BorderRadius.circular(100),
           ),
-          child: const Text(
-            'CHƯA NỘP',
+          child: Text(
+            context.l10n.documentNotSubmitted.toUpperCase(),
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w800,
@@ -591,11 +595,11 @@ class _DocumentItem extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: const Color(0xFFB71C1C),
+            color: Color(0xFFB71C1C),
             borderRadius: BorderRadius.circular(100),
           ),
-          child: const Text(
-            'TỪ CHỐI',
+          child: Text(
+            context.l10n.documentRejected.toUpperCase(),
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w800,
@@ -607,11 +611,11 @@ class _DocumentItem extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: const Color(0xFFFFF8E1),
+            color: Color(0xFFFFF8E1),
             borderRadius: BorderRadius.circular(100),
           ),
-          child: const Text(
-            'ĐÃ NỘP',
+          child: Text(
+            context.l10n.submitted.toUpperCase(),
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w800,
@@ -623,11 +627,11 @@ class _DocumentItem extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: const Color(0xFFE8F5E9),
+            color: Color(0xFFE8F5E9),
             borderRadius: BorderRadius.circular(100),
           ),
-          child: const Text(
-            'ĐÃ DUYỆT',
+          child: Text(
+            context.l10n.documentApproved.toUpperCase(),
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w800,

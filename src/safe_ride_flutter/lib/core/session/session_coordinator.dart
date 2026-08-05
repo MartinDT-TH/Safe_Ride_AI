@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../constants/app_strings.dart';
+import '../localization/locale_provider.dart';
 import 'session_manager.dart';
 
 class SessionCoordinator {
@@ -40,13 +41,13 @@ class SessionCoordinator {
 
     _isNavigating = true;
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      const SnackBar(
-        content: Text(BookingStrings.sessionExpired),
+      SnackBar(
+        content: Text(LocaleProvider.currentLocalizations.sessionExpired),
         behavior: SnackBarBehavior.floating,
       ),
     );
     navigator.pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginPage()),
+      MaterialPageRoute(builder: (_) => LoginPage()),
       (route) => false,
     ).whenComplete(() {
       _isNavigating = false;

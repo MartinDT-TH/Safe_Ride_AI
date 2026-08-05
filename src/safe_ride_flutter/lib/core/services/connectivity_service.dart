@@ -3,13 +3,15 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 
 import '../widgets/app_snackbar.dart';
+import '../localization/locale_provider.dart';
 
 class ConnectivityService {
   final Connectivity _connectivity = Connectivity();
   StreamSubscription<List<ConnectivityResult>>? _subscription;
-  
+
   // Use GlobalKey to show snackbars without context
-  final GlobalKey<ScaffoldMessengerState> messengerKey = GlobalKey<ScaffoldMessengerState>();
+  final GlobalKey<ScaffoldMessengerState> messengerKey =
+      GlobalKey<ScaffoldMessengerState>();
 
   bool _isFirstCheck = true;
   bool _wasOffline = false;
@@ -23,12 +25,17 @@ class ConnectivityService {
     });
 
     // Listen for changes
-    _subscription = _connectivity.onConnectivityChanged.listen((List<ConnectivityResult> results) {
+    _subscription = _connectivity.onConnectivityChanged.listen((
+      List<ConnectivityResult> results,
+    ) {
       _handleConnectivityChange(results);
     });
   }
 
-  void _handleConnectivityChange(List<ConnectivityResult> results, {bool isInitial = false}) {
+  void _handleConnectivityChange(
+    List<ConnectivityResult> results, {
+    bool isInitial = false,
+  }) {
     final bool isOffline = results.contains(ConnectivityResult.none);
 
     if (isOffline) {
@@ -43,26 +50,28 @@ class ConnectivityService {
         _wasOffline = false;
       }
     }
-    
+
     _isFirstCheck = false;
   }
 
   void _showNoInternetSnackBar() {
+    final l10n = LocaleProvider.currentLocalizations;
     AppSnackBar.showGlobal(
       messengerKey,
-      message: 'Không có kết nối internet',
+      message: l10n.noInternetConnection,
       type: AppSnackBarType.error,
-      title: 'Mất kết nối',
+      title: l10n.connectionLost,
       duration: const Duration(days: 1), // Keep it until online
     );
   }
 
   void _showBackOnlineSnackBar() {
+    final l10n = LocaleProvider.currentLocalizations;
     AppSnackBar.showGlobal(
       messengerKey,
-      message: 'Đã khôi phục kết nối internet',
+      message: l10n.internetRestored,
       type: AppSnackBarType.success,
-      title: 'Đã trực tuyến',
+      title: l10n.backOnline,
       duration: const Duration(seconds: 3),
     );
   }

@@ -13,4 +13,16 @@ public interface ICloudinaryImageService
         Stream stream,
         string contentType,
         CancellationToken cancellationToken = default);
+
+    Task<CloudinaryAudioUpload> UploadAiChatAudioAsync(
+        Guid userId,
+        Stream stream,
+        string fileName,
+        CancellationToken cancellationToken = default);
+
+    Task DeleteAiChatAudioAsync(
+        string publicId,
+        CancellationToken cancellationToken = default);
 }
+
+public sealed record CloudinaryAudioUpload(string Url, string PublicId);

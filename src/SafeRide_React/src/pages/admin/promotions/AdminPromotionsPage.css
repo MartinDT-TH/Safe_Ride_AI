@@ -1,0 +1,445 @@
+.admin-promotions-page {
+    max-width: 1480px;
+    margin: 0 auto;
+}
+
+.admin-promotions-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    margin: 12px 0 32px;
+}
+
+.admin-promotions-header h1 {
+    color: #171717;
+    font-size: 34px;
+    line-height: 1.15;
+    letter-spacing: 0;
+}
+
+.admin-promotions-header p {
+    margin-top: 8px;
+    color: #667173;
+    font-size: 15px;
+}
+
+.admin-promotions-create-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 46px;
+    padding: 0 20px;
+    border-radius: 8px;
+    color: #fff;
+    background: #007682;
+    font-size: 15px;
+    font-weight: 700;
+    white-space: nowrap;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.14);
+}
+
+.admin-promotions-create-button:hover {
+    background: #00636d;
+}
+
+.admin-promotions-success {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: -12px 0 24px;
+    padding: 12px 14px;
+    border: 1px solid #acd9bc;
+    border-radius: 7px;
+    color: #176c39;
+    background: #e7f6ec;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.admin-promotions-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 18px;
+    margin-bottom: 24px;
+}
+
+.admin-promotions-summary-card {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 126px;
+    padding: 20px;
+    border: 1px solid #dce4e5;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 2px 4px rgba(22, 43, 46, 0.05);
+}
+
+.admin-promotions-summary-card div {
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+}
+
+.admin-promotions-summary-card div span {
+    color: #596365;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.admin-promotions-summary-card strong {
+    color: #171717;
+    font-size: 28px;
+    line-height: 1;
+}
+
+.admin-promotions-summary-icon {
+    display: grid;
+    place-items: center;
+    flex: 0 0 42px;
+    width: 42px;
+    height: 42px;
+    border-radius: 8px;
+    font-size: 18px;
+}
+
+.admin-promotions-summary-icon--teal {
+    color: #007682;
+    background: #e5f2f3;
+}
+
+.admin-promotions-summary-icon--green {
+    color: #168744;
+    background: #e2f5e8;
+}
+
+.admin-promotions-summary-icon--gray {
+    color: #647073;
+    background: #edf0f0;
+}
+
+.admin-promotions-summary-icon--red {
+    color: #b33a3a;
+    background: #f9e8e8;
+}
+
+.admin-promotions-list {
+    overflow: hidden;
+    border: 1px solid #dce4e5;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.admin-promotions-search {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) minmax(150px, 180px) minmax(160px, 190px) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 18px;
+    border-bottom: 1px solid #e5eaea;
+}
+
+.admin-promotions-search-control {
+    position: relative;
+    display: block;
+    min-width: 0;
+}
+
+.admin-promotions-search-control svg {
+    position: absolute;
+    top: 50%;
+    left: 13px;
+    color: #778184;
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+
+.admin-promotions-search input,
+.admin-promotions-search select {
+    width: 100%;
+    min-width: 0;
+    height: 40px;
+    padding: 0 12px;
+    border: 1px solid #ccd6d7;
+    border-radius: 8px;
+    color: #24292a;
+    background: #fff;
+    font-size: 14px;
+}
+
+.admin-promotions-search input {
+    padding-left: 38px;
+}
+
+.admin-promotions-search input:focus,
+.admin-promotions-search select:focus {
+    border-color: #69aeb4;
+    outline: 3px solid rgba(0, 118, 130, 0.1);
+}
+
+.admin-promotions-search button,
+.admin-promotions-feedback button {
+    min-height: 40px;
+    padding: 0 16px;
+    border-radius: 8px;
+    color: #fff;
+    background: #007682;
+    font-weight: 700;
+}
+
+.admin-promotions-search button {
+    width: auto;
+    white-space: nowrap;
+}
+
+.admin-promotions-feedback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    min-height: 180px;
+    padding: 28px;
+    color: #5f696b;
+    font-size: 15px;
+    font-weight: 600;
+    text-align: center;
+}
+
+.admin-promotions-feedback--error {
+    color: #9c3030;
+}
+
+.admin-promotions-feedback--error button {
+    flex: 0 0 auto;
+}
+
+.admin-promotions-table-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+.admin-promotions-table {
+    width: 100%;
+    min-width: 920px;
+    border-collapse: collapse;
+}
+
+.admin-promotions-table th,
+.admin-promotions-table td {
+    padding: 14px 16px;
+    border-bottom: 1px solid #e7ebec;
+    color: #3f484a;
+    font-size: 13px;
+    text-align: left;
+    vertical-align: middle;
+    white-space: normal;
+}
+
+.admin-promotions-table th {
+    color: #596365;
+    background: #f5f8f8;
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.admin-promotions-table tbody tr:hover {
+    background: #f8fbfb;
+}
+
+.admin-promotions-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.admin-promotions-table td strong {
+    color: #126f78;
+    font-weight: 800;
+}
+
+.admin-promotions-table td:first-child strong,
+.admin-promotions-table td:nth-child(2),
+.admin-promotions-table td:nth-child(3) {
+    white-space: nowrap;
+}
+
+.admin-promotions-cell-details {
+    display: grid;
+    gap: 5px;
+    min-width: 132px;
+    color: #6c7678;
+    font-size: 12px;
+}
+
+.admin-promotions-cell-details span {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.admin-promotions-cell-details strong {
+    color: #344042;
+    text-align: right;
+}
+
+.admin-promotions-date-range {
+    display: grid;
+    gap: 4px;
+    min-width: 88px;
+}
+
+.admin-promotions-date-range span:last-child {
+    color: #788184;
+}
+
+.admin-promotions-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.admin-promotions-status--green {
+    color: #16733c;
+    background: #def3e5;
+}
+
+.admin-promotions-status--gray {
+    color: #5f696b;
+    background: #e9eded;
+}
+
+.admin-promotions-status--red {
+    color: #a23434;
+    background: #f8e2e2;
+}
+
+.admin-promotions-status--yellow {
+    color: #85620c;
+    background: #fff0c4;
+}
+
+.admin-promotions-edit-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 34px;
+    padding: 0 11px;
+    border: 1px solid #c8d3d4;
+    border-radius: 8px;
+    color: #176f77;
+    background: #eef7f7;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.admin-promotions-edit-button:hover {
+    border-color: #8bbfc3;
+    background: #dff0f1;
+}
+
+.admin-promotions-action-column {
+    position: sticky;
+    right: 0;
+    width: 82px;
+    min-width: 82px;
+    background: #fff;
+    box-shadow: -8px 0 12px -12px rgba(20, 36, 39, 0.7);
+}
+
+.admin-promotions-table th.admin-promotions-action-column {
+    z-index: 2;
+    background: #f5f8f8;
+}
+
+.admin-promotions-table tbody tr:hover .admin-promotions-action-column {
+    background: #f8fbfb;
+}
+
+.admin-promotion-editor-page {
+    max-width: 960px;
+    margin: 0 auto;
+}
+
+.admin-promotion-editor-header {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    margin: 12px 0 28px;
+}
+
+.admin-promotion-editor-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    padding: 0;
+    color: #176f77;
+    background: transparent;
+    font-size: 14px;
+    font-weight: 800;
+}
+
+.admin-promotion-editor-back:hover {
+    color: #005e67;
+}
+
+.admin-promotion-editor-header h1 {
+    color: #171717;
+    font-size: 32px;
+    line-height: 1.2;
+    letter-spacing: 0;
+}
+
+.admin-promotion-editor-header p {
+    margin-top: 8px;
+    color: #667173;
+    font-size: 15px;
+}
+
+@media (max-width: 1100px) {
+    .admin-promotions-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .admin-promotions-search {
+        grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(150px, 180px));
+    }
+
+    .admin-promotions-search button {
+        justify-self: start;
+    }
+}
+
+@media (max-width: 700px) {
+    .admin-promotions-header {
+        flex-direction: column;
+    }
+
+    .admin-promotions-create-button {
+        width: 100%;
+    }
+
+    .admin-promotions-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-promotions-search {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-promotions-search button {
+        justify-self: start;
+    }
+
+    .admin-promotions-feedback {
+        flex-direction: column;
+    }
+
+}

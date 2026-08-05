@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 
 class ReportPage extends StatelessWidget {
-  const ReportPage({super.key});
+  ReportPage({super.key});
 
   @override
   Widget build(BuildContext context) {
     const tealColor = Color(0xFF006B70);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Báo cáo sự cố'),
+        title: Text(context.l10n.reportIncident),
         backgroundColor: Colors.white,
         foregroundColor: tealColor,
         elevation: 0.5,
@@ -18,28 +19,28 @@ class ReportPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Chúng tôi có thể giúp gì cho bạn?',
+            Text(
+              context.l10n.reportHelpQuestion,
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             _ReportTypeItem(
-              title: 'Sự cố chuyến đi',
+              title: context.l10n.tripIncident,
               icon: Icons.minor_crash_rounded,
               onTap: () {},
             ),
             _ReportTypeItem(
-              title: 'Vấn đề thanh toán',
+              title: context.l10n.paymentIssue,
               icon: Icons.payments_rounded,
               onTap: () {},
             ),
             _ReportTypeItem(
-              title: 'Phản hồi về tài xế/khách hàng',
+              title: context.l10n.partyFeedback,
               icon: Icons.person_search_rounded,
               onTap: () {},
             ),
             _ReportTypeItem(
-              title: 'Lỗi ứng dụng',
+              title: context.l10n.appIssue,
               icon: Icons.bug_report_rounded,
               onTap: () {},
             ),
@@ -55,7 +56,7 @@ class _ReportTypeItem extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
 
-  const _ReportTypeItem({
+  _ReportTypeItem({
     required this.title,
     required this.icon,
     required this.onTap,
@@ -64,9 +65,9 @@ class _ReportTypeItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      leading: Icon(icon, color: const Color(0xFF006B70)),
+      leading: Icon(icon, color: Color(0xFF006B70)),
       title: Text(title),
-      trailing: const Icon(Icons.chevron_right),
+      trailing: Icon(Icons.chevron_right),
       onTap: onTap,
     );
   }

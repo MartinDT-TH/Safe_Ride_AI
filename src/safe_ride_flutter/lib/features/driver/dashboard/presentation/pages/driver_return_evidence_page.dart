@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import '../providers/driver_dashboard_provider.dart';
 
 /// Driver submits 1–3 evidence photos to confirm vehicle return on behalf of
@@ -13,10 +14,7 @@ import '../providers/driver_dashboard_provider.dart';
 ///
 /// Flow:  WAITING_RETURN_CONFIRM → (this page) → RETURN_CONFIRMED
 class DriverReturnEvidencePage extends StatefulWidget {
-  const DriverReturnEvidencePage({
-    super.key,
-    required this.tripId,
-  });
+  DriverReturnEvidencePage({super.key, required this.tripId});
 
   final int tripId;
 
@@ -45,7 +43,7 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
     super.initState();
     _pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: Duration(milliseconds: 1200),
     )..repeat(reverse: true);
     _pulseAnimation = Tween<double>(begin: 0.95, end: 1.0).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
@@ -77,18 +75,24 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _errorMessage = 'Không thể truy cập ${source == ImageSource.camera ? "camera" : "thư viện"}.');
+      setState(
+        () => _errorMessage = context.l10n.mediaAccessFailed(
+          source == ImageSource.camera
+              ? context.l10n.camera
+              : context.l10n.gallery,
+        ),
+      );
     }
   }
 
   void _showImageSourceSheet() {
     if (_evidenceFiles.length >= _maxPhotos) {
-      setState(() => _errorMessage = DriverReturnEvidenceStrings.errorMaxPhoto);
+      setState(() => _errorMessage = context.l10n.maximumEvidencePhotos);
       return;
     }
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       backgroundColor: Colors.white,
@@ -110,14 +114,14 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
               ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     color: _primaryLight,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.camera_alt_rounded, color: _primary),
+                  child: Icon(Icons.camera_alt_rounded, color: _primary),
                 ),
-                title: const Text(
-                  DriverReturnEvidenceStrings.camera,
+                title: Text(
+                  context.l10n.takePhoto,
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
                 onTap: () {
@@ -128,14 +132,17 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
               ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     color: _primaryLight,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.photo_library_rounded, color: _primary),
+                  child: Icon(
+                    Icons.photo_library_rounded,
+                    color: _primary,
+                  ),
                 ),
-                title: const Text(
-                  DriverReturnEvidenceStrings.gallery,
+                title: Text(
+                  context.l10n.chooseFromGallery,
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
                 onTap: () {
@@ -143,7 +150,7 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
                   _pickImage(ImageSource.gallery);
                 },
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
             ],
           ),
         ),
@@ -156,16 +163,16 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          DriverReturnEvidenceStrings.removePhoto,
+        title: Text(
+          context.l10n.removePhoto,
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        content: const Text(DriverReturnEvidenceStrings.confirmRemove),
+        content: Text(context.l10n.removePhotoQuestion),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: Text(
-              AppStrings.cancel,
+              context.l10n.cancel,
               style: TextStyle(color: Colors.grey[600]),
             ),
           ),
@@ -181,7 +188,7 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
               Navigator.pop(ctx);
               setState(() => _evidenceFiles.removeAt(index));
             },
-            child: const Text('Xóa'),
+            child: Text(context.l10n.delete),
           ),
         ],
       ),
@@ -190,13 +197,11 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
 
   Future<void> _submit() async {
     if (_evidenceFiles.isEmpty) {
-      setState(
-          () => _errorMessage = DriverReturnEvidenceStrings.errorMinPhoto);
+      setState(() => _errorMessage = context.l10n.minimumEvidencePhoto);
       return;
     }
     if (_evidenceFiles.length > _maxPhotos) {
-      setState(
-          () => _errorMessage = DriverReturnEvidenceStrings.errorMaxPhoto);
+      setState(() => _errorMessage = context.l10n.maximumEvidencePhotos);
       return;
     }
 
@@ -206,8 +211,7 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
     });
 
     try {
-      final provider =
-          context.read<DriverDashboardProvider>();
+      final provider = context.read<DriverDashboardProvider>();
       await provider.confirmReturnByDriver(
         tripId: widget.tripId,
         evidenceFiles: List.unmodifiable(_evidenceFiles),
@@ -220,7 +224,7 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _errorMessage = DriverReturnEvidenceStrings.errorUploadFailed;
+        _errorMessage = context.l10n.evidenceUploadFailed;
         _isSubmitting = false;
       });
     }
@@ -232,26 +236,28 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 28,
+          vertical: 24,
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: Color(0xFFE8F7F0),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.check_circle_rounded,
                 color: Color(0xFF0A8F62),
                 size: 52,
               ),
             ),
-            const SizedBox(height: 20),
-            const Text(
-              DriverReturnEvidenceStrings.successTitle,
+            SizedBox(height: 20),
+            Text(
+              context.l10n.returnConfirmedSuccess,
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 20,
@@ -259,9 +265,9 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
                 color: Color(0xFF1F1F1F),
               ),
             ),
-            const SizedBox(height: 10),
-            const Text(
-              DriverReturnEvidenceStrings.successMessage,
+            SizedBox(height: 10),
+            Text(
+              context.l10n.returnConfirmedMessage,
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
@@ -269,7 +275,7 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
                 height: 1.5,
               ),
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -278,18 +284,16 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                 ),
                 onPressed: () {
                   Navigator.pop(ctx); // close dialog
                   Navigator.pop(context); // close evidence page
                 },
-                child: const Text(
-                  DriverReturnEvidenceStrings.done,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
+                child: Text(
+                  context.l10n.done,
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                 ),
               ),
             ),
@@ -309,16 +313,13 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
         backgroundColor: _primary,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: const Text(
-          DriverReturnEvidenceStrings.pageTitle,
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 18,
-          ),
+        title: Text(
+          context.l10n.returnVehicleConfirmation,
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
         ),
         centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          icon: Icon(Icons.arrow_back_ios_new_rounded),
           onPressed: _isSubmitting ? null : () => Navigator.pop(context),
         ),
       ),
@@ -326,7 +327,7 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
         children: [
           // Gradient header bar
           Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [_primary, Color(0xFF005A64)],
                 begin: Alignment.topLeft,
@@ -342,16 +343,16 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
                     color: Colors.white.withOpacity(0.18),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.photo_camera_rounded,
                     color: Colors.white,
                     size: 22,
                   ),
                 ),
-                const SizedBox(width: 14),
-                const Expanded(
+                SizedBox(width: 14),
+                Expanded(
                   child: Text(
-                    DriverReturnEvidenceStrings.instruction,
+                    context.l10n.returnEvidenceInstruction,
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 13,
@@ -372,19 +373,19 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
                 children: [
                   // Photo count indicator
                   _buildPhotoCountBadge(),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
 
                   // Photo grid
                   _buildPhotoGrid(),
-                  const SizedBox(height: 24),
+                  SizedBox(height: 24),
 
                   // Note field
                   _buildNoteField(),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
 
                   // Error message
                   if (_errorMessage != null) _buildErrorBanner(),
-                  const SizedBox(height: 24),
+                  SizedBox(height: 24),
                 ],
               ),
             ),
@@ -402,8 +403,8 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
     final color = count == 0
         ? Colors.orange
         : count < _maxPhotos
-            ? _primary
-            : const Color(0xFF0A8F62);
+        ? _primary
+        : Color(0xFF0A8F62);
     return Row(
       children: [
         Container(
@@ -423,9 +424,9 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
                 size: 16,
                 color: color,
               ),
-              const SizedBox(width: 6),
+              SizedBox(width: 6),
               Text(
-                '$count / $_maxPhotos ảnh',
+                context.l10n.photoCount(count, _maxPhotos),
                 style: TextStyle(
                   color: color,
                   fontSize: 13,
@@ -435,14 +436,11 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
             ],
           ),
         ),
-        const Spacer(),
+        Spacer(),
         if (count < _maxPhotos)
           Text(
-            'Còn ${_maxPhotos - count} ảnh',
-            style: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFF6B6B6B),
-            ),
+            context.l10n.remainingPhotos(_maxPhotos - count),
+            style: TextStyle(fontSize: 12, color: Color(0xFF6B6B6B)),
           ),
       ],
     );
@@ -451,8 +449,8 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
   Widget _buildPhotoGrid() {
     return GridView.builder(
       shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+      physics: NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
@@ -489,7 +487,7 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
               BoxShadow(
                 color: _primary.withOpacity(0.08),
                 blurRadius: 8,
-                offset: const Offset(0, 4),
+                offset: Offset(0, 4),
               ),
             ],
           ),
@@ -498,19 +496,19 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
             children: [
               Container(
                 padding: const EdgeInsets.all(10),
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   color: _primaryLight,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.add_photo_alternate_rounded,
                   color: _primary,
                   size: 26,
                 ),
               ),
-              const SizedBox(height: 6),
-              const Text(
-                DriverReturnEvidenceStrings.tapToAdd,
+              SizedBox(height: 6),
+              Text(
+                context.l10n.tapToAddPhoto,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 10,
@@ -532,10 +530,7 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
         // Photo
         ClipRRect(
           borderRadius: BorderRadius.circular(16),
-          child: Image.file(
-            _evidenceFiles[index],
-            fit: BoxFit.cover,
-          ),
+          child: Image.file(_evidenceFiles[index], fit: BoxFit.cover),
         ),
         // Gradient overlay
         ClipRRect(
@@ -545,10 +540,7 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  Colors.black.withOpacity(0.4),
-                ],
+                colors: [Colors.transparent, Colors.black.withOpacity(0.4)],
               ),
             ),
           ),
@@ -564,8 +556,8 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
-              '${DriverReturnEvidenceStrings.photoOf} ${index + 1}',
-              style: const TextStyle(
+              context.l10n.photoNumber(index + 1),
+              style: TextStyle(
                 color: Colors.white,
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
@@ -585,7 +577,7 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
                 color: Colors.black.withOpacity(0.6),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.close_rounded,
                 color: Colors.white,
                 size: 14,
@@ -601,15 +593,15 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          DriverReturnEvidenceStrings.noteLabel,
+        Text(
+          context.l10n.optionalNote,
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w700,
             color: Color(0xFF1F1F1F),
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
             color: Colors.white,
@@ -618,7 +610,7 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
               BoxShadow(
                 color: Colors.black.withOpacity(0.05),
                 blurRadius: 8,
-                offset: const Offset(0, 2),
+                offset: Offset(0, 2),
               ),
             ],
           ),
@@ -627,25 +619,25 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
             maxLines: 3,
             maxLength: 300,
             decoration: InputDecoration(
-              hintText: DriverReturnEvidenceStrings.noteHint,
-              hintStyle: const TextStyle(
+              hintText: context.l10n.noteHint,
+              hintStyle: TextStyle(
                 color: Color(0xFFBBBBBB),
                 fontSize: 14,
               ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: AppColors.border),
+                borderSide: BorderSide(color: AppColors.border),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: AppColors.border),
+                borderSide: BorderSide(color: AppColors.border),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: _primary, width: 2),
+                borderSide: BorderSide(color: _primary, width: 2),
               ),
               contentPadding: const EdgeInsets.all(16),
-              counterStyle: const TextStyle(color: Color(0xFFBBBBBB)),
+              counterStyle: TextStyle(color: Color(0xFFBBBBBB)),
             ),
           ),
         ),
@@ -655,7 +647,7 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
 
   Widget _buildErrorBanner() {
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
+      duration: Duration(milliseconds: 250),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: _errorColor.withOpacity(0.08),
@@ -664,12 +656,12 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline_rounded, color: _errorColor, size: 20),
-          const SizedBox(width: 10),
+          Icon(Icons.error_outline_rounded, color: _errorColor, size: 20),
+          SizedBox(width: 10),
           Expanded(
             child: Text(
               _errorMessage!,
-              style: const TextStyle(
+              style: TextStyle(
                 color: _errorColor,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -690,7 +682,7 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
           BoxShadow(
             color: Colors.black.withOpacity(0.08),
             blurRadius: 16,
-            offset: const Offset(0, -4),
+            offset: Offset(0, -4),
           ),
         ],
       ),
@@ -707,7 +699,7 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
           style: ElevatedButton.styleFrom(
             backgroundColor: hasPhotos && !_isSubmitting
                 ? _primary
-                : const Color(0xFFB0C4C5),
+                : Color(0xFFB0C4C5),
             foregroundColor: Colors.white,
             elevation: hasPhotos && !_isSubmitting ? 2 : 0,
             shape: RoundedRectangleBorder(
@@ -716,7 +708,7 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
           ),
           onPressed: (hasPhotos && !_isSubmitting) ? _submit : null,
           child: _isSubmitting
-              ? const Row(
+              ? Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     SizedBox(
@@ -729,7 +721,7 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
                     ),
                     SizedBox(width: 12),
                     Text(
-                      DriverReturnEvidenceStrings.submitting,
+                      context.l10n.submitting,
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
@@ -740,13 +732,15 @@ class _DriverReturnEvidencePageState extends State<DriverReturnEvidencePage>
               : Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.verified_rounded, size: 22),
-                    const SizedBox(width: 10),
+                    Icon(Icons.verified_rounded, size: 22),
+                    SizedBox(width: 10),
                     Text(
                       hasPhotos
-                          ? '${DriverReturnEvidenceStrings.submitButton} (${_evidenceFiles.length} ảnh)'
-                          : DriverReturnEvidenceStrings.submitButton,
-                      style: const TextStyle(
+                          ? context.l10n.submitEvidenceWithCount(
+                              _evidenceFiles.length,
+                            )
+                          : context.l10n.returnVehicleConfirmation,
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                       ),

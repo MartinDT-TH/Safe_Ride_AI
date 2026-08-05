@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/localization/locale_provider.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../../core/widgets/app_dialog.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../driver/registration/presentation/pages/identity_verification_page.dart';
@@ -13,9 +15,10 @@ import '../../../../customer/booking/presentation/providers/booking_provider.dar
 import '../../../../customer/home/presentation/pages/customer_home_page.dart';
 import '../../../../shared/onboarding/presentation/providers/role_provider.dart';
 import '../../../../driver/dashboard/presentation/providers/driver_dashboard_provider.dart';
+import '../widgets/language_picker_sheet.dart';
 
 class ProfilePage extends StatefulWidget {
-  const ProfilePage({super.key});
+  ProfilePage({super.key});
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -35,24 +38,25 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final auth = context.watch<AuthProvider>();
     final roleProvider = context.watch<RoleProvider>();
     final bookingProvider = context.watch<BookingProvider>();
     final hasActiveBooking = bookingProvider.activeBooking != null;
 
     return Scaffold(
-      backgroundColor: const Color(
+      backgroundColor: Color(
         0xFFFCF9F9,
       ), //0xFFFDFBFA), // Light warm background as seen in image
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0.5, //0
         // leading: IconButton( // tắt bỏ luôn cho đẹp
-        //   icon: const Icon(Icons.arrow_back, color: Color(0xFF006B70)), // 0xFF263238
+        //   icon: Icon(Icons.arrow_back, color: Color(0xFF006B70)), // 0xFF263238
         //   onPressed: () {}, //onPressed: () => Navigator.pop(context) // lỗi
         // ),
-        title: const Text(
-          ProfileStrings.profileAndSettings,
+        title: Text(
+          l10n.profileAndSettings,
           style: TextStyle(
             color: Color(0xFF006B70), // Color(0xFF007A87), // Primary teal
             fontWeight: FontWeight.bold, //FontWeight.w700,
@@ -63,14 +67,14 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
       body: SingleChildScrollView(
         // padding: const EdgeInsets.symmetric(vertical: 20),
-        physics: const BouncingScrollPhysics(),
+        physics: BouncingScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // 1. Profile Summary Card
             _buildProfileSummary(auth),
-            const SizedBox(height: 32),
+            SizedBox(height: 32),
 
             // 2. Chuyển sang chế độ Tài xế
             if (auth.isDriverEligible)
@@ -79,23 +83,23 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE8F2F2),
+                    color: Color(0xFFE8F2F2),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.directions_car_rounded,
                         color: AppColors.primary, //Color(0xFF006B70)
                         size: 28,
                       ),
-                      const SizedBox(width: 16),
-                      const Expanded(
+                      SizedBox(width: 16),
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              ProfileStrings.switchToDriver,
+                              l10n.switchToDriver,
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 color: Color(0xFF006B70),
@@ -103,7 +107,7 @@ class _ProfilePageState extends State<ProfilePage> {
                               ),
                             ),
                             Text(
-                              ProfileStrings.startReceivingTrips,
+                              l10n.startReceivingTrips,
                               style: TextStyle(
                                 color: Color(0xFF666666),
                                 fontSize: 13,
@@ -121,10 +125,8 @@ class _ProfilePageState extends State<ProfilePage> {
                           // (since they are ALREADY in customer mode conceptually if hasActiveBooking is true)
                           if (val && hasActiveBooking) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Bạn không thể chuyển sang chế độ Tài xế khi đang có chuyến đi hoạt động.',
-                                ),
+                              SnackBar(
+                                content: Text(l10n.cannotSwitchToDriver),
                                 behavior: SnackBarBehavior.floating,
                               ),
                             );
@@ -132,10 +134,8 @@ class _ProfilePageState extends State<ProfilePage> {
                           }
                           if (!val && driverProvider.activeTrip != null) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Bạn không thể chuyển sang chế độ Khách hàng khi đang có chuyến đi hoạt động.',
-                                ),
+                              SnackBar(
+                                content: Text(l10n.cannotSwitchToCustomer),
                                 behavior: SnackBarBehavior.floating,
                               ),
                             );
@@ -155,8 +155,8 @@ class _ProfilePageState extends State<ProfilePage> {
                           if (!mounted) return;
 
                           final Widget destination = val
-                              ? const DriverDashboardPage()
-                              : const CustomerHomePage();
+                              ? DriverDashboardPage()
+                              : CustomerHomePage();
 
                           navigator.pushAndRemoveUntil(
                             MaterialPageRoute(builder: (_) => destination),
@@ -164,54 +164,55 @@ class _ProfilePageState extends State<ProfilePage> {
                           );
                         },
                         activeThumbColor: Colors.white,
-                        activeTrackColor: const Color(0xFF006B70),
+                        activeTrackColor: Color(0xFF006B70),
                       ),
                     ],
                   ),
                 ),
               ),
 
-            const SizedBox(height: 24),
+            SizedBox(height: 24),
 
             // 3. Section: TÀI KHOẢN
-            _buildSectionLabel(ProfileStrings.accountSection),
+            _buildSectionLabel(l10n.accountSection),
             _buildMenuContainer([
               ProfileMenuTile(
                 icon: Icons.person_search_outlined,
-                title: ProfileStrings.editProfile,
+                title: l10n.editProfile,
                 onTap: () => _navigateToEditProfile(auth),
               ),
               _buildLinkedAccountItem(auth),
               ProfileMenuTile(
                 icon: Icons.badge_outlined,
-                title: 'Đăng ký tài xế',
+                title: l10n.registerAsDriver,
                 showDivider: false,
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => const IdentityVerificationPage(),
+                      builder: (_) => IdentityVerificationPage(),
                     ),
                   );
                 },
               ),
             ]),
-            const SizedBox(height: 24),
+            SizedBox(height: 24),
 
             // 4. Section: ỨNG DỤNG & THÔNG BÁO
-            _buildSectionLabel(ProfileStrings.appAndNotifications),
+            _buildSectionLabel(l10n.appAndNotifications),
             _buildMenuContainer([
-              const ProfileMenuTile(
+              ProfileMenuTile(
                 icon: Icons.notifications_none_rounded,
-                title: ProfileStrings.notificationSettings,
+                title: l10n.notificationSettings,
               ),
-              const ProfileMenuTile(
+              ProfileMenuTile(
                 icon: Icons.language_rounded,
-                title: ProfileStrings.language,
-                trailingText: ProfileStrings.vietnamese,
+                title: l10n.language,
+                trailingText: _currentLanguageName(context),
+                onTap: () => _showLanguagePicker(context),
               ),
               ProfileMenuTile(
                 icon: Icons.nightlight_round_outlined,
-                title: ProfileStrings.darkMode,
+                title: l10n.darkMode,
                 showDivider: false,
                 trailingWidget: Transform.scale(
                   scale: 0.8,
@@ -225,30 +226,30 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ]),
 
-            const SizedBox(height: 24),
+            SizedBox(height: 24),
 
             // 5. Section: HỖ TRỢ & PHÁP LÝ
-            _buildSectionLabel(ProfileStrings.supportAndLegal),
+            _buildSectionLabel(l10n.supportAndLegal),
             _buildMenuContainer([
-              const ProfileMenuTile(
+              ProfileMenuTile(
                 icon: Icons.help_outline_rounded,
-                title: ProfileStrings.helpCenter,
+                title: l10n.helpCenter,
               ),
-              const ProfileMenuTile(
+              ProfileMenuTile(
                 icon: Icons.security_outlined,
-                title: AuthStrings.privacyPolicy,
+                title: l10n.privacyPolicy,
               ),
-              const ProfileMenuTile(
+              ProfileMenuTile(
                 icon: Icons.description_outlined,
-                title: AuthStrings.termsOfService,
+                title: l10n.termsOfService,
                 showDivider: false,
               ),
             ]),
 
-            const SizedBox(height: 24),
-            const Center(
+            SizedBox(height: 24),
+            Center(
               child: Text(
-                ProfileStrings.appVersion,
+                context.l10n.appVersion,
                 style: TextStyle(
                   color: Color(0xFF90A4AE),
                   fontSize: 13,
@@ -256,14 +257,38 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: 24),
 
             // 6. Logout Button
             _buildLogoutButton(context),
-            const SizedBox(height: 24),
+            SizedBox(height: 24),
           ],
         ),
       ),
+    );
+  }
+
+  String _currentLanguageName(BuildContext context) {
+    final l10n = context.l10n;
+    switch (context.watch<LocaleProvider>().locale.languageCode) {
+      case 'en':
+        return l10n.english;
+      case 'ko':
+        return l10n.korean;
+      case 'ja':
+        return l10n.japanese;
+      case 'zh':
+        return l10n.simplifiedChinese;
+      default:
+        return l10n.vietnamese;
+    }
+  }
+
+  void _showLanguagePicker(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (_) => LanguagePickerSheet(),
     );
   }
 
@@ -273,12 +298,12 @@ class _ProfilePageState extends State<ProfilePage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFF0F0F0)),
+        border: Border.all(color: Color(0xFFF0F0F0)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.02),
             blurRadius: 10,
-            offset: const Offset(0, 4),
+            offset: Offset(0, 4),
           ),
         ],
       ),
@@ -291,18 +316,18 @@ class _ProfilePageState extends State<ProfilePage> {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: const Color(0xFF007A87),
+                    color: Color(0xFF007A87),
                     width: 1.5,
                   ),
                 ),
                 child: CircleAvatar(
                   radius: 40,
-                  backgroundColor: const Color(0xFFF5F5F5),
+                  backgroundColor: Color(0xFFF5F5F5),
                   backgroundImage: auth.avatarUrl != null
                       ? NetworkImage(auth.avatarUrl!)
                       : null,
                   child: auth.avatarUrl == null
-                      ? const Icon(
+                      ? Icon(
                           Icons.person,
                           size: 40,
                           color: Color(0xFFBDBDBD),
@@ -315,11 +340,11 @@ class _ProfilePageState extends State<ProfilePage> {
                 right: 2,
                 child: Container(
                   padding: const EdgeInsets.all(1.5),
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     color: Colors.white,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.verified,
                     color: Color(0xFF007A87),
                     size: 20,
@@ -328,14 +353,14 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ],
           ),
-          const SizedBox(width: 16),
+          SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   auth.fullName ?? 'Alex Johnson',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
                     color: Color(0xFF1F1F1F),
@@ -344,10 +369,10 @@ class _ProfilePageState extends State<ProfilePage> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: 4),
                 Text(
                   auth.email ?? 'alex.johnson@example.com',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     color: Color(0xFF78909C),
                     fontWeight: FontWeight.w500,
@@ -358,7 +383,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 Text(
                   auth.phoneNumber ?? '+84 123 456 789',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     color: Color(0xFF78909C),
                     fontWeight: FontWeight.w500,
@@ -379,7 +404,7 @@ class _ProfilePageState extends State<ProfilePage> {
         alignment: Alignment.centerLeft,
         child: Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
             color: Color(0xFF78909C),
@@ -392,11 +417,11 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildLinkedAccountItem(AuthProvider auth) {
     final status = auth.googleLinked
-        ? auth.googleEmail ?? ProfileStrings.linked
-        : ProfileStrings.notLinked;
+        ? auth.googleEmail ?? context.l10n.linked
+        : context.l10n.notLinked;
     final color = auth.googleLinked
-        ? const Color(0xFF006B70)
-        : const Color(0xFFF59E0B);
+        ? Color(0xFF006B70)
+        : Color(0xFFF59E0B);
 
     return InkWell(
       onTap: auth.isLoading ? null : () => _handleLinkedAccounts(auth),
@@ -406,19 +431,15 @@ class _ProfilePageState extends State<ProfilePage> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               children: [
-                Icon(
-                  Icons.link_rounded,
-                  color: Colors.grey.shade600,
-                  size: 24,
-                ),
-                const SizedBox(width: 16),
+                Icon(Icons.link_rounded, color: Colors.grey.shade600, size: 24),
+                SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text(
-                        ProfileStrings.linkedAccounts,
+                      Text(
+                        context.l10n.linkedAccounts,
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w400,
@@ -451,7 +472,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                const SizedBox(width: 4),
+                SizedBox(width: 4),
                 Icon(
                   Icons.chevron_right,
                   color: Colors.grey.shade400,
@@ -490,25 +511,25 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _linkGoogle(BuildContext context) async {
     final ok = await context.read<AuthProvider>().linkGoogleAccount();
     if (!context.mounted || ok) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text(ProfileStrings.linkGoogleFailed)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(context.l10n.linkGoogleFailed)));
   }
 
   void _confirmUnlinkGoogle(BuildContext context) {
     AppDialog.show(
       context: context,
       icon: Icons.link_off_rounded,
-      title: ProfileStrings.unlinkGoogleQuestion,
-      description: ProfileStrings.unlinkGoogleDescription,
-      confirmText: ProfileStrings.unlinkAccount,
-      cancelText: AppStrings.cancel,
+      title: context.l10n.unlinkGoogleQuestion,
+      description: context.l10n.unlinkGoogleDescription,
+      confirmText: context.l10n.unlinkAccount,
+      cancelText: context.l10n.cancel,
       onConfirm: () async {
         Navigator.of(context, rootNavigator: true).pop();
         final ok = await context.read<AuthProvider>().unlinkGoogleAccount();
         if (!context.mounted || ok) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(ProfileStrings.unlinkGoogleFailed)),
+          SnackBar(content: Text(context.l10n.unlinkGoogleFailed)),
         );
       },
     );
@@ -519,7 +540,7 @@ class _ProfilePageState extends State<ProfilePage> {
   //     decoration: BoxDecoration(
   //       color: Colors.white,
   //       borderRadius: BorderRadius.circular(16),
-  //       border: Border.all(color: const Color(0xFFF0F0F0)),
+  //       border: Border.all(color: Color(0xFFF0F0F0)),
   //     ),
   //     child: Column(children: children),
   //   );
@@ -582,18 +603,18 @@ class _ProfilePageState extends State<ProfilePage> {
       child: OutlinedButton(
         onPressed: () => _confirmLogout(context),
         style: OutlinedButton.styleFrom(
-          side: const BorderSide(color: Color(0xFFB71C1C), width: 1.5),
+          side: BorderSide(color: Color(0xFFB71C1C), width: 1.5),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
         ),
-        child: const Row(
+        child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.logout_rounded, color: Color(0xFFB71C1C)),
             SizedBox(width: 8),
             Text(
-              'Đăng xuất',
+              context.l10n.logout,
               style: TextStyle(
                 color: Color(0xFFB71C1C),
                 fontWeight: FontWeight.w700,
@@ -610,10 +631,10 @@ class _ProfilePageState extends State<ProfilePage> {
     AppDialog.show(
       context: context,
       icon: Icons.logout_rounded,
-      title: ProfileStrings.logoutQuestion,
-      description: ProfileStrings.logoutDescription,
-      confirmText: ProfileStrings.logout,
-      cancelText: AppStrings.cancel,
+      title: context.l10n.logoutQuestion,
+      description: context.l10n.logoutDescription,
+      confirmText: context.l10n.logout,
+      cancelText: context.l10n.cancel,
       onConfirm: () async {
         Navigator.pop(context);
         final messenger = ScaffoldMessenger.of(context);
@@ -621,8 +642,8 @@ class _ProfilePageState extends State<ProfilePage> {
         if (!mounted) return;
         if (!success) {
           messenger.showSnackBar(
-            const SnackBar(
-              content: Text(ProfileStrings.logoutFailed),
+            SnackBar(
+              content: Text(context.l10n.logoutFailed),
               behavior: SnackBarBehavior.floating,
             ),
           );

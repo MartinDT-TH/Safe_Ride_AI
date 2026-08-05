@@ -7,6 +7,7 @@ import '../../../shared/profile/presentation/pages/edit_profile_page.dart';
 
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../../core/utils/validators.dart';
 import '../../../../../core/widgets/custom_button.dart';
 import '../../../../../core/widgets/custom_textfield.dart';
@@ -16,7 +17,7 @@ import '../../../customer/booking/presentation/providers/booking_provider.dart';
 import '../../../driver/dashboard/presentation/pages/driver_dashboard_page.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+  LoginPage({super.key});
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -40,14 +41,14 @@ class _LoginPageState extends State<LoginPage> {
     if (activeBooking != null) {
       // Force customer role and go to tracking
       roleProvider.setRole(AppValues.roleCustomer);
-      return const CustomerHomePage();
+      return CustomerHomePage();
     }
 
     // 2. No active booking, fallback to role logic
     if (roleProvider.isDriver) {
-      return const DriverDashboardPage();
+      return DriverDashboardPage();
     }
-    return const CustomerHomePage();
+    return CustomerHomePage();
   }
 
   @override
@@ -61,7 +62,7 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const SizedBox(height: 80),
+                SizedBox(height: 80),
                 
                 Container(
                   width: 150,
@@ -74,7 +75,7 @@ class _LoginPageState extends State<LoginPage> {
                         color: Colors.grey.withValues(alpha: 0.2),
                         spreadRadius: 2,
                         blurRadius: 10,
-                        offset: const Offset(0, 5),
+                        offset: Offset(0, 5),
                       ),
                     ],
                   ),
@@ -83,15 +84,15 @@ class _LoginPageState extends State<LoginPage> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Image.network(AppConfig.logoUrl, height: 60),
-                        const SizedBox(height: 8),
+                        SizedBox(height: 8),
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 32),
+                SizedBox(height: 32),
 
-                const Text(
-                  AppStrings.appName,
+                Text(
+                  context.l10n.appName,
                   style: TextStyle(
                     fontSize: 42,
                     fontWeight: FontWeight.bold,
@@ -99,22 +100,22 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
 
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
 
-                const Text(
-                  AuthStrings.slogan,
+                Text(
+                  context.l10n.slogan,
                   style: TextStyle(
                     fontSize: 16,
                     color: AppColors.textSecondary,
                   ),
                 ),
 
-                const SizedBox(height: 48),
+                SizedBox(height: 48),
 
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    AuthStrings.phoneNumber,
+                    context.l10n.phoneNumber,
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
@@ -122,11 +123,11 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
 
                 CustomTextField(
                   controller: phoneController,
-                  hintText: AuthStrings.phoneHint,
+                  hintText: context.l10n.phoneHint,
                   keyboardType: TextInputType.phone,
                   prefixIcon: _CountryCodePicker(
                     value: _selectedCountryCode,
@@ -137,12 +138,12 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
 
-                const SizedBox(height: 24),
+                SizedBox(height: 24),
 
                 Consumer<AuthProvider>(
                   builder: (context, provider, child) {
                     return CustomButton(
-                      text: AuthStrings.continueOrRegister,
+                      text: context.l10n.continueOrRegister,
                       isLoading: provider.isLoading,
                       onPressed: () async {
                         final rawPhone = phoneController.text.trim();
@@ -154,8 +155,8 @@ class _LoginPageState extends State<LoginPage> {
 
                         if (rawPhone.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(AuthStrings.phoneRequired),
+                            SnackBar(
+                              content: Text(context.l10n.phoneRequired),
                             ),
                           );
                           return;
@@ -163,8 +164,8 @@ class _LoginPageState extends State<LoginPage> {
 
                         if (normalizedPhone.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(AuthStrings.invalidPhone),
+                            SnackBar(
+                              content: Text(context.l10n.invalidPhone),
                             ),
                           );
                           return;
@@ -181,8 +182,8 @@ class _LoginPageState extends State<LoginPage> {
                           );
                         } else if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(AuthStrings.sendOtpFailed),
+                            SnackBar(
+                              content: Text(context.l10n.sendOtpFailed),
                             ),
                           );
                         }
@@ -190,29 +191,29 @@ class _LoginPageState extends State<LoginPage> {
                     );
                   },
                 ),
-                const SizedBox(height: 32),
+                SizedBox(height: 32),
 
                 Row(
                   children: [
-                    const Expanded(
+                    Expanded(
                       child: Divider(color: AppColors.border, thickness: 1),
                     ),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Text(
-                        AuthStrings.or,
+                        context.l10n.or,
                         style: TextStyle(
                           color: AppColors.textSecondary,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
                     ),
-                    const Expanded(
+                    Expanded(
                       child: Divider(color: AppColors.border, thickness: 1),
                     ),
                   ],
                 ),
-                const SizedBox(height: 32),
+                SizedBox(height: 32),
 
                 Consumer<AuthProvider>(
                   builder: (context, provider, child) {
@@ -237,7 +238,7 @@ class _LoginPageState extends State<LoginPage> {
                                   phoneNumber: provider.phoneNumber,
                                 ),
                                 AuthNextStep.selectRole =>
-                                  const RoleSelectionPage(),
+                                  RoleSelectionPage(),
                                 AuthNextStep.customerHome =>
                                   await _getDestination(context, provider, roleProvider),
                               };
@@ -249,8 +250,8 @@ class _LoginPageState extends State<LoginPage> {
                           );
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(AuthStrings.googleLoginFailed),
+                            SnackBar(
+                              content: Text(context.l10n.googleLoginFailed),
                             ),
                           );
                         }
@@ -258,16 +259,16 @@ class _LoginPageState extends State<LoginPage> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.white,
                         foregroundColor: AppColors.textPrimary,
-                        minimumSize: const Size(double.infinity, 56),
+                        minimumSize: Size(double.infinity, 56),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
-                          side: const BorderSide(color: AppColors.border),
+                          side: BorderSide(color: AppColors.border),
                         ),
                         elevation: 0,
                       ),
                       icon: Image.network(AppConfig.googleLogoUrl, height: 24),
-                      label: const Text(
-                        AuthStrings.google,
+                      label: Text(
+                        'Google',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
@@ -276,12 +277,12 @@ class _LoginPageState extends State<LoginPage> {
                     );
                   },
                 ),
-                const SizedBox(height: 48),
+                SizedBox(height: 48),
 
                 RichText(
                   textAlign: TextAlign.center,
                   text: TextSpan(
-                    text: AuthStrings.continueAgreement,
+                    text: context.l10n.continueAgreement,
                     style: TextStyle(
                       fontSize: 14,
                       color: AppColors.textSecondary,
@@ -289,25 +290,25 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     children: [
                       TextSpan(
-                        text: AuthStrings.termsOfService,
+                        text: context.l10n.termsOfService,
                         style: TextStyle(
                           color: AppColors.primary,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       TextSpan(
-                        text: AuthStrings.and,
+                        text: context.l10n.and,
                         style: TextStyle(color: AppColors.textSecondary),
                       ),
                       TextSpan(
-                        text: AuthStrings.privacyPolicy,
+                        text: context.l10n.privacyPolicy,
                         style: TextStyle(
                           color: AppColors.primary,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       TextSpan(
-                        text: AuthStrings.agreementSuffix,
+                        text: context.l10n.agreementSuffix,
                         style: TextStyle(color: AppColors.textSecondary),
                       ),
                     ],
@@ -326,7 +327,7 @@ class _CountryCodePicker extends StatelessWidget {
   final String value;
   final ValueChanged<String?> onChanged;
 
-  const _CountryCodePicker({required this.value, required this.onChanged});
+  _CountryCodePicker({required this.value, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {

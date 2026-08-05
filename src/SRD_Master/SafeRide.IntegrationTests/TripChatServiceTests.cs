@@ -438,6 +438,21 @@ public sealed class TripChatServiceTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(
                 $"https://res.cloudinary.com/test/image/upload/saferide/trip-chat/{tripId}/{Guid.NewGuid():N}.webp");
+
+        public Task<CloudinaryAudioUpload> UploadAiChatAudioAsync(
+            Guid userId,
+            Stream stream,
+            string fileName,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(
+                new CloudinaryAudioUpload(
+                    $"https://res.cloudinary.com/test/video/upload/saferide/ai-chat/{userId:N}/{fileName}",
+                    $"saferide/ai-chat/{userId:N}/{fileName}"));
+
+        public Task DeleteAiChatAudioAsync(
+            string publicId,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     private sealed class RedisServiceFake : IRedisService

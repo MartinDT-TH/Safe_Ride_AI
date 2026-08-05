@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Features.AdminNotifications;
 using SafeRide.Application.Features.Notifications;
@@ -27,17 +28,20 @@ public sealed class AdminNotificationManagementService
     private readonly ApplicationDbContext _db;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly ISystemNotificationDeliveryService _notificationDeliveryService;
+    private readonly ITextTranslationService _textTranslationService;
     private readonly ILogger<AdminNotificationManagementService> _logger;
 
     public AdminNotificationManagementService(
         ApplicationDbContext db,
         IDateTimeProvider dateTimeProvider,
         ISystemNotificationDeliveryService notificationDeliveryService,
+        ITextTranslationService textTranslationService,
         ILogger<AdminNotificationManagementService> logger)
     {
         _db = db;
         _dateTimeProvider = dateTimeProvider;
         _notificationDeliveryService = notificationDeliveryService;
+        _textTranslationService = textTranslationService;
         _logger = logger;
     }
 
@@ -153,6 +157,11 @@ public sealed class AdminNotificationManagementService
         }
 
         var now = _dateTimeProvider.UtcNow;
+        var translations = await _textTranslationService.TranslateFromVietnameseAsync(
+            adminNotification.Title,
+            adminNotification.Content,
+            cancellationToken);
+        var translationsJson = JsonSerializer.Serialize(translations);
         adminNotification.Status = AdminNotificationStatus.Approved;
         adminNotification.ApprovedBy = approvedBy;
         adminNotification.ApprovedAt = now;
@@ -167,6 +176,7 @@ public sealed class AdminNotificationManagementService
                 Title = adminNotification.Title,
                 Content = adminNotification.Content,
                 NotificationType = adminNotification.NotificationType,
+                TranslationsJson = translationsJson,
                 IsRead = false,
                 SentAt = now
             })
@@ -184,6 +194,7 @@ public sealed class AdminNotificationManagementService
                     x.Title,
                     x.Content,
                     x.NotificationType,
+                    x.TranslationsJson,
                     x.SentAt))
                 .ToArray();
 

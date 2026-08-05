@@ -20,6 +20,7 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
     private readonly IRealtimeNotificationService _realtimeNotificationService;
     private readonly IOptionsMonitor<DriverRealtimeOptions> _options;
     private readonly IOptionsMonitor<TripTrackingOptions> _tripTrackingOptions;
+    private readonly IMapRoutingService _mapRoutingService;
     private readonly ILogger<DriverRealtimeService> _logger;
 
     public DriverRealtimeService(
@@ -29,6 +30,7 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
         IRealtimeNotificationService realtimeNotificationService,
         IOptionsMonitor<DriverRealtimeOptions> options,
         IOptionsMonitor<TripTrackingOptions> tripTrackingOptions,
+        IMapRoutingService mapRoutingService,
         ILogger<DriverRealtimeService> logger)
     {
         _dbContext = dbContext;
@@ -37,6 +39,7 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
         _realtimeNotificationService = realtimeNotificationService;
         _options = options;
         _tripTrackingOptions = tripTrackingOptions;
+        _mapRoutingService = mapRoutingService;
         _logger = logger;
     }
 
@@ -84,6 +87,12 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
             activeTrip,
             utcNow,
             cancellationToken);
+        await RecalculateRouteIfDeviatedAsync(
+            driverId,
+            location,
+            activeTrip,
+            utcNow,
+            cancellationToken);
 
         await _realtimeNotificationService.PublishDriverLocationUpdatedAsync(
             new DriverLocationUpdatedEvent(
@@ -94,6 +103,222 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
                 location.Longitude,
                 utcNow),
             cancellationToken);
+    }
+
+    private async Task RecalculateRouteIfDeviatedAsync(
+        Guid driverId,
+        DriverLocationUpdateInput location,
+        ActiveDriverTripSnapshot? activeTrip,
+        DateTime utcNow,
+        CancellationToken cancellationToken)
+    {
+        if (activeTrip is null
+            || activeTrip.TripStatus != TripStatus.IN_PROGRESS
+            || activeTrip.DestinationLatitude is null
+            || activeTrip.DestinationLongitude is null)
+        {
+            return;
+        }
+
+        var options = _tripTrackingOptions.CurrentValue;
+        var activeRouteJson = await _redisService.GetAsync(
+            RedisKeys.TripActiveRoute(activeTrip.TripId));
+        var encodedPolyline = activeTrip.RoutePolyline;
+        var routeVersion = 1;
+        if (!string.IsNullOrWhiteSpace(activeRouteJson))
+        {
+            try
+            {
+                var activeRoute =
+                    JsonSerializer.Deserialize<ActiveTripRouteCache>(activeRouteJson);
+                encodedPolyline = activeRoute?.EncodedPolyline ?? encodedPolyline;
+                if (activeRoute?.RouteVersion > 0)
+                {
+                    routeVersion = activeRoute.RouteVersion;
+                }
+            }
+            catch (JsonException)
+            {
+                await _redisService.RemoveAsync(
+                    RedisKeys.TripActiveRoute(activeTrip.TripId));
+            }
+        }
+
+        IReadOnlyList<LocationPoint> route;
+        try
+        {
+            route = EncodedPolylineGeometry.Decode(encodedPolyline);
+        }
+        catch (FormatException exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Invalid active route polyline for trip {TripId}.",
+                activeTrip.TripId);
+            return;
+        }
+
+        var currentPoint = new LocationPoint(location.Latitude, location.Longitude);
+        var projection = EncodedPolylineGeometry.Project(currentPoint, route);
+        var deviationMeters = projection.DistanceToRouteMeters;
+        var deviationKey = RedisKeys.TripRouteDeviationSamples(activeTrip.TripId);
+        var deviationSamples = 0L;
+        if (deviationMeters > options.RouteDeviationThresholdMeters)
+        {
+            deviationSamples = await _redisService.IncrementAsync(
+                deviationKey,
+                TimeSpan.FromMinutes(options.RouteDeviationStateTtlMinutes));
+        }
+        else
+        {
+            await _redisService.RemoveAsync(deviationKey);
+        }
+
+        var progressKey = RedisKeys.TripRouteProgress(activeTrip.TripId);
+        var previousProgressJson = await _redisService.GetAsync(progressKey);
+        RouteProgressCache? previousProgress = null;
+        if (!string.IsNullOrWhiteSpace(previousProgressJson))
+        {
+            try
+            {
+                previousProgress =
+                    JsonSerializer.Deserialize<RouteProgressCache>(
+                        previousProgressJson);
+            }
+            catch (JsonException)
+            {
+                await _redisService.RemoveAsync(progressKey);
+            }
+        }
+
+        var maximumProgress = previousProgress?.RouteVersion == routeVersion
+            ? Math.Max(previousProgress.MaximumProgressMeters, projection.ProgressMeters)
+            : projection.ProgressMeters;
+        var isBehindMaximum =
+            maximumProgress - projection.ProgressMeters
+            >= options.ReverseProgressThresholdMeters;
+        var reverseKey = RedisKeys.TripRouteReverseSamples(activeTrip.TripId);
+        var reverseSamples = 0L;
+        if (isBehindMaximum)
+        {
+            reverseSamples = await _redisService.IncrementAsync(
+                reverseKey,
+                TimeSpan.FromMinutes(options.RouteDeviationStateTtlMinutes));
+        }
+        else
+        {
+            await _redisService.RemoveAsync(reverseKey);
+        }
+
+        await _redisService.SetAsync(
+            progressKey,
+            JsonSerializer.Serialize(new RouteProgressCache(
+                routeVersion,
+                projection.ProgressMeters,
+                maximumProgress,
+                Math.Max(0, projection.TotalRouteMeters - projection.ProgressMeters),
+                utcNow)),
+            TimeSpan.FromHours(options.ActiveRouteTtlHours));
+
+        var confirmedOffRoute =
+            deviationSamples >= options.RouteDeviationRequiredSamples;
+        var confirmedReverse =
+            reverseSamples >= options.ReverseRequiredSamples;
+        if (!confirmedOffRoute && !confirmedReverse)
+        {
+            return;
+        }
+
+        var canReroute = await _redisService.SetIfNotExistsAsync(
+            RedisKeys.TripRouteRerouteCooldown(activeTrip.TripId),
+            utcNow.Ticks.ToString(),
+            TimeSpan.FromSeconds(options.RouteRerouteCooldownSeconds));
+        if (!canReroute)
+        {
+            return;
+        }
+
+        try
+        {
+            var estimate = await _mapRoutingService.GetRouteEstimateAsync(
+                new RouteEstimateRequest
+                {
+                    Origin = currentPoint,
+                    Destination = new LocationPoint(
+                        activeTrip.DestinationLatitude.Value,
+                        activeTrip.DestinationLongitude.Value),
+                    IncludePolyline = true,
+                    RequestSource = "TripRouteDeviation"
+                },
+                cancellationToken);
+            if (string.IsNullOrWhiteSpace(estimate.EncodedPolyline))
+            {
+                return;
+            }
+
+            var cache = new ActiveTripRouteCache(
+                estimate.EncodedPolyline,
+                estimate.DistanceMeters,
+                estimate.DurationSeconds,
+                utcNow,
+                routeVersion + 1);
+            await _redisService.SetAsync(
+                RedisKeys.TripActiveRoute(activeTrip.TripId),
+                JsonSerializer.Serialize(cache),
+                TimeSpan.FromHours(options.ActiveRouteTtlHours));
+            await _redisService.RemoveAsync(deviationKey);
+            await _redisService.RemoveAsync(reverseKey);
+            await _redisService.SetAsync(
+                progressKey,
+                JsonSerializer.Serialize(new RouteProgressCache(
+                    routeVersion + 1,
+                    0,
+                    0,
+                    estimate.DistanceMeters,
+                    utcNow)),
+                TimeSpan.FromHours(options.ActiveRouteTtlHours));
+
+            var previousRemainingMeters = Math.Max(
+                0,
+                projection.TotalRouteMeters - projection.ProgressMeters);
+            var distanceIncreaseMeters =
+                estimate.DistanceMeters - previousRemainingMeters;
+            var warrantsAlert =
+                confirmedReverse
+                || distanceIncreaseMeters
+                    >= options.CustomerAlertDistanceIncreaseMeters;
+            var shouldAlertCustomer = warrantsAlert
+                && await _redisService.SetIfNotExistsAsync(
+                    RedisKeys.TripRouteDeviationAlertCooldown(activeTrip.TripId),
+                    utcNow.Ticks.ToString(),
+                    TimeSpan.FromMinutes(
+                        options.CustomerDeviationAlertCooldownMinutes));
+            var message = confirmedReverse
+                ? "Tài xế đang di chuyển xa hơn khỏi điểm đến. SafeRide đã cập nhật lại lộ trình. Bạn có cảm thấy an toàn không?"
+                : "Tài xế đang đi khác lộ trình dự kiến. SafeRide đã cập nhật tuyến đường.";
+
+            await _realtimeNotificationService.PublishTripRouteRecalculatedAsync(
+                new TripRouteRecalculatedEvent(
+                    activeTrip.TripId,
+                    activeTrip.BookingId,
+                    activeTrip.CustomerId,
+                    driverId,
+                    estimate.EncodedPolyline,
+                    estimate.DistanceMeters,
+                    estimate.DurationSeconds,
+                    deviationMeters,
+                    utcNow,
+                    message,
+                    shouldAlertCustomer),
+                cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Failed to recalculate route for deviated trip {TripId}.",
+                activeTrip.TripId);
+        }
     }
 
     public async Task SetDriverOnlineAsync(
@@ -285,14 +510,22 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
             try
             {
                 var cache = JsonSerializer.Deserialize<DriverActiveTripCache>(cached);
-                if (cache is not null && IsActiveTripStatus(cache.TripStatus))
+                if (cache is not null
+                    && IsActiveTripStatus(cache.TripStatus)
+                    && (cache.TripStatus != TripStatus.IN_PROGRESS
+                        || (cache.DestinationLatitude.HasValue
+                            && cache.DestinationLongitude.HasValue
+                            && !string.IsNullOrWhiteSpace(cache.RoutePolyline))))
                 {
                     return new ActiveDriverTripSnapshot(
                         cache.TripId,
                         cache.BookingId,
                         cache.CustomerId,
                         cache.TripStatus,
-                        cache.DriverAssignedAt);
+                        cache.DriverAssignedAt,
+                        cache.RoutePolyline,
+                        cache.DestinationLatitude,
+                        cache.DestinationLongitude);
                 }
             }
             catch (JsonException)
@@ -311,7 +544,14 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
                 x.BookingId,
                 x.Booking.CustomerId,
                 x.TripStatus,
-                x.DriverAssignedAt ?? x.CreatedAt))
+                x.DriverAssignedAt ?? x.CreatedAt,
+                x.Booking.RoutePolyline,
+                x.Booking.DestinationLocation == null
+                    ? null
+                    : x.Booking.DestinationLocation.Y,
+                x.Booking.DestinationLocation == null
+                    ? null
+                    : x.Booking.DestinationLocation.X))
             .FirstOrDefaultAsync(cancellationToken);
 
         if (activeTrip is not null)
@@ -322,7 +562,10 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
                 driverId,
                 activeTrip.CustomerId,
                 activeTrip.TripStatus,
-                activeTrip.DriverAssignedAt);
+                activeTrip.DriverAssignedAt,
+                activeTrip.RoutePolyline,
+                activeTrip.DestinationLatitude,
+                activeTrip.DestinationLongitude);
             await _redisService.SetAsync(
                 RedisKeys.DriverActiveTrip(driverId),
                 JsonSerializer.Serialize(cache),
@@ -402,5 +645,22 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
         long BookingId,
         Guid CustomerId,
         TripStatus TripStatus,
-        DateTime DriverAssignedAt);
+        DateTime DriverAssignedAt,
+        string? RoutePolyline,
+        double? DestinationLatitude,
+        double? DestinationLongitude);
+
+    private sealed record ActiveTripRouteCache(
+        string EncodedPolyline,
+        double DistanceMeters,
+        double DurationSeconds,
+        DateTime UpdatedAt,
+        int RouteVersion);
+
+    private sealed record RouteProgressCache(
+        int RouteVersion,
+        double ProgressMeters,
+        double MaximumProgressMeters,
+        double RemainingMeters,
+        DateTime UpdatedAt);
 }

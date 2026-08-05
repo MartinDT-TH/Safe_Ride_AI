@@ -241,13 +241,13 @@ public sealed class BookingsController : ControllerBase
         long bookingId,
         CancellationToken cancellationToken)
     {
-        if (!TryGetCustomerId(out var customerId))
+        if (!TryGetCurrentUserId(out var userId))
         {
             return Unauthorized(CreateUnauthorizedProblem());
         }
 
         var result = await _sender.Send(
-            new GetBookingDetailsQuery(customerId, bookingId),
+            new GetBookingDetailsQuery(userId, bookingId),
             cancellationToken);
 
         return Ok(ToResponse(result));

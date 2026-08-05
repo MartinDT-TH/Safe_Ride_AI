@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../../core/utils/validators.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../customer/home/presentation/pages/customer_home_page.dart';
@@ -14,7 +15,7 @@ class EditProfilePage extends StatefulWidget {
   final bool requiredCompletion;
   final String? phoneNumber;
 
-  const EditProfilePage({
+  EditProfilePage({
     super.key,
     this.requiredCompletion = false,
     this.phoneNumber,
@@ -49,9 +50,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     super.initState();
     final auth = context.read<AuthProvider>();
     final currentName = auth.fullName?.trim() ?? '';
-    _nameController = TextEditingController(
-      text: currentName == HomeStrings.defaultUser ? '' : currentName,
-    );
+    _nameController = TextEditingController(text: currentName);
     _phoneController = TextEditingController(
       text: widget.phoneNumber ?? auth.phoneNumber ?? '',
     );
@@ -79,14 +78,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
           leading: widget.requiredCompletion
               ? null
               : IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Color(0xFF006B70)),
+                  icon: Icon(Icons.arrow_back, color: Color(0xFF006B70)),
                   onPressed: () => Navigator.pop(context),
                 ),
           title: Text(
             widget.requiredCompletion
-                ? ProfileStrings.completeProfile
-                : ProfileStrings.editProfile,
-            style: const TextStyle(
+                ? context.l10n.completeProfile
+                : context.l10n.editProfile,
+            style: TextStyle(
               color: Color(0xFF006B70),
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -102,7 +101,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Column(
                     children: [
-                      const SizedBox(height: 20),
+                      SizedBox(height: 20),
                       // Profile Image Section
                       Consumer<AuthProvider>(
                         builder: (_, auth, child) {
@@ -116,13 +115,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     border: Border.all(
-                                      color: const Color(0xFFE0F2F1),
+                                      color: Color(0xFFE0F2F1),
                                       width: 2,
                                     ),
                                   ),
                                   child: CircleAvatar(
                                     radius: 55,
-                                    backgroundColor: const Color(0xFFF5F5F5),
+                                    backgroundColor: Color(0xFFF5F5F5),
                                     backgroundImage: _selectedAvatar != null
                                         ? FileImage(File(_selectedAvatar!.path))
                                         : avatarUrl.isNotEmpty
@@ -133,7 +132,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                             avatarUrl.isEmpty
                                         ? Text(
                                             _initials(_nameController.text),
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               color: Color(0xFF006B70),
                                               fontSize: 30,
                                               fontWeight: FontWeight.bold,
@@ -147,11 +146,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                   right: 5,
                                   child: Container(
                                     padding: const EdgeInsets.all(6),
-                                    decoration: const BoxDecoration(
+                                    decoration: BoxDecoration(
                                       color: Color(0xFF006B70),
                                       shape: BoxShape.circle,
                                     ),
-                                    child: const Icon(
+                                    child: Icon(
                                       Icons.camera_alt,
                                       color: Colors.white,
                                       size: 18,
@@ -163,11 +162,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
                           );
                         },
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: 16),
                       TextButton(
                         onPressed: _pickAvatar,
-                        child: const Text(
-                          ProfileStrings.changeAvatar,
+                        child: Text(
+                          context.l10n.changeAvatar,
                           style: TextStyle(
                             color: Color(0xFF006B70),
                             fontWeight: FontWeight.bold,
@@ -175,12 +174,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 32),
+                      SizedBox(height: 32),
 
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF2F7F7),
+                          color: Color(0xFFF2F7F7),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
@@ -188,22 +187,22 @@ class _EditProfilePageState extends State<EditProfilePage> {
                             Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFD1E8E8),
+                                color: Color(0xFFD1E8E8),
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.verified_user,
                                 color: Color(0xFF006B70),
                                 size: 20,
                               ),
                             ),
-                            const SizedBox(width: 16),
-                            const Expanded(
+                            SizedBox(width: 16),
+                            Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    ProfileStrings.verifiedPhone,
+                                    context.l10n.verifiedPhone,
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 14,
@@ -212,7 +211,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                   ),
                                   SizedBox(height: 2),
                                   Text(
-                                    ProfileStrings.updateInformationHint,
+                                    context.l10n.updateInformationHint,
                                     style: TextStyle(
                                       color: Color(0xFF6B7280),
                                       fontSize: 12,
@@ -224,21 +223,21 @@ class _EditProfilePageState extends State<EditProfilePage> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 32),
+                      SizedBox(height: 32),
 
                       // Input Fields
                       _buildInputField(
-                        label: ProfileStrings.fullName,
+                        label: context.l10n.fullName,
                         controller: _nameController,
                         errorText: _nameError,
-                        suffixIcon: const Icon(
+                        suffixIcon: Icon(
                           Icons.edit_outlined,
                           color: Color(0xFFBDBDBD),
                         ),
                       ),
-                      const SizedBox(height: 24),
+                      SizedBox(height: 24),
                       _buildInputField(
-                        label: AuthStrings.phoneNumber,
+                        label: context.l10n.phoneNumber,
                         controller: _phoneController,
                         isReadOnly: _hasVerifiedPhone,
                         keyboardType: TextInputType.phone,
@@ -255,20 +254,20 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                 },
                               ),
                         suffixIcon: _hasVerifiedPhone
-                            ? const Icon(
+                            ? Icon(
                                 Icons.check_circle,
                                 color: Color(0xFF006B70),
                               )
                             : null,
                       ),
-                      const SizedBox(height: 24),
+                      SizedBox(height: 24),
                       _buildInputField(
-                        label: ProfileStrings.email,
+                        label: context.l10n.email,
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
                         errorText: _emailError,
                       ),
-                      const SizedBox(height: 40),
+                      SizedBox(height: 40),
                     ],
                   ),
                 ),
@@ -286,7 +285,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                             ? null
                             : () => _saveProfile(provider),
                         icon: provider.isLoading
-                            ? const SizedBox(
+                            ? SizedBox(
                                 width: 20,
                                 height: 20,
                                 child: CircularProgressIndicator(
@@ -294,18 +293,18 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                   color: Colors.white,
                                 ),
                               )
-                            : const Icon(Icons.save, size: 20),
+                            : Icon(Icons.save, size: 20),
                         label: Text(
                           provider.isLoading
-                              ? ProfileStrings.saving
-                              : ProfileStrings.saveAndContinue,
-                          style: const TextStyle(
+                              ? context.l10n.saving
+                              : context.l10n.saveAndContinue,
+                          style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF006B70),
+                          backgroundColor: Color(0xFF006B70),
                           foregroundColor: Colors.white,
                           elevation: 0,
                           shape: RoundedRectangleBorder(
@@ -355,7 +354,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       if (!mounted) return;
       if (!uploaded) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(ProfileStrings.uploadAvatarFailed)),
+          SnackBar(content: Text(context.l10n.uploadAvatarFailed)),
         );
         return;
       }
@@ -372,15 +371,15 @@ class _EditProfilePageState extends State<EditProfilePage> {
       if (_applyServerValidation(provider.lastErrorCode)) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(ProfileStrings.updateProfileFailed)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.l10n.updateProfileFailed)));
       return;
     }
 
     if (widget.requiredCompletion) {
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const CustomerHomePage()),
+        MaterialPageRoute(builder: (_) => CustomerHomePage()),
         (_) => false,
       );
     } else {
@@ -413,13 +412,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
             color: Color(0xFF6B7280),
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         TextField(
           controller: controller,
           readOnly: isReadOnly,
@@ -443,14 +442,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
               });
             }
           },
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 15,
             color: Color(0xFF2D3132),
             fontWeight: FontWeight.w500,
           ),
           decoration: InputDecoration(
             filled: true,
-            fillColor: const Color(0xFFF9FAFB),
+            fillColor: Color(0xFFF9FAFB),
             errorText: errorText,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
@@ -460,11 +459,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
             suffixIcon: suffixIcon,
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+              borderSide: BorderSide(color: Color(0xFFE5E7EB)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF006B70), width: 1),
+              borderSide: BorderSide(color: Color(0xFF006B70), width: 1),
             ),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           ),
@@ -475,7 +474,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   String _initials(String fullName) {
     final value = fullName.trim();
-    if (value.isEmpty) return HomeStrings.defaultInitials;
+    if (value.isEmpty) return 'SR';
     final words = value.split(RegExp(r'\s+'));
     return words.take(2).map((word) => word[0].toUpperCase()).join();
   }
@@ -486,7 +485,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     String? emailError;
 
     if (fullName.length < 2) {
-      nameError = ProfileStrings.invalidFullName;
+      nameError = context.l10n.invalidFullName;
     }
 
     if (!_hasVerifiedPhone &&
@@ -495,12 +494,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
           phoneNumber,
           countryCode: _selectedPhoneCountryCode,
         )) {
-      phoneError = AuthStrings.invalidPhone;
+      phoneError = context.l10n.invalidPhone;
     }
 
     if (email.isNotEmpty &&
         !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
-      emailError = ProfileStrings.invalidEmail;
+      emailError = context.l10n.invalidEmail;
     }
 
     setState(() {
@@ -515,18 +514,18 @@ class _EditProfilePageState extends State<EditProfilePage> {
   bool _applyServerValidation(String? code) {
     if (code == 'auth.email_conflict') {
       setState(() {
-        _emailError = ProfileStrings.emailAlreadyUsed;
+        _emailError = context.l10n.emailAlreadyUsed;
       });
       return true;
     }
 
     final errorText = switch (code) {
-      'auth.invalid_phone_number' => AuthStrings.invalidPhone,
-      'auth.phone_number_conflict' => ProfileStrings.phoneNumberAlreadyUsed,
+      'auth.invalid_phone_number' => context.l10n.invalidPhone,
+      'auth.phone_number_conflict' => context.l10n.phoneNumberAlreadyUsed,
       'auth.phone_number_change_requires_verification' =>
-        ProfileStrings.phoneNumberChangeRequiresVerification,
+        context.l10n.phoneNumberChangeRequiresVerification,
       'auth.phone_verification_required' =>
-        ProfileStrings.phoneVerificationRequired,
+        context.l10n.phoneVerificationRequired,
       _ => null,
     };
 
@@ -552,7 +551,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       }
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text(AuthStrings.sendOtpFailed)));
+      ).showSnackBar(SnackBar(content: Text(context.l10n.sendOtpFailed)));
       return false;
     }
 
@@ -583,7 +582,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
             void startOtpLockTimer(int seconds) {
               otpLockTimer?.cancel();
               setDialogState(() => otpLockRemainingSeconds = seconds);
-              otpLockTimer = Timer.periodic(const Duration(seconds: 1), (
+              otpLockTimer = Timer.periodic(Duration(seconds: 1), (
                 timer,
               ) {
                 if (!dialogContext.mounted) {
@@ -602,7 +601,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
             }
 
             return AlertDialog(
-              title: const Text(AuthStrings.otpTitle),
+              title: Text(context.l10n.otpTitle),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -618,11 +617,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
                     ),
                   ),
                   if (isOtpLocked) ...[
-                    const SizedBox(height: 8),
+                    SizedBox(height: 8),
                     Text(
-                      '${AuthStrings.otpLockedPrefix}${formatOtpCountdown(otpLockRemainingSeconds)}',
+                      '${context.l10n.otpLockedPrefix}${formatOtpCountdown(otpLockRemainingSeconds)}',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Color(0xFFC62828),
                         fontWeight: FontWeight.w600,
                       ),
@@ -635,7 +634,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                   onPressed: provider.isLoading
                       ? null
                       : () => Navigator.of(dialogContext).pop(false),
-                  child: const Text(AppStrings.cancel),
+                  child: Text(context.l10n.cancel),
                 ),
                 TextButton(
                   onPressed: provider.isLoading || isOtpLocked
@@ -644,7 +643,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                           final otp = otpController.text.trim();
                           if (!RegExp(r'^\d{6}$').hasMatch(otp)) {
                             setDialogState(() {
-                              otpError = AuthStrings.otpRequired;
+                              otpError = context.l10n.otpRequired;
                             });
                             return;
                           }
@@ -677,12 +676,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
                           }
                         },
                   child: provider.isLoading
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text(AppStrings.confirm),
+                      : Text(context.l10n.confirm),
                 ),
               ],
             );
@@ -697,11 +696,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   String _otpErrorText(String? code) {
     return switch (code) {
-      'auth.otp_attempts_exceeded' => AuthStrings.otpAttemptsExceeded,
-      'auth.otp_expired' => AuthStrings.invalidOtp,
-      'auth.invalid_otp' => AuthStrings.invalidOtp,
-      'auth.phone_number_conflict' => ProfileStrings.phoneNumberAlreadyUsed,
-      _ => AuthStrings.invalidOtp,
+      'auth.otp_attempts_exceeded' => context.l10n.otpAttemptsExceeded,
+      'auth.otp_expired' => context.l10n.invalidOtp,
+      'auth.invalid_otp' => context.l10n.invalidOtp,
+      'auth.phone_number_conflict' => context.l10n.phoneNumberAlreadyUsed,
+      _ => context.l10n.invalidOtp,
     };
   }
 }
@@ -710,7 +709,7 @@ class _CountryCodePicker extends StatelessWidget {
   final String value;
   final ValueChanged<String?> onChanged;
 
-  const _CountryCodePicker({required this.value, required this.onChanged});
+  _CountryCodePicker({required this.value, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -732,4 +731,3 @@ class _CountryCodePicker extends StatelessWidget {
     );
   }
 }
-

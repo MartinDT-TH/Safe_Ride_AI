@@ -69,9 +69,9 @@ public sealed class BookingRepository : IBookingRepository
                 cancellationToken);
     }
 
-    public Task<Booking?> GetCustomerBookingWithDetailsAsync(
+    public Task<Booking?> GetBookingWithDetailsForUserAsync(
         long bookingId,
-        Guid customerId,
+        Guid userId,
         CancellationToken cancellationToken)
     {
         return _dbContext.Bookings
@@ -86,7 +86,8 @@ public sealed class BookingRepository : IBookingRepository
                 .ThenInclude(bookingPromotion => bookingPromotion.Promotion)
             .FirstOrDefaultAsync(
                 booking => booking.BookingId == bookingId
-                    && booking.CustomerId == customerId,
+                    && (booking.CustomerId == userId
+                        || (booking.Trip != null && booking.Trip.DriverId == userId)),
                 cancellationToken);
     }
 

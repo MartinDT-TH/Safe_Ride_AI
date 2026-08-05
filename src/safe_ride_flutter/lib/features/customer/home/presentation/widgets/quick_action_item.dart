@@ -8,7 +8,7 @@ class QuickActionItem extends StatelessWidget {
   final Color? textColor;
   final VoidCallback onTap;
 
-  const QuickActionItem({
+  QuickActionItem({
     super.key,
     required this.icon,
     required this.title,
@@ -33,7 +33,7 @@ class QuickActionItem extends StatelessWidget {
             ),
             child: Icon(icon, color: iconColor, size: 28),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Text(
             title,
             style: TextStyle(
@@ -47,4 +47,3 @@ class QuickActionItem extends StatelessWidget {
     );
   }
 }
-

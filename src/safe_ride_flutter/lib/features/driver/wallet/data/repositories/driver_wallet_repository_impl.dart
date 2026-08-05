@@ -24,10 +24,10 @@ class DriverWalletRepositoryImpl implements DriverWalletRepository {
     required String bankAccountNumber,
     required String bankAccountName,
   }) => _remoteDatasource.requestWithdrawal(
-        accessToken,
-        amount: amount,
-        bankName: bankName,
-        bankAccountNumber: bankAccountNumber,
-        bankAccountName: bankAccountName,
-      );
+    accessToken,
+    amount: amount,
+    bankName: bankName,
+    bankAccountNumber: bankAccountNumber,
+    bankAccountName: bankAccountName,
+  );
 }

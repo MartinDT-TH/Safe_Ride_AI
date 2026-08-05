@@ -377,9 +377,9 @@ public sealed class BookingTests
             return Task.FromResult<IReadOnlyList<BookingHistoryItemDto>>([]);
         }
 
-        public Task<Booking?> GetCustomerBookingWithDetailsAsync(
+        public Task<Booking?> GetBookingWithDetailsForUserAsync(
             long bookingId,
-            Guid customerId,
+            Guid userId,
             CancellationToken cancellationToken)
         {
             return Task.FromResult<Booking?>(AddedBooking);
@@ -654,6 +654,11 @@ public sealed class BookingTests
 
         public Task PublishTripPaymentSucceededAsync(
             TripPaymentSucceededEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task PublishSOSTriggeredAsync(
+            SOSTriggeredEvent notification,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 

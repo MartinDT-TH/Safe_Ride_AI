@@ -29,7 +29,7 @@ class VehicleModel {
           ? VehicleType.car
           : VehicleType.motorbike,
       engineCapacityCc: (json['engineCapacityCc'] as num?)?.toInt(),
-      requiredLicenseClass: json['requiredLicenseClass']?.toString() ?? '',    
+      requiredLicenseClass: json['requiredLicenseClass']?.toString() ?? '',
     );
   }
 
@@ -66,4 +66,3 @@ class VehicleModel {
     );
   }
 }
-
