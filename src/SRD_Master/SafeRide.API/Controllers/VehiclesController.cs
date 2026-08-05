@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -56,7 +57,13 @@ public sealed class VehiclesController : ControllerBase
             return Unauthorized();
         }
 
-        var plateNumber = NormalizePlateNumber(request.PlateNumber);
+        if (!TryNormalizePlateNumber(
+            request.PlateNumber,
+            request.VehicleType,
+            out var plateNumber))
+        {
+            return InvalidPlateNumber(request.VehicleType);
+        }
         if (await PlateNumberExists(plateNumber, null, cancellationToken))
         {
             return Conflict(new
@@ -111,7 +118,13 @@ public sealed class VehiclesController : ControllerBase
             return NotFound();
         }
 
-        var plateNumber = NormalizePlateNumber(request.PlateNumber);
+        if (!TryNormalizePlateNumber(
+            request.PlateNumber,
+            request.VehicleType,
+            out var plateNumber))
+        {
+            return InvalidPlateNumber(request.VehicleType);
+        }
         if (await PlateNumberExists(plateNumber, id, cancellationToken))
         {
             return Conflict(new
@@ -192,12 +205,52 @@ public sealed class VehiclesController : ControllerBase
             cancellationToken);
     }
 
-    private static string NormalizePlateNumber(string value)
+    private ActionResult<VehicleResponse> InvalidPlateNumber(VehicleType vehicleType)
     {
-        return string.Join(
-            ' ',
-            value.Trim().ToUpperInvariant()
-                .Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        var expectedFormat = vehicleType == VehicleType.Motorbike
+            ? "74-F1 123.21"
+            : "74A 543.67";
+        var problem = new ProblemDetails
+        {
+            Status = StatusCodes.Status400BadRequest,
+            Title = "Biển số xe không hợp lệ",
+            Detail = $"Vui lòng nhập biển số đúng định dạng, ví dụ: {expectedFormat}.",
+            Type = "https://saferide.vn/problems/vehicle.invalid_plate_number"
+        };
+        problem.Extensions["code"] = "vehicle.invalid_plate_number";
+        problem.Extensions["traceId"] = HttpContext.TraceIdentifier;
+        return BadRequest(problem);
+    }
+
+    private static bool TryNormalizePlateNumber(
+        string value,
+        VehicleType vehicleType,
+        out string normalized)
+    {
+        var compact = Regex.Replace(
+            value.Trim().ToUpperInvariant(),
+            @"[\s.\-]",
+            string.Empty);
+
+        Match match;
+        if (vehicleType == VehicleType.Motorbike)
+        {
+            match = Regex.Match(compact, @"^(\d{2})([A-Z](?:[A-Z]|\d))(\d{5})$");
+            normalized = match.Success
+                ? $"{match.Groups[1].Value}-{match.Groups[2].Value} " +
+                  $"{match.Groups[3].Value[..3]}.{match.Groups[3].Value[3..]}"
+                : string.Empty;
+        }
+        else
+        {
+            match = Regex.Match(compact, @"^(\d{2})([A-Z])(\d{5})$");
+            normalized = match.Success
+                ? $"{match.Groups[1].Value}{match.Groups[2].Value} " +
+                  $"{match.Groups[3].Value[..3]}.{match.Groups[3].Value[3..]}"
+                : string.Empty;
+        }
+
+        return match.Success;
     }
 
     private static string? NormalizeOptional(string? value)

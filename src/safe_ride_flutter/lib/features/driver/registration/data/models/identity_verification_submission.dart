@@ -5,6 +5,9 @@ class IdentityVerificationSubmission {
   File? cccdBackImage;
   String? cccdNumber;
   String? cccdFullName;
+  DateTime? cccdDateOfBirth;
+  String? cccdGender;
+  String? cccdAddress;
 
   File? licenseFrontImage;
   File? licenseBackImage;

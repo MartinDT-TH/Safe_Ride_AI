@@ -14,6 +14,9 @@ class IdentityOcrResult {
   final String? licenseClass;
   final DateTime? issueDate;
   final DateTime? expiryDate;
+  final DateTime? dateOfBirth;
+  final String? gender;
+  final String? address;
 
   const IdentityOcrResult({
     required this.documentType,
@@ -24,6 +27,9 @@ class IdentityOcrResult {
     this.licenseClass,
     this.issueDate,
     this.expiryDate,
+    this.dateOfBirth,
+    this.gender,
+    this.address,
   });
 }
 
@@ -65,7 +71,10 @@ class IdentityOcrScanner {
   ) {
     final rawText = recognizedText.text.trim();
     final normalizedText = _normalize(rawText);
-    final fullName = _extractFullName(rawText, recognizedText);
+    final extractedFullName = _extractFullName(rawText, recognizedText);
+    final fullName = extractedFullName == null
+        ? null
+        : _normalizePersonName(extractedFullName);
     final dates = _extractDates(rawText);
     final documentNumber = switch (documentType) {
       IdentityOcrDocumentType.idCard => _firstMatch(
@@ -84,6 +93,9 @@ class IdentityOcrScanner {
     final licenseClass = documentType == IdentityOcrDocumentType.drivingLicense
         ? _extractLicenseClass(normalizedText)
         : null;
+    final dateOfBirth = documentType == IdentityOcrDocumentType.idCard
+        ? _extractDateOfBirth(rawText)
+        : null;
 
     return IdentityOcrResult(
       documentType: documentType,
@@ -98,7 +110,61 @@ class IdentityOcrScanner {
               dates.length > 1
           ? dates.last
           : null,
+      dateOfBirth: dateOfBirth,
+      gender: documentType == IdentityOcrDocumentType.idCard
+          ? _extractGender(normalizedText)
+          : null,
+      address: documentType == IdentityOcrDocumentType.idCard
+          ? _extractAddress(rawText)
+          : null,
     );
+  }
+
+  DateTime? _extractDateOfBirth(String value) {
+    final match = RegExp(
+      r'(?:ng[aà]y\s*sinh|date\s*of\s*birth|dob)[^\d]{0,12}'
+      r'(?<day>\d{1,2})[\/\-.](?<month>\d{1,2})[\/\-.](?<year>\d{4})',
+      caseSensitive: false,
+    ).firstMatch(value);
+    return match == null ? null : _tryCreateDate(match);
+  }
+
+  String? _extractGender(String value) {
+    final match = RegExp(
+      r'(?:GIOI\s*TINH|SEX)[^A-ZÀ-Ỹ]{0,8}(NAM|NU|NỮ|MALE|FEMALE)',
+      caseSensitive: false,
+    ).firstMatch(value);
+    final gender = match?.group(1)?.toUpperCase();
+    if (gender == 'NAM' || gender == 'MALE') return 'Male';
+    if (gender == 'NU' || gender == 'NỮ' || gender == 'FEMALE') return 'Female';
+    return null;
+  }
+
+  String? _extractAddress(String value) {
+    final lines = value
+        .split(RegExp(r'[\r\n]+'))
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+    final label = RegExp(
+      r'(?:n[oơ]i\s*th[uư][oờ]ng\s*tr[uú]|place\s*of\s*residence|address)',
+      caseSensitive: false,
+    );
+    for (var i = 0; i < lines.length; i++) {
+      final match = label.firstMatch(lines[i]);
+      if (match == null) continue;
+      final parts = <String>[];
+      final sameLine = lines[i].substring(match.end).replaceFirst(RegExp(r'^\s*[:/-]?\s*'), '');
+      if (sameLine.isNotEmpty) parts.add(sameLine);
+      for (var j = i + 1; j < lines.length && parts.length < 2; j++) {
+        if (RegExp(r'(?:c[oó]\s*gi[aá]\s*tr[iị]|date\s*of\s*expiry)', caseSensitive: false)
+            .hasMatch(lines[j])) break;
+        parts.add(lines[j]);
+      }
+      final address = parts.join(', ').trim();
+      return address.isEmpty ? null : address;
+    }
+    return null;
   }
 
   double _estimateConfidence(RecognizedText recognizedText) {
@@ -366,5 +432,24 @@ class IdentityOcrScanner {
         .replaceAll('Hạng', 'Hang')
         .replaceAll('Ngày', 'Ngay')
         .toUpperCase();
+  }
+
+  String _normalizePersonName(String value) {
+    const replacements = <String, String>{
+      'ÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴ': 'A',
+      'ÈÉẸẺẼÊỀẾỆỂỄ': 'E',
+      'ÌÍỊỈĨ': 'I',
+      'ÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠ': 'O',
+      'ÙÚỤỦŨƯỪỨỰỬỮ': 'U',
+      'ỲÝỴỶỸ': 'Y',
+      'Đ': 'D',
+    };
+    var normalized = value.trim().toUpperCase();
+    for (final entry in replacements.entries) {
+      for (final character in entry.key.split('')) {
+        normalized = normalized.replaceAll(character, entry.value);
+      }
+    }
+    return normalized.replaceAll(RegExp(r'\s+'), ' ');
   }
 }

@@ -67,12 +67,18 @@ class AiBookingDraft {
     required this.destination,
     this.vehicleQuery,
     this.promotionCode,
+    this.vehicleType,
+    this.useBestPromotion = false,
+    this.autoBook = false,
   });
 
   final BookingLocation pickup;
   final BookingLocation destination;
   final String? vehicleQuery;
   final String? promotionCode;
+  final String? vehicleType;
+  final bool useBestPromotion;
+  final bool autoBook;
 
   factory AiBookingDraft.fromJson(Map<String, dynamic> json) {
     BookingLocation location(Map<String, dynamic> value) => BookingLocation(
@@ -86,6 +92,9 @@ class AiBookingDraft {
       destination: location(json['destination'] as Map<String, dynamic>),
       vehicleQuery: json['vehicleQuery']?.toString(),
       promotionCode: json['promotionCode']?.toString(),
+      vehicleType: json['vehicleType']?.toString(),
+      useBestPromotion: json['useBestPromotion'] as bool? ?? false,
+      autoBook: json['autoBook'] as bool? ?? false,
     );
   }
 }

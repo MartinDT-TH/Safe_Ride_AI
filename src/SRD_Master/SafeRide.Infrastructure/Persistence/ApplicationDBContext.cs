@@ -203,6 +203,11 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
             entity.Property(e => e.DocumentNumber)
                 .HasMaxLength(50)
                 .IsUnicode(false);
+            entity.Property(e => e.FullName).HasMaxLength(100);
+            entity.Property(e => e.Gender)
+                .HasMaxLength(10)
+                .IsUnicode(false);
+            entity.Property(e => e.Address).HasMaxLength(500);
             entity.Property(e => e.DocumentType)
                 .HasConversion<string>()
                 .HasMaxLength(50);

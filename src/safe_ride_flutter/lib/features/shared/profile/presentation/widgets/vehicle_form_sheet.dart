@@ -160,8 +160,14 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
             _buildInputField(
               label: context.l10n.licensePlate,
               controller: _plateController,
-              hint: context.l10n.licensePlateHint,
+              hint: _selectedType == VehicleType.motorbike
+                  ? '74-F1 123.21'
+                  : '74A 543.67',
               errorText: _plateError,
+              textCapitalization: TextCapitalization.characters,
+              inputFormatters: [
+                _LicensePlateInputFormatter(_selectedType),
+              ],
             ),
             SizedBox(height: 20),
             _buildInputField(
@@ -246,7 +252,7 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
     final vehicle = VehicleModel(
       id: widget.vehicle?.id ?? 0,
       name: name,
-      plateNumber: plateNumber,
+      plateNumber: _normalizePlateNumber(plateNumber, _selectedType)!,
       color: color,
       type: _selectedType,
       engineCapacityCc: _selectedType == VehicleType.motorbike
@@ -272,6 +278,15 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
         onTap: () => setState(() {
           _selectedType = type;
           _engineCapacityError = null;
+          _plateError = null;
+          final normalized = _formatPartialPlateNumber(
+            _plateController.text,
+            type,
+          );
+          _plateController.value = TextEditingValue(
+            text: normalized,
+            selection: TextSelection.collapsed(offset: normalized.length),
+          );
         }),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -310,6 +325,7 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
     String? errorText,
     TextInputType? keyboardType,
     List<TextInputFormatter>? inputFormatters,
+    TextCapitalization textCapitalization = TextCapitalization.none,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -327,6 +343,7 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
           controller: controller,
           keyboardType: keyboardType,
           inputFormatters: inputFormatters,
+          textCapitalization: textCapitalization,
           onChanged: (_) => _clearErrorFor(controller),
           style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
           decoration: InputDecoration(
@@ -401,10 +418,11 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
       }
     }
 
-    if (plateNumber.length < 4 || plateNumber.length > 20) {
-      plateError = context.l10n.licensePlateLengthValidation;
-    } else if (!RegExp(r'^[A-Za-z0-9 .-]+$').hasMatch(plateNumber)) {
-      plateError = context.l10n.licensePlateFormatValidation;
+    if (_normalizePlateNumber(plateNumber, _selectedType) == null) {
+      final example = _selectedType == VehicleType.motorbike
+          ? '74-F1 123.21'
+          : '74A 543.67';
+      plateError = '${context.l10n.licensePlateFormatValidation} ($example)';
     }
 
     if (color.length > 30) {
@@ -422,5 +440,63 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
         engineCapacityError == null &&
         plateError == null &&
         colorError == null;
+  }
+}
+
+String? _normalizePlateNumber(String value, VehicleType type) {
+  final compact = value.toUpperCase().replaceAll(RegExp(r'[\s.\-]'), '');
+  final pattern = type == VehicleType.motorbike
+      ? RegExp(r'^(\d{2})([A-Z](?:[A-Z]|\d))(\d{5})$')
+      : RegExp(r'^(\d{2})([A-Z])(\d{5})$');
+  final match = pattern.firstMatch(compact);
+  if (match == null) return null;
+  final province = match.group(1)!;
+  final series = match.group(2)!;
+  final sequence = match.group(3)!;
+  return type == VehicleType.motorbike
+      ? '$province-$series ${sequence.substring(0, 3)}.${sequence.substring(3)}'
+      : '$province$series ${sequence.substring(0, 3)}.${sequence.substring(3)}';
+}
+
+String _formatPartialPlateNumber(String value, VehicleType type) {
+  final maxLength = type == VehicleType.motorbike ? 9 : 8;
+  var compact = value
+      .toUpperCase()
+      .replaceAll(RegExp(r'[^A-Z0-9]'), '');
+  if (compact.length > maxLength) compact = compact.substring(0, maxLength);
+  if (compact.length <= 2) return compact;
+
+  final seriesLength = type == VehicleType.motorbike ? 2 : 1;
+  final seriesEnd = 2 + seriesLength;
+  final availableSeriesEnd = compact.length < seriesEnd
+      ? compact.length
+      : seriesEnd;
+  final prefix = type == VehicleType.motorbike
+      ? '${compact.substring(0, 2)}-${compact.substring(2, availableSeriesEnd)}'
+      : compact.substring(0, availableSeriesEnd);
+  if (compact.length <= seriesEnd) return prefix;
+
+  final sequence = compact.substring(seriesEnd);
+  final firstEnd = sequence.length < 3 ? sequence.length : 3;
+  final first = sequence.substring(0, firstEnd);
+  final last = sequence.length > 3 ? '.${sequence.substring(3)}' : '';
+  return '$prefix $first$last';
+}
+
+class _LicensePlateInputFormatter extends TextInputFormatter {
+  _LicensePlateInputFormatter(this.type);
+
+  final VehicleType type;
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final formatted = _formatPartialPlateNumber(newValue.text, type);
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
   }
 }

@@ -26,6 +26,14 @@ class IdentityVerificationRemoteDatasource {
           ApiKeys.backImage: submission.cccdBackImage,
           if (_hasText(submission.cccdNumber))
             ApiKeys.documentNumber: submission.cccdNumber!.trim(),
+          if (_hasText(submission.cccdFullName))
+            'fullName': submission.cccdFullName!.trim(),
+          if (submission.cccdDateOfBirth != null)
+            'dateOfBirth': _formatDate(submission.cccdDateOfBirth!),
+          if (_hasText(submission.cccdGender))
+            'gender': submission.cccdGender!.trim(),
+          if (_hasText(submission.cccdAddress))
+            'address': submission.cccdAddress!.trim(),
         },
       );
     }

@@ -157,6 +157,8 @@ public sealed class AdminDriverAccountService : IAdminDriverAccountService
             var identityCardNumber = documents
                 .FirstOrDefault(x => x.DocumentType == KycDocumentType.ID_CARD)
                 ?.DocumentNumber;
+            var identityCard = documents.First(
+                x => x.DocumentType == KycDocumentType.ID_CARD);
             if (string.IsNullOrWhiteSpace(identityCardNumber))
             {
                 throw new AdminUserAccountException(
@@ -172,6 +174,7 @@ public sealed class AdminDriverAccountService : IAdminDriverAccountService
                 {
                     DriverId = driverId,
                     IdentityCardNumber = identityCardNumber,
+                    HomeAddress = identityCard.Address,
                     WorkStatus = DriverWorkStatus.Offline,
                     CreatedAt = now
                 });
@@ -179,6 +182,7 @@ public sealed class AdminDriverAccountService : IAdminDriverAccountService
             else
             {
                 profile.IdentityCardNumber = identityCardNumber;
+                profile.HomeAddress = identityCard.Address ?? profile.HomeAddress;
                 profile.UpdatedAt = now;
             }
         }
