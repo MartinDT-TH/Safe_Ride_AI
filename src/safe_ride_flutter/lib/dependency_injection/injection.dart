@@ -49,6 +49,10 @@ import '../features/driver/trip_requests/data/datasources/driver_trip_request_re
 import '../features/driver/trip_requests/data/repositories/driver_trip_request_repository_impl.dart';
 import '../features/driver/trip_requests/domain/repositories/driver_trip_request_repository.dart';
 import '../features/driver/registration/data/datasources/identity_verification_remote_datasource.dart';
+import '../features/trip_sharing/data/datasources/trip_sharing_remote_datasource.dart';
+import '../features/trip_sharing/presentation/providers/trip_sharing_provider.dart';
+import '../features/trip_sharing/presentation/providers/received_trip_shares_provider.dart';
+import '../features/trip_sharing/trip_share_deep_link_coordinator.dart';
 import '../features/shared/chat/presentation/providers/trip_chat_provider.dart';
 import '../features/shared/feedback/data/datasources/feedback_remote_datasource.dart';
 import '../features/shared/feedback/data/repositories/feedback_repository_impl.dart';
@@ -218,6 +222,23 @@ Future<void> setupDependencies() async {
 
   getIt.registerLazySingleton<IdentityVerificationRemoteDatasource>(
     () => IdentityVerificationRemoteDatasource(),
+  );
+  getIt.registerLazySingleton<TripSharingRemoteDatasource>(
+    () => TripSharingRemoteDatasource(),
+  );
+  getIt.registerFactory<TripSharingProvider>(
+    () => TripSharingProvider(getIt<TripSharingRemoteDatasource>()),
+  );
+  getIt.registerLazySingleton<TripShareDeepLinkCoordinator>(
+    () => TripShareDeepLinkCoordinator(
+      getIt<SecureStorageService>(),
+      getIt<SessionManager>(),
+      getIt<TripSharingRemoteDatasource>(),
+      () => getIt<MobileConfigService>().config.tripSharing.appLinkBaseUrl,
+    ),
+  );
+  getIt.registerFactory<ReceivedTripSharesProvider>(
+    () => ReceivedTripSharesProvider(getIt<TripSharingRemoteDatasource>()),
   );
 
   getIt.registerLazySingleton<FeedbackRemoteDatasource>(

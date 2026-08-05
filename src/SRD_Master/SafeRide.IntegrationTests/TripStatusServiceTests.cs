@@ -182,6 +182,28 @@ public sealed class TripStatusServiceTests
 
 
     [Fact]
+    public async Task ConfirmCashPayment_WhenWalletIsMissingOrInsufficient_StillCompletesTrip()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.WAITING_PAYMENT);
+        var paymentService = fixture.CreatePaymentService();
+
+        var result = await paymentService.ConfirmCashPaymentAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            CancellationToken.None);
+
+        var trip = await fixture.DbContext.Trips
+            .Include(x => x.Payments)
+            .SingleAsync(x => x.Id == fixture.TripId);
+
+        Assert.Equal(TripStatus.COMPLETED, trip.TripStatus);
+        Assert.Equal(PaymentStatus.Success, result.PaymentStatus);
+        Assert.Equal(PaymentMethod.CASH, result.PaymentMethod);
+        Assert.Equal(62_000m, result.Amount);
+        Assert.Single(trip.Payments);
+    }
+
+    [Fact]
     public async Task CompleteTrip_WhenPaymentSucceeded_CompletesAndIncrementsPromotionUsage()
     {
         using var fixture = await TripStatusFixture.CreateAsync(TripStatus.WAITING_PAYMENT);
@@ -491,6 +513,7 @@ public sealed class TripStatusServiceTests
                 redis,
                 realtime,
                 new NoOpTripReturnEvidenceStorage(),
+                new TripSharingServiceFake(),
                 new OptionsMonitorFake<TripTrackingOptions>(new TripTrackingOptions()),
                 new NoOpMapRoutingService(),
                 new TripFareFinalizationService(new FareEstimationService()),

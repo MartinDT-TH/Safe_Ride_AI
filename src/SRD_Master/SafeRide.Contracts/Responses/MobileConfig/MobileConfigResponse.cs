@@ -8,7 +8,8 @@ public sealed record MobileConfigResponse(
     MobileStatusGroupResponse Offer,
     MobileDriverConfigResponse Driver,
     MobileMatchingConfigResponse Matching,
-    MobileFeatureConfigResponse Features);
+    MobileFeatureConfigResponse Features,
+    MobileTripSharingConfigResponse TripSharing);
 
 public sealed record MobileRealtimeConfigResponse(
     string HubPath,
@@ -56,3 +57,5 @@ public sealed record MobileFeatureConfigResponse(
     string MapProvider,
     bool EnableGoogleMap,
     bool EnableVietMap);
+
+public sealed record MobileTripSharingConfigResponse(string AppLinkBaseUrl);

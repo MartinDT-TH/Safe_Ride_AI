@@ -221,7 +221,7 @@ abstract final class LocationStrings {
 abstract final class AppConfig {
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://192.168.1.26:5026/api/',
+    defaultValue: 'https://safe-ride-ai-1.onrender.com/api/',
   );
   // https://safe-ride-ai.onrender.com
   // http://192.168.1.19:5026
@@ -303,6 +303,7 @@ abstract final class ApiEndpoints {
 abstract final class ApiKeys {
   static const authorization = 'Authorization';
   static const bearer = 'Bearer';
+  static const requiresAuth = 'requiresAuth';
   static const userId = 'userId';
   static const phoneNumber = 'phoneNumber';
   static const otpCode = 'otpCode';
@@ -444,6 +445,7 @@ abstract final class StorageKeys {
   static const continuationAbsoluteExpiresAt =
       'auth.continuation_absolute_expires_at';
   static const deviceId = 'device.id';
+  static const pendingTripShareToken = 'trip_share.pending_token';
 }
 
 abstract final class DeviceStrings {

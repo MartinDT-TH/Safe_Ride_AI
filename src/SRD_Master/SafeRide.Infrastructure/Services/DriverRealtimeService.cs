@@ -18,6 +18,7 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
     private readonly IRedisService _redisService;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IRealtimeNotificationService _realtimeNotificationService;
+    private readonly ITripSharingService _tripSharingService;
     private readonly IOptionsMonitor<DriverRealtimeOptions> _options;
     private readonly IOptionsMonitor<TripTrackingOptions> _tripTrackingOptions;
     private readonly IMapRoutingService _mapRoutingService;
@@ -28,6 +29,7 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
         IRedisService redisService,
         IDateTimeProvider dateTimeProvider,
         IRealtimeNotificationService realtimeNotificationService,
+        ITripSharingService tripSharingService,
         IOptionsMonitor<DriverRealtimeOptions> options,
         IOptionsMonitor<TripTrackingOptions> tripTrackingOptions,
         IMapRoutingService mapRoutingService,
@@ -37,6 +39,7 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
         _redisService = redisService;
         _dateTimeProvider = dateTimeProvider;
         _realtimeNotificationService = realtimeNotificationService;
+        _tripSharingService = tripSharingService;
         _options = options;
         _tripTrackingOptions = tripTrackingOptions;
         _mapRoutingService = mapRoutingService;
@@ -103,6 +106,16 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
                 location.Longitude,
                 utcNow),
             cancellationToken);
+
+        if (activeTrip is not null)
+        {
+            await _tripSharingService.PublishLocationAsync(
+                activeTrip.TripId,
+                location.Latitude,
+                location.Longitude,
+                utcNow,
+                cancellationToken);
+        }
     }
 
     private async Task RecalculateRouteIfDeviatedAsync(

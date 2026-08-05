@@ -725,6 +725,9 @@ namespace SafeRide.Infrastructure.Migrations
                     b.Property<DateTime?>("ReadAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<long?>("ReferenceId")
+                        .HasColumnType("bigint");
+
                     b.Property<DateTime>("SentAt")
                         .HasColumnType("datetime2");
 
@@ -742,7 +745,8 @@ namespace SafeRide.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("PK__Notifica__3214EC07BC6B781B");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId", "NotificationType", "ReferenceId")
+                        .HasDatabaseName("IX_Notifications_UserId_Type_Reference");
 
                     b.ToTable("Notifications");
                 });
@@ -1492,22 +1496,29 @@ namespace SafeRide.Infrastructure.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("(sysutcdatetime())");
 
                     b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("OpenedAt")
                         .HasColumnType("datetime2");
 
                     b.Property<Guid>("RecipientUserId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<string>("ShareToken")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(100)");
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<Guid>("SharedByUserId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .IsUnicode(false)
+                        .HasColumnType("char(64)");
 
                     b.Property<long>("TripId")
                         .HasColumnType("bigint");
@@ -1515,13 +1526,30 @@ namespace SafeRide.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("PK__TripShar__3214EC079FAF0E0E");
 
-                    b.HasIndex("RecipientUserId");
+                    b.HasIndex("RecipientUserId")
+                        .HasDatabaseName("IX_TripShares_RecipientUserId");
 
                     b.HasIndex("SharedByUserId");
 
-                    b.HasIndex("TripId");
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("UX_TripShares_TokenHash");
 
-                    b.ToTable("TripShares");
+                    b.HasIndex("TripId")
+                        .HasDatabaseName("IX_TripShares_TripId");
+
+                    b.HasIndex("TripId", "RecipientUserId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_TripShares_ActiveRecipient")
+                        .HasFilter("[RevokedAt] IS NULL");
+
+                    b.HasIndex("TripId", "ExpiresAt", "RevokedAt")
+                        .HasDatabaseName("IX_TripShares_ActiveLookup");
+
+                    b.ToTable("TripShares", t =>
+                        {
+                            t.HasCheckConstraint("CK_TripShares_DifferentUsers", "[SharedByUserId] <> [RecipientUserId]");
+                        });
                 });
 
             modelBuilder.Entity("SafeRide.Domain.Entities.Vehicle", b =>

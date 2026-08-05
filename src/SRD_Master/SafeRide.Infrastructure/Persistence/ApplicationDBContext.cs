@@ -286,6 +286,8 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
             entity.Property(e => e.NotificationType)
                 .HasMaxLength(50)
                 .IsUnicode(false);
+            entity.HasIndex(e => new { e.UserId, e.NotificationType, e.ReferenceId })
+                .HasDatabaseName("IX_Notifications_UserId_Type_Reference");
             entity.Property(e => e.Title).HasMaxLength(255);
             entity.Property(e => e.TranslationsJson).HasColumnType("nvarchar(max)");
 
@@ -598,10 +600,30 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
         {
             entity.HasKey(e => e.Id).HasName("PK__TripShar__3214EC079FAF0E0E");
 
+            entity.ToTable(tb =>
+                tb.HasCheckConstraint(
+                    "CK_TripShares_DifferentUsers",
+                    "[SharedByUserId] <> [RecipientUserId]"));
 
-            entity.Property(e => e.ShareToken)
-                .HasMaxLength(100)
+            entity.Property(e => e.TokenHash)
+                .HasColumnType("char(64)")
                 .IsUnicode(false);
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(sysutcdatetime())");
+
+            entity.HasIndex(e => e.TokenHash)
+                .IsUnique()
+                .HasDatabaseName("UX_TripShares_TokenHash");
+            entity.HasIndex(e => e.TripId)
+                .HasDatabaseName("IX_TripShares_TripId");
+            entity.HasIndex(e => e.RecipientUserId)
+                .HasDatabaseName("IX_TripShares_RecipientUserId");
+            entity.HasIndex(e => new { e.TripId, e.RecipientUserId })
+                .IsUnique()
+                .HasFilter("[RevokedAt] IS NULL")
+                .HasDatabaseName("UX_TripShares_ActiveRecipient");
+            entity.HasIndex(e => new { e.TripId, e.ExpiresAt, e.RevokedAt })
+                .HasDatabaseName("IX_TripShares_ActiveLookup");
 
             entity.HasOne(d => d.RecipientUser).WithMany(p => p.TripShareRecipientUsers)
                 .HasForeignKey(d => d.RecipientUserId)
