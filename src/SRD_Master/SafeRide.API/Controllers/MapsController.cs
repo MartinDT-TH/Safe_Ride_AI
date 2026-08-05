@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SafeRide.Application.Common.Interfaces;
@@ -136,13 +137,30 @@ public sealed class MapsController : ControllerBase
 }
 
 /// <summary>Request body for POST /api/maps/routes/estimate</summary>
-public sealed class RouteEstimateApiRequest
+public sealed class RouteEstimateApiRequest : IValidatableObject
 {
+    [Range(-90d, 90d, ErrorMessage = "originLat phải nằm trong khoảng [-90, 90].")]
     public double OriginLat { get; init; }
+
+    [Range(-180d, 180d, ErrorMessage = "originLng phải nằm trong khoảng [-180, 180].")]
     public double OriginLng { get; init; }
+
+    [Range(-90d, 90d, ErrorMessage = "destinationLat phải nằm trong khoảng [-90, 90].")]
     public double DestinationLat { get; init; }
+
+    [Range(-180d, 180d, ErrorMessage = "destinationLng phải nằm trong khoảng [-180, 180].")]
     public double DestinationLng { get; init; }
 
     /// <summary>Optional. Defaults to Car if not provided.</summary>
     public MapTravelMode? TravelMode { get; init; }
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (OriginLat.Equals(DestinationLat) && OriginLng.Equals(DestinationLng))
+        {
+            yield return new ValidationResult(
+                "Điểm đón và điểm đến không được trùng nhau.",
+                [nameof(OriginLat), nameof(OriginLng), nameof(DestinationLat), nameof(DestinationLng)]);
+        }
+    }
 }
