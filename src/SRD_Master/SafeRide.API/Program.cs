@@ -111,6 +111,17 @@ builder.Services.AddSwaggerGen(options =>
         }
     });
 });
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("VercelFrontend", policy =>
+    {
+        policy
+            .WithOrigins("https://saferidereact.vercel.app")
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
 
 var app = builder.Build();
 
@@ -179,6 +190,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseMiddleware<ApiExceptionMiddleware>();
+app.UseCors("VercelFrontend");
 if (!app.Environment.IsProduction())
 {
     app.UseHttpsRedirection();
