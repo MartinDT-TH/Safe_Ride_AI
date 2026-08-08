@@ -2,20 +2,37 @@ import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart';
 
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/localization/localization_extensions.dart';
 import '../../application/services/document_image_cropper.dart';
+
+class DocumentCaptureResult {
+  const DocumentCaptureResult({
+    required this.croppedImage,
+    required this.originalImage,
+    this.qrPayload,
+  });
+
+  final File croppedImage;
+  final File originalImage;
+  final String? qrPayload;
+}
 
 class DocumentCameraPage extends StatefulWidget {
   DocumentCameraPage({
     super.key,
     required this.title,
     required this.instruction,
+    this.focusPoint,
+    this.scanQrLive = false,
   });
 
   final String title;
   final String instruction;
+  final Offset? focusPoint;
+  final bool scanQrLive;
 
   @override
   State<DocumentCameraPage> createState() => _DocumentCameraPageState();
@@ -23,9 +40,14 @@ class DocumentCameraPage extends StatefulWidget {
 
 class _DocumentCameraPageState extends State<DocumentCameraPage> {
   final DocumentImageCropper _cropper = DocumentImageCropper();
+  final BarcodeScanner _barcodeScanner = BarcodeScanner(
+    formats: [BarcodeFormat.qrCode],
+  );
   CameraController? _controller;
   Future<void>? _initializeCameraFuture;
   bool _isCapturing = false;
+  bool _isProcessingQrFrame = false;
+  String? _qrPayload;
   String? _errorMessage;
 
   @override
@@ -36,6 +58,7 @@ class _DocumentCameraPageState extends State<DocumentCameraPage> {
 
   @override
   void dispose() {
+    _barcodeScanner.close();
     _controller?.dispose();
     super.dispose();
   }
@@ -51,14 +74,20 @@ class _DocumentCameraPageState extends State<DocumentCameraPage> {
         camera,
         ResolutionPreset.high,
         enableAudio: false,
-        imageFormatGroup: ImageFormatGroup.jpeg,
+        imageFormatGroup: widget.scanQrLive
+            ? Platform.isAndroid
+                  ? ImageFormatGroup.nv21
+                  : ImageFormatGroup.bgra8888
+            : ImageFormatGroup.jpeg,
       );
       await controller.initialize();
+      await _focusCamera(controller);
       if (!mounted) {
         await controller.dispose();
         return;
       }
       setState(() => _controller = controller);
+      if (widget.scanQrLive) await controller.startImageStream(_processQrFrame);
     } catch (_) {
       if (!mounted) return;
       setState(
@@ -73,16 +102,90 @@ class _DocumentCameraPageState extends State<DocumentCameraPage> {
 
     setState(() => _isCapturing = true);
     try {
+      if (controller.value.isStreamingImages) {
+        await controller.stopImageStream();
+        while (_isProcessingQrFrame) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+      }
+      await _focusCamera(controller);
+      if (widget.focusPoint != null) {
+        await Future<void>.delayed(const Duration(milliseconds: 450));
+      }
       final image = await controller.takePicture();
-      final cropped = await _cropper.cropToDocument(File(image.path));
+      final original = File(image.path);
+      final cropped = await _cropper.cropToDocument(original);
       if (!mounted) return;
-      Navigator.of(context).pop(cropped);
+      Navigator.of(context).pop(
+        DocumentCaptureResult(
+          croppedImage: cropped,
+          originalImage: original,
+          qrPayload: _qrPayload,
+        ),
+      );
     } catch (_) {
       if (!mounted) return;
       setState(() => _isCapturing = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.l10n.photoCaptureFailed)),
       );
+    }
+  }
+
+  Future<void> _processQrFrame(CameraImage frame) async {
+    final controller = _controller;
+    if (controller == null ||
+        _isCapturing ||
+        _isProcessingQrFrame ||
+        _qrPayload != null ||
+        frame.planes.length != 1) {
+      return;
+    }
+
+    final rotation = InputImageRotationValue.fromRawValue(
+      controller.description.sensorOrientation,
+    );
+    final format = InputImageFormatValue.fromRawValue(frame.format.raw);
+    if (rotation == null || format == null) return;
+
+    _isProcessingQrFrame = true;
+    try {
+      final input = InputImage.fromBytes(
+        bytes: frame.planes.first.bytes,
+        metadata: InputImageMetadata(
+          size: Size(frame.width.toDouble(), frame.height.toDouble()),
+          rotation: rotation,
+          format: format,
+          bytesPerRow: frame.planes.first.bytesPerRow,
+        ),
+      );
+      final barcodes = await _barcodeScanner.processImage(input);
+      for (final barcode in barcodes) {
+        final payload = barcode.rawValue?.trim();
+        if (payload == null || payload.isEmpty) continue;
+        _qrPayload = payload;
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã nhận diện QR GPLX.')),
+        );
+        break;
+      }
+    } finally {
+      _isProcessingQrFrame = false;
+    }
+  }
+
+  Future<void> _focusCamera(CameraController controller) async {
+    final focusPoint = widget.focusPoint;
+    if (focusPoint == null) return;
+    try {
+      await controller.setFocusMode(FocusMode.auto);
+      await controller.setExposureMode(ExposureMode.auto);
+      await controller.setFocusPoint(focusPoint);
+      await controller.setExposurePoint(focusPoint);
+    } catch (_) {
+      // Some camera devices do not support metering points. Their default
+      // continuous autofocus remains available as a fallback.
     }
   }
 

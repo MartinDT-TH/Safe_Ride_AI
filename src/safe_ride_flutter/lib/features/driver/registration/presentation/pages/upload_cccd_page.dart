@@ -28,6 +28,7 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
   final TextEditingController _addressController = TextEditingController();
   String? _gender;
   bool _isScanning = false;
+  bool _hasQrIdentityData = false;
   final IdentityOcrScanner _ocrScanner = IdentityOcrScanner();
   late final IdentityVerificationSubmission _submission;
 
@@ -58,7 +59,7 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
 
   Future<void> _pickImage(bool isFront) async {
     try {
-      final image = await Navigator.of(context).push<File>(
+      final capture = await Navigator.of(context).push<DocumentCaptureResult>(
         MaterialPageRoute(
           builder: (_) => DocumentCameraPage(
             title: isFront ? context.l10n.idCardFront : context.l10n.idCardBack,
@@ -67,7 +68,8 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
         ),
       );
 
-      if (image != null) {
+      if (capture != null) {
+        final image = capture.croppedImage;
         setState(() {
           if (isFront) {
             _frontImage = image;
@@ -75,7 +77,7 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
             _backImage = image;
           }
         });
-        await _scanImage(image);
+        await _scanImage(image, qrFallbackImage: capture.originalImage);
       }
     } catch (e) {
       debugPrint('Error picking image: $e');
@@ -91,30 +93,73 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
     }
   }
 
-  Future<void> _scanImage(File image) async {
+  Future<void> _scanImage(File image, {File? qrFallbackImage}) async {
     setState(() => _isScanning = true);
     try {
       final result = await _ocrScanner.scanImage(
         image: image,
+        qrFallbackImage: qrFallbackImage,
         documentType: IdentityOcrDocumentType.idCard,
+        onQrNotDetected: () async {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.l10n.ocrScanningOnDevice)),
+          );
+        },
+        onQrDetectedButInvalid: () async {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Đã nhận diện QR CCCD nhưng không giải mã được dữ liệu. Đang chuyển sang OCR.',
+              ),
+            ),
+          );
+        },
       );
       if (!mounted) return;
       setState(() {
-        if (result.fullName != null) {
+        final isQrResult = result.scanMethod == IdentityScanMethod.qr;
+        if (isQrResult) _hasQrIdentityData = true;
+
+        if (result.fullName != null &&
+            (isQrResult ||
+                (!_hasQrIdentityData &&
+                    _fullNameController.text.trim().isEmpty))) {
           _fullNameController.text = result.fullName!;
         }
-        if (result.documentNumber != null) {
+        if (result.documentNumber != null &&
+            (isQrResult ||
+                (!_hasQrIdentityData &&
+                    _documentNumberController.text.trim().isEmpty))) {
           _documentNumberController.text = result.documentNumber!;
         }
-        if (result.dateOfBirth != null) {
+        if (result.dateOfBirth != null &&
+            (isQrResult ||
+                (!_hasQrIdentityData &&
+                    _dateOfBirthController.text.trim().isEmpty))) {
           _dateOfBirthController.text = _formatDisplayDate(result.dateOfBirth!);
         }
-        if (result.gender != null) _gender = result.gender;
-        if (result.address != null) _addressController.text = result.address!;
+        if (result.gender != null &&
+            (isQrResult || (!_hasQrIdentityData && _gender == null))) {
+          _gender = result.gender;
+        }
+        if (result.address != null &&
+            (isQrResult ||
+                (!_hasQrIdentityData &&
+                    _addressController.text.trim().isEmpty))) {
+          _addressController.text = result.address!;
+        }
       });
       if (result.documentNumber != null || result.fullName != null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.idCardScanned)),
+          SnackBar(
+            content: Text(
+              result.scanMethod == IdentityScanMethod.qr
+                  ? 'Đã quét QR CCCD thành công.'
+                  : context.l10n.idCardScanned,
+            ),
+          ),
         );
       }
     } catch (e) {
