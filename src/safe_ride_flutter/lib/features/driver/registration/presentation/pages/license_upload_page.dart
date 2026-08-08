@@ -30,6 +30,9 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
   DateTime? _expiryDate;
   bool _hasNoExpiryDate = false;
   bool _isScanning = false;
+  bool _hasQrLicenseData = false;
+  IdentityScanMethod? _lastScanMethod;
+  IdentityScanMethod? _activeScanMethod;
   String? _ocrRawText;
   late final IdentityVerificationSubmission _submission;
 
@@ -60,16 +63,19 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
 
   Future<void> _pickImage(bool isFront) async {
     try {
-      final file = await Navigator.of(context).push<File>(
+      final capture = await Navigator.of(context).push<DocumentCaptureResult>(
         MaterialPageRoute(
           builder: (_) => DocumentCameraPage(
             title: isFront ? context.l10n.licenseFront : context.l10n.licenseBack,
             instruction: context.l10n.licenseCameraInstruction,
+            focusPoint: isFront ? null : const Offset(0.3, 0.65),
+            scanQrLive: !isFront,
           ),
         ),
       );
 
-      if (file != null) {
+      if (capture != null) {
+        final file = capture.croppedImage;
         setState(() {
           if (isFront) {
             _frontImage = file;
@@ -77,7 +83,12 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
             _backImage = file;
           }
         });
-        await _scanLicenseImage(file);
+        await _scanLicenseImage(
+          file,
+          isFront: isFront,
+          qrFallbackImage: capture.originalImage,
+          detectedQrPayload: capture.qrPayload,
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -90,31 +101,107 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
     }
   }
 
-  Future<void> _scanLicenseImage(File image) async {
-    setState(() => _isScanning = true);
+  Future<void> _scanLicenseImage(
+    File image, {
+    required bool isFront,
+    File? qrFallbackImage,
+    String? detectedQrPayload,
+  }) async {
+    setState(() {
+      _isScanning = true;
+      _activeScanMethod = IdentityScanMethod.qr;
+    });
     try {
       final result = await _ocrScanner.scanImage(
         image: image,
+        qrFallbackImage: qrFallbackImage,
+        detectedQrPayload: detectedQrPayload,
         documentType: IdentityOcrDocumentType.drivingLicense,
+        allowOcrFallback: isFront,
+        onQrNotDetected: () async {
+          if (!mounted) return;
+          setState(() => _activeScanMethod = IdentityScanMethod.ocr);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.l10n.ocrScanningOnDevice)),
+          );
+        },
+        onQrDetectedButInvalid: () async {
+          if (!mounted) return;
+          setState(() => _activeScanMethod = IdentityScanMethod.ocr);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Đã nhận diện QR GPLX nhưng không giải mã được dữ liệu. Đang chuyển sang OCR.',
+              ),
+            ),
+          );
+        },
       );
       if (!mounted) return;
       setState(() {
         _ocrRawText = result.rawText;
-        if (result.fullName != null) {
+        _lastScanMethod = result.scanMethod;
+        final isQrResult = result.scanMethod == IdentityScanMethod.qr;
+        if (isQrResult) _hasQrLicenseData = true;
+
+        if (result.fullName != null &&
+            (isQrResult ||
+                (!_hasQrLicenseData &&
+                    _fullNameController.text.trim().isEmpty))) {
           _fullNameController.text = result.fullName!;
         }
-        if (result.documentNumber != null) {
+        if (result.documentNumber != null &&
+            (isQrResult ||
+                (!_hasQrLicenseData &&
+                    _licenseNumberController.text.trim().isEmpty))) {
           _licenseNumberController.text = result.documentNumber!;
         }
         if (result.licenseClass != null &&
-            _grades.contains(result.licenseClass)) {
+            _grades.contains(result.licenseClass) &&
+            (isQrResult || (!_hasQrLicenseData && _selectedGrade == null))) {
           _selectedGrade = result.licenseClass;
         }
-        _issuedDate = result.issueDate ?? _issuedDate;
-        _expiryDate = result.expiryDate ?? _expiryDate;
+        if (result.issueDate != null &&
+            (isQrResult || (!_hasQrLicenseData && _issuedDate == null))) {
+          _issuedDate = result.issueDate;
+        }
+        if (result.hasNoExpiryDate && isQrResult) {
+          _hasNoExpiryDate = true;
+          _expiryDate = null;
+        } else if (result.expiryDate != null &&
+            (isQrResult || (!_hasQrLicenseData && _expiryDate == null))) {
+          _hasNoExpiryDate = false;
+          _expiryDate = result.expiryDate;
+        }
       });
+      if (result.scanMethod == IdentityScanMethod.ocr) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.ocrMlKitScanned)),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã quét QR GPLX thành công.')),
+        );
+      }
+    } on QrNotDetectedException {
+      if (!mounted) return;
+      setState(() => _backImage = null);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.ocrMlKitScanned)),
+        const SnackBar(
+          content: Text(
+            'Không nhận diện được QR GPLX ở mặt sau. Vui lòng chụp lại rõ mã QR.',
+          ),
+        ),
+      );
+    } on QrPayloadInvalidException {
+      if (!mounted) return;
+      setState(() => _backImage = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Đã thấy QR GPLX nhưng dữ liệu không đúng định dạng. Vui lòng chụp lại.',
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -122,7 +209,12 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
         SnackBar(content: Text(context.l10n.licenseOcrFailed)),
       );
     } finally {
-      if (mounted) setState(() => _isScanning = false);
+      if (mounted) {
+        setState(() {
+          _isScanning = false;
+          _activeScanMethod = null;
+        });
+      }
     }
   }
 
@@ -521,7 +613,11 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
           Expanded(
             child: Text(
               _isScanning
-                  ? context.l10n.ocrScanningOnDevice
+                  ? _activeScanMethod == IdentityScanMethod.qr
+                        ? 'Đang quét QR GPLX...'
+                        : context.l10n.ocrScanningOnDevice
+                  : _lastScanMethod == IdentityScanMethod.qr
+                  ? 'QR đã tự điền thông tin GPLX'
                   : context.l10n.licenseOcrFilled,
               style: TextStyle(
                 color: Color(0xFF455A64),
