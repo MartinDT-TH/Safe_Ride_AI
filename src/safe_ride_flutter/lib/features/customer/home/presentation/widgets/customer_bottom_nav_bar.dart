@@ -13,40 +13,48 @@ class CustomerBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          top: BorderSide(color: Colors.grey.withOpacity(0.1), width: 1),
-        ),
-      ),
-      child: BottomNavigationBar(
-        currentIndex: currentIndex,
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: Color(0xFF006B70),
-        unselectedItemColor: Colors.grey,
-        showUnselectedLabels: true,
-        selectedLabelStyle: TextStyle(
-          fontWeight: FontWeight.w800,
-          fontSize: 12,
-        ),
-        unselectedLabelStyle: TextStyle(fontSize: 12),
-        onTap: onTap,
-        items: [
-          _buildNavItem(
-            Icons.home_outlined,
-            Icons.home_filled,
-            context.l10n.home,
-            0,
+    return SafeArea(
+      top: false,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border(
+            top: BorderSide(color: Colors.grey.withOpacity(0.1), width: 1),
           ),
-          _buildNavItem(Icons.history, Icons.history, context.l10n.activity, 1),
-          _buildNavItem(
-            Icons.person_outline_rounded,
-            Icons.person_rounded,
-            context.l10n.account,
-            2,
+        ),
+        child: BottomNavigationBar(
+          currentIndex: currentIndex,
+          type: BottomNavigationBarType.fixed,
+          selectedItemColor: Color(0xFF006B70),
+          unselectedItemColor: Colors.grey,
+          showUnselectedLabels: true,
+          selectedLabelStyle: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 12,
           ),
-        ],
+          unselectedLabelStyle: TextStyle(fontSize: 12),
+          onTap: onTap,
+          items: [
+            _buildNavItem(
+              Icons.home_outlined,
+              Icons.home_filled,
+              context.l10n.home,
+              0,
+            ),
+            _buildNavItem(
+              Icons.history,
+              Icons.history,
+              context.l10n.activity,
+              1,
+            ),
+            _buildNavItem(
+              Icons.person_outline_rounded,
+              Icons.person_rounded,
+              context.l10n.account,
+              2,
+            ),
+          ],
+        ),
       ),
     );
   }

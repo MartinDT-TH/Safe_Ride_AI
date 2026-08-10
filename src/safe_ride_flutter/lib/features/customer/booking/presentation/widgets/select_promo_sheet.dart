@@ -52,181 +52,184 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
     final isLoading = provider.isLoadingPromotions;
     final manualCode = _promoController.text.trim();
 
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-      ),
-      child: Column(
-        children: [
-          SizedBox(height: 12),
-          // Handle bar
-          Container(
-            width: 48,
-            height: 5,
-            decoration: BoxDecoration(
-              color: Color(0xFFE2E2E2),
-              borderRadius: BorderRadius.circular(10),
+    return SafeArea(
+      top: false,
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.85,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        child: Column(
+          children: [
+            SizedBox(height: 12),
+            // Handle bar
+            Container(
+              width: 48,
+              height: 5,
+              decoration: BoxDecoration(
+                color: Color(0xFFE2E2E2),
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
-          ),
-          SizedBox(height: 16),
-          // Header
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  context.l10n.selectPromotion,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Color(0xFFF5F5F5),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.close,
-                      size: 20,
-                      color: Color(0xFF6B6B6B),
+            SizedBox(height: 16),
+            // Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    context.l10n.selectPromotion,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
                     ),
                   ),
-                ),
-              ],
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Color(0xFFF5F5F5),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.close,
+                        size: 20,
+                        color: Color(0xFF6B6B6B),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          Divider(height: 1),
-          SizedBox(height: 20),
-          // Input Section
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                Expanded(
-                  child: SizedBox(
-                    height: 54,
-                    child: TextField(
-                      controller: _promoController,
-                      decoration: InputDecoration(
-                        hintText: context.l10n.enterPromoCode,
-                        hintStyle: TextStyle(
-                          color: Color(0xFFAAAAAA),
-                          fontSize: 15,
-                        ),
-                        filled: true,
-                        fillColor: Color(0xFFF7F7F7),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
+            Divider(height: 1),
+            SizedBox(height: 20),
+            // Input Section
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 54,
+                      child: TextField(
+                        controller: _promoController,
+                        decoration: InputDecoration(
+                          hintText: context.l10n.enterPromoCode,
+                          hintStyle: TextStyle(
+                            color: Color(0xFFAAAAAA),
+                            fontSize: 15,
+                          ),
+                          filled: true,
+                          fillColor: Color(0xFFF7F7F7),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                SizedBox(width: 12),
-                SizedBox(
-                  height: 54,
-                  child: ElevatedButton(
-                    onPressed: manualCode.isEmpty
-                        ? null
-                        : () {
-                            final promo = PromoModel(
-                              promotionId: -manualCode.hashCode.abs(),
-                              promotionCode: manualCode.toUpperCase(),
-                              discountType: '',
-                              discountValue: 0,
-                              remainingUsageCount: 1,
-                              shortDescription:
-                                  context.l10n.promoValidatedOnBooking,
-                            );
-                            provider.selectPromo(promo);
-                            Navigator.pop(context, promo);
+                  SizedBox(width: 12),
+                  SizedBox(
+                    height: 54,
+                    child: ElevatedButton(
+                      onPressed: manualCode.isEmpty
+                          ? null
+                          : () {
+                              final promo = PromoModel(
+                                promotionId: -manualCode.hashCode.abs(),
+                                promotionCode: manualCode.toUpperCase(),
+                                discountType: '',
+                                discountValue: 0,
+                                remainingUsageCount: 1,
+                                shortDescription:
+                                    context.l10n.promoValidatedOnBooking,
+                              );
+                              provider.selectPromo(promo);
+                              Navigator.pop(context, promo);
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                      ),
+                      child: Text(
+                        context.l10n.apply,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 24),
+            // List Section
+            Expanded(
+              child: isLoading
+                  ? Center(child: CircularProgressIndicator())
+                  : promos.isEmpty
+                  ? Center(child: Text(context.l10n.noAvailablePromoCodes))
+                  : ListView.separated(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 8,
+                      ),
+                      itemCount: promos.length,
+                      physics: BouncingScrollPhysics(),
+                      separatorBuilder: (context, index) =>
+                          SizedBox(height: 16),
+                      itemBuilder: (context, index) {
+                        return _PromoCard(
+                          promo: promos[index],
+                          isSelected:
+                              provider.selectedPromo?.promotionId ==
+                              promos[index].promotionId,
+                          onUse: () {
+                            provider.selectPromo(promos[index]);
+                            Navigator.pop(context, promos[index]);
                           },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
+                        );
+                      },
+                    ),
+            ),
+            if (provider.selectedPromo != null)
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: OutlinedButton(
+                    onPressed: () {
+                      provider.clearSelectedPromo();
+                      Navigator.pop(context);
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      side: BorderSide(color: Colors.red),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
                     ),
-                    child: Text(
-                      context.l10n.apply,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
-                      ),
-                    ),
+                    child: Text(context.l10n.deselectPromo),
                   ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(height: 24),
-          // List Section
-          Expanded(
-            child: isLoading
-                ? Center(child: CircularProgressIndicator())
-                : promos.isEmpty
-                ? Center(child: Text(context.l10n.noAvailablePromoCodes))
-                : ListView.separated(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 8,
-                    ),
-                    itemCount: promos.length,
-                    physics: BouncingScrollPhysics(),
-                    separatorBuilder: (context, index) =>
-                        SizedBox(height: 16),
-                    itemBuilder: (context, index) {
-                      return _PromoCard(
-                        promo: promos[index],
-                        isSelected:
-                            provider.selectedPromo?.promotionId ==
-                            promos[index].promotionId,
-                        onUse: () {
-                          provider.selectPromo(promos[index]);
-                          Navigator.pop(context, promos[index]);
-                        },
-                      );
-                    },
-                  ),
-          ),
-          if (provider.selectedPromo != null)
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: SizedBox(
-                width: double.infinity,
-                height: 54,
-                child: OutlinedButton(
-                  onPressed: () {
-                    provider.clearSelectedPromo();
-                    Navigator.pop(context);
-                  },
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.red,
-                    side: BorderSide(color: Colors.red),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(context.l10n.deselectPromo),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -314,10 +317,7 @@ class _PromoCard extends StatelessWidget {
                       context.l10n.minimumOrder(
                         _formatCurrency(promo.minimumOrderValue),
                       ),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF888888),
-                      ),
+                      style: TextStyle(fontSize: 12, color: Color(0xFF888888)),
                     ),
                   ],
                   SizedBox(height: 10),
