@@ -52,7 +52,10 @@ public static class DependencyInjection
                     configuration.GetConnectionString("MongoDB") ?? "")
             .Validate(
                 options => options.TripChatTranslationTimeoutSeconds > 0,
-                "AiChat:TripChatTranslationTimeoutSeconds must be greater than zero.");
+                "AiChat:TripChatTranslationTimeoutSeconds must be greater than zero.")
+            .Validate(
+                options => options.TripChatTranslationMaxRetries is >= 0 and <= 3,
+                "AiChat:TripChatTranslationMaxRetries must be between zero and three.");
         services.AddHttpClient<IAiChatService, AiChatService>(client =>
         {
             client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
@@ -284,6 +287,7 @@ public static class DependencyInjection
         services.AddScoped<TripFareFinalizationService>();
         services.AddScoped<ITripStatusService, TripStatusService>();
         services.AddScoped<ITripChatService, TripChatService>();
+        services.AddSingleton<ITripChatContentFilter, TripChatContentFilter>();
         services.AddHttpClient<ISpeedSmsService, InfobipSmsService>();
         services.AddHttpClient<IPaymentService, PayOsPaymentService>((provider, client) =>
         {

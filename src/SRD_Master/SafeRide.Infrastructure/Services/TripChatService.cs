@@ -28,6 +28,7 @@ public sealed class TripChatService : ITripChatService
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly ICloudinaryImageService _cloudinaryImageService;
     private readonly ITripChatTranslationService _translationService;
+    private readonly ITripChatContentFilter _contentFilter;
     private readonly ILogger<TripChatService> _logger;
 
     public TripChatService(
@@ -36,6 +37,7 @@ public sealed class TripChatService : ITripChatService
         IDateTimeProvider dateTimeProvider,
         ICloudinaryImageService cloudinaryImageService,
         ITripChatTranslationService translationService,
+        ITripChatContentFilter contentFilter,
         ILogger<TripChatService> logger)
     {
         _dbContext = dbContext;
@@ -43,6 +45,7 @@ public sealed class TripChatService : ITripChatService
         _dateTimeProvider = dateTimeProvider;
         _cloudinaryImageService = cloudinaryImageService;
         _translationService = translationService;
+        _contentFilter = contentFilter;
         _logger = logger;
     }
 
@@ -102,16 +105,20 @@ public sealed class TripChatService : ITripChatService
         var translation = await TryTranslateAsync(
             normalizedMessage,
             cancellationToken);
+        var filteredMessage = _contentFilter.Filter(normalizedMessage);
+        var filteredTranslations = translation?.Translations.ToDictionary(
+            item => item.Key,
+            item => _contentFilter.Filter(item.Value));
         var payload = new TripChatMessageDto(
             Guid.NewGuid(),
             tripId,
             senderUserId,
             senderName,
             TextMessageType,
-            normalizedMessage,
+            filteredMessage,
             null,
             _dateTimeProvider.UtcNow,
-            translation?.Translations,
+            filteredTranslations,
             translation?.SourceLanguage);
 
         await _redisService.ListRightPushTrimAndExpireAsync(
