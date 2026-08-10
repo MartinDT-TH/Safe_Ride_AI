@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Features.Bookings;
 using SafeRide.Application.Features.Trips.DTOs;
@@ -26,17 +27,23 @@ public sealed class TripChatService : ITripChatService
     private readonly IRedisService _redisService;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly ICloudinaryImageService _cloudinaryImageService;
+    private readonly ITripChatTranslationService _translationService;
+    private readonly ILogger<TripChatService> _logger;
 
     public TripChatService(
         ApplicationDbContext dbContext,
         IRedisService redisService,
         IDateTimeProvider dateTimeProvider,
-        ICloudinaryImageService cloudinaryImageService)
+        ICloudinaryImageService cloudinaryImageService,
+        ITripChatTranslationService translationService,
+        ILogger<TripChatService> logger)
     {
         _dbContext = dbContext;
         _redisService = redisService;
         _dateTimeProvider = dateTimeProvider;
         _cloudinaryImageService = cloudinaryImageService;
+        _translationService = translationService;
+        _logger = logger;
     }
 
     public async Task EnsureCanAccessTripChatAsync(
@@ -92,6 +99,9 @@ public sealed class TripChatService : ITripChatService
         var senderName = await ResolveSenderNameAsync(
             senderUserId,
             cancellationToken);
+        var translation = await TryTranslateAsync(
+            normalizedMessage,
+            cancellationToken);
         var payload = new TripChatMessageDto(
             Guid.NewGuid(),
             tripId,
@@ -100,7 +110,9 @@ public sealed class TripChatService : ITripChatService
             TextMessageType,
             normalizedMessage,
             null,
-            _dateTimeProvider.UtcNow);
+            _dateTimeProvider.UtcNow,
+            translation?.Translations,
+            translation?.SourceLanguage);
 
         await _redisService.ListRightPushTrimAndExpireAsync(
             RedisKeys.TripChatMessages(tripId),
@@ -308,5 +320,27 @@ public sealed class TripChatService : ITripChatService
             ?? user?.UserName?.Trim()
             ?? user?.Email?.Trim()
             ?? senderUserId.ToString();
+    }
+
+    private async Task<TripChatTranslation?> TryTranslateAsync(
+        string message,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _translationService.TranslateAsync(message, cancellationToken);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning("Trip chat translation timed out; the original message will be delivered.");
+            return null;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Trip chat translation failed; the original message will be delivered.");
+            return null;
+        }
     }
 }

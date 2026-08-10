@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NetTopologySuite.Geometries;
 using SafeRide.Application.Common.Interfaces;
@@ -54,6 +55,44 @@ public sealed class TripChatServiceTests
         Assert.Equal("Text", payload.MessageType);
         Assert.Equal("Anh tới chưa?", payload.Message);
         Assert.Null(payload.ImageUrl);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_WithTranslation_StoresOriginalAndTranslations()
+    {
+        await using var dbContext = CreateDbContext();
+        var redis = new InMemoryRedisService();
+        var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var trip = SeedTrip(dbContext, customerId, driverId, TripStatus.IN_PROGRESS);
+        await dbContext.SaveChangesAsync();
+        var translation = new TripChatTranslation(
+            "en",
+            new Dictionary<string, string>
+            {
+                ["vi"] = "Tôi đang ở cổng chính.",
+                ["en"] = "I am at the main entrance."
+            });
+        var service = CreateService(
+            dbContext,
+            redis,
+            new TripChatTranslationServiceFake(translation));
+
+        var result = await service.SendMessageAsync(
+            customerId,
+            trip.Id,
+            "I am at the main entrance.");
+
+        Assert.Equal("I am at the main entrance.", result.Message);
+        Assert.Equal("en", result.SourceLanguage);
+        Assert.Equal("Tôi đang ở cổng chính.", result.Translations?["vi"]);
+
+        var stored = await redis.ListRangeAsync(RedisKeys.TripChatMessages(trip.Id));
+        var payload = JsonSerializer.Deserialize<TripChatMessageDto>(
+            Assert.Single(stored),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.Equal("I am at the main entrance.", payload?.Message);
+        Assert.Equal("Tôi đang ở cổng chính.", payload?.Translations?["vi"]);
     }
 
     [Theory]
@@ -197,7 +236,9 @@ public sealed class TripChatServiceTests
             dbContext,
             redis,
             new DateTimeProviderFake(UtcNow),
-            new CloudinaryImageServiceFake());
+            new CloudinaryImageServiceFake(),
+            new TripChatTranslationServiceFake(),
+            NullLogger<TripChatService>.Instance);
 
         await service.ShortenMessageTtlAsync(4);
 
@@ -328,13 +369,25 @@ public sealed class TripChatServiceTests
 
     private static TripChatService CreateService(
         ApplicationDbContext dbContext,
-        InMemoryRedisService redis)
+        InMemoryRedisService redis,
+        ITripChatTranslationService? translationService = null)
     {
         return new TripChatService(
             dbContext,
             redis,
             new DateTimeProviderFake(UtcNow),
-            new CloudinaryImageServiceFake());
+            new CloudinaryImageServiceFake(),
+            translationService ?? new TripChatTranslationServiceFake(),
+            NullLogger<TripChatService>.Instance);
+    }
+
+    private sealed class TripChatTranslationServiceFake(
+        TripChatTranslation? translation = null) : ITripChatTranslationService
+    {
+        public Task<TripChatTranslation?> TranslateAsync(
+            string message,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(translation);
     }
 
     private static Trip SeedTrip(
