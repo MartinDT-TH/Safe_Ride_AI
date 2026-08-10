@@ -118,7 +118,15 @@ public sealed class TripChatServiceTests
 
         Assert.Equal("Text", result.MessageType);
         Assert.Equal("Cảm ơn anh", result.Message);
+        Assert.Equal(trip.BookingId, result.BookingId);
+        Assert.Equal(customerId, result.SenderId);
+        Assert.Equal("Cảm ơn anh", result.MessagePreview);
+        Assert.Equal(result.SentAt, result.CreatedAt);
         Assert.Single(await redis.ListRangeAsync(RedisKeys.TripChatMessages(trip.Id)));
+        Assert.Equal(
+            "1",
+            await redis.GetAsync(RedisKeys.TripChatUnread(trip.Id, driverId)));
+        Assert.Null(await redis.GetAsync(RedisKeys.TripChatUnread(trip.Id, customerId)));
     }
 
     [Fact]
@@ -158,6 +166,69 @@ public sealed class TripChatServiceTests
             message => Assert.Equal("Tin 1", message.Message),
             message => Assert.Equal("Tin 2", message.Message),
             message => Assert.Equal("Tin 3", message.Message));
+    }
+
+    [Fact]
+    public async Task GetUnreadSummaryAsync_ReturnsRecipientUnreadAndLastMessage()
+    {
+        await using var dbContext = CreateDbContext();
+        var redis = new InMemoryRedisService();
+        var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var trip = SeedTrip(dbContext, customerId, driverId, TripStatus.IN_PROGRESS);
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext, redis);
+
+        await service.SendMessageAsync(customerId, trip.Id, "Anh tới chưa?");
+        await service.SendMessageAsync(customerId, trip.Id, "Em đang đợi");
+
+        var summary = await service.GetUnreadSummaryAsync(driverId);
+
+        Assert.Equal(2, summary.TotalUnread);
+        var item = Assert.Single(summary.Items);
+        Assert.Equal(trip.Id, item.TripId);
+        Assert.Equal(trip.BookingId, item.BookingId);
+        Assert.Equal(2, item.UnreadCount);
+        Assert.Equal("Em đang đợi", item.LastMessagePreview);
+        Assert.Equal(UtcNow, item.LastMessageAt);
+    }
+
+    [Fact]
+    public async Task MarkReadAsync_RemovesOnlyCurrentUsersUnreadCount()
+    {
+        await using var dbContext = CreateDbContext();
+        var redis = new InMemoryRedisService();
+        var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var trip = SeedTrip(dbContext, customerId, driverId, TripStatus.IN_PROGRESS);
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext, redis);
+        await service.SendMessageAsync(customerId, trip.Id, "Tin cho tài xế");
+        await service.SendMessageAsync(driverId, trip.Id, "Tin cho khách");
+
+        await service.MarkReadAsync(driverId, trip.Id);
+
+        Assert.Null(await redis.GetAsync(RedisKeys.TripChatUnread(trip.Id, driverId)));
+        Assert.Equal(
+            "1",
+            await redis.GetAsync(RedisKeys.TripChatUnread(trip.Id, customerId)));
+    }
+
+    [Fact]
+    public async Task MarkReadAsync_WithUnauthorizedUser_Throws()
+    {
+        await using var dbContext = CreateDbContext();
+        var redis = new InMemoryRedisService();
+        var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var trip = SeedTrip(dbContext, customerId, driverId, TripStatus.IN_PROGRESS);
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext, redis);
+
+        var exception = await Assert.ThrowsAsync<BookingException>(
+            () => service.MarkReadAsync(Guid.NewGuid(), trip.Id));
+
+        Assert.Equal("Bạn không có quyền truy cập cuộc trò chuyện này.", exception.Message);
     }
 
     [Fact]
