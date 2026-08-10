@@ -12,7 +12,8 @@ public sealed class AiChatOptions
     public string GeminiApiKey { get; init; } = "";
     public string GeminiModel { get; init; } = "gemini-2.5-flash";
     public bool TripChatTranslationEnabled { get; init; }
-    public int TripChatTranslationTimeoutSeconds { get; init; } = 4;
+    public int TripChatTranslationTimeoutSeconds { get; init; } = 10;
+    public int TripChatTranslationMaxRetries { get; init; } = 1;
     public int RetentionDays { get; init; } = 90;
     public int ContextMessageLimit { get; init; } = 20;
     public int ContextTtlHours { get; init; } = 24;

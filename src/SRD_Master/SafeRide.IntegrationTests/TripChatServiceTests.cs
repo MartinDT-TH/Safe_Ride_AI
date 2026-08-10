@@ -13,6 +13,7 @@ using SafeRide.Infrastructure.ExternalServices.Cloudinary;
 using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
 using SafeRide.Infrastructure.Services;
+using SafeRide.Infrastructure.TripChat;
 
 namespace SafeRide.IntegrationTests;
 
@@ -93,6 +94,35 @@ public sealed class TripChatServiceTests
             new JsonSerializerOptions(JsonSerializerDefaults.Web));
         Assert.Equal("I am at the main entrance.", payload?.Message);
         Assert.Equal("Tôi đang ở cổng chính.", payload?.Translations?["vi"]);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_WithUnsafeLanguage_FiltersOriginalAndTranslations()
+    {
+        await using var dbContext = CreateDbContext();
+        var redis = new InMemoryRedisService();
+        var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var trip = SeedTrip(dbContext, customerId, driverId, TripStatus.IN_PROGRESS);
+        await dbContext.SaveChangesAsync();
+        var translation = new TripChatTranslation(
+            "vi",
+            new Dictionary<string, string>
+            {
+                ["en"] = "You are an asshole"
+            });
+        var service = CreateService(
+            dbContext,
+            redis,
+            new TripChatTranslationServiceFake(translation));
+
+        var result = await service.SendMessageAsync(
+            customerId,
+            trip.Id,
+            "Đồ đéo biết lái xe");
+
+        Assert.Equal("Đồ *** biết lái xe", result.Message);
+        Assert.Equal("You are an *******", result.Translations?["en"]);
     }
 
     [Theory]
@@ -238,6 +268,7 @@ public sealed class TripChatServiceTests
             new DateTimeProviderFake(UtcNow),
             new CloudinaryImageServiceFake(),
             new TripChatTranslationServiceFake(),
+            new TripChatContentFilter(),
             NullLogger<TripChatService>.Instance);
 
         await service.ShortenMessageTtlAsync(4);
@@ -378,6 +409,7 @@ public sealed class TripChatServiceTests
             new DateTimeProviderFake(UtcNow),
             new CloudinaryImageServiceFake(),
             translationService ?? new TripChatTranslationServiceFake(),
+            new TripChatContentFilter(),
             NullLogger<TripChatService>.Instance);
     }
 
