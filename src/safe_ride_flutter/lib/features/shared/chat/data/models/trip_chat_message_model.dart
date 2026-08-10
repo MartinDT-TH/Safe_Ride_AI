@@ -9,6 +9,8 @@ class TripChatMessageModel {
   final String message;
   final String? imageUrl;
   final DateTime sentAt;
+  final Map<String, String> translations;
+  final String? sourceLanguage;
   final bool isMine;
 
   const TripChatMessageModel({
@@ -20,6 +22,8 @@ class TripChatMessageModel {
     required this.message,
     this.imageUrl,
     required this.sentAt,
+    this.translations = const {},
+    this.sourceLanguage,
     this.isMine = false,
   });
 
@@ -44,6 +48,8 @@ class TripChatMessageModel {
       sentAt: json['sentAt'] == null
           ? DateTime.now()
           : DateTime.tryParse(json['sentAt'].toString()) ?? DateTime.now(),
+      translations: _parseTranslations(json['translations']),
+      sourceLanguage: json['sourceLanguage']?.toString(),
       isMine: senderUserId == currentUserId,
     );
   }
@@ -71,7 +77,19 @@ class TripChatMessageModel {
       message: message,
       imageUrl: imageUrl,
       sentAt: sentAt,
+      translations: translations,
+      sourceLanguage: sourceLanguage,
       isMine: isMine ?? this.isMine,
     );
+  }
+
+  static Map<String, String> _parseTranslations(dynamic value) {
+    if (value is! Map) return const {};
+    return value.map(
+      (key, translation) => MapEntry(
+        key.toString().toLowerCase(),
+        translation?.toString() ?? '',
+      ),
+    )..removeWhere((_, translation) => translation.trim().isEmpty);
   }
 }

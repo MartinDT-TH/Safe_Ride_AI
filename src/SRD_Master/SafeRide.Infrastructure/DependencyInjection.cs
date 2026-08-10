@@ -31,6 +31,7 @@ using SafeRide.Infrastructure.Services;
 using SafeRide.Infrastructure.Simulator;
 using System.Text;
 using SafeRide.Infrastructure.ExternalServices.Cloudinary;
+using SafeRide.Infrastructure.TripChat;
 
 namespace SafeRide.Infrastructure;
 
@@ -48,7 +49,10 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(AiChatOptions.SectionName))
             .PostConfigure(options =>
                 options.MongoConnectionString =
-                    configuration.GetConnectionString("MongoDB") ?? "");
+                    configuration.GetConnectionString("MongoDB") ?? "")
+            .Validate(
+                options => options.TripChatTranslationTimeoutSeconds > 0,
+                "AiChat:TripChatTranslationTimeoutSeconds must be greater than zero.");
         services.AddHttpClient<IAiChatService, AiChatService>(client =>
         {
             client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
@@ -58,6 +62,17 @@ public static class DependencyInjection
             client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
         });
         services.AddHostedService<AiChatMongoInitializer>();
+
+        services.AddHttpClient<ITripChatTranslationService, GeminiTripChatTranslationService>(
+            (provider, client) =>
+            {
+                var options = provider
+                    .GetRequiredService<IOptions<AiChatOptions>>()
+                    .Value;
+                client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
+                client.Timeout = TimeSpan.FromSeconds(
+                    options.TripChatTranslationTimeoutSeconds);
+            });
 
         services.AddDbContext<ApplicationDbContext>(
             options => options.UseSqlServer(

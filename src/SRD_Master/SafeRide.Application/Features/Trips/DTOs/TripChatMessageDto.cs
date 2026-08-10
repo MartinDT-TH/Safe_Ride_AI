@@ -8,4 +8,6 @@ public sealed record TripChatMessageDto(
     string MessageType,
     string Message,
     string? ImageUrl,
-    DateTime SentAt);
+    DateTime SentAt,
+    IReadOnlyDictionary<string, string>? Translations = null,
+    string? SourceLanguage = null);

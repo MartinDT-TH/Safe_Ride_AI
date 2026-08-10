@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/localization/locale_provider.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/trip_chat_provider.dart';
 import '../../data/models/trip_chat_message_model.dart';
@@ -262,10 +263,19 @@ class _TripChatPageState extends State<TripChatPage> {
   }
 }
 
-class _MessageBubble extends StatelessWidget {
+class _MessageBubble extends StatefulWidget {
   _MessageBubble({required this.message});
 
   final TripChatMessageModel message;
+
+  @override
+  State<_MessageBubble> createState() => _MessageBubbleState();
+}
+
+class _MessageBubbleState extends State<_MessageBubble> {
+  bool _showOriginal = false;
+
+  TripChatMessageModel get message => widget.message;
 
   String _getFullImageUrl(String url) {
     if (url.startsWith('http')) return url;
@@ -292,6 +302,15 @@ class _MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final isMine = message.isMine;
     final timeStr = DateFormat('HH:mm').format(message.sentAt);
+    final locale = LocaleProvider.currentLocale.languageCode.toLowerCase();
+    final translatedText = message.translations[locale];
+    final hasTranslation = !isMine &&
+        translatedText != null &&
+        translatedText.trim().isNotEmpty &&
+        translatedText.trim() != message.message.trim();
+    final displayedText = hasTranslation && !_showOriginal
+        ? translatedText
+        : message.message;
 
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
@@ -328,13 +347,34 @@ class _MessageBubble extends StatelessWidget {
                     ),
                 ],
               ),
-              child: Text(
-                message.message,
-                style: TextStyle(
-                  color: isMine ? Colors.white : Color(0xFF1D2939),
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    displayedText!,
+                    style: TextStyle(
+                      color: isMine ? Colors.white : Color(0xFF1D2939),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  if (hasTranslation) ...[
+                    const SizedBox(height: 6),
+                    InkWell(
+                      onTap: () => setState(() {
+                        _showOriginal = !_showOriginal;
+                      }),
+                      child: Text(
+                        _translationLabel(locale, _showOriginal),
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             )
           else if (message.isImage && message.imageUrl != null)
@@ -377,5 +417,17 @@ class _MessageBubble extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _translationLabel(String locale, bool showingOriginal) {
+    const labels = <String, List<String>>{
+      'vi': ['AI dịch tự động · Xem bản gốc', 'AI dịch tự động · Xem bản dịch'],
+      'en': ['AI translation · View original', 'AI translation · View translation'],
+      'ko': ['AI 자동 번역 · 원문 보기', 'AI 자동 번역 · 번역 보기'],
+      'ja': ['AI自動翻訳 · 原文を見る', 'AI自動翻訳 · 翻訳を見る'],
+      'zh': ['AI 自动翻译 · 查看原文', 'AI 自动翻译 · 查看译文'],
+    };
+    final localizedLabels = labels[locale] ?? labels['en']!;
+    return localizedLabels[showingOriginal ? 1 : 0];
   }
 }
