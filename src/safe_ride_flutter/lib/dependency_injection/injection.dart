@@ -50,6 +50,8 @@ import '../features/driver/trip_requests/data/repositories/driver_trip_request_r
 import '../features/driver/trip_requests/domain/repositories/driver_trip_request_repository.dart';
 import '../features/driver/registration/data/datasources/identity_verification_remote_datasource.dart';
 import '../features/shared/chat/presentation/providers/trip_chat_provider.dart';
+import '../features/shared/chat/data/datasources/trip_chat_remote_datasource.dart';
+import '../features/shared/chat/presentation/providers/chat_unread_provider.dart';
 import '../features/shared/feedback/data/datasources/feedback_remote_datasource.dart';
 import '../features/shared/feedback/data/repositories/feedback_repository_impl.dart';
 import '../features/shared/feedback/domain/repositories/feedback_repository.dart';
@@ -231,4 +233,14 @@ Future<void> setupDependencies() async {
   );
 
   getIt.registerFactory<TripChatProvider>(() => TripChatProvider());
+  getIt.registerLazySingleton<TripChatRemoteDatasource>(
+    () => TripChatRemoteDatasource(),
+  );
+  getIt.registerLazySingleton<ChatUnreadProvider>(
+    () => ChatUnreadProvider(
+      getIt<TripChatRemoteDatasource>(),
+      getIt<HistoryRepository>(),
+      getIt<SocketService>(),
+    ),
+  );
 }

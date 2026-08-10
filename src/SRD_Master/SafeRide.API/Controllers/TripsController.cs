@@ -326,6 +326,52 @@ public sealed class TripsController : ControllerBase
         return Ok(messages);
     }
 
+    [HttpGet("chat/unread")]
+    [ProducesResponseType<TripChatUnreadSummaryDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<TripChatUnreadSummaryDto>> GetChatUnread(
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Unauthorized",
+                Detail = "Không xác định được tài khoản."
+            });
+        }
+
+        return Ok(await _tripChatService.GetUnreadSummaryAsync(
+            userId,
+            cancellationToken));
+    }
+
+    [HttpPost("{tripId:long}/chat/read")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> MarkChatRead(
+        long tripId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Unauthorized",
+                Detail = "Không xác định được tài khoản."
+            });
+        }
+
+        await _tripChatService.MarkReadAsync(
+            userId,
+            tripId,
+            cancellationToken);
+        return NoContent();
+    }
+
     [HttpPost("{tripId:long}/chat/images")]
     [Consumes("multipart/form-data")]
     [ProducesResponseType<TripChatMessageDto>(StatusCodes.Status200OK)]

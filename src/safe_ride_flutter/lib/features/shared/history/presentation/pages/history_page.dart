@@ -16,6 +16,7 @@ import '../widgets/interactive_button.dart';
 import '../widgets/trip_history_card.dart';
 import 'package:safe_ride/features/shared/feedback/presentation/pages/report_trip_page.dart';
 import 'package:safe_ride/features/shared/chat/presentation/pages/trip_chat_page.dart';
+import 'package:safe_ride/features/shared/chat/presentation/providers/chat_unread_provider.dart';
 
 class HistoryPage extends StatefulWidget {
   HistoryPage({super.key});
@@ -187,9 +188,7 @@ class _HistoryPageState extends State<HistoryPage> {
                               Text(
                                 provider.errorMessage!,
                                 textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: Color(0xFF626A6C),
-                                ),
+                                style: TextStyle(color: Color(0xFF626A6C)),
                               ),
                               SizedBox(height: 16),
                               ElevatedButton(
@@ -225,6 +224,9 @@ class _HistoryPageState extends State<HistoryPage> {
                                   _openTripDetails(trip, canRebook: canRebook),
                               borderRadius: BorderRadius.circular(24),
                               child: TripHistoryCard(
+                                unreadChatCount: context
+                                    .watch<ChatUnreadProvider>()
+                                    .unreadCountForTrip(trip.tripId),
                                 onChat: trip.tripId != null
                                     ? () => _handleChat(trip)
                                     : null,

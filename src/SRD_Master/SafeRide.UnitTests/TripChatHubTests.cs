@@ -85,6 +85,17 @@ public sealed class TripChatHubTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<TripChatMessageDto>>([]);
 
+        public Task<TripChatUnreadSummaryDto> GetUnreadSummaryAsync(
+            Guid userId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new TripChatUnreadSummaryDto(0, []));
+
+        public Task MarkReadAsync(
+            Guid userId,
+            long tripId,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
         public Task ShortenMessageTtlAsync(
             long tripId,
             CancellationToken cancellationToken = default) =>

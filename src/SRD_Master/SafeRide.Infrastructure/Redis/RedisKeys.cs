@@ -100,6 +100,9 @@ public static class RedisKeys
     public static string TripChatMessages(long tripId) =>
         $"sr:tripchat:messages:{tripId}";
 
+    public static string TripChatUnread(long tripId, Guid userId) =>
+        $"sr:trip-chat:unread:{tripId}:{userId}";
+
     public static IReadOnlyList<string> TripTrackingKeys(long tripId) =>
     [
         TripTrackingPath(tripId),
