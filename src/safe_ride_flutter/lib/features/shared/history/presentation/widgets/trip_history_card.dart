@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../../core/constants/app_colors.dart';
-import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/localization/localization_extensions.dart';
 import '../../data/models/history_trip.dart';
 import './interactive_button.dart';
@@ -15,6 +14,7 @@ class TripHistoryCard extends StatelessWidget {
     this.onReport,
     this.onChat,
     this.onViewFeedback,
+    this.unreadChatCount = 0,
   });
 
   final HistoryTrip trip;
@@ -22,6 +22,7 @@ class TripHistoryCard extends StatelessWidget {
   final VoidCallback? onReport;
   final VoidCallback? onChat;
   final VoidCallback? onViewFeedback;
+  final int unreadChatCount;
 
   @override
   Widget build(BuildContext context) {
@@ -92,12 +93,30 @@ class TripHistoryCard extends StatelessWidget {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+                      if (unreadChatCount > 0) ...[
+                        SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Color(0xFFFFE4E6),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'Tin nhắn mới',
+                            style: TextStyle(
+                              color: Color(0xFFBE123C),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
                       Text(
                         '${trip.vehicleName} \u2022 ${trip.distanceKm} km',
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: 13,
-                        ),
+                        style: TextStyle(color: Colors.grey, fontSize: 13),
                       ),
                     ],
                   ),
@@ -204,17 +223,33 @@ class TripHistoryCard extends StatelessWidget {
                                 decoration: BoxDecoration(
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: Color(0xFFE0E0E0),
-                                  ),
+                                  border: Border.all(color: Color(0xFFE0E0E0)),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(
-                                      Icons.chat_bubble_outline_rounded,
-                                      size: 16,
-                                      color: Color(0xFF626A6C),
+                                    Stack(
+                                      clipBehavior: Clip.none,
+                                      children: [
+                                        Icon(
+                                          Icons.chat_bubble_outline_rounded,
+                                          size: 16,
+                                          color: Color(0xFF626A6C),
+                                        ),
+                                        if (unreadChatCount > 0)
+                                          Positioned(
+                                            top: -4,
+                                            right: -4,
+                                            child: Container(
+                                              width: 7,
+                                              height: 7,
+                                              decoration: BoxDecoration(
+                                                color: Color(0xFFE11D48),
+                                                shape: BoxShape.circle,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
                                     ),
                                     SizedBox(width: 6),
                                     Text(
@@ -241,9 +276,7 @@ class TripHistoryCard extends StatelessWidget {
                                 decoration: BoxDecoration(
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: Color(0xFFE0E0E0),
-                                  ),
+                                  border: Border.all(color: Color(0xFFE0E0E0)),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,

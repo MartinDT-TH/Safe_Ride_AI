@@ -15,17 +15,15 @@ import '../../../../customer/booking/presentation/pages/rebook_trip_page.dart';
 import '../../../../customer/booking/presentation/providers/booking_provider.dart';
 import '../../../../shared/onboarding/presentation/providers/role_provider.dart';
 import '../../../../shared/feedback/domain/repositories/feedback_repository.dart';
+import '../../../../shared/chat/presentation/pages/trip_chat_page.dart';
+import '../../../../shared/chat/presentation/providers/chat_unread_provider.dart';
 import '../../data/models/history_trip.dart';
 import '../../data/models/trip_details_view_data.dart';
 import '../../data/repositories/trip_details_repository_impl.dart';
 import '../providers/trip_details_provider.dart';
 
 class TripDetailsPage extends StatelessWidget {
-  TripDetailsPage({
-    super.key,
-    required this.trip,
-    required this.canRebook,
-  });
+  TripDetailsPage({super.key, required this.trip, required this.canRebook});
 
   final HistoryTrip trip;
   final bool canRebook;
@@ -125,11 +123,34 @@ class _TripDetailsView extends StatelessWidget {
       );
   }
 
+  void _openChat(BuildContext context) {
+    final currentUserId = context.read<AuthProvider>().userId;
+    final tripId = trip.tripId;
+    if (currentUserId == null || tripId == null) {
+      _showMessage(context, context.l10n.chatOpenFailed);
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TripChatPage(
+          tripId: tripId,
+          currentUserId: currentUserId,
+          receiverName: trip.driverName ?? context.l10n.safeRideDriver,
+          canSendMessage: trip.status != HistoryTripStatus.cancelled,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<TripDetailsProvider>(
       builder: (context, provider, child) {
         final data = provider.tripDetails;
+        final unreadChatCount = context
+            .watch<ChatUnreadProvider>()
+            .unreadCountForTrip(trip.tripId);
 
         return Scaffold(
           backgroundColor: Color(0xFFFCF9F8),
@@ -153,9 +174,7 @@ class _TripDetailsView extends StatelessWidget {
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.96),
-                      border: Border(
-                        top: BorderSide(color: Color(0xFFE7E3E2)),
-                      ),
+                      border: Border(top: BorderSide(color: Color(0xFFE7E3E2))),
                     ),
                     child: SizedBox(
                       height: 54,
@@ -213,6 +232,13 @@ class _TripDetailsView extends StatelessWidget {
                 SizedBox(height: 16),
                 _TripDriverCard(data: data),
                 SizedBox(height: 16),
+                if (trip.tripId != null) ...[
+                  _TripChatActionCard(
+                    unreadCount: unreadChatCount,
+                    onTap: () => _openChat(context),
+                  ),
+                  SizedBox(height: 16),
+                ],
                 _TripPaymentCard(data: data),
                 SizedBox(height: 16),
                 _TripFeedbackCard(data: data),
@@ -221,6 +247,85 @@ class _TripDetailsView extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _TripChatActionCard extends StatelessWidget {
+  const _TripChatActionCard({required this.unreadCount, required this.onTap});
+
+  final int unreadCount;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Color(0xFFE7E3E2)),
+          ),
+          child: Row(
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(
+                    Icons.chat_bubble_outline_rounded,
+                    color: AppColors.primary,
+                  ),
+                  if (unreadCount > 0)
+                    Positioned(
+                      top: -3,
+                      right: -4,
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: Color(0xFFE11D48),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 1),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      context.l10n.chat,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF101828),
+                      ),
+                    ),
+                    if (unreadCount > 0)
+                      Text(
+                        'Tin nhắn mới',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFFBE123C),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: Color(0xFF98A2B3)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -278,10 +383,7 @@ class _TripMetaHeader extends StatelessWidget {
                   SizedBox(height: 4),
                   Text(
                     context.l10n.bookingOrder(data.bookingId),
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFF667085),
-                    ),
+                    style: TextStyle(fontSize: 13, color: Color(0xFF667085)),
                   ),
                 ],
               ],
@@ -813,7 +915,9 @@ class _TripDriverCard extends StatelessWidget {
                   ),
                 if (data.driverLicenseClass != null)
                   _InfoChip(
-                    label: context.l10n.requiredLicense(data.driverLicenseClass!),
+                    label: context.l10n.requiredLicense(
+                      data.driverLicenseClass!,
+                    ),
                   ),
               ],
             ),
@@ -872,10 +976,7 @@ class _TripPaymentCard extends StatelessWidget {
                   SizedBox(height: 4),
                   Text(
                     data.paymentStatusLabel,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF667085),
-                    ),
+                    style: TextStyle(fontSize: 12, color: Color(0xFF667085)),
                   ),
                 ],
               ),
@@ -1019,9 +1120,7 @@ class _TripFeedbackCard extends StatelessWidget {
                 final selected = index < (data.ratingScore ?? 0);
                 return Icon(
                   selected ? Icons.star_rounded : Icons.star_outline_rounded,
-                  color: selected
-                      ? Color(0xFFF59E0B)
-                      : Color(0xFFD0D5DD),
+                  color: selected ? Color(0xFFF59E0B) : Color(0xFFD0D5DD),
                   size: 24,
                 );
               }),
@@ -1102,11 +1201,7 @@ class _TripSectionCard extends StatelessWidget {
 }
 
 class _TripStatCard extends StatelessWidget {
-  _TripStatCard({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
+  _TripStatCard({required this.icon, required this.label, required this.value});
 
   final IconData icon;
   final String label;
@@ -1245,8 +1340,7 @@ class _PriceLine extends StatelessWidget {
           child: Text(
             label,
             style:
-                labelStyle ??
-                TextStyle(fontSize: 14, color: Color(0xFF667085)),
+                labelStyle ?? TextStyle(fontSize: 14, color: Color(0xFF667085)),
           ),
         ),
         SizedBox(width: 12),
@@ -1352,12 +1446,7 @@ class _StatusStyle {
         backgroundColor: Color(0xFFFEF3C7),
         textColor: Color(0xFF92400E),
       ),
-      'CANCELLED' ||
-      'CANCEL' ||
-      'EXPIRED' ||
-      '3' ||
-      '4' ||
-      '8' => _StatusStyle(
+      'CANCELLED' || 'CANCEL' || 'EXPIRED' || '3' || '4' || '8' => _StatusStyle(
         backgroundColor: Color(0xFFFEE2E2),
         textColor: Color(0xFFB91C1C),
       ),
