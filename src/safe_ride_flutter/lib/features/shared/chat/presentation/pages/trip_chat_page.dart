@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../../../../core/localization/localization_extensions.dart';
@@ -9,6 +10,7 @@ import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/trip_chat_provider.dart';
+import '../providers/chat_unread_provider.dart';
 import '../../data/models/trip_chat_message_model.dart';
 
 class TripChatPage extends StatefulWidget {
@@ -38,6 +40,7 @@ class _TripChatPageState extends State<TripChatPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ChatUnreadProvider>().openChat(widget.tripId);
       final token = context.read<AuthProvider>().token;
       if (token != null) {
         context.read<TripChatProvider>().initialize(
@@ -47,6 +50,15 @@ class _TripChatPageState extends State<TripChatPage> {
         );
       }
     });
+  }
+
+  @override
+  void dispose() {
+    context.read<ChatUnreadProvider>().closeChat(widget.tripId);
+    unawaited(context.read<TripChatProvider>().disposeChat());
+    _messageController.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 
   void _scrollToBottom() {
@@ -217,9 +229,7 @@ class _TripChatPageState extends State<TripChatPage> {
             onPressed: widget.canSendMessage ? _handlePickImage : null,
             icon: Icon(
               Icons.image_outlined,
-              color: widget.canSendMessage
-                  ? Color(0xFF667085)
-                  : Colors.grey,
+              color: widget.canSendMessage ? Color(0xFF667085) : Colors.grey,
             ),
           ),
           Expanded(
@@ -236,10 +246,7 @@ class _TripChatPageState extends State<TripChatPage> {
                   hintText: widget.canSendMessage
                       ? context.l10n.messageHint
                       : context.l10n.tripEnded,
-                  hintStyle: TextStyle(
-                    fontSize: 14,
-                    color: Color(0xFF98A2B3),
-                  ),
+                  hintStyle: TextStyle(fontSize: 14, color: Color(0xFF98A2B3)),
                   border: InputBorder.none,
                 ),
                 maxLines: null,

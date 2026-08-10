@@ -5,11 +5,35 @@ import 'package:safe_ride/core/constants/app_strings.dart';
 import 'package:safe_ride/core/network/auth_header.dart';
 import 'package:safe_ride/core/network/dio_client.dart';
 import '../models/trip_chat_message_model.dart';
+import '../models/trip_chat_unread_model.dart';
 
 class TripChatRemoteDatasource {
   TripChatRemoteDatasource({Dio? dio}) : _dio = dio ?? DioClient().dio;
 
   final Dio _dio;
+
+  Future<TripChatUnreadSummaryModel> getUnreadSummary({
+    required String token,
+  }) async {
+    final response = await _dio.get(
+      '/trips/chat/unread',
+      options: Options(
+        headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+      ),
+    );
+    return TripChatUnreadSummaryModel.fromJson(
+      Map<String, dynamic>.from(response.data as Map),
+    );
+  }
+
+  Future<void> markRead({required String token, required int tripId}) async {
+    await _dio.post(
+      '/trips/$tripId/chat/read',
+      options: Options(
+        headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+      ),
+    );
+  }
 
   Future<List<TripChatMessageModel>> getTripChatMessages({
     required String token,

@@ -9,6 +9,8 @@ import 'core/session/session_coordinator.dart';
 import 'dependency_injection/injection.dart';
 
 import 'features/shared/onboarding/presentation/pages/splash_page.dart';
+import 'features/auth/presentation/providers/auth_provider.dart';
+import 'features/shared/chat/presentation/providers/chat_unread_provider.dart';
 import 'l10n/generated/app_localizations.dart';
 
 class MyApp extends StatefulWidget {
@@ -18,12 +20,14 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   late final ConnectivityService _connectivityService;
+  String? _chatSessionSignature;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _connectivityService = getIt<ConnectivityService>();
     _connectivityService.initialize();
     getIt<SessionCoordinator>().start();
@@ -31,8 +35,29 @@ class _MyAppState extends State<MyApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _connectivityService.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final auth = context.watch<AuthProvider>();
+    final signature = '${auth.token}|${auth.userId}|${auth.roles.join(',')}';
+    if (_chatSessionSignature == signature) return;
+    _chatSessionSignature = signature;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<ChatUnreadProvider>().updateSession(auth);
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      context.read<ChatUnreadProvider>().refresh();
+    }
   }
 
   @override
