@@ -592,9 +592,7 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                     context.l10n.fareCalculationNote,
                     style: TextStyle(color: Color(0xFF667174), fontSize: 13),
                   ),
-                  SizedBox(
-                    height: 100,
-                  ), // Khoảng trống cho nút bấm phía dưới
+                  SizedBox(height: 100), // Khoảng trống cho nút bấm phía dưới
                 ],
               ),
             ),
@@ -806,17 +804,12 @@ class _MapPreviewState extends State<_MapPreview> {
         // Nút quay lại được bọc trong SafeArea để tránh bị lấp bởi Status Bar
         Positioned(
           left: 20,
-          top: 0,
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: CircleAvatar(
-                backgroundColor: Colors.white,
-                child: IconButton(
-                  onPressed: widget.onBack,
-                  icon: Icon(Icons.arrow_back, color: Color(0xFF263334)),
-                ),
-              ),
+          top: MediaQuery.of(context).viewPadding.top + 10,
+          child: CircleAvatar(
+            backgroundColor: Colors.white,
+            child: IconButton(
+              onPressed: widget.onBack,
+              icon: Icon(Icons.arrow_back, color: Color(0xFF263334)),
             ),
           ),
         ),
@@ -922,11 +915,7 @@ class _RouteSummary extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
-                      Icons.trending_up,
-                      color: Colors.orange,
-                      size: 18,
-                    ),
+                    Icon(Icons.trending_up, color: Colors.orange, size: 18),
                     SizedBox(width: 6),
                     Text(
                       context.l10n.surgePricing(estimate!.surgeMultiplier!),
@@ -1043,11 +1032,7 @@ class _HourInput extends StatelessWidget {
 }
 
 class _PromoTile extends StatelessWidget {
-  _PromoTile({
-    required this.onTap,
-    this.selectedPromo,
-    required this.onClear,
-  });
+  _PromoTile({required this.onTap, this.selectedPromo, required this.onClear});
 
   final VoidCallback onTap;
   final PromoModel? selectedPromo;
@@ -1061,9 +1046,7 @@ class _PromoTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: selectedPromo != null
-              ? Color(0xFFEAF4F4)
-              : Color(0xFFF8F6F6),
+          color: selectedPromo != null ? Color(0xFFEAF4F4) : Color(0xFFF8F6F6),
           borderRadius: BorderRadius.circular(12),
           border: selectedPromo != null
               ? Border.all(color: AppColors.primary)
@@ -1088,10 +1071,7 @@ class _PromoTile extends StatelessWidget {
                   if (selectedPromo != null)
                     Text(
                       selectedPromo!.shortDescription,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF626A6C),
-                      ),
+                      style: TextStyle(fontSize: 13, color: Color(0xFF626A6C)),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -1353,10 +1333,7 @@ class _VehicleCard extends StatelessWidget {
                 children: [
                   Text(
                     vehicle.name,
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800,
-                    ),
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
                   ),
                   Text(context.l10n.plateNumberLabel(vehicle.plateNumber)),
                   Text(context.l10n.vehicleColorLabel(vehicle.color)),

@@ -656,6 +656,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   }
 
   Widget _buildMap() {
+    final topSafe = MediaQuery.of(context).viewPadding.top;
     return LiveTripMapWidget(
       trackingState: _trackingState == TripTrackingState.arriving
           ? LiveTripTrackingState.arriving
@@ -672,8 +673,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       actualPathPoints: _actualPathPoints,
       driverPosition: _driverPosition,
       driverHeading: _driverHeading,
-      padding: const EdgeInsets.only(
-        top: 130,
+      padding: EdgeInsets.only(
+        top: topSafe + 130,
         bottom: 320,
         left: 24,
         right: 24,
@@ -1044,456 +1045,460 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       bottom: 0,
       left: 0,
       right: 0,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black12,
-              blurRadius: 24,
-              offset: Offset(0, -10),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 24),
-              decoration: BoxDecoration(
-                color: Colors.grey[200],
-                borderRadius: BorderRadius.circular(2),
+      child: SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black12,
+                blurRadius: 24,
+                offset: Offset(0, -10),
               ),
-            ),
-            if (!isArriving) ...[
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 24),
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              if (!isArriving) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.check_circle_rounded,
+                          color: _tealColor,
+                          size: 22,
+                        ),
+                        SizedBox(width: 10),
+                        Text(
+                          context.l10n.onCorrectRoute,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ],
+                    ),
+                    _SosButton(
+                      isActivated: _isSOSActivated,
+                      isLoading: _isSendingSOS,
+                      onTap: _canTriggerSOS ? _confirmAndTriggerSOS : null,
+                    ),
+                  ],
+                ),
+                SizedBox(height: 24),
+              ],
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
+                  Stack(
                     children: [
-                      Icon(
-                        Icons.check_circle_rounded,
-                        color: _tealColor,
-                        size: 22,
+                      CircleAvatar(
+                        radius: 30,
+                        backgroundColor: Colors.grey[200],
+                        backgroundImage: offer?.driverAvatarUrl != null
+                            ? NetworkImage(offer!.driverAvatarUrl!)
+                            : null,
+                        child: offer?.driverAvatarUrl == null
+                            ? Icon(Icons.person, size: 30, color: Colors.grey)
+                            : null,
                       ),
-                      SizedBox(width: 10),
-                      Text(
-                        context.l10n.onCorrectRoute,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 15,
-                          color: Colors.black87,
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(color: Colors.black12, blurRadius: 4),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.star_rounded,
+                                color: Colors.amber,
+                                size: 14,
+                              ),
+                              Text(
+                                offer == null ? ' --' : ' ${offer.rating}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],
                   ),
-                  _SosButton(
-                    isActivated: _isSOSActivated,
-                    isLoading: _isSendingSOS,
-                    onTap: _canTriggerSOS ? _confirmAndTriggerSOS : null,
+                  SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                offer?.driverName ??
+                                    context.l10n.safeRideDriverName,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w900,
+                                  color: Color(0xFF1A1A1A),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (offer != null) ...[
+                              SizedBox(width: 4),
+                              InkWell(
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => DriverReviewsPage(
+                                        driverId: offer.driverId,
+                                        driverName: offer.driverName,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withValues(
+                                      alpha: 0.1,
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.star_outline_rounded,
+                                        size: 16,
+                                        color: AppColors.primary,
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        context.l10n.viewReviews,
+                                        style: TextStyle(
+                                          color: AppColors.primary,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          vehicle == null
+                              ? context.l10n.updatingVehicle
+                              : '${vehicle.name} - ${vehicle.color}',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Color(0xFFF2F4F7),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          plateParts.isNotEmpty
+                              ? plateParts.first.trim()
+                              : '--',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF667085),
+                          ),
+                        ),
+                        Text(
+                          plateParts.length > 1 ? plateParts.last.trim() : '--',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF1D2939),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
               SizedBox(height: 24),
-            ],
-            Row(
-              children: [
-                Stack(
-                  children: [
-                    CircleAvatar(
-                      radius: 30,
-                      backgroundColor: Colors.grey[200],
-                      backgroundImage: offer?.driverAvatarUrl != null
-                          ? NetworkImage(offer!.driverAvatarUrl!)
-                          : null,
-                      child: offer?.driverAvatarUrl == null
-                          ? Icon(
-                              Icons.person,
-                              size: 30,
-                              color: Colors.grey,
-                            )
-                          : null,
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 3,
+              if (isArriving) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: _isPrepaid
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          decoration: BoxDecoration(
+                            color: Color(0xFFE5F5F0),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.check_circle_rounded,
+                                color: Color(0xFF0A8F62),
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                context.l10n.prepaid,
+                                style: TextStyle(
+                                  color: Color(0xFF08734F),
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ElevatedButton.icon(
+                          onPressed: _openPrepayment,
+                          icon: Icon(Icons.qr_code_2_rounded),
+                          label: Text(context.l10n.prepayWithPayos),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _tealColor,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            textStyle: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
                         ),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(color: Colors.black12, blurRadius: 4),
-                          ],
+                ),
+                SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _ActionButton(
+                        icon: Icons.chat_bubble_rounded,
+                        label: context.l10n.message,
+                        onPressed: _openChat,
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton.icon(
+                        onPressed: _startInAppCall,
+                        icon: Icon(Icons.phone_in_talk_rounded),
+                        label: Text(context.l10n.call),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _tealColor,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          textStyle: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                    _SosButton(
+                      isCircle: true,
+                      isActivated: _isSOSActivated,
+                      isLoading: _isSendingSOS,
+                      onTap: _canTriggerSOS ? _confirmAndTriggerSOS : null,
+                    ),
+                  ],
+                ),
+                SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    InkWell(
+                      onTap: _showShareModal,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
                         ),
                         child: Row(
-                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
-                              Icons.star_rounded,
-                              color: Colors.amber,
-                              size: 14,
+                              Icons.share_outlined,
+                              color: Colors.black54,
+                              size: 20,
                             ),
+                            SizedBox(width: 8),
                             Text(
-                              offer == null ? ' --' : ' ${offer.rating}',
+                              context.l10n.share,
                               style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
+                                color: Colors.black87,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
                               ),
                             ),
                           ],
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () =>
+                          handleBookingBack(context, booking: widget.booking),
+                      child: Text(
+                        context.l10n.cancelBooking,
+                        style: TextStyle(
+                          color: Color(0xFFE53935),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
                         ),
                       ),
                     ),
                   ],
                 ),
-                SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              offer?.driverName ??
-                                  context.l10n.safeRideDriverName,
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w900,
-                                color: Color(0xFF1A1A1A),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+              ] else ...[
+                if (_currentTripStatus == 'WAITING_PAYMENT') ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Color(0xFFE8F2F2),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: Color(0xFF006B70).withValues(alpha: 0.28),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.payments_rounded,
+                          color: _tealColor,
+                          size: 22,
+                        ),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            widget.booking.payment?.message ??
+                                context.l10n.payDriverToComplete,
+                            style: TextStyle(
+                              color: Color(0xFF00545A),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              height: 1.35,
                             ),
                           ),
-                          if (offer != null) ...[
-                            SizedBox(width: 4),
-                            InkWell(
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => DriverReviewsPage(
-                                      driverId: offer.driverId,
-                                      driverName: offer.driverName,
-                                    ),
-                                  ),
-                                );
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary.withValues(
-                                    alpha: 0.1,
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.star_outline_rounded,
-                                      size: 16,
-                                      color: AppColors.primary,
-                                    ),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      context.l10n.viewReviews,
-                                      style: TextStyle(
-                                        color: AppColors.primary,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        vehicle == null
-                            ? context.l10n.updatingVehicle
-                            : '${vehicle.name} - ${vehicle.color}',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Color(0xFFF2F4F7),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        plateParts.isNotEmpty ? plateParts.first.trim() : '--',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF667085),
-                        ),
-                      ),
-                      Text(
-                        plateParts.length > 1 ? plateParts.last.trim() : '--',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFF1D2939),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 24),
-            if (isArriving) ...[
-              SizedBox(
-                width: double.infinity,
-                child: _isPrepaid
-                    ? Container(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        decoration: BoxDecoration(
-                          color: Color(0xFFE5F5F0),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.check_circle_rounded,
-                              color: Color(0xFF0A8F62),
-                            ),
-                            SizedBox(width: 8),
-                            Text(
-                              context.l10n.prepaid,
-                              style: TextStyle(
-                                color: Color(0xFF08734F),
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ElevatedButton.icon(
-                        onPressed: _openPrepayment,
-                        icon: Icon(Icons.qr_code_2_rounded),
-                        label: Text(context.l10n.prepayWithPayos),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _tealColor,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 15),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          textStyle: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
-              ),
-              SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: _ActionButton(
-                      icon: Icons.chat_bubble_rounded,
-                      label: context.l10n.message,
-                      onPressed: _openChat,
+                      ],
                     ),
                   ),
-                  SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
+                  SizedBox(height: 16),
+                ],
+                Row(
+                  children: [
+                    Expanded(
+                      child: _CircleActionButton(
+                        icon: Icons.chat_bubble_rounded,
+                        onPressed: _openChat,
+                        label: context.l10n.message,
+                      ),
+                    ),
+                    SizedBox(width: 16),
+                    Expanded(
+                      child: _CircleActionButton(
+                        icon: Icons.share_rounded,
+                        onPressed: _showShareModal,
+                        label: context.l10n.share,
+                      ),
+                    ),
+                    SizedBox(width: 16),
+                    Expanded(
+                      child: _CircleActionButton(
+                        icon: Icons.phone_in_talk_rounded,
+                        onPressed: _startInAppCall,
+                        label: context.l10n.call,
+                      ),
+                    ),
+                  ],
+                ),
+                if (_currentTripStatus == 'IN_PROGRESS') ...[
+                  SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: _startInAppCall,
-                      icon: Icon(Icons.phone_in_talk_rounded),
-                      label: Text(context.l10n.call),
+                      onPressed: _isCompletingTrip ? null : _completeTrip,
+                      icon: _isCompletingTrip
+                          ? SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Icon(Icons.check_circle_rounded),
+                      label: Text(
+                        _isCompletingTrip
+                            ? context.l10n.endingTrip
+                            : context.l10n.endTrip,
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _tealColor,
                         foregroundColor: Colors.white,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
-                        textStyle: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: 12),
-                  _SosButton(
-                    isCircle: true,
-                    isActivated: _isSOSActivated,
-                    isLoading: _isSendingSOS,
-                    onTap: _canTriggerSOS ? _confirmAndTriggerSOS : null,
-                  ),
-                ],
-              ),
-              SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  InkWell(
-                    onTap: _showShareModal,
-                    borderRadius: BorderRadius.circular(8),
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.share_outlined,
-                            color: Colors.black54,
-                            size: 20,
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            context.l10n.share,
-                            style: TextStyle(
-                              color: Colors.black87,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () =>
-                        handleBookingBack(context, booking: widget.booking),
-                    child: Text(
-                      context.l10n.cancelBooking,
-                      style: TextStyle(
-                        color: Color(0xFFE53935),
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
                       ),
                     ),
                   ),
                 ],
-              ),
-            ] else ...[
-              if (_currentTripStatus == 'WAITING_PAYMENT') ...[
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Color(0xFFE8F2F2),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: Color(0xFF006B70).withValues(alpha: 0.28),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.payments_rounded,
-                        color: _tealColor,
-                        size: 22,
-                      ),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          widget.booking.payment?.message ??
-                              context.l10n.payDriverToComplete,
-                          style: TextStyle(
-                            color: Color(0xFF00545A),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            height: 1.35,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox(height: 16),
-              ],
-              Row(
-                children: [
-                  Expanded(
-                    child: _CircleActionButton(
-                      icon: Icons.chat_bubble_rounded,
-                      onPressed: _openChat,
-                      label: context.l10n.message,
-                    ),
-                  ),
-                  SizedBox(width: 16),
-                  Expanded(
-                    child: _CircleActionButton(
-                      icon: Icons.share_rounded,
-                      onPressed: _showShareModal,
-                      label: context.l10n.share,
-                    ),
-                  ),
-                  SizedBox(width: 16),
-                  Expanded(
-                    child: _CircleActionButton(
-                      icon: Icons.phone_in_talk_rounded,
-                      onPressed: _startInAppCall,
-                      label: context.l10n.call,
-                    ),
-                  ),
-                ],
-              ),
-              if (_currentTripStatus == 'IN_PROGRESS') ...[
-                SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _isCompletingTrip ? null : _completeTrip,
-                    icon: _isCompletingTrip
-                        ? SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Icon(Icons.check_circle_rounded),
-                    label: Text(
-                      _isCompletingTrip
-                          ? context.l10n.endingTrip
-                          : context.l10n.endTrip,
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _tealColor,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                  ),
-                ),
               ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -1951,11 +1956,8 @@ class _SosButton extends StatelessWidget {
           borderRadius: useCircle ? null : BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color:
-                  (isActivated
-                          ? Color(0xFF667085)
-                          : Color(0xFFE53935))
-                      .withValues(alpha: 0.3),
+              color: (isActivated ? Color(0xFF667085) : Color(0xFFE53935))
+                  .withValues(alpha: 0.3),
               blurRadius: 8,
               offset: Offset(0, 4),
             ),
