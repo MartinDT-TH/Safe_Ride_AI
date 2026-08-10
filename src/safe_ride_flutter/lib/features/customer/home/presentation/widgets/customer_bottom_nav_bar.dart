@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../../core/localization/localization_extensions.dart';
+import 'package:provider/provider.dart';
+import '../../../../shared/chat/presentation/providers/chat_unread_provider.dart';
 
 class CustomerBottomNavBar extends StatelessWidget {
   final int currentIndex;
@@ -13,6 +15,7 @@ class CustomerBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasUnreadChat = context.watch<ChatUnreadProvider>().totalUnread > 0;
     return SafeArea(
       top: false,
       child: Container(
@@ -46,6 +49,7 @@ class CustomerBottomNavBar extends StatelessWidget {
               Icons.history,
               context.l10n.activity,
               1,
+              showBadge: hasUnreadChat,
             ),
             _buildNavItem(
               Icons.person_outline_rounded,
@@ -63,8 +67,9 @@ class CustomerBottomNavBar extends StatelessWidget {
     IconData icon,
     IconData activeIcon,
     String label,
-    int index,
-  ) {
+    int index, {
+    bool showBadge = false,
+  }) {
     bool isSelected = currentIndex == index;
     return BottomNavigationBarItem(
       icon: Container(
@@ -73,9 +78,28 @@ class CustomerBottomNavBar extends StatelessWidget {
           color: isSelected ? Color(0xFF006B70) : Colors.transparent,
           borderRadius: BorderRadius.circular(14),
         ),
-        child: Icon(
-          isSelected ? activeIcon : icon,
-          color: isSelected ? Colors.white : Colors.grey,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Icon(
+              isSelected ? activeIcon : icon,
+              color: isSelected ? Colors.white : Colors.grey,
+            ),
+            if (showBadge)
+              Positioned(
+                top: -4,
+                right: -5,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: Color(0xFFE11D48),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 1),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
       label: label,
