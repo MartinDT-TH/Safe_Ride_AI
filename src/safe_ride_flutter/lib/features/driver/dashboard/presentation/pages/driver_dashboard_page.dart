@@ -11,6 +11,7 @@ import '../../../../../core/maps/widgets/live_trip_map_widget.dart';
 import '../../../../../core/services/location_service.dart';
 import '../../../../../core/services/map_api_service.dart';
 import '../../../../../core/services/socket_service.dart';
+import '../../../../../core/utils/currency_formatter.dart';
 import '../../../../../core/widgets/current_location_button.dart';
 import '../../../../../dependency_injection/injection.dart';
 
@@ -1673,7 +1674,7 @@ class _IncomeHeader extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '${summary.todayIncome.toInt().toString().replaceAllMapped(RegExp(r"(\d{3})(?=\d)"), (m) => "${m[1]},")}đ',
+                    formatVnd(summary.todayIncome),
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -1959,7 +1960,7 @@ class _NewRequestCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      '${request.expectedIncome.toInt().toString().replaceAllMapped(RegExp(r"(\d{3})(?=\d)"), (m) => "${m[1]},")}đ',
+                      formatVnd(request.expectedIncome),
                       style: const TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,

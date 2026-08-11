@@ -67,7 +67,7 @@ public sealed class CancelBookingCommandHandler
         {
             throw new BookingException(
                 "booking.cannot_cancel",
-                "Chỉ có thể hủy chuyến khi tài xế đang đến điểm đón.",
+                "Chuyến đi đã bắt đầu hoặc kết thúc nên không thể hủy.",
                 409);
         }
 
@@ -147,7 +147,8 @@ public sealed class CancelBookingCommandHandler
 
     private static bool CanCancel(Domain.Entities.Booking booking)
     {
-        if (booking.BookingStatus == BookingStatus.Searching)
+        if (booking.BookingStatus is BookingStatus.PendingSchedule
+            or BookingStatus.Searching)
         {
             return true;
         }

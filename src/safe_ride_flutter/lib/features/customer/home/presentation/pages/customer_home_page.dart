@@ -84,8 +84,12 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
   Future<void> _loadActiveBooking(String? token) async {
     if (token == null || token.isEmpty) return;
-    final booking = await context.read<BookingProvider>().loadActiveBooking(token);
-    if (booking != null && mounted) {
+    final booking = await context.read<BookingProvider>().loadActiveBooking(
+      token,
+    );
+    final shouldOpenActivity =
+        booking?.bookingType == AppValues.bookingNow || booking?.tripId != null;
+    if (shouldOpenActivity && mounted) {
       context.read<HomeProvider>().setSelectedIndex(1);
     }
   }
@@ -101,12 +105,19 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
     final activeBooking = bookingProvider.activeBooking;
     final activePickup = bookingProvider.activePickup ?? activeBooking?.pickup;
-    final activeDestination = bookingProvider.activeDestination ?? activeBooking?.destination;
-    final activeVehicle = bookingProvider.activeVehicle ?? activeBooking?.vehicle;
+    final activeDestination =
+        bookingProvider.activeDestination ?? activeBooking?.destination;
+    final activeVehicle =
+        bookingProvider.activeVehicle ?? activeBooking?.vehicle;
+    final hasTrackableActiveBooking =
+        activeBooking != null &&
+        activePickup != null &&
+        (activeBooking.bookingType == AppValues.bookingNow ||
+            activeBooking.tripId != null);
 
     final List<Widget> pages = [
       _buildHomeContent(auth, bookingProvider),
-      (activeBooking != null && activePickup != null)
+      hasTrackableActiveBooking
           ? TripTrackingPage(
               state: _trackingState(activeBooking),
               booking: activeBooking,
@@ -132,13 +143,20 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
           final shouldExit = await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               title: const Text('Thoát ứng dụng?'),
-              content: const Text('Bạn có chắc chắn muốn thoát khỏi SafeRide không?'),
+              content: const Text(
+                'Bạn có chắc chắn muốn thoát khỏi SafeRide không?',
+              ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
+                  child: const Text(
+                    'Hủy',
+                    style: TextStyle(color: Colors.grey),
+                  ),
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(context, true),
@@ -225,19 +243,19 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                 ],
               )
             : (selectedIndex == 1 && activeBooking == null
-                ? AppBar(
-                    backgroundColor: Colors.white,
-                    elevation: 0,
-                    title: const Text(
-                      'Hoạt động',
-                      style: TextStyle(
-                        color: Color(0xFF1A1A1A),
-                        fontWeight: FontWeight.bold,
+                  ? AppBar(
+                      backgroundColor: Colors.white,
+                      elevation: 0,
+                      title: const Text(
+                        'Hoạt động',
+                        style: TextStyle(
+                          color: Color(0xFF1A1A1A),
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    centerTitle: true,
-                  )
-                : null),
+                      centerTitle: true,
+                    )
+                  : null),
         body: IndexedStack(index: selectedIndex, children: pages),
         floatingActionButton: selectedIndex == 0
             ? FloatingActionButton(
@@ -259,13 +277,15 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
   }
 
   Widget _buildHomeContent(AuthProvider auth, BookingProvider bookingProvider) {
-    final hasActiveBooking = bookingProvider.activeBooking != null;
+    final hasActiveBooking = bookingProvider.hasActiveNowBooking;
     final homeProvider = context.read<HomeProvider>();
 
     return Consumer<HomeProvider>(
       builder: (_, provider, child) {
         if (provider.isLoading && provider.recentTrips.isEmpty) {
-          return const Center(child: CircularProgressIndicator(color: Color(0xFF006B70)));
+          return const Center(
+            child: CircularProgressIndicator(color: Color(0xFF006B70)),
+          );
         }
 
         if (provider.errorMessage != null && provider.recentTrips.isEmpty) {
@@ -277,7 +297,9 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                 return SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight,
+                    ),
                     child: Center(
                       child: Padding(
                         padding: const EdgeInsets.all(24.0),
@@ -302,7 +324,10 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                             Text(
                               provider.errorMessage!,
                               textAlign: TextAlign.center,
-                              style: const TextStyle(fontSize: 15, color: Colors.black54),
+                              style: const TextStyle(
+                                fontSize: 15,
+                                color: Colors.black54,
+                              ),
                             ),
                             const SizedBox(height: 32),
                             ElevatedButton.icon(
@@ -310,13 +335,18 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                               icon: const Icon(Icons.refresh_rounded),
                               label: const Text(
                                 'Thử lại',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF006B70),
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 32, vertical: 14),
+                                  horizontal: 32,
+                                  vertical: 14,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(16),
                                 ),
@@ -555,7 +585,9 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
               color: Colors.grey[200],
               borderRadius: BorderRadius.circular(20),
             ),
-            child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            child: const Center(
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
           ),
         ],
       );

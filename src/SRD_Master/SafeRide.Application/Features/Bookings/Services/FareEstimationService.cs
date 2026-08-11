@@ -13,12 +13,12 @@ public sealed class FareEstimationService : IFareEstimationService
     {
         decimal rawFare;
 
-        if (pricingRule.PricePerKm.HasValue && !pricingRule.PricePerHour.HasValue)
+        if (pricingRule.PricePerKm is > 0m && !pricingRule.PricePerHour.HasValue)
         {
             rawFare = pricingRule.BaseFare
                 + distanceKm * pricingRule.PricePerKm.Value;
         }
-        else if (pricingRule.PricePerHour.HasValue && !pricingRule.PricePerKm.HasValue)
+        else if (pricingRule.PricePerHour is > 0m && !pricingRule.PricePerKm.HasValue)
         {
             var estimatedHours = (decimal)durationMinutes / 60m;
             rawFare = pricingRule.BaseFare
@@ -36,9 +36,19 @@ public sealed class FareEstimationService : IFareEstimationService
         var finalFare = rawFare * multiplier;
         var minFareWithSurge = pricingRule.MinFare * multiplier;
 
-        return decimal.Round(
+        var roundedFare = decimal.Round(
             Math.Max(minFareWithSurge, finalFare),
             2,
             MidpointRounding.AwayFromZero);
+
+        if (roundedFare <= 0)
+        {
+            throw new BookingException(
+                "booking.invalid_pricing_rule",
+                "Cấu hình giá của dịch vụ không thể tạo ra giá chuyến hợp lệ.",
+                500);
+        }
+
+        return roundedFare;
     }
 }

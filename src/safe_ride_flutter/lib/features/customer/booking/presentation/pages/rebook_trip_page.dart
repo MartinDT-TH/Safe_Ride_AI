@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/maps/models/map_models.dart';
 import '../../../../../core/maps/widgets/map_renderer_widget.dart';
+import '../../../../../core/utils/currency_formatter.dart';
 import '../../../../../core/widgets/app_loading_screen.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/models/booking_catalog.dart';
@@ -543,7 +544,7 @@ class _RebookTripPageState extends State<RebookTripPage> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '${finalFare.toStringAsFixed(0)} đ',
+                          formatVnd(finalFare),
                           style: const TextStyle(
                             color: AppColors.primary,
                             fontSize: 20,
@@ -557,7 +558,7 @@ class _RebookTripPageState extends State<RebookTripPage> {
                       children: [
                         if (discount > 0)
                           Text(
-                            '↓ Đã giảm ${discount.toStringAsFixed(0)} đ',
+                            '↓ Đã giảm ${formatVnd(discount)}',
                             style: const TextStyle(
                               color: Colors.red,
                               fontSize: 13,

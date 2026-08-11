@@ -84,9 +84,9 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Future<void> _handleReport(HistoryTrip trip) async {
-    final result = await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => ReportTripPage(trip: trip)),
-    );
+    final result = await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => ReportTripPage(trip: trip)));
 
     if (result == true) {
       _loadHistory();
@@ -120,12 +120,24 @@ class _HistoryPageState extends State<HistoryPage> {
     return normalized != 'CANCELLED';
   }
 
-  Future<void> _openTripDetails(HistoryTrip trip, {required bool canRebook}) {
-    return Navigator.of(context).push(
+  Future<void> _openTripDetails(
+    HistoryTrip trip, {
+    required bool canRebook,
+    required bool canCancelScheduled,
+  }) async {
+    final cancelled = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => TripDetailsPage(trip: trip, canRebook: canRebook),
+        builder: (_) => TripDetailsPage(
+          trip: trip,
+          canRebook: canRebook,
+          canCancelScheduled: canCancelScheduled,
+        ),
       ),
     );
+
+    if (cancelled == true && mounted) {
+      await _loadHistory();
+    }
   }
 
   void _showMessage(String message) {
@@ -219,8 +231,11 @@ class _HistoryPageState extends State<HistoryPage> {
                                 trip.status != HistoryTripStatus.booked;
 
                             return InteractiveButton(
-                              onTap: () =>
-                                  _openTripDetails(trip, canRebook: canRebook),
+                              onTap: () => _openTripDetails(
+                                trip,
+                                canRebook: canRebook,
+                                canCancelScheduled: !isDriver,
+                              ),
                               borderRadius: BorderRadius.circular(24),
                               child: TripHistoryCard(
                                 onChat: trip.tripId != null
@@ -229,12 +244,12 @@ class _HistoryPageState extends State<HistoryPage> {
                                 trip: trip,
                                 onReport:
                                     (isDriver ||
-                                            trip.status ==
-                                                HistoryTripStatus.booked)
-                                        ? null
-                                        : () => _handleReport(trip),
-                                onRebook:
-                                    canRebook ? () => _handleRebook(trip) : null,
+                                        trip.status == HistoryTripStatus.booked)
+                                    ? null
+                                    : () => _handleReport(trip),
+                                onRebook: canRebook
+                                    ? () => _handleRebook(trip)
+                                    : null,
                               ),
                             );
                           },

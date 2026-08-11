@@ -81,7 +81,10 @@ class BookingRemoteDatasource {
         Map<String, dynamic>.from(response.data as Map),
       );
     } on FormatException {
-      throw const BookingApiException(BookingStrings.sessionExpired);
+      throw const BookingApiException(
+        'Không thể xác định giá dự kiến. Vui lòng thử lại.',
+        code: 'booking.invalid_fare_response',
+      );
     } on DioException catch (exception) {
       final data = exception.response?.data;
       if (data is Map) {

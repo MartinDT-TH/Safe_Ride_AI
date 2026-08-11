@@ -519,6 +519,8 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
 
   bool _shouldShowDriverCard(BookingResponse? booking) {
     return booking?.driverOffer != null &&
+        booking?.bookingType == AppValues.bookingNow &&
+        booking?.bookingStatus == 'Searching' &&
         booking?.driverOffer?.offerStatus == 'DriverAccepted';
   }
 }

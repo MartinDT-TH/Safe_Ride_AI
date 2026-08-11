@@ -43,6 +43,11 @@ class DriverProfilePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final canConfirmDriver =
+        booking?.bookingType == 'Now' &&
+        booking?.bookingStatus == 'Searching' &&
+        booking?.driverOffer?.offerStatus == 'DriverAccepted';
+
     return PopScope(
       canPop: true,
       child: Scaffold(
@@ -149,145 +154,160 @@ class DriverProfilePage extends StatelessWidget {
         ),
 
         // --- BOTTOM NAVIGATION BAR ---
-        bottomNavigationBar: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.06),
-                blurRadius: 16,
-                offset: const Offset(0, -4),
-              ),
-            ],
-          ),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => DriverReviewsPage(
-                                  driverId: driverId,
-                                  driverName: name,
-                                ),
-                              ),
-                            );
-                          },
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            side: const BorderSide(
-                              color: AppColors.primary,
-                              width: 1.5,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text(
-                            'Xem đánh giá',
-                            style: TextStyle(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: booking == null || pickup == null
-                              ? null
-                              : () {
+        bottomNavigationBar: !canConfirmDriver
+            ? null
+            : Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(24),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.06),
+                      blurRadius: 16,
+                      offset: const Offset(0, -4),
+                    ),
+                  ],
+                ),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () {
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
-                                      builder: (_) => ConfirmBookingPage(
-                                        booking: booking!,
-                                        pickup: pickup!,
-                                        destination: destination,
-                                        fareEstimate: fareEstimate,
-                                        vehicle: vehicle,
+                                      builder: (_) => DriverReviewsPage(
+                                        driverId: driverId,
                                         driverName: name,
-                                        driverRating: rating,
-                                        driverTripCount: tripCount,
-                                        driverExperienceYears: experienceYears,
                                       ),
                                     ),
                                   );
                                 },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                  ),
+                                  side: const BorderSide(
+                                    color: AppColors.primary,
+                                    width: 1.5,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'Xem đánh giá',
+                                  style: TextStyle(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: booking == null || pickup == null
+                                    ? null
+                                    : () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) => ConfirmBookingPage(
+                                              booking: booking!,
+                                              pickup: pickup!,
+                                              destination: destination,
+                                              fareEstimate: fareEstimate,
+                                              vehicle: vehicle,
+                                              driverName: name,
+                                              driverRating: rating,
+                                              driverTripCount: tripCount,
+                                              driverExperienceYears:
+                                                  experienceYears,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                  ),
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                // Bỏ Icon và Row, đưa Text ra làm con trực tiếp để tự động căn giữa
+                                child: const Text(
+                                  'Xác nhận thuê',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 16,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: TextButton.icon(
+                            onPressed: booking == null
+                                ? null
+                                : () => _rejectDriver(context),
+                            icon: Icon(
+                              Icons.close_rounded,
+                              size: 18,
+                              color: Colors.red.shade600,
+                            ),
+                            label: Text(
+                              'Từ chối và tìm tài xế khác',
+                              style: TextStyle(
+                                color: Colors.red.shade600,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
+                              ),
+                            ),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
                           ),
-                          // Bỏ Icon và Row, đưa Text ra làm con trực tiếp để tự động căn giữa
-                          child: const Text(
-                            'Xác nhận thuê',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 16,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: TextButton.icon(
-                      onPressed: booking == null ? null : () => _rejectDriver(context),
-                      icon: Icon(
-                        Icons.close_rounded,
-                        size: 18,
-                        color: Colors.red.shade600,
-                      ),
-                      label: Text(
-                        'Từ chối và tìm tài xế khác',
-                        style: TextStyle(
-                          color: Colors.red.shade600,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
-                        ),
-                      ),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
+                      ],
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
-        ),
       ),
     );
   }
 
   // --- POPUP TỪ CHỐI ---
   Future<void> _rejectDriver(BuildContext context) async {
+    if (booking?.bookingType != 'Now' ||
+        booking?.bookingStatus != 'Searching' ||
+        booking?.driverOffer?.offerStatus != 'DriverAccepted') {
+      return;
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: Colors.white,
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -384,9 +404,9 @@ class DriverProfilePage extends StatelessWidget {
     if (token == null) return;
 
     final result = await context.read<BookingProvider>().rejectDriver(
-          token,
-          bookingId: booking!.bookingId,
-        );
+      token,
+      bookingId: booking!.bookingId,
+    );
 
     if (!context.mounted) return;
 

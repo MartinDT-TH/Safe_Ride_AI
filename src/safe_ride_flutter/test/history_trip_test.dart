@@ -65,6 +65,8 @@ void main() {
     });
 
     expect(pending.status, HistoryTripStatus.booked);
+    expect(pending.time, DateTime.utc(2026, 6, 27, 2).toLocal());
+    expect(pending.time.isUtc, isFalse);
     expect(assigned.status, HistoryTripStatus.booked);
   });
 }

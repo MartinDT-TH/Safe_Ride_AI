@@ -252,8 +252,8 @@ public sealed class DriversController : ControllerBase
     }
 
     /// <summary>
-    /// Driver accepts the offer. This sets the offer status to DriverAccepted but does NOT create a Trip yet.
-    /// The Trip is created only when the customer confirms the accepted driver.
+    /// Driver accepts the offer. Now bookings wait for customer confirmation;
+    /// scheduled bookings are assigned immediately and return the created Trip.
     /// </summary>
     [Authorize(Roles = "Driver")]
     [HttpPost("offers/{offerId:long}/accept")]
@@ -266,7 +266,7 @@ public sealed class DriversController : ControllerBase
         long offerId,
         CancellationToken cancellationToken)
     {
-        // Flow: driver acceptance only moves the offer to DriverAccepted; customer confirmation creates the Trip.
+        // Flow: the response tells the client whether this offer is waiting or already assigned.
         if (!TryGetUserId(out var driverId))
         {
             return Unauthorized();

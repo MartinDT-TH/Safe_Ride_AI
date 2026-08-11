@@ -30,6 +30,10 @@ public interface IBookingRepository
         Guid customerId,
         CancellationToken cancellationToken);
 
+    Task<Booking?> GetActiveBookingAsync(
+        Guid customerId,
+        CancellationToken cancellationToken);
+
     Task<BookingDriverOfferDto?> GetLatestBookingDriverOfferAsync(
         long bookingId,
         CancellationToken cancellationToken);

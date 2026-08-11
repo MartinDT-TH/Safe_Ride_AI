@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../../core/constants/app_colors.dart';
+import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/maps/models/map_models.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
 import '../../../../../core/maps/widgets/map_renderer_widget.dart';
@@ -10,22 +11,35 @@ import '../../../../../core/widgets/app_loading_screen.dart';
 import '../../../../../dependency_injection/injection.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../customer/booking/domain/repositories/booking_repository.dart';
+import '../../../../customer/booking/data/models/booking_response.dart';
 import '../../../../customer/booking/presentation/pages/rebook_trip_page.dart';
 import '../../../../customer/booking/presentation/providers/booking_provider.dart';
+import '../../../../customer/booking/presentation/widgets/booking_cancel_flow.dart';
 import '../../data/models/history_trip.dart';
 import '../../data/models/trip_details_view_data.dart';
 import '../../data/repositories/trip_details_repository_impl.dart';
 import '../providers/trip_details_provider.dart';
+
+bool shouldShowHistoryScheduledBookingCancel({
+  required bool allowedForRole,
+  required BookingResponse? booking,
+}) {
+  return allowedForRole &&
+      booking?.bookingType == AppValues.bookingScheduled &&
+      isBookingCancellable(booking);
+}
 
 class TripDetailsPage extends StatelessWidget {
   const TripDetailsPage({
     super.key,
     required this.trip,
     required this.canRebook,
+    this.canCancelScheduled = false,
   });
 
   final HistoryTrip trip;
   final bool canRebook;
+  final bool canCancelScheduled;
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +53,7 @@ class TripDetailsPage extends StatelessWidget {
       child: _TripDetailsView(
         trip: trip,
         canRebook: canRebook,
+        canCancelScheduled: canCancelScheduled,
         accessToken: accessToken,
       ),
     );
@@ -49,11 +64,13 @@ class _TripDetailsView extends StatelessWidget {
   const _TripDetailsView({
     required this.trip,
     required this.canRebook,
+    required this.canCancelScheduled,
     required this.accessToken,
   });
 
   final HistoryTrip trip;
   final bool canRebook;
+  final bool canCancelScheduled;
   final String? accessToken;
 
   Future<void> _reload(BuildContext context) {
@@ -111,11 +128,29 @@ class _TripDetailsView extends StatelessWidget {
       );
   }
 
+  Future<void> _handleCancelScheduled(
+    BuildContext context,
+    BookingResponse booking,
+  ) async {
+    final cancelled = await requestBookingCancellation(
+      context,
+      booking: booking,
+    );
+    if (cancelled && context.mounted) {
+      Navigator.of(context).pop(true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<TripDetailsProvider>(
       builder: (context, provider, child) {
         final data = provider.tripDetails;
+        final booking = data.booking;
+        final showCancelScheduled = shouldShowHistoryScheduledBookingCancel(
+          allowedForRole: canCancelScheduled,
+          booking: booking,
+        );
 
         return Scaffold(
           backgroundColor: const Color(0xFFFCF9F8),
@@ -202,11 +237,72 @@ class _TripDetailsView extends StatelessWidget {
                 _TripPaymentCard(data: data),
                 const SizedBox(height: 16),
                 _TripFeedbackCard(data: data),
+                if (showCancelScheduled) ...[
+                  const SizedBox(height: 16),
+                  HistoryScheduledBookingCancelButton(
+                    onCancel: () => _handleCancelScheduled(context, booking!),
+                  ),
+                ],
               ],
             ),
           ),
         );
       },
+    );
+  }
+}
+
+class HistoryScheduledBookingCancelButton extends StatefulWidget {
+  const HistoryScheduledBookingCancelButton({
+    super.key,
+    required this.onCancel,
+  });
+
+  static const buttonKey = Key('history-scheduled-booking-cancel-button');
+
+  final Future<void> Function() onCancel;
+
+  @override
+  State<HistoryScheduledBookingCancelButton> createState() =>
+      _HistoryScheduledBookingCancelButtonState();
+}
+
+class _HistoryScheduledBookingCancelButtonState
+    extends State<HistoryScheduledBookingCancelButton> {
+  bool _isCancelling = false;
+
+  Future<void> _cancel() async {
+    if (_isCancelling) return;
+    setState(() => _isCancelling = true);
+    try {
+      await widget.onCancel();
+    } finally {
+      if (mounted) {
+        setState(() => _isCancelling = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      key: HistoryScheduledBookingCancelButton.buttonKey,
+      onPressed: _isCancelling ? null : _cancel,
+      icon: _isCancelling
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.close_rounded),
+      label: Text(_isCancelling ? 'Đang hủy...' : 'Hủy chuyến đặt trước'),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: const Color(0xFFC62828),
+        side: const BorderSide(color: Color(0xFFC62828)),
+        padding: const EdgeInsets.symmetric(vertical: 15),
+        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
     );
   }
 }

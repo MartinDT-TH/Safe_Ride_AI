@@ -42,8 +42,18 @@ class ConfirmBookingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fare = booking?.finalFare ?? booking?.estimatedFare ?? fareEstimate?.estimatedFare;
-    final originalFare = booking?.originalFare ?? booking?.estimatedFare ?? fareEstimate?.estimatedFare;
+    final canConfirmDriver =
+        booking?.bookingType == 'Now' &&
+        booking?.bookingStatus == 'Searching' &&
+        booking?.driverOffer?.offerStatus == 'DriverAccepted';
+    final fare =
+        booking?.finalFare ??
+        booking?.estimatedFare ??
+        fareEstimate?.estimatedFare;
+    final originalFare =
+        booking?.originalFare ??
+        booking?.estimatedFare ??
+        fareEstimate?.estimatedFare;
     final discount = booking?.discountAmount ?? 0;
     final promoCode = booking?.promotionCode;
 
@@ -124,10 +134,13 @@ class ConfirmBookingPage extends StatelessWidget {
               if (discount > 0 || promoCode != null) ...[
                 _InfoRow(
                   label: 'Giá gốc',
-                  value: originalFare == null ? 'Đang cập nhật' : _formatCurrency(originalFare),
+                  value: originalFare == null
+                      ? 'Đang cập nhật'
+                      : _formatCurrency(originalFare),
                 ),
                 _InfoRow(
-                  label: 'Khuyến mãi ${promoCode != null ? '($promoCode)' : ''}',
+                  label:
+                      'Khuyến mãi ${promoCode != null ? '($promoCode)' : ''}',
                   value: '-${_formatCurrency(discount)}',
                   valueColor: Colors.red,
                 ),
@@ -143,23 +156,28 @@ class ConfirmBookingPage extends StatelessWidget {
             ],
           ),
         ),
-        bottomNavigationBar: Container(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            border: Border(top: BorderSide(color: Color(0xFFF5F5F5))),
-          ),
-          child: CustomButton(
-            text: 'Xác nhận thuê tài xế',
-            onPressed: () => _confirmDriver(context),
-          ),
-        ),
+        bottomNavigationBar: !canConfirmDriver
+            ? null
+            : Container(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  border: Border(top: BorderSide(color: Color(0xFFF5F5F5))),
+                ),
+                child: CustomButton(
+                  text: 'Xác nhận thuê tài xế',
+                  onPressed: () => _confirmDriver(context),
+                ),
+              ),
       ),
     );
   }
 
   Future<void> _confirmDriver(BuildContext context) async {
-    if (booking == null) {
+    if (booking == null ||
+        booking!.bookingType != 'Now' ||
+        booking!.bookingStatus != 'Searching' ||
+        booking!.driverOffer?.offerStatus != 'DriverAccepted') {
       _showMessage(context, 'Chưa có mã chuyến để xác nhận tài xế.');
       return;
     }
@@ -177,10 +195,10 @@ class ConfirmBookingPage extends StatelessWidget {
     }
 
     final result = await context.read<BookingProvider>().confirmDriverOffer(
-          token,
-          bookingId: booking!.bookingId,
-          offerId: offerId,
-        );
+      token,
+      bookingId: booking!.bookingId,
+      offerId: offerId,
+    );
     if (!context.mounted) {
       return;
     }
@@ -196,11 +214,11 @@ class ConfirmBookingPage extends StatelessWidget {
 
     // Set active booking in provider
     context.read<BookingProvider>().setActiveBooking(
-          booking: result,
-          pickup: pickup,
-          destination: destination,
-          vehicle: vehicle,
-        );
+      booking: result,
+      pickup: pickup,
+      destination: destination,
+      vehicle: vehicle,
+    );
 
     await showDialog<void>(
       context: context,
