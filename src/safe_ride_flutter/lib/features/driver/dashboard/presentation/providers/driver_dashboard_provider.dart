@@ -15,6 +15,9 @@ import '../../../../../core/session/session_manager.dart';
 import '../../../trip_requests/data/datasources/driver_trip_request_remote_datasource.dart';
 import '../../../trip_requests/data/models/driver_trip_request_model.dart';
 import '../../../trip_requests/domain/repositories/driver_trip_request_repository.dart';
+import '../../../wallet/domain/repositories/driver_wallet_repository.dart';
+import '../../../../shared/history/data/models/history_trip.dart';
+import '../../../../shared/history/domain/repositories/history_repository.dart';
 
 enum DriverStatus { offline, online }
 
@@ -63,9 +66,13 @@ class DriverDashboardProvider extends ChangeNotifier {
     Dio? dio,
     SessionManager? sessionManager,
     DriverTripRequestRepository? tripRequestRepository,
+    DriverWalletRepository? driverWalletRepository,
+    HistoryRepository? historyRepository,
   }) : _socketService = socketService ?? SocketService(),
        _dio = dio ?? DioClient().dio,
-       _tripRequestRepository = tripRequestRepository {
+       _tripRequestRepository = tripRequestRepository,
+       _driverWalletRepository = driverWalletRepository,
+       _historyRepository = historyRepository {
     _sessionExpiredSubscription = sessionManager?.sessionExpiredStream.listen((
       _,
     ) {
@@ -76,6 +83,8 @@ class DriverDashboardProvider extends ChangeNotifier {
   final SocketService _socketService;
   final Dio _dio;
   final DriverTripRequestRepository? _tripRequestRepository;
+  final DriverWalletRepository? _driverWalletRepository;
+  final HistoryRepository? _historyRepository;
   String? _accessToken;
   StreamSubscription<void>? _sessionExpiredSubscription;
   static const int _maxPendingLocationUpdates = 20;
@@ -85,13 +94,20 @@ class DriverDashboardProvider extends ChangeNotifier {
   DriverStatus _status = DriverStatus.offline;
   DriverStatus get status => _status;
 
-  // debug: Mock value until driver income summary API is available.
-  final double _todayIncome = 500000;
-  double get todayIncome => _todayIncome;
+  num? _todayIncome;
+  num? get todayIncome => _todayIncome;
 
-  // debug: Mock value until driver trip summary API is available.
-  final int _todayTrips = 3;
+  int _todayTrips = 0;
   int get todayTrips => _todayTrips;
+
+  bool _isLoadingIncome = false;
+  bool get isLoadingIncome => _isLoadingIncome;
+
+  bool _hasLoadedIncome = false;
+  bool get hasLoadedIncome => _hasLoadedIncome;
+
+  String? _incomeErrorMessage;
+  String? get incomeErrorMessage => _incomeErrorMessage;
 
   bool _hasNewRequest = false;
   bool get hasNewRequest => _hasNewRequest;
@@ -176,6 +192,7 @@ class DriverDashboardProvider extends ChangeNotifier {
     }
 
     _accessToken = accessToken;
+    unawaited(loadTodayIncome());
     await _socketService.connect();
     _registerRealtimeHandlers();
     try {
@@ -187,6 +204,48 @@ class DriverDashboardProvider extends ChangeNotifier {
       await loadOpenTripRequests();
     } catch (error) {
       debugPrint('DRIVER_DASHBOARD: load trip requests failed: $error');
+    }
+  }
+
+  Future<void> loadTodayIncome() async {
+    final token = _accessToken;
+    final walletRepository = _driverWalletRepository;
+    final historyRepository = _historyRepository;
+    if (token == null ||
+        token.isEmpty ||
+        walletRepository == null ||
+        historyRepository == null) {
+      return;
+    }
+    if (_isLoadingIncome) return;
+
+    _isLoadingIncome = true;
+    _incomeErrorMessage = null;
+    notifyListeners();
+    try {
+      final wallet = await walletRepository.getWallet(token, period: 'Day');
+      final history = await historyRepository.getBookingHistory(
+        token,
+        role: AppValues.roleDriver,
+      );
+      final now = DateTime.now();
+      _todayIncome = wallet.income.total;
+      _todayTrips = history.where((trip) {
+        if (trip.status != HistoryTripStatus.completed || trip.tripId == null) {
+          return false;
+        }
+        final completedAt = trip.time.toLocal();
+        return completedAt.year == now.year &&
+            completedAt.month == now.month &&
+            completedAt.day == now.day;
+      }).length;
+      _hasLoadedIncome = true;
+    } catch (error) {
+      debugPrint('DRIVER_DASHBOARD: Load today income failed: $error');
+      _incomeErrorMessage = 'Không thể tải thu nhập hôm nay.';
+    } finally {
+      _isLoadingIncome = false;
+      notifyListeners();
     }
   }
 
@@ -243,6 +302,9 @@ class DriverDashboardProvider extends ChangeNotifier {
           _clearActiveTrip();
           notifyListeners();
         }
+        if (update.tripStatus == 'COMPLETED') {
+          unawaited(loadTodayIncome());
+        }
         return;
       }
 
@@ -278,6 +340,7 @@ class DriverDashboardProvider extends ChangeNotifier {
       if (update.isSuccess || update.tripStatus == 'COMPLETED') {
         _clearActiveTrip();
         notifyListeners();
+        unawaited(loadTodayIncome());
         return;
       }
 
