@@ -56,6 +56,9 @@ public sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
             .HasMaxLength(20)
             .HasDefaultValue(BookingSource.Manual);
         builder.Property(booking => booking.ScheduledAt)
+            .HasConversion(
+                scheduledAt => NormalizeUtc(scheduledAt),
+                storedScheduledAt => MarkAsUtc(storedScheduledAt))
             .IsRequired(false);
         builder.Property(booking => booking.EstimatedFare)
             .HasColumnType("decimal(18,2)");
@@ -107,5 +110,27 @@ public sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
             .HasForeignKey(booking => booking.VehicleId)
             .OnDelete(DeleteBehavior.ClientSetNull)
             .HasConstraintName("FK_Booking_Vehicle");
+    }
+
+    private static DateTime? NormalizeUtc(DateTime? value)
+    {
+        if (!value.HasValue)
+        {
+            return null;
+        }
+
+        return value.Value.Kind switch
+        {
+            DateTimeKind.Utc => value.Value,
+            DateTimeKind.Local => value.Value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)
+        };
+    }
+
+    private static DateTime? MarkAsUtc(DateTime? value)
+    {
+        return value.HasValue
+            ? DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)
+            : null;
     }
 }

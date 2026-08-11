@@ -620,10 +620,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get cancelTripFailed => '乗車をキャンセルできません。もう一度お試しください。';
 
   @override
+  String get tripCannotBeCancelled => 'この乗車は現在の状態ではキャンセルできません。';
+
+  @override
   String get tripWaitExpired => '待機時間が終了したため、乗車は終了しました。';
 
   @override
   String get tripCancelledSuccessfully => '乗車をキャンセルしました。';
+
+  @override
+  String get scheduledTripCancelledSuccessfully => '予約乗車をキャンセルしました。';
 
   @override
   String get rebook => '再予約';

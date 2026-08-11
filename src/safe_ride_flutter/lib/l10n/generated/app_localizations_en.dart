@@ -639,11 +639,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cancelTripFailed => 'Unable to cancel the trip. Please try again.';
 
   @override
+  String get tripCannotBeCancelled =>
+      'This trip cannot be cancelled in its current status.';
+
+  @override
   String get tripWaitExpired =>
       'The waiting period expired and the trip was closed.';
 
   @override
   String get tripCancelledSuccessfully => 'Trip cancelled successfully.';
+
+  @override
+  String get scheduledTripCancelledSuccessfully =>
+      'Scheduled trip cancelled successfully.';
 
   @override
   String get rebook => 'Book again';

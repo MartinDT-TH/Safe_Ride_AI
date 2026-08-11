@@ -237,12 +237,13 @@ class DriverDashboardProvider extends ChangeNotifier {
       }
     }, key: 'driverDashboardOfferClosed');
     _socketService.onTripStatusChanged((update) {
-      if (update.tripStatus == 'COMPLETED' ||
-          update.tripStatus == 'CANCELLED') {
+      if (_isTerminalTripStatus(update.tripStatus)) {
         if (_activeTrip?.tripId == update.tripId) {
           _clearActiveTrip();
           notifyListeners();
         }
+        unawaited(_socketService.leaveTrip(update.tripId));
+        unawaited(loadOpenTripRequests());
         return;
       }
 
@@ -275,9 +276,11 @@ class DriverDashboardProvider extends ChangeNotifier {
         return;
       }
 
-      if (update.isSuccess || update.tripStatus == 'COMPLETED') {
+      if (update.isSuccess || _isTerminalTripStatus(update.tripStatus)) {
         _clearActiveTrip();
         notifyListeners();
+        unawaited(_socketService.leaveTrip(update.tripId));
+        unawaited(loadOpenTripRequests());
         return;
       }
 
@@ -414,20 +417,74 @@ class DriverDashboardProvider extends ChangeNotifier {
       key: 'driverDashboardBooking',
     );
     try {
-      await _dio.post(
+      // Join before accepting when possible; the HTTP response remains the recovery
+      // source if the assignment event races with group membership.
+      try {
+        await _socketService.joinBooking(request.bookingId);
+      } catch (error) {
+        debugPrint('Failed to join booking before accepting: $error');
+      }
+      final response = await _dio.post(
         ApiEndpoints.acceptDriverOffer(request.offerId),
         options: Options(
           headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
         ),
       );
-      // Join booking group to receive updates (like cancellation)
-      await _socketService.joinBooking(request.bookingId);
 
-      // Wait for SignalR 'BookingDriverAssigned' event.
       _errorMessage = null;
-      loadOpenTripRequests();
-      _isWaitingForCustomerConfirmation = true;
-      loadOpenTripRequests();
+      final data = response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : const <String, dynamic>{};
+      final bookingStatus =
+          (data[ApiKeys.bookingStatus] ?? data['BookingStatus'])?.toString();
+      final tripId = (data[ApiKeys.tripId] ?? data['TripId']) as num?;
+      final tripStatus = _normalizeTripStatus(
+        data[ApiKeys.tripStatus] ?? data['TripStatus'],
+      );
+      final driverOfferRaw = data[ApiKeys.driverOffer] ?? data['DriverOffer'];
+      final driverOffer = driverOfferRaw is Map
+          ? Map<String, dynamic>.from(driverOfferRaw)
+          : const <String, dynamic>{};
+      final offerStatus =
+          (driverOffer[ApiKeys.offerStatus] ?? driverOffer['OfferStatus'])
+              ?.toString();
+
+      if (bookingStatus == 'DriverAssigned' && tripId != null) {
+        final tripIdValue = tripId.toInt();
+        _hasNewRequest = false;
+        _currentRequest = null;
+        _isWaitingForCustomerConfirmation = false;
+        _openTripRequests.clear();
+        _activeTrip = ActiveDriverTrip(
+          bookingId: request.bookingId,
+          tripId: tripIdValue,
+          tripStatus: tripStatus ?? 'ACCEPTED',
+        );
+        try {
+          await _socketService.leaveBooking(request.bookingId);
+          await _socketService.joinTrip(tripIdValue);
+        } catch (error) {
+          debugPrint(
+            'Failed to update realtime groups after assignment: $error',
+          );
+        }
+        await _fetchActiveTripDetailsSync(request.bookingId, tripIdValue);
+      } else if (bookingStatus == 'Searching' &&
+          offerStatus == 'DriverAccepted' &&
+          tripId == null) {
+        _isWaitingForCustomerConfirmation = true;
+        try {
+          await _socketService.joinBooking(request.bookingId);
+        } catch (error) {
+          debugPrint('Failed to join booking while waiting: $error');
+        }
+      } else {
+        // Recover from an unexpected/stale response using the durable active-trip API.
+        _isWaitingForCustomerConfirmation = false;
+        await loadActiveTrip();
+      }
+
+      unawaited(loadOpenTripRequests());
     } catch (e) {
       debugPrint('Failed to accept request: $e');
       _errorMessage = LocaleProvider.currentLocalizations.acceptTripFailed;
@@ -657,6 +714,9 @@ class DriverDashboardProvider extends ChangeNotifier {
     _isUpdatingTrip = true;
     notifyListeners();
     try {
+      // Make the latest queued GPS points visible to fare finalization before
+      // the backend closes the trip tracking snapshot.
+      await _flushPendingLocationUpdates();
       await _dio.post(
         ApiEndpoints.endTrip(trip.tripId),
         options: Options(
@@ -762,6 +822,12 @@ class DriverDashboardProvider extends ChangeNotifier {
           data[ApiKeys.tripStatus] ?? data['TripStatus'],
         );
         if (bookingId != null && tripId != null && tripStatus != null) {
+          if (_isTerminalTripStatus(tripStatus)) {
+            _clearActiveTrip();
+            unawaited(_socketService.leaveTrip(tripId.toInt()));
+            return;
+          }
+
           final oldTrip = _activeTrip;
           final tripIdValue = tripId.toInt();
           final sameTrip = oldTrip?.tripId == tripIdValue;
@@ -824,8 +890,10 @@ class DriverDashboardProvider extends ChangeNotifier {
         ),
       );
 
-      if (tripStatus == 'COMPLETED' || tripStatus == 'CANCELLED') {
+      if (_isTerminalTripStatus(tripStatus)) {
         _clearActiveTrip();
+        unawaited(_socketService.leaveTrip(trip.tripId));
+        unawaited(loadOpenTripRequests());
       } else {
         _activeTrip = trip.copyWith(tripStatus: tripStatus);
       }
@@ -837,11 +905,16 @@ class DriverDashboardProvider extends ChangeNotifier {
   }
 
   void _handleBookingUpdate(dynamic update) {
-    if (update.status == 'Cancelled' || update.status == 'Expired') {
+    final isTerminal =
+        _isTerminalBookingStatus(update.status?.toString()) ||
+        _isTerminalTripStatus(update.tripStatus?.toString());
+    if (isTerminal) {
       var changed = false;
       if (_activeTrip?.bookingId == update.bookingId) {
+        final tripId = _activeTrip!.tripId;
         _socketService.leaveBooking(update.bookingId);
         _clearActiveTrip();
+        unawaited(_socketService.leaveTrip(tripId));
         changed = true;
       }
       if (_currentRequest?.bookingId == update.bookingId) {
@@ -859,7 +932,8 @@ class DriverDashboardProvider extends ChangeNotifier {
       if (changed) {
         notifyListeners();
       }
-      loadOpenTripRequests();
+      unawaited(loadOpenTripRequests());
+      return;
     } else if (update.status == 'DriverAssigned' || update.tripId != null) {
       if (update.tripId != null) {
         _socketService.leaveBooking(update.bookingId);
@@ -1016,7 +1090,11 @@ class DriverDashboardProvider extends ChangeNotifier {
   }
 
   void _clearActiveTrip() {
+    final tripId = _activeTrip?.tripId;
     _activeTrip = null;
+    if (_tripAwaitingPaymentId == tripId) {
+      _tripAwaitingPaymentId = null;
+    }
     _activeTripDetailsLoaded.clear();
     _activeTripDetailsFetches.clear();
   }
@@ -1133,6 +1211,21 @@ class DriverDashboardProvider extends ChangeNotifier {
       '8' => 'CANCELLED',
       _ => text,
     };
+  }
+
+  static bool _isTerminalTripStatus(String? value) {
+    final normalized = value?.trim().toUpperCase();
+    return normalized == 'COMPLETED' ||
+        normalized == 'CANCELLED' ||
+        normalized == 'CANCELED';
+  }
+
+  static bool _isTerminalBookingStatus(String? value) {
+    final normalized = value?.trim().toUpperCase();
+    return normalized == 'COMPLETED' ||
+        normalized == 'CANCELLED' ||
+        normalized == 'CANCELED' ||
+        normalized == 'EXPIRED';
   }
 
   @override

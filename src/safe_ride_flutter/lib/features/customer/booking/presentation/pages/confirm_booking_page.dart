@@ -46,6 +46,10 @@ class ConfirmBookingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final canConfirmDriver =
+        booking?.bookingType == 'Now' &&
+        booking?.bookingStatus == 'Searching' &&
+        booking?.driverOffer?.offerStatus == 'DriverAccepted';
     final fare =
         booking?.finalFare ??
         booking?.estimatedFare ??
@@ -184,7 +188,10 @@ class ConfirmBookingPage extends StatelessWidget {
   }
 
   Future<void> _confirmDriver(BuildContext context) async {
-    if (booking == null) {
+    if (booking == null ||
+        booking!.bookingType != 'Now' ||
+        booking!.bookingStatus != 'Searching' ||
+        booking!.driverOffer?.offerStatus != 'DriverAccepted') {
       _showMessage(context, context.l10n.missingTripToConfirmDriver);
       return;
     }

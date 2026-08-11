@@ -12,6 +12,7 @@ import '../../../../../core/maps/widgets/live_trip_map_widget.dart';
 import '../../../../../core/services/location_service.dart';
 import '../../../../../core/services/map_api_service.dart';
 import '../../../../../core/services/socket_service.dart';
+import '../../../../../core/utils/currency_formatter.dart';
 import '../../../../../core/widgets/current_location_button.dart';
 import '../../../../../dependency_injection/injection.dart';
 

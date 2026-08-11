@@ -113,6 +113,35 @@ public sealed class BookingRepository : IBookingRepository
             .FirstOrDefaultAsync(cancellationToken);
     }
 
+    public Task<Booking?> GetActiveBookingAsync(
+        Guid customerId,
+        CancellationToken cancellationToken)
+    {
+        return _dbContext.Bookings
+            .AsNoTracking()
+            .Include(booking => booking.Vehicle)
+            .Include(booking => booking.Trip)
+                .ThenInclude(trip => trip!.ReturnConfirmations)
+                    .ThenInclude(returnConfirmation => returnConfirmation.Evidence)
+            .Include(booking => booking.Trip)
+                .ThenInclude(trip => trip!.Payments)
+            .Include(booking => booking.BookingPromotions)
+                .ThenInclude(bookingPromotion => bookingPromotion.Promotion)
+            .Where(booking => booking.CustomerId == customerId
+                && ((booking.BookingType == BookingType.Now
+                        && (booking.BookingStatus == BookingStatus.Searching
+                            || booking.BookingStatus == BookingStatus.DriverAssigned))
+                    || (booking.BookingType == BookingType.Scheduled
+                        && (booking.BookingStatus == BookingStatus.PendingSchedule
+                            || booking.BookingStatus == BookingStatus.Searching
+                            || booking.BookingStatus == BookingStatus.DriverAssigned))))
+            .OrderByDescending(booking => booking.Trip != null)
+            .ThenByDescending(booking => booking.BookingType == BookingType.Now)
+            .ThenBy(booking => booking.ScheduledAt ?? DateTime.MaxValue)
+            .ThenByDescending(booking => booking.UpdatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<BookingHistoryItemDto>> GetCustomerBookingHistoryAsync(
         Guid customerId,
         CancellationToken cancellationToken)

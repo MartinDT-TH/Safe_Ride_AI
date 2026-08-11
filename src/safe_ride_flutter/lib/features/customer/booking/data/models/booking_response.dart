@@ -1,5 +1,6 @@
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/localization/locale_provider.dart';
+import '../../../../../core/utils/api_date_time.dart';
 import 'booking_catalog.dart';
 import 'booking_location.dart';
 
@@ -118,9 +119,9 @@ class BookingResponse {
       bookingType: _value(json, ApiKeys.bookingType)?.toString() ?? '',
       bookingStatus:
           _normalizeBookingStatus(_value(json, ApiKeys.bookingStatus)) ?? '',
-      scheduledAt: _value(json, ApiKeys.scheduledAt) == null
-          ? null
-          : DateTime.tryParse(_value(json, ApiKeys.scheduledAt).toString()),
+      scheduledAt: parseApiUtcDateTimeToLocal(
+        _value(json, ApiKeys.scheduledAt),
+      ),
       estimatedDistanceKm:
           (_value(json, ApiKeys.estimatedDistanceKm) as num?)?.toDouble() ?? 0,
       estimatedDurationMinutes:

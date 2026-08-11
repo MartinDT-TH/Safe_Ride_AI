@@ -33,7 +33,7 @@ public sealed class GetActiveBookingQueryHandler
             _dateTimeProvider.UtcNow,
             cancellationToken);
 
-        var booking = await _bookingRepository.GetActiveNowBookingAsync(
+        var booking = await _bookingRepository.GetActiveBookingAsync(
             request.CustomerId,
             cancellationToken);
         if (booking is null)

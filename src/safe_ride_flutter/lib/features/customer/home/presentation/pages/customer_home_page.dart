@@ -87,7 +87,9 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     final booking = await context.read<BookingProvider>().loadActiveBooking(
       token,
     );
-    if (booking != null && mounted) {
+    final shouldOpenActivity =
+        booking?.bookingType == AppValues.bookingNow || booking?.tripId != null;
+    if (shouldOpenActivity && mounted) {
       context.read<HomeProvider>().setSelectedIndex(1);
     }
   }
@@ -107,10 +109,15 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
         bookingProvider.activeDestination ?? activeBooking?.destination;
     final activeVehicle =
         bookingProvider.activeVehicle ?? activeBooking?.vehicle;
+    final hasTrackableActiveBooking =
+        activeBooking != null &&
+        activePickup != null &&
+        (activeBooking.bookingType == AppValues.bookingNow ||
+            activeBooking.tripId != null);
 
     final List<Widget> pages = [
       _buildHomeContent(auth, bookingProvider),
-      (activeBooking != null && activePickup != null)
+      hasTrackableActiveBooking
           ? TripTrackingPage(
               state: _trackingState(activeBooking),
               booking: activeBooking,
@@ -268,7 +275,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
   }
 
   Widget _buildHomeContent(AuthProvider auth, BookingProvider bookingProvider) {
-    final hasActiveBooking = bookingProvider.activeBooking != null;
+    final hasActiveBooking = bookingProvider.hasActiveNowBooking;
     final homeProvider = context.read<HomeProvider>();
 
     return Consumer<HomeProvider>(

@@ -617,10 +617,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cancelTripFailed => '无法取消行程，请重试。';
 
   @override
+  String get tripCannotBeCancelled => '此行程在当前状态下无法取消。';
+
+  @override
   String get tripWaitExpired => '等待时间已结束，行程已关闭。';
 
   @override
   String get tripCancelledSuccessfully => '行程已成功取消。';
+
+  @override
+  String get scheduledTripCancelledSuccessfully => '预约行程已成功取消。';
 
   @override
   String get rebook => '再次预订';

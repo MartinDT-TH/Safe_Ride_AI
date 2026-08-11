@@ -58,18 +58,13 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         CancellationToken cancellationToken)
     {
         var utcNow = _dateTimeProvider.UtcNow;
-        Trip? trip;
-        BookingDriverOffer offer;
-        Booking booking;
-        DriverProfile driverProfile;
-        List<BookingDriverOffer> cancelledOffers = [];
 
         // Flow: serialize customer confirmation so one booking/driver cannot produce duplicate active trips.
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(
             IsolationLevel.Serializable,
             cancellationToken);
 
-        booking = await _dbContext.Bookings
+        var booking = await _dbContext.Bookings
             .Include(x => x.Vehicle)
             .Include(x => x.BookingPromotions)
                 .ThenInclude(x => x.Promotion)
@@ -81,7 +76,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
                 "Không tìm thấy chuyến của bạn.",
                 404);
 
-        offer = await _dbContext.BookingDriverOffers
+        var offer = await _dbContext.BookingDriverOffers
             .Where(x => x.BookingId == bookingId
                 && (!offerId.HasValue || x.Id == offerId.Value)
                 && (x.OfferStatus == DriverOfferStatus.DriverAccepted
@@ -94,7 +89,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
                 409);
 
         // Flow: idempotent retry returns the existing confirmed trip instead of creating another one.
-        trip = await _dbContext.Trips
+        var trip = await _dbContext.Trips
             .FirstOrDefaultAsync(x => x.BookingId == bookingId, cancellationToken);
 
         if (offer.OfferStatus == DriverOfferStatus.CustomerConfirmed
@@ -105,11 +100,21 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             await transaction.CommitAsync(cancellationToken);
             var confirmedOfferDto = await GetOfferDtoAsync(offer.Id, utcNow, cancellationToken);
             return BuildResponse(
-            booking,
-            "Đã xác nhận thuê tài xế. Tài xế đang di chuyển đến điểm đón.",
-            trip.Id,
-            confirmedOfferDto,
-            trip.TripStatus);
+                booking,
+                booking.BookingType == BookingType.Scheduled
+                    ? "Chuyến đặt trước đã có tài xế. Tài xế đang chuẩn bị đến điểm đón."
+                    : "Đã xác nhận thuê tài xế. Tài xế đang di chuyển đến điểm đón.",
+                trip.Id,
+                confirmedOfferDto,
+                trip.TripStatus);
+        }
+
+        if (booking.BookingType == BookingType.Scheduled)
+        {
+            throw new BookingException(
+                "booking.scheduled_driver_auto_confirmed",
+                "Chuyến đặt trước được hệ thống tự động xác nhận khi tài xế nhận chuyến.",
+                409);
         }
 
         if (booking.BookingStatus != BookingStatus.Searching)
@@ -143,16 +148,8 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
                 409);
         }
 
-        if (trip is not null)
-        {
-            throw new BookingException(
-                "booking.trip_already_created",
-                "Chuyến này đã có tài xế được xác nhận.",
-                409);
-        }
-
         // Flow: re-check driver availability, license compatibility, and active trip guards inside the transaction.
-        driverProfile = await _dbContext.DriverProfiles
+        var driverProfile = await _dbContext.DriverProfiles
             .FirstOrDefaultAsync(x => x.DriverId == offer.DriverId, cancellationToken)
             ?? throw new BookingException(
                 "booking.driver_unavailable",
@@ -170,124 +167,30 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         await EnsureDriverCanServeBookingAsync(offer.DriverId, booking, cancellationToken);
         await EnsureDriverHasNoActiveTripAsync(offer.DriverId, cancellationToken);
 
-        // Flow: create the Trip only after customer confirmation, then assign driver and cancel competing offers.
-        trip = new Trip
-        {
-            BookingId = booking.BookingId,
-            DriverId = offer.DriverId,
-            TripStatus = TripStatus.ACCEPTED,
-            DriverAssignedAt = utcNow,
-            CreatedAt = utcNow
-        };
-
-        offer.OfferStatus = DriverOfferStatus.CustomerConfirmed;
-        offer.ConfirmedAt = utcNow;
-        booking.BookingStatus = BookingStatus.DriverAssigned;
-        booking.UpdatedAt = utcNow;
-        driverProfile.WorkStatus = DriverWorkStatus.Busy;
-        driverProfile.UpdatedAt = utcNow;
-
-        cancelledOffers = await _dbContext.BookingDriverOffers
-            .Where(x => x.BookingId == booking.BookingId
-                && x.Id != offer.Id
-                && (x.OfferStatus == DriverOfferStatus.Sent
-                    || x.OfferStatus == DriverOfferStatus.DriverAccepted))
-            .ToListAsync(cancellationToken);
-        foreach (var cancelledOffer in cancelledOffers)
-        {
-            cancelledOffer.OfferStatus = DriverOfferStatus.Cancelled;
-            cancelledOffer.CancelledAt = utcNow;
-        }
-
-        await _dbContext.Trips.AddAsync(trip, cancellationToken);
+        var assignment = await CompleteDriverAssignmentAsync(
+            booking,
+            offer,
+            driverProfile,
+            DriverOfferStatus.DriverAccepted,
+            utcNow,
+            cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        // Flow: booking is no longer Searching, so cancel lifecycle jobs and clean matching cache.
-        await _jobScheduler.CancelJobsForBookingAsync(booking.BookingId, cancellationToken);
-        await _jobScheduler.CancelExpireDriverOfferAsync(offer.Id, cancellationToken);
-
-        await CacheTripLiveAsync(trip, booking.CustomerId);
-        await RemoveMatchingKeysAsync(booking.BookingId, offer.DriverId);
-        await _redisService.SetAsync(
-            RedisKeys.DriverStatus(offer.DriverId),
-            DriverWorkStatus.Busy.ToString(),
-            TimeSpan.FromMinutes(_tripTrackingOptions.CurrentValue.DriverStatusTtlMinutes));
-
-        foreach (var cancelledOffer in cancelledOffers)
-        {
-            await _jobScheduler.CancelExpireDriverOfferAsync(cancelledOffer.Id, cancellationToken);
-            await RemoveOfferKeysAsync(cancelledOffer.BookingId, cancelledOffer.DriverId);
-        }
-
-        var driverOffer = await GetOfferDtoAsync(offer.Id, utcNow, cancellationToken);
-
-        // Flow: publish assignment/trip events after durable state and cache updates are complete.
-        await _realtimeNotificationService.PublishCustomerConfirmedDriverOfferAsync(
-            new CustomerConfirmedDriverOfferEvent(
-                booking.BookingId,
-                trip.Id,
-                booking.CustomerId,
-                offer.DriverId,
-                offer.Id,
-                utcNow,
-                "Khách hàng đã xác nhận thuê tài xế."),
+        var driverOffer = await RunAssignmentPostCommitAsync(
+            booking,
+            offer,
+            assignment,
+            isSystemAutoConfirmed: false,
+            utcNow,
             cancellationToken);
-        await _realtimeNotificationService.PublishBookingStatusChangedAsync(
-            new BookingStatusChangedEvent(
-                booking.BookingId,
-                booking.CustomerId,
-                booking.BookingStatus,
-                utcNow),
-            cancellationToken);
-        await _realtimeNotificationService.PublishBookingDriverAssignedAsync(
-            new BookingDriverAssignedEvent(
-                booking.BookingId,
-                trip.Id,
-                booking.CustomerId,
-                offer.DriverId,
-                utcNow,
-                "Đã xác nhận thuê tài xế. Tài xế đang di chuyển đến điểm đón.",
-                driverOffer),
-            cancellationToken);
-        await _realtimeNotificationService.PublishTripCreatedAsync(
-            new TripCreatedEvent(
-                trip.Id,
-                booking.BookingId,
-                booking.CustomerId,
-                trip.DriverId,
-                trip.TripStatus,
-                trip.DriverAssignedAt ?? utcNow),
-            cancellationToken);
-        await _realtimeNotificationService.PublishTripStatusChangedAsync(
-            new TripStatusChangedEvent(
-                trip.Id,
-                booking.BookingId,
-                booking.CustomerId,
-                trip.DriverId,
-                trip.TripStatus,
-                utcNow),
-            cancellationToken);
-
-        foreach (var cancelledOffer in cancelledOffers)
-        {
-            await _realtimeNotificationService.PublishDriverOfferCancelledAsync(
-                new DriverOfferCancelledEvent(
-                    cancelledOffer.BookingId,
-                    booking.CustomerId,
-                    cancelledOffer.DriverId,
-                    cancelledOffer.Id,
-                    utcNow,
-                    "Yêu cầu nhận chuyến đã được hủy vì chuyến đã có tài xế khác."),
-                cancellationToken);
-        }
 
         return BuildResponse(
             booking,
             "Đã xác nhận thuê tài xế. Tài xế đang di chuyển đến điểm đón.",
-            trip.Id,
+            assignment.Trip.Id,
             driverOffer,
-            trip.TripStatus);
+            assignment.Trip.TripStatus);
     }
 
     public async Task<CreateBookingResponse> RejectDriverAsync(
@@ -309,6 +212,14 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
                 "booking.not_found",
                 "Không tìm thấy chuyến của bạn.",
                 404);
+
+        if (booking.BookingType == BookingType.Scheduled)
+        {
+            throw new BookingException(
+                "booking.scheduled_driver_auto_confirmed",
+                "Chuyến đặt trước không yêu cầu khách hàng chọn lại tài xế.",
+                409);
+        }
 
         if (booking.BookingStatus != BookingStatus.Searching)
         {
@@ -380,7 +291,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         BookingDriverOffer offer;
         Booking booking;
 
-        // Flow: driver acceptance reserves the offer for customer confirmation; it still does not create a Trip.
+        // Flow: Now bookings wait for customer confirmation; scheduled bookings are assigned atomically here.
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(
             IsolationLevel.Serializable,
             cancellationToken);
@@ -400,6 +311,39 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
                 404);
 
         booking = offer.Booking;
+
+        var existingTrip = await _dbContext.Trips
+            .FirstOrDefaultAsync(x => x.BookingId == booking.BookingId, cancellationToken);
+        if (booking.BookingType == BookingType.Scheduled
+            && booking.BookingStatus == BookingStatus.DriverAssigned
+            && offer.OfferStatus == DriverOfferStatus.CustomerConfirmed
+            && existingTrip is not null
+            && existingTrip.DriverId == driverId)
+        {
+            var previouslyCancelledOffers = await GetOffersCancelledByAssignmentAsync(
+                booking.BookingId,
+                offer,
+                cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            var existingAssignment = new DriverAssignmentResult(
+                existingTrip,
+                previouslyCancelledOffers);
+            var existingOfferDto = await RunAssignmentPostCommitAsync(
+                booking,
+                offer,
+                existingAssignment,
+                isSystemAutoConfirmed: true,
+                utcNow,
+                cancellationToken);
+            return BuildResponse(
+                booking,
+                "Chuyến đặt trước đã có tài xế. Tài xế đang chuẩn bị đến điểm đón.",
+                existingTrip.Id,
+                existingOfferDto,
+                existingTrip.TripStatus);
+        }
+
         if (booking.BookingStatus != BookingStatus.Searching)
         {
             throw new BookingException(
@@ -444,8 +388,41 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         var driverProfile = await EnsureDriverOnlineAsync(driverId, cancellationToken);
         await EnsureDriverCanServeBookingAsync(driverId, booking, cancellationToken);
         await EnsureDriverHasNoActiveTripAsync(driverId, cancellationToken);
-        await EnsureNoOtherActiveBookingOfferAsync(booking.BookingId, offer.Id, cancellationToken);
         await EnsureNoOtherActiveDriverOfferAsync(driverId, offer.Id, cancellationToken);
+
+        if (booking.BookingType == BookingType.Scheduled)
+        {
+            await EnsureNoWinningBookingOfferAsync(
+                booking.BookingId,
+                offer.Id,
+                cancellationToken);
+
+            var assignment = await CompleteDriverAssignmentAsync(
+                booking,
+                offer,
+                driverProfile,
+                DriverOfferStatus.Sent,
+                utcNow,
+                cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            var scheduledOffer = await RunAssignmentPostCommitAsync(
+                booking,
+                offer,
+                assignment,
+                isSystemAutoConfirmed: true,
+                utcNow,
+                cancellationToken);
+            return BuildResponse(
+                booking,
+                "Chuyến đặt trước đã có tài xế. Tài xế đang chuẩn bị đến điểm đón.",
+                assignment.Trip.Id,
+                scheduledOffer,
+                assignment.Trip.TripStatus);
+        }
+
+        await EnsureNoOtherActiveBookingOfferAsync(booking.BookingId, offer.Id, cancellationToken);
 
         // Flow: extend the offer into the customer-confirm window and refresh the matching lock/cache.
         offer.OfferStatus = DriverOfferStatus.DriverAccepted;
@@ -632,6 +609,26 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         }
     }
 
+    private async Task EnsureNoWinningBookingOfferAsync(
+        long bookingId,
+        long currentOfferId,
+        CancellationToken cancellationToken)
+    {
+        var hasWinningOffer = await _dbContext.BookingDriverOffers
+            .AnyAsync(
+                x => x.BookingId == bookingId
+                    && x.Id != currentOfferId
+                    && x.OfferStatus == DriverOfferStatus.CustomerConfirmed,
+                cancellationToken);
+        if (hasWinningOffer)
+        {
+            throw new BookingException(
+                "driver_offer.booking_already_has_driver",
+                "Chuyến này đã có tài xế nhận chuyến.",
+                409);
+        }
+    }
+
     private async Task EnsureNoOtherActiveDriverOfferAsync(
         Guid driverId,
         long currentOfferId,
@@ -684,6 +681,192 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             RedisKeys.DriverActiveTrip(trip.DriverId),
             JsonSerializer.Serialize(driverActiveTrip),
             TimeSpan.FromHours(_tripTrackingOptions.CurrentValue.TripLiveTtlHours));
+    }
+
+    private async Task<DriverAssignmentResult> CompleteDriverAssignmentAsync(
+        Booking booking,
+        BookingDriverOffer offer,
+        DriverProfile driverProfile,
+        DriverOfferStatus requiredOfferStatus,
+        DateTime utcNow,
+        CancellationToken cancellationToken)
+    {
+        if (booking.BookingStatus != BookingStatus.Searching)
+        {
+            throw new BookingException(
+                "driver_offer.booking_not_searching",
+                "Chuyến này không còn ở trạng thái tìm tài xế.",
+                409);
+        }
+
+        if (offer.OfferStatus != requiredOfferStatus || offer.ExpiresAt <= utcNow)
+        {
+            throw new BookingException(
+                "driver_offer.not_active",
+                "Yêu cầu nhận chuyến không còn hiệu lực.",
+                409);
+        }
+
+        if (driverProfile.WorkStatus != DriverWorkStatus.Online)
+        {
+            throw new BookingException(
+                "driver_offer.driver_unavailable",
+                "Tài xế không còn sẵn sàng nhận chuyến.",
+                409);
+        }
+
+        var existingTrip = await _dbContext.Trips
+            .FirstOrDefaultAsync(x => x.BookingId == booking.BookingId, cancellationToken);
+        if (existingTrip is not null)
+        {
+            throw new BookingException(
+                "booking.trip_already_created",
+                "Chuyến này đã có tài xế được xác nhận.",
+                409);
+        }
+
+        await EnsureNoWinningBookingOfferAsync(booking.BookingId, offer.Id, cancellationToken);
+
+        var trip = new Trip
+        {
+            BookingId = booking.BookingId,
+            DriverId = offer.DriverId,
+            TripStatus = TripStatus.ACCEPTED,
+            DriverAssignedAt = utcNow,
+            CreatedAt = utcNow
+        };
+
+        // CustomerConfirmed is reused for scheduled bookings as a system auto-confirmed
+        // assignment. It does not represent a direct customer confirmation in that flow.
+        offer.OfferStatus = DriverOfferStatus.CustomerConfirmed;
+        offer.ConfirmedAt = utcNow;
+        booking.BookingStatus = BookingStatus.DriverAssigned;
+        booking.UpdatedAt = utcNow;
+        driverProfile.WorkStatus = DriverWorkStatus.Busy;
+        driverProfile.UpdatedAt = utcNow;
+
+        var cancelledOffers = await _dbContext.BookingDriverOffers
+            .Where(x => x.BookingId == booking.BookingId
+                && x.Id != offer.Id
+                && (x.OfferStatus == DriverOfferStatus.Sent
+                    || x.OfferStatus == DriverOfferStatus.DriverAccepted))
+            .ToListAsync(cancellationToken);
+        foreach (var cancelledOffer in cancelledOffers)
+        {
+            cancelledOffer.OfferStatus = DriverOfferStatus.Cancelled;
+            cancelledOffer.CancelledAt = utcNow;
+        }
+
+        await _dbContext.Trips.AddAsync(trip, cancellationToken);
+        return new DriverAssignmentResult(trip, cancelledOffers);
+    }
+
+    private Task<List<BookingDriverOffer>> GetOffersCancelledByAssignmentAsync(
+        long bookingId,
+        BookingDriverOffer winningOffer,
+        CancellationToken cancellationToken)
+    {
+        return _dbContext.BookingDriverOffers
+            .Where(x => x.BookingId == bookingId
+                && x.Id != winningOffer.Id
+                && x.OfferStatus == DriverOfferStatus.Cancelled
+                && x.CancelledAt == winningOffer.ConfirmedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task<BookingDriverOfferDto?> RunAssignmentPostCommitAsync(
+        Booking booking,
+        BookingDriverOffer offer,
+        DriverAssignmentResult assignment,
+        bool isSystemAutoConfirmed,
+        DateTime utcNow,
+        CancellationToken cancellationToken)
+    {
+        await _jobScheduler.CancelJobsForBookingAsync(booking.BookingId, cancellationToken);
+        await _jobScheduler.CancelExpireDriverOfferAsync(offer.Id, cancellationToken);
+
+        await CacheTripLiveAsync(assignment.Trip, booking.CustomerId);
+        await RemoveMatchingKeysAsync(booking.BookingId, offer.DriverId);
+        await _redisService.SetAsync(
+            RedisKeys.DriverStatus(offer.DriverId),
+            DriverWorkStatus.Busy.ToString(),
+            TimeSpan.FromMinutes(_tripTrackingOptions.CurrentValue.DriverStatusTtlMinutes));
+
+        foreach (var cancelledOffer in assignment.CancelledOffers)
+        {
+            await _jobScheduler.CancelExpireDriverOfferAsync(cancelledOffer.Id, cancellationToken);
+            await RemoveOfferKeysAsync(cancelledOffer.BookingId, cancelledOffer.DriverId);
+        }
+
+        var driverOffer = await GetOfferDtoAsync(offer.Id, utcNow, cancellationToken);
+        var assignmentMessage = isSystemAutoConfirmed
+            ? "Tài xế đã nhận chuyến đặt trước. Hệ thống đã tự động xác nhận tài xế."
+            : "Đã xác nhận thuê tài xế. Tài xế đang di chuyển đến điểm đón.";
+
+        if (!isSystemAutoConfirmed)
+        {
+            await _realtimeNotificationService.PublishCustomerConfirmedDriverOfferAsync(
+                new CustomerConfirmedDriverOfferEvent(
+                    booking.BookingId,
+                    assignment.Trip.Id,
+                    booking.CustomerId,
+                    offer.DriverId,
+                    offer.Id,
+                    utcNow,
+                    "Khách hàng đã xác nhận thuê tài xế."),
+                cancellationToken);
+        }
+
+        await _realtimeNotificationService.PublishBookingStatusChangedAsync(
+            new BookingStatusChangedEvent(
+                booking.BookingId,
+                booking.CustomerId,
+                booking.BookingStatus,
+                utcNow),
+            cancellationToken);
+        await _realtimeNotificationService.PublishBookingDriverAssignedAsync(
+            new BookingDriverAssignedEvent(
+                booking.BookingId,
+                assignment.Trip.Id,
+                booking.CustomerId,
+                offer.DriverId,
+                utcNow,
+                assignmentMessage,
+                driverOffer),
+            cancellationToken);
+        await _realtimeNotificationService.PublishTripCreatedAsync(
+            new TripCreatedEvent(
+                assignment.Trip.Id,
+                booking.BookingId,
+                booking.CustomerId,
+                assignment.Trip.DriverId,
+                assignment.Trip.TripStatus,
+                assignment.Trip.DriverAssignedAt ?? utcNow),
+            cancellationToken);
+        await _realtimeNotificationService.PublishTripStatusChangedAsync(
+            new TripStatusChangedEvent(
+                assignment.Trip.Id,
+                booking.BookingId,
+                booking.CustomerId,
+                assignment.Trip.DriverId,
+                assignment.Trip.TripStatus,
+                utcNow),
+            cancellationToken);
+
+        foreach (var cancelledOffer in assignment.CancelledOffers)
+        {
+            await _realtimeNotificationService.PublishDriverOfferCancelledAsync(
+                new DriverOfferCancelledEvent(
+                    cancelledOffer.BookingId,
+                    booking.CustomerId,
+                    cancelledOffer.DriverId,
+                    cancelledOffer.Id,
+                    utcNow,
+                    "Yêu cầu nhận chuyến đã được hủy vì chuyến đã có tài xế khác."),
+                cancellationToken);
+        }
+
+        return driverOffer;
     }
 
     private Task CacheMatchingOfferAsync(BookingDriverOffer offer)
@@ -827,5 +1010,9 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             driverOffer,
             tripStatus);
     }
+
+    private sealed record DriverAssignmentResult(
+        Trip Trip,
+        List<BookingDriverOffer> CancelledOffers);
 
 }

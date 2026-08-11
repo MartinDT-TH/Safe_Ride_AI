@@ -23,4 +23,8 @@
     <ProjectReference Include="..\SafeRide.API\SafeRide.API.csproj" />
     <ProjectReference Include="..\SafeRide.Infrastructure\SafeRide.Infrastructure.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\SafeRide.IntegrationTests\BookingAssignmentServiceTests.cs"
+             Link="BookingAssignmentServiceTests.cs" />
+  </ItemGroup>
 </Project>

@@ -637,10 +637,18 @@ class AppLocalizationsVi extends AppLocalizations {
   String get cancelTripFailed => 'Không thể hủy chuyến. Vui lòng thử lại.';
 
   @override
+  String get tripCannotBeCancelled =>
+      'Chuyến đi này không thể hủy ở trạng thái hiện tại.';
+
+  @override
   String get tripWaitExpired => 'Chuyến đã hết thời gian chờ và được kết thúc.';
 
   @override
   String get tripCancelledSuccessfully => 'Đã hủy chuyến thành công.';
+
+  @override
+  String get scheduledTripCancelledSuccessfully =>
+      'Đã hủy chuyến đặt trước thành công.';
 
   @override
   String get rebook => 'Đặt lại';

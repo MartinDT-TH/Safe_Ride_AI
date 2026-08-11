@@ -91,6 +91,52 @@ public sealed class TripStatusServiceTests
         Assert.NotEqual(trip.Booking.EstimatedDistanceKm, trip.ActualDistanceKm);
         Assert.NotEqual(trip.Booking.EstimatedFare, payment.Amount);
     }
+
+    [Fact]
+    public async Task EndTrip_WhenEndedEarly_RecalculatesFareFromPartialDistance()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.IN_PROGRESS);
+        fixture.Redis.SetTripTrackingSnapshot(CreateTripTrackingSnapshot(fixture.TripId, 2_000));
+
+        await fixture.Service.EndTripAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            CancellationToken.None);
+
+        var trip = await fixture.DbContext.Trips
+            .Include(x => x.Booking)
+            .SingleAsync(x => x.Id == fixture.TripId);
+
+        Assert.Equal(2m, trip.ActualDistanceKm);
+        Assert.Equal(40_000m, trip.ActualFare);
+        Assert.Equal(30_000m, trip.FinalFare);
+        Assert.NotEqual(trip.Booking.EstimatedFare, trip.FinalFare);
+    }
+
+    [Fact]
+    public async Task StartTrip_SeedsTrackingFromCurrentDriverLocation()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.ARRIVED);
+        fixture.Redis.SetDriverLocation(
+            fixture.DriverId,
+            new DriverLocationCache(
+                fixture.DriverId,
+                10.762622,
+                106.660172,
+                UtcNow.AddSeconds(-5)));
+
+        await fixture.Service.UpdateDriverTripStatusAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            TripStatus.IN_PROGRESS,
+            CancellationToken.None);
+
+        var point = Assert.Single(fixture.Redis.RecordedTrackingPoints);
+        Assert.Equal(fixture.TripId, point.TripId);
+        Assert.Equal(10.762622, point.Latitude);
+        Assert.Equal(106.660172, point.Longitude);
+    }
+
     [Fact]
     public async Task ConfirmReturnByCustomer_CreatesAuditRecordAndMovesTripToWaitingPayment()
     {
@@ -645,13 +691,21 @@ public sealed class TripStatusServiceTests
     private sealed class TrackingRedisService : IRedisService
     {
         private TripTrackingSnapshot _tripTrackingSnapshot = new([], 0, null, null, null, null);
+        private readonly Dictionary<string, string> _values = [];
 
         public List<string> RemovedKeys { get; } = [];
+        public List<TripTrackingPoint> RecordedTrackingPoints { get; } = [];
         public string? DriverStatusValue { get; private set; }
 
         public void SetTripTrackingSnapshot(TripTrackingSnapshot snapshot)
         {
             _tripTrackingSnapshot = snapshot;
+        }
+
+        public void SetDriverLocation(Guid driverId, DriverLocationCache location)
+        {
+            _values[RedisKeys.DriverLocation(driverId)] =
+                System.Text.Json.JsonSerializer.Serialize(location);
         }
 
         public Task SetAsync(
@@ -680,7 +734,7 @@ public sealed class TripStatusServiceTests
             Task.FromResult(true);
 
         public Task<string?> GetAsync(string key) =>
-            Task.FromResult<string?>(null);
+            Task.FromResult(_values.GetValueOrDefault(key));
 
         public Task<IReadOnlyDictionary<string, string?>> GetManyAsync(
             IReadOnlyCollection<string> keys) =>
@@ -752,8 +806,12 @@ public sealed class TripStatusServiceTests
         public Task<TripTrackingUpdateResult> RecordTripTrackingPointAsync(
             TripTrackingPoint point,
             TripTrackingWriteOptions options,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new TripTrackingUpdateResult(true, true, 0, 0, "accepted"));
+            CancellationToken cancellationToken = default)
+        {
+            RecordedTrackingPoints.Add(point);
+            return Task.FromResult(
+                new TripTrackingUpdateResult(true, true, 0, 0, "accepted"));
+        }
 
         public Task<TripTrackingSnapshot> GetTripTrackingSnapshotAsync(
             long tripId,

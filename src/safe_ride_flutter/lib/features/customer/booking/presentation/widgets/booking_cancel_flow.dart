@@ -10,7 +10,7 @@ import 'cancel_booking_sheet.dart';
 bool isBookingCancellable(BookingResponse? booking) {
   final status = booking?.bookingStatus;
   final tripStatus = booking?.tripStatus;
-  if (status == 'Searching') {
+  if (status == 'PendingSchedule' || status == 'Searching') {
     return true;
   }
 
@@ -42,6 +42,24 @@ Future<void> handleBookingBack(
     return;
   }
 
+  final cancelled = await requestBookingCancellation(context, booking: booking);
+  if (!cancelled || !context.mounted) {
+    return;
+  }
+
+  // Navigate back to home (root)
+  Navigator.of(context).popUntil((route) => route.isFirst);
+}
+
+Future<bool> requestBookingCancellation(
+  BuildContext context, {
+  required BookingResponse booking,
+}) async {
+  if (!isBookingCancellable(booking)) {
+    _showMessage(context, context.l10n.tripCannotBeCancelled);
+    return false;
+  }
+
   final reason = await CancelBookingSheet.show(
     context,
     bookingId: booking.bookingId,
@@ -51,14 +69,14 @@ Future<void> handleBookingBack(
     debugPrint(
       'CANCEL_FLOW: Cancellation cancelled by user or context unmounted',
     );
-    return;
+    return false;
   }
 
   final token = context.read<AuthProvider>().token;
   if (token == null || token.isEmpty) {
     debugPrint('CANCEL_FLOW: No token found for cancellation');
     _showMessage(context, context.l10n.sessionExpired);
-    return;
+    return false;
   }
 
   debugPrint(
@@ -70,13 +88,13 @@ Future<void> handleBookingBack(
     reason: reason,
   );
 
-  if (!context.mounted) return;
+  if (!context.mounted) return false;
 
   if (result == null) {
     final error = context.read<BookingProvider>().errorMessage;
     debugPrint('CANCEL_FLOW: Cancellation failed: $error');
     _showMessage(context, error ?? context.l10n.cancelTripFailed);
-    return;
+    return false;
   }
 
   debugPrint(
@@ -92,11 +110,12 @@ Future<void> handleBookingBack(
     context,
     result.bookingStatus == 'Expired'
         ? context.l10n.tripWaitExpired
+        : booking.bookingType == 'Scheduled'
+        ? context.l10n.scheduledTripCancelledSuccessfully
         : context.l10n.tripCancelledSuccessfully,
   );
 
-  // Navigate back to home (root)
-  Navigator.of(context).popUntil((route) => route.isFirst);
+  return true;
 }
 
 void _showMessage(BuildContext context, String message) {

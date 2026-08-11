@@ -266,7 +266,13 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
     }
 
     if (widget.showSchedule) {
-      _showMessage(context.l10n.bookingSuccess);
+      context.read<BookingProvider>().setActiveBooking(
+        booking: result,
+        pickup: pickup,
+        destination: destination,
+        vehicle: vehicle,
+      );
+      _showMessage(BookingStrings.bookingSuccess);
       Navigator.of(context).popUntil((route) => route.isFirst);
       return;
     }

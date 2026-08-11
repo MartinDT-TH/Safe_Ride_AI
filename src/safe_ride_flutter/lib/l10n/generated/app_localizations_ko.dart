@@ -622,10 +622,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String get cancelTripFailed => '운행을 취소할 수 없습니다. 다시 시도해 주세요.';
 
   @override
+  String get tripCannotBeCancelled => '이 여정은 현재 상태에서 취소할 수 없습니다.';
+
+  @override
   String get tripWaitExpired => '대기 시간이 만료되어 운행이 종료되었습니다.';
 
   @override
   String get tripCancelledSuccessfully => '운행이 취소되었습니다.';
+
+  @override
+  String get scheduledTripCancelledSuccessfully => '예약 여정이 취소되었습니다.';
 
   @override
   String get rebook => '다시 예약';

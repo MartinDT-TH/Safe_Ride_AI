@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
 using SafeRide.Application.Common.Realtime;
@@ -11,6 +12,7 @@ using SafeRide.Application.Features.Promotions;
 using SafeRide.Application.Features.Vehicles.Services;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
+using SafeRide.Infrastructure.Persistence;
 
 namespace SafeRide.UnitTests;
 
@@ -18,6 +20,35 @@ public sealed class BookingTests
 {
     private static readonly DateTime UtcNow =
         new(2026, 6, 15, 0, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public void ScheduledAt_ValueConverter_RestoresUtcKindFromSqlDateTime2()
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlServer(
+                "Server=(localdb)\\mssqllocaldb;Database=SafeRideModelTest;Trusted_Connection=True;",
+                sql => sql.UseNetTopologySuite())
+            .Options;
+        using var dbContext = new ApplicationDbContext(options);
+        var property = dbContext.Model
+            .FindEntityType(typeof(Booking))!
+            .FindProperty(nameof(Booking.ScheduledAt))!;
+        var converter = property.GetValueConverter();
+        var storedValue = new DateTime(
+            2026,
+            6,
+            16,
+            1,
+            30,
+            0,
+            DateTimeKind.Unspecified);
+
+        var restoredValue = Assert.IsType<DateTime>(
+            converter!.ConvertFromProvider(storedValue));
+
+        Assert.Equal(DateTimeKind.Utc, restoredValue.Kind);
+        Assert.Equal(storedValue.Ticks, restoredValue.Ticks);
+    }
 
     [Fact]
     public void CalculateFare_PerTrip_UsesDistance()
@@ -235,6 +266,41 @@ public sealed class BookingTests
         Assert.Equal(4, promotion.CurrentUsageCount);
     }
 
+    [Fact]
+    public async Task CancelBooking_PendingScheduledBooking_CancelsBeforeMatchingStarts()
+    {
+        var fixture = new CancelBookingFixture();
+        var booking = new Booking
+        {
+            BookingId = 56,
+            CustomerId = HandlerFixture.CustomerId,
+            BookingType = BookingType.Scheduled,
+            BookingStatus = BookingStatus.PendingSchedule,
+            ScheduledAt = UtcNow.AddHours(3),
+            EstimatedDistanceKm = 5.2m,
+            EstimatedDurationMinutes = 30,
+            EstimatedFare = 72_000m,
+            RoutePolyline = "polyline"
+        };
+        fixture.Repository.CustomerBooking = booking;
+
+        var result = await fixture.Handler.Handle(
+            new CancelBookingCommand(
+                HandlerFixture.CustomerId,
+                booking.BookingId,
+                "Thay đổi lịch trình"),
+            CancellationToken.None);
+
+        Assert.Equal(BookingStatus.Cancelled, result.BookingStatus);
+        Assert.Equal(BookingStatus.Cancelled, booking.BookingStatus);
+        Assert.Equal(HandlerFixture.CustomerId, booking.CancelledBy);
+        Assert.Equal("Thay đổi lịch trình", booking.CancellationReason);
+        Assert.Equal([booking.BookingId], fixture.Scheduler.CancelledBookingIds);
+        Assert.Equal(1, fixture.Repository.RemoveBookingPromotionsCallCount);
+        Assert.Equal(1, fixture.Repository.CancelActiveDriverOffersCallCount);
+        Assert.Equal(1, fixture.UnitOfWork.SaveCount);
+    }
+
     private static PricingRule CreatePricingRule(
         decimal? pricePerKm = null,
         decimal? pricePerHour = null)
@@ -391,6 +457,11 @@ public sealed class BookingTests
         {
             return Task.FromResult(ActiveNowBooking);
         }
+
+        public Task<Booking?> GetActiveBookingAsync(
+            Guid customerId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(ActiveNowBooking);
 
         public Task<Application.Features.Bookings.DTOs.BookingDriverOfferDto?> GetLatestBookingDriverOfferAsync(
             long bookingId,

@@ -1280,6 +1280,12 @@ abstract class AppLocalizations {
   /// **'Không thể hủy chuyến. Vui lòng thử lại.'**
   String get cancelTripFailed;
 
+  /// No description provided for @tripCannotBeCancelled.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chuyến đi này không thể hủy ở trạng thái hiện tại.'**
+  String get tripCannotBeCancelled;
+
   /// No description provided for @tripWaitExpired.
   ///
   /// In vi, this message translates to:
@@ -1291,6 +1297,12 @@ abstract class AppLocalizations {
   /// In vi, this message translates to:
   /// **'Đã hủy chuyến thành công.'**
   String get tripCancelledSuccessfully;
+
+  /// No description provided for @scheduledTripCancelledSuccessfully.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đã hủy chuyến đặt trước thành công.'**
+  String get scheduledTripCancelledSuccessfully;
 
   /// No description provided for @rebook.
   ///

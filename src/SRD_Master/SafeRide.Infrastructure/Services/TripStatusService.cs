@@ -172,6 +172,10 @@ public sealed class TripStatusService : ITripStatusService
         }
 
         var utcNow = _dateTimeProvider.UtcNow;
+        await RecordCurrentDriverLocationForTripAsync(
+            trip,
+            utcNow,
+            cancellationToken);
         await FinalizeActualTripAsync(trip, utcNow, cancellationToken);
 
         await ApplyTripStatusAsync(
@@ -436,6 +440,14 @@ public sealed class TripStatusService : ITripStatusService
         else
         {
             await CacheTripLiveAsync(trip, utcNow);
+            if (tripStatus == TripStatus.IN_PROGRESS
+                && previousTripStatus != TripStatus.IN_PROGRESS)
+            {
+                await RecordCurrentDriverLocationForTripAsync(
+                    trip,
+                    utcNow,
+                    cancellationToken);
+            }
         }
 
         await _realtimeNotificationService.PublishTripStatusChangedAsync(
@@ -514,6 +526,58 @@ public sealed class TripStatusService : ITripStatusService
             RedisKeys.DriverActiveTrip(trip.DriverId),
             JsonSerializer.Serialize(driverActiveTrip),
             TimeSpan.FromHours(_options.CurrentValue.TripLiveTtlHours));
+    }
+
+    private async Task RecordCurrentDriverLocationForTripAsync(
+        Domain.Entities.Trip trip,
+        DateTime utcNow,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var locationJson = await _redisService.GetAsync(
+                RedisKeys.DriverLocation(trip.DriverId));
+            if (string.IsNullOrWhiteSpace(locationJson))
+            {
+                return;
+            }
+
+            var location = JsonSerializer.Deserialize<DriverLocationCache>(locationJson);
+            if (location is null)
+            {
+                return;
+            }
+
+            var timestampUnixMs = new DateTimeOffset(utcNow).ToUnixTimeMilliseconds();
+            var point = new TripTrackingPoint(
+                trip.Id,
+                location.Latitude,
+                location.Longitude,
+                timestampUnixMs,
+                timestampUnixMs,
+                utcNow);
+            var options = _options.CurrentValue;
+            var writeOptions = new TripTrackingWriteOptions(
+                TimeSpan.FromHours(options.TrackingTtlHours),
+                options.MaxPathPoints,
+                options.AccumulatorJitterThresholdMeters,
+                options.PathSampleDistanceMeters,
+                options.PathSampleIntervalSeconds,
+                options.MaxInferredSpeedKmh,
+                options.MaxAccuracyMeters);
+
+            await _redisService.RecordTripTrackingPointAsync(
+                point,
+                writeOptions,
+                cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Failed to record cached driver location for trip {TripId}. Trip status update will continue.",
+                trip.Id);
+        }
     }
 
     private async Task FinalizeActualTripAsync(

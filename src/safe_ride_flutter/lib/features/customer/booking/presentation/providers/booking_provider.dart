@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../../../../core/constants/app_strings.dart';
@@ -21,7 +23,12 @@ class BookingProvider extends ChangeNotifier {
     this._repository,
     this._locationService, [
     this._socketService,
-  ]);
+  ]) {
+    _socketService?.onBookingUpdated(
+      _handleBookingUpdate,
+      key: 'customer_booking',
+    );
+  }
 
   final BookingRepository _repository;
   final LocationService _locationService;
@@ -46,6 +53,7 @@ class BookingProvider extends ChangeNotifier {
   BookingVehicleOption? _activeVehicle;
 
   BookingResponse? _searchingBooking;
+  String? _accessToken;
 
   bool get isLoading => _isLoading;
   bool get isEstimating => _isEstimating;
@@ -66,71 +74,67 @@ class BookingProvider extends ChangeNotifier {
 
   BookingResponse? get searchingBooking => _searchingBooking;
 
-  bool get hasActiveNowBooking => _activeBooking != null;
+  bool get hasActiveNowBooking =>
+      _activeBooking?.bookingType == AppValues.bookingNow &&
+      (_activeBooking?.bookingStatus == 'Searching' ||
+          _activeBooking?.bookingStatus == 'DriverAssigned');
 
   void setSearchingBooking(BookingResponse? booking) {
     debugPrint('PROVIDER: setSearchingBooking ID: ${booking?.bookingId}');
     _searchingBooking = booking;
-    if (booking != null) {
-      _setupBookingRealtime(booking.bookingId);
-    } else {
-      _socketService?.removeBookingUpdatedHandler('customer_booking');
-    }
     notifyListeners();
   }
 
-  void _setupBookingRealtime(int bookingId) {
-    debugPrint('PROVIDER: Setting up SignalR for Booking $bookingId');
-    _socketService?.onBookingUpdated((update) {
-      debugPrint(
-        'PROVIDER: SIGNALR RECEIVED for Booking ${update.bookingId}. Status: ${update.status}',
-      );
-      if (update.bookingId != bookingId) return;
+  void _handleBookingUpdate(BookingUpdate update) {
+    debugPrint(
+      'PROVIDER: SIGNALR RECEIVED for Booking ${update.bookingId}. Status: ${update.status}',
+    );
 
-      final current = _searchingBooking ?? _activeBooking;
-      if (current == null) {
-        debugPrint(
-          'PROVIDER: Received update but no current booking in provider',
-        );
-        return;
+    final current = _searchingBooking?.bookingId == update.bookingId
+        ? _searchingBooking
+        : _activeBooking?.bookingId == update.bookingId
+        ? _activeBooking
+        : null;
+    if (current == null) {
+      // Scheduled bookings can be assigned while the customer is elsewhere in
+      // the app. Recover the durable assignment through the active-booking API.
+      if (update.status == 'DriverAssigned' || update.tripId != null) {
+        final accessToken = _accessToken;
+        if (accessToken != null && accessToken.isNotEmpty) {
+          unawaited(loadActiveBooking(accessToken));
+        }
       }
+      return;
+    }
 
-      final updatedBooking = current.copyWith(
-        bookingStatus: update.status ?? current.bookingStatus,
-        currentSearchRadiusKm:
-            update.currentSearchRadiusKm ?? current.currentSearchRadiusKm,
-        estimatedRemainingSeconds:
-            update.estimatedRemainingSeconds ??
-            current.estimatedRemainingSeconds,
-        matchingMessage: update.matchingMessage ?? current.matchingMessage,
-        driverOffer: update.driverOffer != null
-            ? BookingDriverOffer.fromJson(update.driverOffer!)
-            : current.driverOffer,
-        tripId: update.tripId ?? current.tripId,
-        tripStatus: update.tripStatus ?? current.tripStatus,
-      );
+    final updatedBooking = current.copyWith(
+      bookingStatus: update.status ?? current.bookingStatus,
+      currentSearchRadiusKm:
+          update.currentSearchRadiusKm ?? current.currentSearchRadiusKm,
+      estimatedRemainingSeconds:
+          update.estimatedRemainingSeconds ?? current.estimatedRemainingSeconds,
+      matchingMessage: update.matchingMessage ?? current.matchingMessage,
+      driverOffer: update.driverOffer != null
+          ? BookingDriverOffer.fromJson(update.driverOffer!)
+          : current.driverOffer,
+      tripId: update.tripId ?? current.tripId,
+      tripStatus: update.tripStatus ?? current.tripStatus,
+    );
 
-      debugPrint(
-        'PROVIDER: Updated status: ${updatedBooking.bookingStatus}, Offer: ${updatedBooking.driverOffer?.driverName}',
-      );
+    if (_isTerminalBooking(updatedBooking)) {
+      _searchingBooking = null;
+      _activeBooking = null;
+      _activePickup = null;
+      _activeDestination = null;
+      _activeVehicle = null;
+    } else if (_isActiveBooking(updatedBooking)) {
+      _searchingBooking = updatedBooking;
+      _setActiveBookingFromResponse(updatedBooking);
+    } else {
+      _searchingBooking = updatedBooking;
+    }
 
-      if (_isTerminalBooking(updatedBooking)) {
-        debugPrint('PROVIDER: Booking $bookingId is terminal, clearing state');
-        _searchingBooking = null;
-        _activeBooking = null;
-        _activePickup = null;
-        _activeDestination = null;
-        _activeVehicle = null;
-        _socketService.removeBookingUpdatedHandler('customer_booking');
-      } else if (_isActiveNowBooking(updatedBooking)) {
-        _searchingBooking = updatedBooking;
-        _setActiveBookingFromResponse(updatedBooking);
-      } else {
-        _searchingBooking = updatedBooking;
-      }
-
-      notifyListeners();
-    }, key: 'customer_booking');
+    notifyListeners();
   }
 
   Future<BookingResponse?> refreshSearchingBooking(
@@ -156,7 +160,7 @@ class BookingProvider extends ChangeNotifier {
       );
 
       _searchingBooking = booking;
-      if (_isActiveNowBooking(booking)) {
+      if (_isActiveBooking(booking)) {
         _setActiveBookingFromResponse(booking);
       } else if (_isTerminalBooking(booking)) {
         _activeBooking = null;
@@ -174,11 +178,18 @@ class BookingProvider extends ChangeNotifier {
   }
 
   Future<BookingResponse?> loadActiveBooking(String accessToken) async {
+    _accessToken = accessToken;
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
+      try {
+        await _socketService?.connect(accessToken);
+      } catch (error) {
+        debugPrint('PROVIDER: Realtime connection failed: $error');
+      }
+
       final newBooking = await _repository.getActiveBooking(accessToken);
       if (newBooking == null) {
         _activeBooking = null;
@@ -195,13 +206,12 @@ class BookingProvider extends ChangeNotifier {
           ? _activeBooking!.mergeWithPreservedPromotion(newBooking)
           : newBooking;
 
-      if (_isActiveNowBooking(booking) || booking.tripStatus != null) {
+      if (_isActiveBooking(booking) || booking.tripStatus != null) {
         _setActiveBookingFromResponse(booking);
         // If it's searching, also set searchingBooking
         if (booking.bookingStatus == 'Searching' ||
             booking.bookingStatus == 'DriverAssigned') {
           _searchingBooking = booking;
-          _setupBookingRealtime(booking.bookingId);
         }
       } else {
         _activeBooking = null;
@@ -288,7 +298,6 @@ class BookingProvider extends ChangeNotifier {
     _activeDestination = null;
     _activeVehicle = null;
     _searchingBooking = null;
-    _socketService?.removeBookingUpdatedHandler('customer_booking');
     notifyListeners();
   }
 
@@ -484,7 +493,7 @@ class BookingProvider extends ChangeNotifier {
         offerId: offerId,
       );
       _searchingBooking = booking;
-      if (_isActiveNowBooking(booking)) {
+      if (_isActiveBooking(booking)) {
         _setActiveBookingFromResponse(booking);
       }
       return booking;
@@ -616,7 +625,6 @@ class BookingProvider extends ChangeNotifier {
         _activePickup = null;
         _activeDestination = null;
         _activeVehicle = null;
-        _socketService?.removeBookingUpdatedHandler('customer_booking');
       }
       return booking;
     });
@@ -696,16 +704,27 @@ class BookingProvider extends ChangeNotifier {
     _activeVehicle = booking.vehicle ?? _activeVehicle;
   }
 
-  bool _isActiveNowBooking(BookingResponse? booking) {
+  bool _isActiveBooking(BookingResponse? booking) {
     return booking != null &&
-        booking.bookingType == AppValues.bookingNow &&
-        (booking.bookingStatus == 'Searching' ||
-            booking.bookingStatus == 'DriverAssigned');
+        ((booking.bookingType == AppValues.bookingNow &&
+                (booking.bookingStatus == 'Searching' ||
+                    booking.bookingStatus == 'DriverAssigned')) ||
+            (booking.bookingType == AppValues.bookingScheduled &&
+                (booking.bookingStatus == 'PendingSchedule' ||
+                    booking.bookingStatus == 'Searching' ||
+                    (booking.bookingStatus == 'DriverAssigned' &&
+                        booking.tripId != null))));
   }
 
   bool _isTerminalBooking(BookingResponse booking) {
     return booking.bookingStatus == 'Cancelled' ||
         booking.bookingStatus == 'Expired' ||
         booking.bookingStatus == 'Completed';
+  }
+
+  @override
+  void dispose() {
+    _socketService?.removeBookingUpdatedHandler('customer_booking');
+    super.dispose();
   }
 }

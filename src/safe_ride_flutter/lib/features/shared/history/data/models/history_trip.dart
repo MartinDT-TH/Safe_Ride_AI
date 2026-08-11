@@ -1,3 +1,5 @@
+import '../../../../../core/utils/api_date_time.dart';
+
 enum HistoryTripStatus { completed, cancelled, booked }
 
 class HistoryTrip {
@@ -58,7 +60,7 @@ class HistoryTrip {
       tripId: (json['tripId'] as num?)?.toInt(),
       pickup: json['pickupAddress'] ?? '',
       destination: json['destinationAddress'] ?? '',
-      time: DateTime.tryParse(occurredAt ?? '') ?? DateTime.now(),
+      time: parseApiUtcDateTimeToLocal(occurredAt) ?? DateTime.now(),
       fare: finalFare != null && finalFare > 0 ? finalFare : estimatedFare,
       distanceKm: (json['estimatedDistanceKm'] as num?)?.toDouble() ?? 0,
       status: status,
