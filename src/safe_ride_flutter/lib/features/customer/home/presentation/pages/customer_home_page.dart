@@ -24,8 +24,6 @@ import '../../../../customer/booking/presentation/providers/booking_provider.dar
 import '../../../../customer/ai_chat/presentation/widgets/ai_chat_sheet.dart';
 import '../../../../shared/history/presentation/pages/history_page.dart';
 import '../../../../trip_sharing/trip_share_deep_link_coordinator.dart';
-import '../../../../trip_sharing/presentation/pages/shared_trip_tracking_page.dart';
-import '../../../../trip_sharing/presentation/providers/received_trip_shares_provider.dart';
 import '../../../../../dependency_injection/injection.dart';
 import '../../../../shared/notifications/presentation/pages/notifications_page.dart';
 import '../../../../shared/notifications/presentation/providers/notification_provider.dart';
@@ -86,7 +84,6 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     context.read<BookingProvider>().loadAvailablePromotions(auth.token!);
     context.read<NotificationProvider>().initialize(auth.token);
     _loadActiveBooking(auth.token);
-    context.read<ReceivedTripSharesProvider>().load();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         unawaited(
@@ -295,11 +292,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
         if (provider.errorMessage != null && provider.recentTrips.isEmpty) {
           return RefreshIndicator(
-            onRefresh: () async {
-              final receivedShares = context.read<ReceivedTripSharesProvider>();
-              await provider.loadHomeData();
-              await receivedShares.refresh();
-            },
+            onRefresh: provider.loadHomeData,
             color: const Color(0xFF006B70),
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -374,11 +367,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
         }
 
         return RefreshIndicator(
-          onRefresh: () async {
-            final receivedShares = context.read<ReceivedTripSharesProvider>();
-            await provider.loadHomeData();
-            await receivedShares.refresh();
-          },
+          onRefresh: provider.loadHomeData,
           color: Color(0xFF006B70),
           child: SingleChildScrollView(
             physics: AlwaysScrollableScrollPhysics(),
@@ -399,8 +388,6 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                   style: TextStyle(fontSize: 16, color: Color(0xFF666666)),
                 ),
                 SizedBox(height: 24),
-
-                _buildReceivedShares(),
 
                 InkWell(
                   onTap: hasActiveBooking
@@ -585,49 +572,6 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                 _buildPromotionSection(bookingProvider),
               ],
             ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildReceivedShares() {
-    return Consumer<ReceivedTripSharesProvider>(
-      builder: (context, provider, _) {
-        if (provider.shares.isEmpty) return const SizedBox.shrink();
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Chuyến đi được chia sẻ với bạn',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
-              ),
-              const SizedBox(height: 8),
-              ...provider.shares.map(
-                (share) => Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.share_location_outlined),
-                    title: Text(share.sharedByName),
-                    subtitle: Text('Trạng thái: ${share.tripStatus}'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () async {
-                      await Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => SharedTripTrackingPage(
-                            tripShareId: share.tripShareId,
-                          ),
-                        ),
-                      );
-                      if (context.mounted) {
-                        await context.read<ReceivedTripSharesProvider>().load();
-                      }
-                    },
-                  ),
-                ),
-              ),
-            ],
           ),
         );
       },

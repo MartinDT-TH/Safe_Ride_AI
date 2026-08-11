@@ -5,6 +5,7 @@ public sealed record UserNotificationResponse(
     string Title,
     string Content,
     string? NotificationType,
+    long? ReferenceId,
     string? TranslationsJson,
     bool IsRead,
     DateTime SentAt,

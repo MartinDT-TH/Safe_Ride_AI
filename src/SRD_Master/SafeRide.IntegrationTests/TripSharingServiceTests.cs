@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NetTopologySuite.Geometries;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Features.Notifications;
 using SafeRide.Application.Features.TripSharing;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
@@ -59,6 +60,26 @@ public sealed class TripSharingServiceTests
         Assert.Equal(first.TripShareId, second.TripShareId);
         Assert.NotEqual(first.ShareUrl, second.ShareUrl);
         Assert.Single(fixture.Db.TripShares);
+    }
+
+    [Fact]
+    public async Task Create_PersistsAndPublishesRecipientNotification()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+
+        var created = await fixture.Service.CreateAsync(
+            fixture.Trip.Id,
+            fixture.Owner.Id,
+            fixture.Recipient.PhoneNumber!);
+
+        var persisted = await fixture.Db.Notifications.SingleAsync();
+        Assert.Equal(fixture.Recipient.Id, persisted.UserId);
+        Assert.Equal("TripShared", persisted.NotificationType);
+        Assert.Equal(created.TripShareId, persisted.ReferenceId);
+
+        var pushed = Assert.Single(fixture.NotificationDelivery.Events);
+        Assert.Equal(persisted.Id, pushed.Id);
+        Assert.Equal(created.TripShareId, pushed.ReferenceId);
     }
 
     [Fact]
@@ -130,6 +151,57 @@ public sealed class TripSharingServiceTests
         var inactive = await Assert.ThrowsAsync<TripSharingException>(() =>
             fixture.Service.CreateAsync(fixture.Trip.Id, fixture.Owner.Id, fixture.Recipient.PhoneNumber!));
         Assert.Equal(409, inactive.StatusCode);
+    }
+
+    [Fact]
+    public async Task Create_RejectsDriverAndRecipientWithActiveBooking()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var driverProfile = new DriverProfile
+        {
+            DriverId = fixture.Recipient.Id,
+            Driver = fixture.Recipient,
+            IdentityCardNumber = "RECIPIENT-DRIVER"
+        };
+        fixture.Db.DriverProfiles.Add(driverProfile);
+        await fixture.Db.SaveChangesAsync();
+
+        var driverError = await Assert.ThrowsAsync<TripSharingException>(() =>
+            fixture.Service.CreateAsync(
+                fixture.Trip.Id,
+                fixture.Owner.Id,
+                fixture.Recipient.PhoneNumber!));
+        Assert.Equal("trip_share.recipient_is_driver", driverError.Code);
+        Assert.Equal(409, driverError.StatusCode);
+
+        fixture.Db.DriverProfiles.Remove(driverProfile);
+        fixture.Db.Bookings.Add(new Booking
+        {
+            BookingId = 2,
+            CustomerId = fixture.Recipient.Id,
+            Customer = fixture.Recipient,
+            VehicleId = fixture.Trip.Booking.VehicleId,
+            Vehicle = fixture.Trip.Booking.Vehicle,
+            ServiceTypeId = 1,
+            BookingType = BookingType.Now,
+            BookingStatus = BookingStatus.Searching,
+            PickupAddress = "Điểm đón khác",
+            PickupLocation = new Point(106.67, 10.77) { SRID = 4326 },
+            EstimatedFare = 100000,
+            CreatedAt = fixture.Clock.UtcNow,
+            UpdatedAt = fixture.Clock.UtcNow
+        });
+        await fixture.Db.SaveChangesAsync();
+
+        var activeTripError = await Assert.ThrowsAsync<TripSharingException>(() =>
+            fixture.Service.CreateAsync(
+                fixture.Trip.Id,
+                fixture.Owner.Id,
+                fixture.Recipient.PhoneNumber!));
+        Assert.Equal("trip_share.recipient_has_active_trip", activeTripError.Code);
+        Assert.Equal(409, activeTripError.StatusCode);
+        Assert.Empty(fixture.Db.TripShares);
+        Assert.Empty(fixture.Db.Notifications);
     }
 
     [Fact]
@@ -297,6 +369,7 @@ public sealed class TripSharingServiceTests
             TripSharingService service,
             RealtimeFake realtime,
             ExpirySchedulerFake scheduler,
+            NotificationDeliveryFake notificationDelivery,
             AspNetUser owner,
             AspNetUser recipient,
             Trip trip)
@@ -306,6 +379,7 @@ public sealed class TripSharingServiceTests
             Service = service;
             Realtime = realtime;
             Scheduler = scheduler;
+            NotificationDelivery = notificationDelivery;
             Owner = owner;
             Recipient = recipient;
             Trip = trip;
@@ -316,6 +390,7 @@ public sealed class TripSharingServiceTests
         public TripSharingService Service { get; }
         public RealtimeFake Realtime { get; }
         public ExpirySchedulerFake Scheduler { get; }
+        public NotificationDeliveryFake NotificationDelivery { get; }
         public AspNetUser Owner { get; }
         public AspNetUser Recipient { get; }
         public Trip Trip { get; }
@@ -383,6 +458,7 @@ public sealed class TripSharingServiceTests
 
             var realtime = new RealtimeFake();
             var scheduler = new ExpirySchedulerFake();
+            var notificationDelivery = new NotificationDeliveryFake();
             var service = new TripSharingService(
                 db,
                 new InMemoryRedisService(),
@@ -395,8 +471,19 @@ public sealed class TripSharingServiceTests
                     CompletedGraceMinutes = 15,
                     CancelledGraceMinutes = 5
                 }),
-                scheduler);
-            return new Fixture(db, clock, service, realtime, scheduler, owner, recipient, trip);
+                scheduler,
+                notificationDelivery,
+                NullLogger<TripSharingService>.Instance);
+            return new Fixture(
+                db,
+                clock,
+                service,
+                realtime,
+                scheduler,
+                notificationDelivery,
+                owner,
+                recipient,
+                trip);
         }
 
         public AspNetUser AddUser(string phone, string name) => AddUser(Db, phone, name);
@@ -434,6 +521,19 @@ public sealed class TripSharingServiceTests
         }
     }
 
+    private sealed class NotificationDeliveryFake : ISystemNotificationDeliveryService
+    {
+        public List<UserNotificationRealtimeEvent> Events { get; } = [];
+
+        public Task PublishUserNotificationsAsync(
+            IReadOnlyCollection<UserNotificationRealtimeEvent> notifications,
+            CancellationToken cancellationToken = default)
+        {
+            Events.AddRange(notifications);
+            return Task.CompletedTask;
+        }
+    }
+
     private sealed class RealtimeFake : IRealtimeNotificationService
     {
         public List<(SharedTripStatusUpdate Update, string EventName)> StatusEvents { get; } = [];
@@ -458,6 +558,7 @@ public sealed class TripSharingServiceTests
         public Task PublishTripStatusChangedAsync(SafeRide.Application.Common.Realtime.TripStatusChangedEvent notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task PublishTripPaymentPendingAsync(SafeRide.Application.Common.Realtime.TripPaymentPendingEvent notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task PublishTripPaymentSucceededAsync(SafeRide.Application.Common.Realtime.TripPaymentSucceededEvent notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task PublishSOSTriggeredAsync(SafeRide.Application.Common.Realtime.SOSTriggeredEvent notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task PublishDriverLocationUpdatedAsync(SafeRide.Application.Common.Realtime.DriverLocationUpdatedEvent notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task PublishDriverOfferCreatedAsync(SafeRide.Application.Common.Realtime.DriverOfferCreatedEvent notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task PublishDriverOfferReceivedAsync(SafeRide.Application.Common.Realtime.DriverOfferReceivedEvent notification, CancellationToken cancellationToken = default) => Task.CompletedTask;

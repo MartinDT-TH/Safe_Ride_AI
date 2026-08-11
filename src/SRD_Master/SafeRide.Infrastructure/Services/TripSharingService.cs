@@ -1,9 +1,11 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Features.Auth;
+using SafeRide.Application.Features.Notifications;
 using SafeRide.Application.Features.TripSharing;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
@@ -20,6 +22,8 @@ public sealed class TripSharingService : ITripSharingService
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IOptionsMonitor<TripSharingOptions> _options;
     private readonly ITripShareExpiryScheduler _expiryScheduler;
+    private readonly ISystemNotificationDeliveryService _notificationDeliveryService;
+    private readonly ILogger<TripSharingService> _logger;
 
     public TripSharingService(
         ApplicationDbContext dbContext,
@@ -27,7 +31,9 @@ public sealed class TripSharingService : ITripSharingService
         IRealtimeNotificationService realtime,
         IDateTimeProvider dateTimeProvider,
         IOptionsMonitor<TripSharingOptions> options,
-        ITripShareExpiryScheduler expiryScheduler)
+        ITripShareExpiryScheduler expiryScheduler,
+        ISystemNotificationDeliveryService notificationDeliveryService,
+        ILogger<TripSharingService> logger)
     {
         _dbContext = dbContext;
         _redisService = redisService;
@@ -35,6 +41,8 @@ public sealed class TripSharingService : ITripSharingService
         _dateTimeProvider = dateTimeProvider;
         _options = options;
         _expiryScheduler = expiryScheduler;
+        _notificationDeliveryService = notificationDeliveryService;
+        _logger = logger;
     }
 
     public async Task<CreateTripShareResult> CreateAsync(
@@ -86,6 +94,38 @@ public sealed class TripSharingService : ITripSharingService
             throw Error("trip_share.recipient_inactive", "Tài khoản người nhận hiện không hoạt động.", StatusCodes.Status409Conflict);
         }
 
+        if (await _dbContext.DriverProfiles.AsNoTracking().AnyAsync(
+                x => x.DriverId == recipient.Id,
+                cancellationToken))
+        {
+            throw Error(
+                "trip_share.recipient_is_driver",
+                "Không thể chia sẻ chuyến đi cho tài khoản tài xế.",
+                StatusCodes.Status409Conflict);
+        }
+
+        var recipientHasActiveBooking = await _dbContext.Bookings
+            .AsNoTracking()
+            .AnyAsync(
+                x => x.CustomerId == recipient.Id
+                    && (x.BookingStatus == BookingStatus.Searching
+                        || x.BookingStatus == BookingStatus.DriverAssigned),
+                cancellationToken);
+        var recipientHasActiveTrip = await _dbContext.Trips
+            .AsNoTracking()
+            .AnyAsync(
+                x => x.Booking.CustomerId == recipient.Id
+                    && x.TripStatus != TripStatus.COMPLETED
+                    && x.TripStatus != TripStatus.CANCELLED,
+                cancellationToken);
+        if (recipientHasActiveBooking || recipientHasActiveTrip)
+        {
+            throw Error(
+                "trip_share.recipient_has_active_trip",
+                "Người nhận đang có chuyến đi hoạt động nên không thể nhận chia sẻ lúc này.",
+                StatusCodes.Status409Conflict);
+        }
+
         var rawToken = TripShareTokenService.GenerateToken();
         var tokenHash = TripShareTokenService.HashToken(rawToken);
         var expiresAt = utcNow.AddHours(_options.CurrentValue.DefaultExpirationHours);
@@ -127,7 +167,7 @@ public sealed class TripSharingService : ITripSharingService
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
-        _dbContext.Notifications.Add(new Notification
+        var notification = new Notification
         {
             UserId = recipient.Id,
             Title = "Chuyến đi được chia sẻ",
@@ -135,10 +175,34 @@ public sealed class TripSharingService : ITripSharingService
             NotificationType = "TripShared",
             ReferenceId = share.Id,
             SentAt = utcNow
-        });
+        };
+        _dbContext.Notifications.Add(notification);
         await _dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         _expiryScheduler.ScheduleExpiration(share.Id, share.ExpiresAt);
+
+        try
+        {
+            await _notificationDeliveryService.PublishUserNotificationsAsync(
+                [new UserNotificationRealtimeEvent(
+                    notification.UserId,
+                    notification.Id,
+                    notification.Title,
+                    notification.Content,
+                    notification.NotificationType,
+                    notification.ReferenceId,
+                    notification.TranslationsJson,
+                    notification.SentAt)],
+                cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Failed to push realtime trip-share notification {NotificationId} for share {TripShareId}.",
+                notification.Id,
+                share.Id);
+        }
 
         return new CreateTripShareResult(
             share.Id,

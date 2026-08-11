@@ -366,6 +366,7 @@ class SystemNotificationUpdate {
     required this.content,
     required this.notificationType,
     required this.sentAt,
+    this.referenceId,
   });
 
   final int id;
@@ -373,6 +374,7 @@ class SystemNotificationUpdate {
   final String content;
   final String notificationType;
   final DateTime sentAt;
+  final int? referenceId;
 
   static SystemNotificationUpdate? fromSignalRArguments(
     List<Object?>? arguments,
@@ -408,6 +410,7 @@ class SystemNotificationUpdate {
       notificationType:
           _value(data, 'notificationType')?.toString() ?? 'System Update',
       sentAt: sentAt,
+      referenceId: (_value(data, 'referenceId') as num?)?.toInt(),
     );
   }
 

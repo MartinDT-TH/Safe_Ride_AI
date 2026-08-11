@@ -51,7 +51,6 @@ import '../features/driver/trip_requests/domain/repositories/driver_trip_request
 import '../features/driver/registration/data/datasources/identity_verification_remote_datasource.dart';
 import '../features/trip_sharing/data/datasources/trip_sharing_remote_datasource.dart';
 import '../features/trip_sharing/presentation/providers/trip_sharing_provider.dart';
-import '../features/trip_sharing/presentation/providers/received_trip_shares_provider.dart';
 import '../features/trip_sharing/trip_share_deep_link_coordinator.dart';
 import '../features/shared/chat/presentation/providers/trip_chat_provider.dart';
 import '../features/shared/feedback/data/datasources/feedback_remote_datasource.dart';
@@ -237,10 +236,6 @@ Future<void> setupDependencies() async {
       () => getIt<MobileConfigService>().config.tripSharing.appLinkBaseUrl,
     ),
   );
-  getIt.registerFactory<ReceivedTripSharesProvider>(
-    () => ReceivedTripSharesProvider(getIt<TripSharingRemoteDatasource>()),
-  );
-
   getIt.registerLazySingleton<FeedbackRemoteDatasource>(
     () => FeedbackRemoteDatasource(),
   );

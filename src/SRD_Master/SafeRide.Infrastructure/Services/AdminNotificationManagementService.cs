@@ -194,6 +194,7 @@ public sealed class AdminNotificationManagementService
                     x.Title,
                     x.Content,
                     x.NotificationType,
+                    x.ReferenceId,
                     x.TranslationsJson,
                     x.SentAt))
                 .ToArray();

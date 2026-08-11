@@ -6,5 +6,6 @@ public sealed record UserNotificationRealtimeEvent(
     string Title,
     string Content,
     string? NotificationType,
+    long? ReferenceId,
     string? TranslationsJson,
     DateTime SentAt);

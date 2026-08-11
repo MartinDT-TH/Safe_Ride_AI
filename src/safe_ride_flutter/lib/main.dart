@@ -19,7 +19,6 @@ import 'features/shared/history/presentation/providers/history_provider.dart';
 import 'features/shared/notifications/presentation/providers/notification_provider.dart';
 import 'features/driver/dashboard/presentation/providers/driver_dashboard_provider.dart';
 import 'features/trip_sharing/presentation/providers/trip_sharing_provider.dart';
-import 'features/trip_sharing/presentation/providers/received_trip_shares_provider.dart';
 import 'features/shared/chat/presentation/providers/trip_chat_provider.dart';
 import 'features/driver/wallet/presentation/providers/driver_wallet_provider.dart';
 import 'features/shared/feedback/presentation/providers/feedback_provider.dart';
@@ -53,9 +52,6 @@ void main() async {
         ChangeNotifierProvider(create: (_) => getIt<NotificationProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<DriverDashboardProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<TripSharingProvider>()),
-        ChangeNotifierProvider(
-          create: (_) => getIt<ReceivedTripSharesProvider>(),
-        ),
         ChangeNotifierProvider(create: (_) => getIt<TripChatProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<DriverWalletProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<FeedbackProvider>()),
