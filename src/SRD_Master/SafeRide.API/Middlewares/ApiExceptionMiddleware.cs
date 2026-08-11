@@ -8,6 +8,7 @@ using SafeRide.Application.Features.Notifications;
 using SafeRide.Application.Features.Pricing;
 using SafeRide.Application.Features.Promotions;
 using SafeRide.Application.Features.Ratings;
+using SafeRide.Application.Features.TripSharing;
 using SafeRide.Application.Features.Reports;
 using SafeRide.Application.Features.Safety;
 
@@ -69,6 +70,14 @@ public sealed class ApiExceptionMiddleware
                 exception.Message);
         }
         catch (RatingException exception)
+        {
+            await WriteProblemAsync(
+                context,
+                exception.StatusCode,
+                exception.Code,
+                exception.Message);
+        }
+        catch (TripSharingException exception)
         {
             await WriteProblemAsync(
                 context,

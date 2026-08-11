@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -21,6 +23,8 @@ import '../../../../customer/booking/presentation/pages/trip_tracking_page.dart'
 import '../../../../customer/booking/presentation/providers/booking_provider.dart';
 import '../../../../customer/ai_chat/presentation/widgets/ai_chat_sheet.dart';
 import '../../../../shared/history/presentation/pages/history_page.dart';
+import '../../../../trip_sharing/trip_share_deep_link_coordinator.dart';
+import '../../../../../dependency_injection/injection.dart';
 import '../../../../shared/notifications/presentation/pages/notifications_page.dart';
 import '../../../../shared/notifications/presentation/providers/notification_provider.dart';
 
@@ -80,6 +84,13 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     context.read<BookingProvider>().loadAvailablePromotions(auth.token!);
     context.read<NotificationProvider>().initialize(auth.token);
     _loadActiveBooking(auth.token);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        unawaited(
+          getIt<TripShareDeepLinkCoordinator>().processPendingAfterNavigation(),
+        );
+      }
+    });
   }
 
   Future<void> _loadActiveBooking(String? token) async {
@@ -288,8 +299,8 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
         if (provider.errorMessage != null && provider.recentTrips.isEmpty) {
           return RefreshIndicator(
-            onRefresh: () => provider.loadHomeData(),
-            color: Color(0xFF006B70),
+            onRefresh: provider.loadHomeData,
+            color: const Color(0xFF006B70),
             child: LayoutBuilder(
               builder: (context, constraints) {
                 return SingleChildScrollView(
@@ -363,7 +374,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
         }
 
         return RefreshIndicator(
-          onRefresh: () => provider.loadHomeData(),
+          onRefresh: provider.loadHomeData,
           color: Color(0xFF006B70),
           child: SingleChildScrollView(
             physics: AlwaysScrollableScrollPhysics(),

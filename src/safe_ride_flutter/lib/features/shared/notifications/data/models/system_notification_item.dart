@@ -8,6 +8,7 @@ class SystemNotificationItem {
     required this.notificationType,
     required this.isRead,
     required this.sentAt,
+    this.referenceId,
     this.translations = const {},
     this.readAt,
   });
@@ -18,6 +19,7 @@ class SystemNotificationItem {
   final String notificationType;
   final bool isRead;
   final DateTime sentAt;
+  final int? referenceId;
   final Map<String, NotificationTranslation> translations;
   final DateTime? readAt;
 
@@ -27,6 +29,7 @@ class SystemNotificationItem {
       title: json['title']?.toString() ?? '',
       content: json['content']?.toString() ?? '',
       notificationType: json['notificationType']?.toString() ?? 'System Update',
+      referenceId: (json['referenceId'] as num?)?.toInt(),
       isRead: json['isRead'] == true,
       sentAt:
           DateTime.tryParse(json['sentAt']?.toString() ?? '') ??
@@ -43,6 +46,7 @@ class SystemNotificationItem {
     String? title,
     String? content,
     String? notificationType,
+    int? referenceId,
     bool? isRead,
     DateTime? sentAt,
     Map<String, NotificationTranslation>? translations,
@@ -53,6 +57,7 @@ class SystemNotificationItem {
       title: title ?? this.title,
       content: content ?? this.content,
       notificationType: notificationType ?? this.notificationType,
+      referenceId: referenceId ?? this.referenceId,
       isRead: isRead ?? this.isRead,
       sentAt: sentAt ?? this.sentAt,
       translations: translations ?? this.translations,

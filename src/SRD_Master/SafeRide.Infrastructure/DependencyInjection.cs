@@ -37,6 +37,23 @@ namespace SafeRide.Infrastructure;
 
 public static class DependencyInjection
 {
+    private static bool IsValidTripSharingAppLink(string value, bool isDevelopment)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || string.IsNullOrWhiteSpace(uri.Host))
+        {
+            return false;
+        }
+
+        if (string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return isDevelopment
+            && !string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+    }
+
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
         IConfiguration configuration,
@@ -222,6 +239,18 @@ public static class DependencyInjection
             .Validate(options => options.CustomerAlertDistanceIncreaseMeters > 0, "TripTracking:CustomerAlertDistanceIncreaseMeters must be greater than zero.")
             .ValidateOnStart();
 
+        services
+            .AddOptions<TripSharingOptions>()
+            .Bind(configuration.GetSection(TripSharingOptions.SectionName))
+            .Validate(options => IsValidTripSharingAppLink(
+                    options.AppLinkBaseUrl,
+                    environment.IsDevelopment()),
+                "TripSharing:AppLinkBaseUrl must be an absolute HTTPS URL in production, or an explicitly configured custom scheme in development.")
+            .Validate(options => options.DefaultExpirationHours > 0, "TripSharing:DefaultExpirationHours must be greater than zero.")
+            .Validate(options => options.CompletedGraceMinutes > 0, "TripSharing:CompletedGraceMinutes must be greater than zero.")
+            .Validate(options => options.CancelledGraceMinutes > 0, "TripSharing:CancelledGraceMinutes must be greater than zero.")
+            .ValidateOnStart();
+
         // ── Hangfire ───────────────────────────────────────────────────────────────
         if (backgroundJobsEnabled)
         {
@@ -241,10 +270,12 @@ public static class DependencyInjection
                     }));
             services.AddHangfireServer();
             services.AddScoped<IBookingLifecycleJobScheduler, HangfireBookingLifecycleJobScheduler>();
+            services.AddScoped<ITripShareExpiryScheduler, HangfireTripShareExpiryScheduler>();
         }
         else
         {
             services.AddScoped<IBookingLifecycleJobScheduler, NoOpBookingLifecycleJobScheduler>();
+            services.AddScoped<ITripShareExpiryScheduler, NoOpTripShareExpiryScheduler>();
         }
         // ──────────────────────────────────────────────────────────────────────────
 
@@ -286,6 +317,7 @@ public static class DependencyInjection
         services.AddScoped<IDriverRealtimeService, DriverRealtimeService>();
         services.AddScoped<TripFareFinalizationService>();
         services.AddScoped<ITripStatusService, TripStatusService>();
+        services.AddScoped<ITripSharingService, TripSharingService>();
         services.AddScoped<ITripChatService, TripChatService>();
         services.AddSingleton<ITripChatContentFilter, TripChatContentFilter>();
         services.AddHttpClient<ISpeedSmsService, InfobipSmsService>();
@@ -416,8 +448,11 @@ public static class DependencyInjection
                             .CreateLogger("JwtAuthentication");
                         logger.LogWarning(
                             context.Exception,
-                            "JWT authentication failed for {Path}.",
-                            context.Request.Path);
+                            "JWT authentication failed for {Method} {Path}. FailureType={FailureType} TraceId={TraceId}.",
+                            context.Request.Method,
+                            context.Request.Path,
+                            context.Exception.GetType().Name,
+                            context.HttpContext.TraceIdentifier);
                         return Task.CompletedTask;
                     },
                     OnMessageReceived = context =>
@@ -434,6 +469,21 @@ public static class DependencyInjection
                     },
                     OnChallenge = async context =>
                     {
+                        var authorizationHeaders = context.Request.Headers.Authorization;
+                        var hasBearerHeader = authorizationHeaders.Any(value =>
+                            value?.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) == true);
+                        var logger = context.HttpContext.RequestServices
+                            .GetRequiredService<ILoggerFactory>()
+                            .CreateLogger("JwtAuthentication");
+                        logger.LogWarning(
+                            "JWT challenge for {Method} {Path}. HasBearerHeader={HasBearerHeader} AuthorizationHeaderCount={AuthorizationHeaderCount} FailureType={FailureType} TraceId={TraceId}.",
+                            context.Request.Method,
+                            context.Request.Path,
+                            hasBearerHeader,
+                            authorizationHeaders.Count,
+                            context.AuthenticateFailure?.GetType().Name ?? "none",
+                            context.HttpContext.TraceIdentifier);
+
                         context.HandleResponse();
                         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                         context.Response.ContentType = "application/problem+json";

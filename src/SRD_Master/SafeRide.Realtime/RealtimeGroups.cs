@@ -12,5 +12,7 @@ public static class RealtimeGroups
 
     public static string Trip(long tripId) => $"trip:{tripId}";
 
+    public static string TripShare(long tripShareId) => $"trip-share:{tripShareId}";
+  
     public static string TripChat(long tripId) => $"trip-chat:{tripId}";
 }

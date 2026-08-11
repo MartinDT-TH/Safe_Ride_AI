@@ -34,7 +34,10 @@ class NotificationProvider extends ChangeNotifier {
   int get unreadCount => _unreadCount;
   bool get hasMore => _currentPage < _totalPages;
 
-  Future<void> initialize(String? accessToken) async {
+  Future<void> initialize(
+    String? accessToken, {
+    bool refreshIfInitialized = false,
+  }) async {
     if (accessToken == null || accessToken.isEmpty) {
       return;
     }
@@ -46,6 +49,8 @@ class NotificationProvider extends ChangeNotifier {
     if (shouldReload) {
       await refresh(accessToken);
       _isInitialized = true;
+    } else if (refreshIfInitialized) {
+      await refresh(accessToken);
     }
   }
 
@@ -191,6 +196,7 @@ class NotificationProvider extends ChangeNotifier {
       title: update.title,
       content: update.content,
       notificationType: update.notificationType,
+      referenceId: update.referenceId,
       isRead: false,
       sentAt: update.sentAt,
     );

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../../../core/localization/locale_provider.dart';
 import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
+import '../../../../trip_sharing/presentation/pages/shared_trip_tracking_page.dart';
 import '../providers/notification_provider.dart';
 
 class NotificationsPage extends StatefulWidget {
@@ -24,7 +25,10 @@ class _NotificationsPageState extends State<NotificationsPage> {
       }
 
       final token = context.read<AuthProvider>().token;
-      context.read<NotificationProvider>().initialize(token);
+      context.read<NotificationProvider>().initialize(
+        token,
+        refreshIfInitialized: true,
+      );
     });
   }
 
@@ -107,7 +111,21 @@ class _NotificationsPageState extends State<NotificationsPage> {
                 final item = provider.notifications[index];
                 return _NotificationCard(
                   item: item,
-                  onTap: () => provider.markAsRead(item.id),
+                  onTap: () async {
+                    await provider.markAsRead(item.id);
+                    if (!context.mounted ||
+                        item.notificationType != 'TripShared' ||
+                        item.referenceId == null) {
+                      return;
+                    }
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => SharedTripTrackingPage(
+                          tripShareId: item.referenceId!,
+                        ),
+                      ),
+                    );
+                  },
                 );
               },
             );
@@ -122,7 +140,7 @@ class _NotificationCard extends StatelessWidget {
   _NotificationCard({required this.item, required this.onTap});
 
   final dynamic item;
-  final VoidCallback onTap;
+  final Future<void> Function() onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -136,7 +154,7 @@ class _NotificationCard extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
+        onTap: () => onTap(),
         borderRadius: BorderRadius.circular(20),
         child: Ink(
           decoration: BoxDecoration(
