@@ -59,7 +59,11 @@ abstract class BookingRepository {
     required String message,
   });
 
-  Future<void> confirmCustomerReturn(String accessToken, {required int tripId});
+  Future<void> respondToDriverEndTrip(
+    String accessToken, {
+    required int tripId,
+    required bool accepted,
+  });
 
   Future<void> submitTripRating(
     String accessToken, {

@@ -141,9 +141,10 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
       return true;
     }
 
-    final ok = await bookingProvider.confirmCustomerReturn(
+    final ok = await bookingProvider.respondToDriverEndTrip(
       token,
       tripId: tripId,
+      accepted: true,
     );
     if (ok) {
       _returnConfirmed = true;
@@ -208,9 +209,7 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
 
     _paymentPollingTimer?.cancel();
     unawaited(_pollPaymentStatusOnce());
-    _paymentPollingTimer = Timer.periodic(Duration(seconds: 3), (
-      timer,
-    ) async {
+    _paymentPollingTimer = Timer.periodic(Duration(seconds: 3), (timer) async {
       final completed = await _pollPaymentStatusOnce();
       if (completed || !mounted) {
         timer.cancel();
@@ -323,11 +322,7 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
                           color: AppColors.primary,
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(
-                          Icons.check,
-                          color: Colors.white,
-                          size: 32,
-                        ),
+                        child: Icon(Icons.check, color: Colors.white, size: 32),
                       ),
                       SizedBox(height: 20),
                       Text(
@@ -520,9 +515,7 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
                             ),
                             child: Text(
                               context.l10n.confirmTripRateLater,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w800,
-                              ),
+                              style: TextStyle(fontWeight: FontWeight.w800),
                             ),
                           ),
                         ),
@@ -651,10 +644,7 @@ class _PaymentDetails extends StatelessWidget {
             children: [
               Text(
                 context.l10n.total,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
               ),
               Text(
                 formatCurrency(finalFare),
@@ -727,10 +717,7 @@ class _RatingCard extends StatelessWidget {
             enabled: enabled,
             decoration: InputDecoration(
               hintText: context.l10n.driverCommentHint,
-              hintStyle: TextStyle(
-                fontSize: 14,
-                color: Color(0xFF98A2B3),
-              ),
+              hintStyle: TextStyle(fontSize: 14, color: Color(0xFF98A2B3)),
               filled: true,
               fillColor: Colors.white,
               border: OutlineInputBorder(
@@ -748,11 +735,7 @@ class _RatingCard extends StatelessWidget {
 }
 
 class _StatCard extends StatelessWidget {
-  _StatCard({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
+  _StatCard({required this.icon, required this.label, required this.value});
 
   final IconData icon;
   final String label;

@@ -17,6 +17,30 @@ public sealed class TripFareFinalizationService
         decimal actualDistanceKm,
         int actualDurationMinutes)
     {
+        var discountAmount = trip.Booking.BookingPromotions.Sum(x => x.DiscountAmount);
+        var estimatedDistanceKm = trip.Booking.EstimatedDistanceKm;
+        if (estimatedDistanceKm.HasValue
+            && estimatedDistanceKm.Value > 0m
+            && actualDistanceKm > 0m
+            && actualDistanceKm < estimatedDistanceKm.Value)
+        {
+            var completedRatio = decimal.Clamp(
+                actualDistanceKm / estimatedDistanceKm.Value,
+                0m,
+                1m);
+            var proportionalActualFare = RoundVnd(
+                trip.Booking.EstimatedFare * completedRatio);
+            var originalFinalFare = Math.Max(
+                0m,
+                trip.Booking.EstimatedFare - discountAmount);
+            var proportionalFinalFare = RoundVnd(
+                originalFinalFare * completedRatio);
+
+            return new TripFareFinalizationResult(
+                proportionalActualFare,
+                proportionalFinalFare);
+        }
+
         var actualFare = trip.Booking.PricingRule is null
             ? trip.Booking.EstimatedFare
             : _fareEstimationService.CalculateFare(
@@ -26,7 +50,6 @@ public sealed class TripFareFinalizationService
                 trip.Booking.SurgePricingRule);
 
         actualFare = RoundVnd(actualFare);
-        var discountAmount = trip.Booking.BookingPromotions.Sum(x => x.DiscountAmount);
         var finalFare = RoundVnd(Math.Max(0m, actualFare - discountAmount));
 
         return new TripFareFinalizationResult(actualFare, finalFare);

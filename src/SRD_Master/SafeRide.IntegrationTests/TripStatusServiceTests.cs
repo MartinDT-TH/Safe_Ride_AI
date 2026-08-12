@@ -41,18 +41,18 @@ public sealed class TripStatusServiceTests
         Assert.Equal(TripStatus.WAITING_RETURN_CONFIRM, trip.TripStatus);
         Assert.Equal(BookingStatus.DriverAssigned, trip.Booking.BookingStatus);
         Assert.Null(trip.CompletedAt);
-        Assert.Equal(UtcNow, trip.EndedAt);
-        Assert.Equal(5.2m, trip.ActualDistanceKm);
-        Assert.Equal(5, trip.ActualDurationMinutes);
-        Assert.Equal(72_000m, trip.ActualFare);
-        Assert.Equal(62_000m, trip.FinalFare);
+        Assert.Null(trip.EndedAt);
+        Assert.Null(trip.ActualDistanceKm);
+        Assert.Null(trip.ActualDurationMinutes);
+        Assert.Null(trip.ActualFare);
+        Assert.Null(trip.FinalFare);
         Assert.Equal(2, fixture.Promotion.CurrentUsageCount);
         Assert.Single(trip.Booking.BookingPromotions);
         Assert.Equal(DriverWorkStatus.Busy, driver.WorkStatus);
         Assert.Null(fixture.Redis.DriverStatusValue);
         Assert.DoesNotContain(fixture.TripLiveKey, fixture.Redis.RemovedKeys);
         Assert.DoesNotContain(fixture.DriverActiveTripKey, fixture.Redis.RemovedKeys);
-        Assert.Contains(RedisKeys.TripTrackingPath(fixture.TripId), fixture.Redis.RemovedKeys);
+        Assert.DoesNotContain(RedisKeys.TripTrackingPath(fixture.TripId), fixture.Redis.RemovedKeys);
         var notification = Assert.Single(fixture.Realtime.TripStatusNotifications);
         Assert.Equal(fixture.TripId, notification.TripId);
         Assert.Equal(trip.BookingId, notification.BookingId);
@@ -77,7 +77,6 @@ public sealed class TripStatusServiceTests
             fixture.TripId,
             vehicleReturnedConfirmed: true,
             CancellationToken.None);
-
         var trip = await fixture.DbContext.Trips
             .Include(x => x.Booking)
             .Include(x => x.Payments)
@@ -102,14 +101,19 @@ public sealed class TripStatusServiceTests
             fixture.DriverId,
             fixture.TripId,
             CancellationToken.None);
+        await fixture.Service.ConfirmReturnByCustomerAsync(
+            fixture.CustomerId,
+            fixture.TripId,
+            vehicleReturnedConfirmed: true,
+            CancellationToken.None);
 
         var trip = await fixture.DbContext.Trips
             .Include(x => x.Booking)
             .SingleAsync(x => x.Id == fixture.TripId);
 
         Assert.Equal(2m, trip.ActualDistanceKm);
-        Assert.Equal(40_000m, trip.ActualFare);
-        Assert.Equal(30_000m, trip.FinalFare);
+        Assert.Equal(27_692m, trip.ActualFare);
+        Assert.Equal(23_846m, trip.FinalFare);
         Assert.NotEqual(trip.Booking.EstimatedFare, trip.FinalFare);
     }
 
@@ -141,6 +145,8 @@ public sealed class TripStatusServiceTests
     public async Task ConfirmReturnByCustomer_CreatesAuditRecordAndMovesTripToWaitingPayment()
     {
         using var fixture = await TripStatusFixture.CreateAsync(TripStatus.WAITING_RETURN_CONFIRM);
+        fixture.Redis.SetTripTrackingSnapshot(
+            CreateTripTrackingSnapshot(fixture.TripId, 5_200));
         await fixture.Service.ConfirmReturnByCustomerAsync(
             fixture.CustomerId,
             fixture.TripId,
@@ -207,23 +213,70 @@ public sealed class TripStatusServiceTests
         Assert.DoesNotContain(fixture.DriverActiveTripKey, fixture.Redis.RemovedKeys);
     }
     [Fact]
-    public async Task ConfirmReturnByCustomer_WhenVehicleReturnNotConfirmed_RejectsRequest()
+    public async Task ConfirmReturnByCustomer_WhenRejected_ResumesTripWithoutFinalizingFare()
     {
         using var fixture = await TripStatusFixture.CreateAsync(TripStatus.WAITING_RETURN_CONFIRM);
-        var exception = await Assert.ThrowsAsync<BookingException>(
-            () => fixture.Service.ConfirmReturnByCustomerAsync(
-                fixture.CustomerId,
-                fixture.TripId,
-                vehicleReturnedConfirmed: false,
-                CancellationToken.None));
+        await fixture.Service.ConfirmReturnByCustomerAsync(
+            fixture.CustomerId,
+            fixture.TripId,
+            vehicleReturnedConfirmed: false,
+            CancellationToken.None);
         var trip = await fixture.DbContext.Trips
             .Include(x => x.ReturnConfirmations)
             .SingleAsync(x => x.Id == fixture.TripId);
-        Assert.Equal("trip.return_confirmation_required", exception.Code);
-        Assert.Equal(400, exception.StatusCode);
-        Assert.Equal(TripStatus.WAITING_RETURN_CONFIRM, trip.TripStatus);
+        Assert.Equal(TripStatus.IN_PROGRESS, trip.TripStatus);
+        Assert.Null(trip.EndedAt);
+        Assert.Null(trip.ActualDistanceKm);
+        Assert.Null(trip.FinalFare);
         Assert.Empty(trip.ReturnConfirmations);
-        Assert.Empty(fixture.Realtime.TripStatusNotifications);
+        var notification = Assert.Single(fixture.Realtime.TripStatusNotifications);
+        Assert.Equal(TripStatus.IN_PROGRESS, notification.TripStatus);
+        Assert.DoesNotContain(
+            RedisKeys.TripTrackingPath(fixture.TripId),
+            fixture.Redis.RemovedKeys);
+    }
+
+    [Fact]
+    public async Task EndTrip_AfterCustomerRejects_PreservesCumulativeDistanceForNextRequest()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.IN_PROGRESS);
+        fixture.Redis.SetTripTrackingSnapshot(
+            CreateTripTrackingSnapshot(fixture.TripId, 2_000));
+
+        await fixture.Service.EndTripAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            CancellationToken.None);
+        await fixture.Service.ConfirmReturnByCustomerAsync(
+            fixture.CustomerId,
+            fixture.TripId,
+            vehicleReturnedConfirmed: false,
+            CancellationToken.None);
+
+        fixture.Redis.SetTripTrackingSnapshot(
+            CreateTripTrackingSnapshot(fixture.TripId, 3_120));
+        await fixture.Service.EndTripAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            CancellationToken.None);
+        await fixture.Service.ConfirmReturnByCustomerAsync(
+            fixture.CustomerId,
+            fixture.TripId,
+            vehicleReturnedConfirmed: true,
+            CancellationToken.None);
+
+        var trip = await fixture.DbContext.Trips
+            .Include(x => x.Payments)
+            .SingleAsync(x => x.Id == fixture.TripId);
+        var payment = Assert.Single(trip.Payments);
+
+        Assert.Equal(3.12m, trip.ActualDistanceKm);
+        Assert.Equal(43_200m, trip.ActualFare);
+        Assert.Equal(37_200m, trip.FinalFare);
+        Assert.Equal(37_200m, payment.Amount);
+        Assert.Contains(
+            RedisKeys.TripTrackingPath(fixture.TripId),
+            fixture.Redis.RemovedKeys);
     }
 
 
