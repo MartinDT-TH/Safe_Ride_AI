@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faEye, faPhone, faTriangleExclamation, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { TopHeader } from '../../../shared/components/TopHeader';
+import { getCurrentManagementRole, MANAGEMENT_ROLES } from '../../auth/managementRoles';
 import { createAdminSOSConnection } from './adminSOSRealtime';
 import { getActiveAdminSOSAlerts, getAdminSOSAlert } from './adminSOSAlertsApi';
 import './AdminSOSAlertCenter.css';
@@ -9,6 +10,7 @@ import './AdminSOSAlertCenter.css';
 const DISMISSED_SOS_KEY = 'saferide_admin_dismissed_sos';
 
 function AdminSOSAlertCenter() {
+    const shouldLoadAdminSOS = getCurrentManagementRole() === MANAGEMENT_ROLES.admin;
     const [alerts, setAlerts] = useState([]);
     const [isPanelOpen, setIsPanelOpen] = useState(false);
     const [isRealtimeConnected, setIsRealtimeConnected] = useState(true);
@@ -18,6 +20,10 @@ function AdminSOSAlertCenter() {
     const [isDetailLoading, setIsDetailLoading] = useState(false);
 
     useEffect(() => {
+        if (getCurrentManagementRole() !== MANAGEMENT_ROLES.admin) {
+            return undefined;
+        }
+
         const controller = new AbortController();
         let active = true;
         const realtime = createAdminSOSConnection({
@@ -52,6 +58,10 @@ function AdminSOSAlertCenter() {
             realtime.stop();
         };
     }, []);
+
+    if (!shouldLoadAdminSOS) {
+        return null;
+    }
 
     const dismissAlert = (sosAlertId) => {
         rememberDismissed(sosAlertId);
