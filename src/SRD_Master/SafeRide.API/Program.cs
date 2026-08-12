@@ -130,6 +130,7 @@ await app.Services.ApplyDevelopmentMigrationsAsync(app.Environment);
 await app.Services.SeedAdminIdentityAsync();
 await app.Services.SeedIdentityAsync();
 await app.Services.SeedCustomerIdentityAsync();
+await app.Services.SeedStaffIdentityAsync();
 
 app.Use(async (context, next) =>
 {

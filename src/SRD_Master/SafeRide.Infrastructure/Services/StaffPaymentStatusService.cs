@@ -24,7 +24,7 @@ public sealed class StaffPaymentStatusService : IStaffPaymentStatusService
 
         var baseQuery = _db.Payments.AsNoTracking();
         baseQuery = ApplyMethodFilter(baseQuery, filter.Method);
-        baseQuery = ApplyDateFilter(baseQuery, filter.Date);
+        baseQuery = ApplyDateRangeFilter(baseQuery, filter.FromDate, filter.ToDate);
 
         var counts = new StaffPaymentStatusCountsResponse(
             await baseQuery.CountAsync(cancellationToken),
@@ -99,18 +99,37 @@ public sealed class StaffPaymentStatusService : IStaffPaymentStatusService
         return query.Where(x => x.PaymentMethod == parsedMethod);
     }
 
-    private static IQueryable<Domain.Entities.Payment> ApplyDateFilter(
+    private static IQueryable<Domain.Entities.Payment> ApplyDateRangeFilter(
         IQueryable<Domain.Entities.Payment> query,
-        DateOnly? date)
+        DateOnly? fromDate,
+        DateOnly? toDate)
     {
-        if (!date.HasValue)
+        if (!fromDate.HasValue && !toDate.HasValue)
         {
             return query;
         }
 
-        var start = date.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var end = start.AddDays(1);
-        return query.Where(x => x.CreatedAt >= start && x.CreatedAt < end);
+        var normalizedFrom = fromDate;
+        var normalizedTo = toDate;
+        if (normalizedFrom.HasValue && normalizedTo.HasValue && normalizedFrom > normalizedTo)
+        {
+            (normalizedFrom, normalizedTo) = (normalizedTo, normalizedFrom);
+        }
+
+        if (normalizedFrom.HasValue)
+        {
+            var start = normalizedFrom.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            query = query.Where(x => x.CreatedAt >= start);
+        }
+
+        if (normalizedTo.HasValue)
+        {
+            var endExclusive = normalizedTo.Value.AddDays(1)
+                .ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            query = query.Where(x => x.CreatedAt < endExclusive);
+        }
+
+        return query;
     }
 
     private static bool IsAllFilter(string? value)

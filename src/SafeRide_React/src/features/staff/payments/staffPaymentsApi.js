@@ -1,10 +1,11 @@
 import { apiRequest } from '../../../shared/api/apiClient';
 
-export function getStaffPaymentStatusesPath({ status, method, date, page, pageSize = 10 }) {
+export function getStaffPaymentStatusesPath({ status, method, fromDate, toDate, page, pageSize = 10 }) {
   const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (status !== 'all') params.set('status', status);
   if (method !== 'all') params.set('method', method);
-  if (date) params.set('date', date);
+  if (fromDate) params.set('fromDate', fromDate);
+  if (toDate) params.set('toDate', toDate);
   return `/staff/payments?${params}`;
 }
 

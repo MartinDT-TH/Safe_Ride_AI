@@ -5,4 +5,5 @@ public sealed record StaffPaymentStatusListFilter(
     int PageSize,
     string? Status,
     string? Method,
-    DateOnly? Date);
+    DateOnly? FromDate,
+    DateOnly? ToDate);

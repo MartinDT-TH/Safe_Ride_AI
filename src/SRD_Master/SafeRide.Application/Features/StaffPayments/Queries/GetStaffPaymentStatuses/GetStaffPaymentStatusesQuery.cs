@@ -7,4 +7,5 @@ public sealed record GetStaffPaymentStatusesQuery(
     int PageSize,
     string? Status,
     string? Method,
-    DateOnly? Date) : IRequest<StaffPaymentStatusPagedResult>;
+    DateOnly? FromDate,
+    DateOnly? ToDate) : IRequest<StaffPaymentStatusPagedResult>;

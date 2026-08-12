@@ -23,13 +23,14 @@ public sealed class StaffPaymentsController : ControllerBase
     public async Task<ActionResult<StaffPaymentStatusPagedResult>> GetPaymentStatuses(
         [FromQuery] string? status,
         [FromQuery] string? method,
-        [FromQuery] DateOnly? date,
+        [FromQuery] DateOnly? fromDate,
+        [FromQuery] DateOnly? toDate,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
         CancellationToken cancellationToken = default)
     {
         var result = await _sender.Send(
-            new GetStaffPaymentStatusesQuery(page, pageSize, status, method, date),
+            new GetStaffPaymentStatusesQuery(page, pageSize, status, method, fromDate, toDate),
             cancellationToken);
 
         return Ok(result);
