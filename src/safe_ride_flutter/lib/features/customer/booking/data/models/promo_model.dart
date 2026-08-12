@@ -10,6 +10,11 @@ class PromoModel {
   final int usageLimitPerUser;
   final int remainingUsageCount;
   final String shortDescription;
+  final int requiredCompletedTrips;
+  final int customerCompletedTrips;
+  final int remainingTripsToUnlock;
+  final bool isUnlocked;
+  final String? unlockMessage;
 
   const PromoModel({
     required this.promotionId,
@@ -23,6 +28,11 @@ class PromoModel {
     this.usageLimitPerUser = 1,
     this.remainingUsageCount = 0,
     required this.shortDescription,
+    this.requiredCompletedTrips = 0,
+    this.customerCompletedTrips = 0,
+    this.remainingTripsToUnlock = 0,
+    this.isUnlocked = true,
+    this.unlockMessage,
   });
 
   factory PromoModel.fromJson(Map<String, dynamic> json) {
@@ -43,6 +53,14 @@ class PromoModel {
       usageLimitPerUser: (json['usageLimitPerUser'] as num?)?.toInt() ?? 1,
       remainingUsageCount: (json['remainingUsageCount'] as num?)?.toInt() ?? 0,
       shortDescription: json['shortDescription']?.toString() ?? '',
+      requiredCompletedTrips:
+          (json['requiredCompletedTrips'] as num?)?.toInt() ?? 0,
+      customerCompletedTrips:
+          (json['customerCompletedTrips'] as num?)?.toInt() ?? 0,
+      remainingTripsToUnlock:
+          (json['remainingTripsToUnlock'] as num?)?.toInt() ?? 0,
+      isUnlocked: json['isUnlocked'] as bool? ?? true,
+      unlockMessage: json['unlockMessage']?.toString(),
     );
   }
 
@@ -59,10 +77,19 @@ class PromoModel {
       'usageLimitPerUser': usageLimitPerUser,
       'remainingUsageCount': remainingUsageCount,
       'shortDescription': shortDescription,
+      'requiredCompletedTrips': requiredCompletedTrips,
+      'customerCompletedTrips': customerCompletedTrips,
+      'remainingTripsToUnlock': remainingTripsToUnlock,
+      'isUnlocked': isUnlocked,
+      'unlockMessage': unlockMessage,
     };
   }
 
   // Legacy support for older code if any
   String get code => promotionCode;
   String get description => shortDescription;
+
+  String get resolvedUnlockMessage => unlockMessage?.trim().isNotEmpty == true
+      ? unlockMessage!.trim()
+      : 'Bạn cần hoàn thành thêm $remainingTripsToUnlock chuyến để sử dụng mã khuyến mãi này.';
 }

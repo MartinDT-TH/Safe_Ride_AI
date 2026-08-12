@@ -143,9 +143,33 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
                       onPressed: manualCode.isEmpty
                           ? null
                           : () {
+                              final normalizedCode = manualCode.toUpperCase();
+                              final matchingPromo = promos
+                                  .where(
+                                    (promo) =>
+                                        promo.promotionCode.toUpperCase() ==
+                                        normalizedCode,
+                                  )
+                                  .firstOrNull;
+                              if (matchingPromo != null &&
+                                  !matchingPromo.isUnlocked) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      matchingPromo.resolvedUnlockMessage,
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+                              if (matchingPromo != null) {
+                                provider.selectPromo(matchingPromo);
+                                Navigator.pop(context, matchingPromo);
+                                return;
+                              }
                               final promo = PromoModel(
                                 promotionId: -manualCode.hashCode.abs(),
-                                promotionCode: manualCode.toUpperCase(),
+                                promotionCode: normalizedCode,
                                 discountType: '',
                                 discountValue: 0,
                                 remainingUsageCount: 1,
@@ -199,6 +223,16 @@ class _SelectPromoSheetState extends State<SelectPromoSheet> {
                               provider.selectedPromo?.promotionId ==
                               promos[index].promotionId,
                           onUse: () {
+                            if (!promos[index].isUnlocked) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    promos[index].resolvedUnlockMessage,
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
                             provider.selectPromo(promos[index]);
                             Navigator.pop(context, promos[index]);
                           },
@@ -248,124 +282,147 @@ class _PromoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isSelected ? AppColors.primary : Color(0xFFEEEEEE),
-          width: 1.5,
+    return Opacity(
+      opacity: promo.isUnlocked ? 1 : 0.62,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? AppColors.primary : Color(0xFFEEEEEE),
+            width: 1.5,
+          ),
         ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Voucher Icon
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: Color(0xFFE0F2F2),
-                borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Voucher Icon
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: Color(0xFFE0F2F2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  promo.isUnlocked
+                      ? Icons.confirmation_num_outlined
+                      : Icons.lock_rounded,
+                  color: AppColors.primary,
+                  size: 24,
+                ),
               ),
-              child: Icon(
-                Icons.confirmation_num_outlined,
-                color: AppColors.primary,
-                size: 24,
-              ),
-            ),
-            SizedBox(width: 16),
-            // Info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Color(0xFFE0F2F2),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      promo.promotionCode,
-                      style: TextStyle(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 12,
-                        letterSpacing: 0.5,
+              SizedBox(width: 16),
+              // Info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
                       ),
-                    ),
-                  ),
-                  SizedBox(height: 10),
-                  Text(
-                    promo.shortDescription,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF2D2D2D),
-                      height: 1.3,
-                    ),
-                  ),
-                  if (promo.minimumOrderValue > 0) ...[
-                    SizedBox(height: 4),
-                    Text(
-                      context.l10n.minimumOrder(
-                        _formatCurrency(promo.minimumOrderValue),
+                      decoration: BoxDecoration(
+                        color: Color(0xFFE0F2F2),
+                        borderRadius: BorderRadius.circular(6),
                       ),
-                      style: TextStyle(fontSize: 12, color: Color(0xFF888888)),
-                    ),
-                  ],
-                  SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.access_time,
-                        size: 14,
-                        color: Color(0xFF888888),
-                      ),
-                      SizedBox(width: 4),
-                      Text(
-                        promo.remainingUsageCount > 0
-                            ? context.l10n.remainingUseCount(
-                                promo.remainingUsageCount,
-                              )
-                            : context.l10n.usageExhausted,
+                      child: Text(
+                        promo.promotionCode,
                         style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 10),
+                    Text(
+                      promo.shortDescription,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF2D2D2D),
+                        height: 1.3,
+                      ),
+                    ),
+                    if (promo.minimumOrderValue > 0) ...[
+                      SizedBox(height: 4),
+                      Text(
+                        context.l10n.minimumOrder(
+                          _formatCurrency(promo.minimumOrderValue),
+                        ),
+                        style: TextStyle(
+                          fontSize: 12,
                           color: Color(0xFF888888),
                         ),
                       ),
                     ],
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(width: 12),
-            // Action
-            TextButton(
-              onPressed: promo.remainingUsageCount > 0 ? onUse : null,
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.primary,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: Text(
-                isSelected ? context.l10n.inUse : context.l10n.useNow,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14,
-                  height: 1.2,
+                    if (!promo.isUnlocked) ...[
+                      SizedBox(height: 8),
+                      Text(
+                        'Còn ${promo.remainingTripsToUnlock} chuyến nữa để mở khóa',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFFB54708),
+                        ),
+                      ),
+                    ],
+                    SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.access_time,
+                          size: 14,
+                          color: Color(0xFF888888),
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          promo.remainingUsageCount > 0
+                              ? context.l10n.remainingUseCount(
+                                  promo.remainingUsageCount,
+                                )
+                              : context.l10n.usageExhausted,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF888888),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-            ),
-          ],
+              SizedBox(width: 12),
+              // Action
+              TextButton(
+                onPressed: promo.remainingUsageCount > 0 ? onUse : null,
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  !promo.isUnlocked
+                      ? 'Đang khóa'
+                      : isSelected
+                      ? context.l10n.inUse
+                      : context.l10n.useNow,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                    height: 1.2,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -106,6 +106,17 @@ function PromotionForm({
                             required
                         />
                         <Field
+                            label="Số chuyến hoàn thành tối thiểu"
+                            name="requiredCompletedTrips"
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={values.requiredCompletedTrips}
+                            error={errors.requiredCompletedTrips}
+                            helperText="Để trống hoặc nhập 0 nếu voucher không yêu cầu số chuyến."
+                            onChange={handleChange}
+                        />
+                        <Field
                             label="Giá trị nhỏ nhất cho chuyến"
                             name="minimumOrderValue"
                             type="number"
@@ -187,8 +198,9 @@ function PromotionForm({
     );
 }
 
-function Field({ label, name, error, ...inputProps }) {
+function Field({ label, name, error, helperText, ...inputProps }) {
     const errorId = `${name}-error`;
+    const helperId = `${name}-helper`;
 
     return (
         <label className="promotion-form-page-field">
@@ -196,10 +208,11 @@ function Field({ label, name, error, ...inputProps }) {
             <input
                 name={name}
                 aria-invalid={Boolean(error)}
-                aria-describedby={error ? errorId : undefined}
+                aria-describedby={error ? errorId : helperText ? helperId : undefined}
                 {...inputProps}
             />
             {error && <small id={errorId}>{error}</small>}
+            {!error && helperText && <small id={helperId}>{helperText}</small>}
         </label>
     );
 }
@@ -208,6 +221,7 @@ function PromotionPreview({ values }) {
     const discountValue = Number(values.discountValue);
     const minimumOrderValue = Number(values.minimumOrderValue);
     const maximumDiscountValue = Number(values.maximumDiscountValue);
+    const requiredCompletedTrips = Number(values.requiredCompletedTrips);
     const discountLabel = Number.isFinite(discountValue) && discountValue > 0
         ? values.discountType === 'Percentage'
             ? `${discountValue}%`
@@ -232,6 +246,14 @@ function PromotionPreview({ values }) {
                         <dd>{formatCurrency(maximumDiscountValue)}</dd>
                     </div>
                 )}
+                <div>
+                    <dt>Điều kiện chuyến</dt>
+                    <dd>
+                        {Number.isInteger(requiredCompletedTrips) && requiredCompletedTrips > 0
+                            ? `${requiredCompletedTrips} chuyến hoàn thành`
+                            : 'Không yêu cầu'}
+                    </dd>
+                </div>
             </dl>
         </section>
     );
