@@ -1,8 +1,15 @@
 import { apiRequest } from '../../shared/api/apiClient';
+import { getCurrentManagementRole, MANAGEMENT_ROLES } from '../auth/managementRoles';
 export function getDrivers(status = 'all') {
     return apiRequest(getDriversPath(status)).then(mapDriverList);
 }
 export function getDriversPath(status) {
+    if (getCurrentManagementRole() === MANAGEMENT_ROLES.staff) {
+        return status === 'all'
+            ? '/staff/drivers'
+            : `/staff/drivers?status=${encodeURIComponent(status)}`;
+    }
+
     return status === 'all'
         ? '/admin/drivers'
         : `/admin/drivers?status=${encodeURIComponent(status)}`;
@@ -25,6 +32,13 @@ export function unlockDriver(driverId) {
     }).then(mapDriver);
 }
 export function reviewDriverKyc(driverId, status, rejectionReason) {
+    if (getCurrentManagementRole() === MANAGEMENT_ROLES.staff) {
+        return apiRequest(`/staff/drivers/${driverId}/kyc`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status, rejectionReason }),
+        }).then(mapDriver);
+    }
+
     return apiRequest(`/admin/drivers/${driverId}/kyc`, {
         method: 'PATCH',
         body: JSON.stringify({ status, rejectionReason }),
