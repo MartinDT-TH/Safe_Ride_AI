@@ -108,6 +108,33 @@
   color: #08734f;
 }
 
+.admin-reports-feedback--realtime {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-color: #86c7b0;
+  background: #edf9f4;
+  color: #086747;
+  font-weight: 700;
+}
+
+.admin-reports-feedback--realtime button {
+  flex: 0 0 auto;
+  padding: 7px 12px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-weight: 700;
+}
+
+.admin-reports-feedback--realtime-error {
+  border-color: #efc17b;
+  background: #fff8e9;
+  color: #8a5700;
+}
+
 .admin-report-modal__message--success {
   border-color: #99d5bd;
   background: #effaf5;
