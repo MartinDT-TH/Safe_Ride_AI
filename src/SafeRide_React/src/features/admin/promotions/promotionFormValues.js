@@ -13,6 +13,7 @@ export function createEmptyPromotionValues() {
         usageLimitPerUser: 1,
         minimumOrderValue: 0,
         maximumDiscountValue: 0,
+        requiredCompletedTrips: '',
         isActive: true,
     };
 }
@@ -28,6 +29,7 @@ export function mapPromotionToFormValues(promotion = {}) {
         usageLimitPerUser: promotion.usageLimitPerUser ?? 1,
         minimumOrderValue: promotion.minimumOrderValue ?? 0,
         maximumDiscountValue: promotion.maximumDiscountValue ?? 0,
+        requiredCompletedTrips: promotion.requiredCompletedTrips ?? 0,
         isActive: promotion.isActive ?? true,
     };
 }
@@ -39,6 +41,9 @@ export function validatePromotionValues(values, { currentUsageCount = 0 } = {}) 
     const usageLimitPerUser = Number(values.usageLimitPerUser);
     const minimumOrderValue = Number(values.minimumOrderValue);
     const maximumDiscountValue = Number(values.maximumDiscountValue);
+    const requiredCompletedTrips = values.requiredCompletedTrips === ''
+        ? 0
+        : Number(values.requiredCompletedTrips);
     const startTime = new Date(values.startDate).getTime();
     const endTime = new Date(values.endDate).getTime();
 
@@ -64,6 +69,9 @@ export function validatePromotionValues(values, { currentUsageCount = 0 } = {}) 
     if (!Number.isFinite(maximumDiscountValue) || maximumDiscountValue < 0) {
         errors.maximumDiscountValue = 'Giá giảm tối đa cho chuyến không được âm.';
     }
+    if (!Number.isInteger(requiredCompletedTrips) || requiredCompletedTrips < 0) {
+        errors.requiredCompletedTrips = 'Số chuyến hoàn thành tối thiểu phải là số nguyên không âm.';
+    }
     if (!values.startDate || Number.isNaN(startTime)) {
         errors.startDate = 'Vui lòng chọn ngày bắt đầu.';
     }
@@ -87,6 +95,9 @@ export function toPromotionPayload(values) {
         minimumOrderValue: Number(values.minimumOrderValue),
         maximumDiscountValue: Number(values.maximumDiscountValue),
         usageLimitPerUser: Number(values.usageLimitPerUser),
+        requiredCompletedTrips: values.requiredCompletedTrips === ''
+            ? null
+            : Number(values.requiredCompletedTrips),
         isActive: Boolean(values.isActive),
     };
 }

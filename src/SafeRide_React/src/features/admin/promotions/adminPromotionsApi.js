@@ -107,6 +107,9 @@ function mapPromotion(promotion) {
     const maximumDiscountValue = toNumber(
         read(promotion, 'maximumDiscountValue', 'MaximumDiscountValue'),
     );
+    const requiredCompletedTrips = toNumber(
+        read(promotion, 'requiredCompletedTrips', 'RequiredCompletedTrips'),
+    );
     const startDate = read(promotion, 'startDate', 'StartDate') ?? null;
     const endDate = read(promotion, 'endDate', 'EndDate') ?? null;
     const isActive = toBoolean(
@@ -134,6 +137,10 @@ function mapPromotion(promotion) {
         minimumOrderValueLabel: currencyFormatter.format(minimumOrderValue),
         maximumDiscountValue,
         maximumDiscountValueLabel: currencyFormatter.format(maximumDiscountValue),
+        requiredCompletedTrips,
+        requiredCompletedTripsLabel: requiredCompletedTrips > 0
+            ? `Yêu cầu: Hoàn thành ${requiredCompletedTrips} chuyến`
+            : 'Không yêu cầu số chuyến',
         maxUsageCount: toNumber(
             read(promotion, 'maxUsageCount', 'MaxUsageCount'),
         ),
