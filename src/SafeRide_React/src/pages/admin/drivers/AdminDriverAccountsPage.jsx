@@ -354,7 +354,7 @@ function DriverAccountDetails({ driver, onBack }) {
                             </div>
                             <div>
                                 <dt>Email</dt>
-                                <dd>{driver.email}</dd>
+                                <dd title={driver.email}>{driver.email}</dd>
                             </div>
                             <div>
                                 <dt>Ngày đăng ký</dt>

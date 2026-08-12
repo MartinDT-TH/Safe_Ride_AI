@@ -47,7 +47,7 @@ function DriverVerificationDetail({ driver, onBack, onReviewKyc, actionDriverId,
               </div>
               <div>
                 <dt>Email</dt>
-                <dd>{driver.email}</dd>
+                <dd title={driver.email}>{driver.email}</dd>
               </div>
               <div>
                 <dt>Ngày đăng ký</dt>

@@ -9,7 +9,7 @@ import {
 import '../TransactionsPage.css';
 
 function StaffPaymentStatusPage() {
-  const [filters, setFilters] = useState({ status: 'all', method: 'all', date: '' });
+  const [filters, setFilters] = useState({ status: 'all', method: 'all', fromDate: '', toDate: '' });
   const [currentPage, setCurrentPage] = useState(1);
   const path = useMemo(
     () => getStaffPaymentStatusesPath({ ...filters, page: currentPage }),

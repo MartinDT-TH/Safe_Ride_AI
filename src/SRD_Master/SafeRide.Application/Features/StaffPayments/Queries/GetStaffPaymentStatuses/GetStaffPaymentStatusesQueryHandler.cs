@@ -24,7 +24,8 @@ public sealed class GetStaffPaymentStatusesQueryHandler
                 request.PageSize,
                 request.Status,
                 request.Method,
-                request.Date),
+                request.FromDate,
+                request.ToDate),
             cancellationToken);
     }
 }
