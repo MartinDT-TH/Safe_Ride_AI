@@ -398,14 +398,15 @@ class BookingRemoteDatasource {
     }
   }
 
-  Future<void> confirmCustomerReturn(
+  Future<void> respondToDriverEndTrip(
     String accessToken, {
     required int tripId,
+    required bool accepted,
   }) async {
     try {
       await _dio.post(
         ApiEndpoints.customerReturnConfirmation(tripId),
-        data: {ApiKeys.vehicleReturnedConfirmed: true},
+        data: {ApiKeys.vehicleReturnedConfirmed: accepted},
         options: Options(
           headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
         ),

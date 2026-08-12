@@ -545,12 +545,17 @@ class BookingProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> confirmCustomerReturn(
+  Future<bool> respondToDriverEndTrip(
     String accessToken, {
     required int tripId,
+    required bool accepted,
   }) async {
     final ok = await _run(() async {
-      await _repository.confirmCustomerReturn(accessToken, tripId: tripId);
+      await _repository.respondToDriverEndTrip(
+        accessToken,
+        tripId: tripId,
+        accepted: accepted,
+      );
       return true;
     });
     return ok == true;

@@ -8,6 +8,25 @@ namespace SafeRide.UnitTests;
 public sealed class FareEstimationServiceValidationTests
 {
     [Fact]
+    public void FinalizeFare_WhenSixtyPercentOfRouteCompleted_ChargesSixtyPercent()
+    {
+        var trip = new SafeRide.Domain.Entities.Trip
+        {
+            Booking = new SafeRide.Domain.Entities.Booking
+            {
+                EstimatedDistanceKm = 10m,
+                EstimatedFare = 100_000m
+            }
+        };
+        var service = new TripFareFinalizationService(new FareEstimationService());
+
+        var result = service.Calculate(trip, 6m, 10);
+
+        Assert.Equal(60_000m, result.ActualFare);
+        Assert.Equal(60_000m, result.FinalFare);
+    }
+
+    [Fact]
     public void CalculateFare_HourlyRuleWithZeroUnitPrice_RejectsInvalidRule()
     {
         var service = new FareEstimationService();
