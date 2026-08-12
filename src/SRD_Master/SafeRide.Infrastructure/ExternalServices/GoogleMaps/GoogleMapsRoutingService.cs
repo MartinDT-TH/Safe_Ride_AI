@@ -68,9 +68,9 @@ public sealed class GoogleMapsRoutingService : IMapRoutingService
             languageCode = NormalizeLanguageCode(request.Language),
             units = "METRIC"
         };
-        var requestUrl = $"{_options.RoutesApiUrl}?key={_options.ApiKey}";
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUrl)
-        // using var httpRequest = new HttpRequestMessage(HttpMethod.Post, _options.RoutesApiUrl)
+        // var requestUrl = $"{_options.RoutesApiUrl}?key={_options.ApiKey}";
+        // using var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUrl)
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, _options.RoutesApiUrl)
         {
             Content = JsonContent.Create(
                 requestBody,
