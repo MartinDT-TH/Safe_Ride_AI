@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../../core/localization/locale_provider.dart';
+import '../../../../../core/utils/api_date_time.dart';
 
 import '../../../../../core/maps/models/map_models.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
@@ -949,7 +950,7 @@ class _ConversationHistorySheetState extends State<_ConversationHistorySheet> {
                       subtitle: Text(
                         DateFormat(
                           'dd/MM/yyyy • HH:mm',
-                        ).format(conversation.updatedAt.toLocal()),
+                        ).format(toVietnamTime(conversation.updatedAt)),
                       ),
                       onTap: deleting
                           ? null

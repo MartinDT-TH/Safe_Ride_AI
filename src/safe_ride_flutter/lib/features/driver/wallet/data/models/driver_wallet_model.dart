@@ -1,4 +1,5 @@
 import '../../../../../core/localization/locale_provider.dart';
+import '../../../../../core/utils/api_date_time.dart';
 
 class DriverWalletModel {
   const DriverWalletModel({
@@ -101,8 +102,8 @@ class WalletTransactionModel {
             json['title']?.toString() ??
             LocaleProvider.currentLocalizations.wallet,
         createdAt:
-            DateTime.tryParse(json['createdAt']?.toString() ?? '')?.toLocal() ??
-            DateTime.now(),
+            parseApiUtcDateTimeToUtc7(json['createdAt']) ??
+            toVietnamTime(DateTime.now()),
       );
 }
 

@@ -6,6 +6,7 @@ import '../../../../core/maps/models/map_models.dart';
 import '../../../../core/maps/polyline_decoder.dart';
 import '../../../../core/maps/widgets/live_trip_map_widget.dart';
 import '../../../../core/services/socket_service.dart';
+import '../../../../core/utils/api_date_time.dart';
 import '../../../../dependency_injection/injection.dart';
 import '../../data/datasources/trip_sharing_remote_datasource.dart';
 import '../../data/models/trip_share_models.dart';
@@ -269,7 +270,7 @@ class _SharedTripTrackingPageState extends State<SharedTripTrackingPage> {
                   if (tracking.lastLocationUpdate != null) ...[
                     const SizedBox(height: 8),
                     Text(
-                      'Cập nhật vị trí: ${tracking.lastLocationUpdate!.toLocal()}',
+                      'Cập nhật vị trí: ${toVietnamTime(tracking.lastLocationUpdate!)}',
                       style: const TextStyle(color: Colors.black54),
                     ),
                   ],

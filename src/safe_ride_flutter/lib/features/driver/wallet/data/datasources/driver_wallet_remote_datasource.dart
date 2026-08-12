@@ -7,6 +7,8 @@ import '../../../../../core/localization/locale_provider.dart';
 import '../models/driver_wallet_model.dart';
 
 class DriverWalletRemoteDatasource {
+  static const int _utc7OffsetMinutes = 7 * 60;
+
   DriverWalletRemoteDatasource({Dio? dio}) : _dio = dio ?? DioClient().dio;
   final Dio _dio;
   List<VietnamBankModel>? _bankCache;
@@ -54,7 +56,7 @@ class DriverWalletRemoteDatasource {
         ApiEndpoints.driverWallet,
         queryParameters: {
           'period': period,
-          'utcOffsetMinutes': DateTime.now().timeZoneOffset.inMinutes,
+          'utcOffsetMinutes': _utc7OffsetMinutes,
           'recentLimit': 10,
         },
         options: Options(

@@ -38,6 +38,7 @@ builder.Services
     {
         // FIX: The specific converter must run before the general enum converter
         // so route-mode aliases are accepted while numeric enum values remain invalid.
+        options.JsonSerializerOptions.Converters.Add(new UtcDateTimeJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new MapTravelModeJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     })
