@@ -344,6 +344,31 @@ public sealed class TripStatusServiceTests
         Assert.Equal(TripStatus.COMPLETED, succeeded.TripStatus);
         Assert.Equal(BookingStatus.Completed, succeeded.BookingStatus);
         Assert.Equal("Thanh toán đã hoàn tất.", succeeded.Message);
+
+        var wallet = await new DriverQueryService(
+                fixture.DbContext,
+                null!,
+                null!)
+            .GetWalletAsync(
+                fixture.DriverId,
+                SafeRide.Application.Features.Drivers.DTOs.WalletPeriod.Week,
+                0,
+                10,
+                CancellationToken.None);
+
+        Assert.Equal(result.DriverShare, wallet.Income.Total);
+        var cashReceipt = Assert.Single(wallet.RecentTransactions, x =>
+            x.TripId == fixture.TripId
+            && x.Type == WalletTransactionType.Income);
+        Assert.Equal(payment.Amount, cashReceipt.Amount);
+        Assert.True(cashReceipt.IsCredit);
+        Assert.Contains("Đã nhận tiền mặt", cashReceipt.Title);
+
+        var platformFee = Assert.Single(wallet.RecentTransactions, x =>
+            x.TripId == fixture.TripId
+            && x.Type == WalletTransactionType.Penalty);
+        Assert.Equal(result.PlatformShare, platformFee.Amount);
+        Assert.False(platformFee.IsCredit);
     }
 
     [Fact]
