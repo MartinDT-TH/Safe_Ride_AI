@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../../core/constants/app_strings.dart';
@@ -24,6 +25,7 @@ import '../../../../customer/booking/presentation/pages/trip_tracking_page.dart'
 import '../../../../customer/booking/presentation/providers/booking_provider.dart';
 import '../../../../customer/ai_chat/presentation/widgets/ai_chat_sheet.dart';
 import '../../../../shared/history/presentation/pages/history_page.dart';
+import '../../../../shared/history/presentation/providers/history_provider.dart';
 import '../../../../trip_sharing/trip_share_deep_link_coordinator.dart';
 import '../../../../../dependency_injection/injection.dart';
 import '../../../../shared/notifications/presentation/pages/notifications_page.dart';
@@ -82,6 +84,10 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     }
 
     context.read<HomeProvider>().loadHomeData();
+    context.read<HistoryProvider>().loadHistory(
+      auth.token,
+      role: AppValues.roleCustomer,
+    );
     context.read<BookingProvider>().loadAvailablePromotions(auth.token!);
     context.read<NotificationProvider>().initialize(auth.token);
     _loadActiveBooking(auth.token);
@@ -276,6 +282,19 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
   Widget _buildHomeContent(AuthProvider auth, BookingProvider bookingProvider) {
     final hasActiveBooking = bookingProvider.hasActiveNowBooking;
     final homeProvider = context.read<HomeProvider>();
+    final latestCompletedTrip = context
+        .watch<HistoryProvider>()
+        .latestCompletedTrip;
+
+    Future<void> refreshHome() async {
+      await Future.wait([
+        homeProvider.loadHomeData(),
+        context.read<HistoryProvider>().loadHistory(
+          auth.token,
+          role: AppValues.roleCustomer,
+        ),
+      ]);
+    }
 
     return Consumer<HomeProvider>(
       builder: (_, provider, child) {
@@ -287,7 +306,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
         if (provider.errorMessage != null && provider.recentTrips.isEmpty) {
           return RefreshIndicator(
-            onRefresh: provider.loadHomeData,
+            onRefresh: refreshHome,
             color: const Color(0xFF006B70),
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -362,7 +381,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
         }
 
         return RefreshIndicator(
-          onRefresh: provider.loadHomeData,
+          onRefresh: refreshHome,
           color: Color(0xFF006B70),
           child: SingleChildScrollView(
             physics: AlwaysScrollableScrollPhysics(),
@@ -547,11 +566,29 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                   ),
                 ),
                 SizedBox(height: 16),
-                RecentTripCard(
-                  pickup: context.l10n.sampleRecentPickup,
-                  destination: context.l10n.sampleRecentDestination,
-                  time: context.l10n.sampleRecentTime,
-                ),
+                if (latestCompletedTrip != null)
+                  RecentTripCard(
+                    pickup: latestCompletedTrip.pickup,
+                    destination: latestCompletedTrip.destination,
+                    time: DateFormat(
+                      'dd/MM/yyyy, HH:mm',
+                    ).format(latestCompletedTrip.time),
+                  )
+                else
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.grey.shade100),
+                    ),
+                    child: Text(
+                      context.l10n.noTripHistory,
+                      style: TextStyle(color: Colors.grey.shade600),
+                    ),
+                  ),
                 SizedBox(height: 24),
                 _buildPromotionSection(bookingProvider),
               ],
@@ -577,9 +614,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
               color: Colors.grey[200],
               borderRadius: BorderRadius.circular(20),
             ),
-            child: Center(
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
           ),
         ],
       );
@@ -626,6 +661,10 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
               final promo = bookingProvider.availablePromotions[index];
               return GestureDetector(
                 onTap: () {
+                  if (!promo.isUnlocked) {
+                    _showMessage(promo.resolvedUnlockMessage);
+                    return;
+                  }
                   bookingProvider.selectPromo(promo);
                   _openBooking(context, BookingType.now);
                 },

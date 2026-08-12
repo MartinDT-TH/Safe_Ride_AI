@@ -345,6 +345,15 @@ class BookingProvider extends ChangeNotifier {
       _availablePromotions = await _repository.getAvailablePromotions(
         accessToken,
       );
+      final selectedPromo = _selectedPromo;
+      if (selectedPromo != null) {
+        final refreshedPromos = _availablePromotions.where(
+          (promo) => promo.promotionCode == selectedPromo.promotionCode,
+        );
+        if (refreshedPromos.isNotEmpty && !refreshedPromos.first.isUnlocked) {
+          _selectedPromo = null;
+        }
+      }
     } on BookingApiException catch (exception) {
       _errorMessage = _bookingError(exception);
     } catch (_) {
@@ -356,6 +365,7 @@ class BookingProvider extends ChangeNotifier {
   }
 
   void selectPromo(PromoModel promo) {
+    if (!promo.isUnlocked) return;
     _selectedPromo = promo;
     notifyListeners();
   }

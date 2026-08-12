@@ -42,6 +42,14 @@ class HistoryProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   HistoryFilter get currentFilter => _currentFilter;
 
+  HistoryTrip? get latestCompletedTrip {
+    final completedTrips = _allTrips
+        .where((trip) => trip.status == HistoryTripStatus.completed)
+        .toList()
+      ..sort((a, b) => b.time.compareTo(a.time));
+    return completedTrips.isEmpty ? null : completedTrips.first;
+  }
+
   void setFilter(HistoryFilter filter) {
     _currentFilter = filter;
     notifyListeners();

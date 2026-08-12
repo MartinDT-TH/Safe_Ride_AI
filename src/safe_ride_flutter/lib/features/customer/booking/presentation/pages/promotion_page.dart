@@ -122,7 +122,31 @@ class _PromotionPageState extends State<PromotionPage> {
                       SizedBox(
                         height: 48,
                         child: ElevatedButton(
-                          onPressed: () {},
+                          onPressed: () {
+                            final code = _promoController.text
+                                .trim()
+                                .toUpperCase();
+                            if (code.isEmpty) return;
+                            final matches = promotions.where(
+                              (promo) =>
+                                  promo.promotionCode.toUpperCase() == code,
+                            );
+                            final promo = matches.isEmpty
+                                ? null
+                                : matches.first;
+                            if (promo != null && !promo.isUnlocked) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(promo.resolvedUnlockMessage),
+                                ),
+                              );
+                              return;
+                            }
+                            Navigator.pop(
+                              context,
+                              promo?.promotionCode ?? code,
+                            );
+                          },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
@@ -183,106 +207,141 @@ class _PromotionPageState extends State<PromotionPage> {
   }
 
   Widget _buildPromotionCard(PromoModel promo) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Color(0xFFE8E8E8), width: 1.5),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Left Icon
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: Color(0xFFE1F1F2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              Icons.confirmation_number_rounded,
-              color: AppColors.primary,
-              size: 26,
-            ),
-          ),
-          SizedBox(width: 16),
-
-          // Content
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Tag
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Color(0xFFE1F1F2),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    promo.promotionCode,
-                    style: TextStyle(
-                      color: AppColors.primary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  promo.shortDescription,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF1F1F1F),
-                    height: 1.3,
-                  ),
-                ),
-                SizedBox(height: 10),
-                Row(
-                  children: [
-                    Icon(Icons.schedule, size: 16, color: Color(0xFF757575)),
-                    SizedBox(width: 6),
-                    Text(
-                      context.l10n.remainingUses(promo.remainingUsageCount),
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFF757575),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          // Action
-          SizedBox(width: 8),
-          TextButton(
-            onPressed: () => Navigator.pop(context, promo.promotionCode),
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 0),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: Text(
-              context.l10n.useNow,
-              textAlign: TextAlign.right,
-              style: TextStyle(
+    return Opacity(
+      opacity: promo.isUnlocked ? 1 : 0.62,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Color(0xFFE8E8E8), width: 1.5),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Left Icon
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: Color(0xFFE1F1F2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                promo.isUnlocked
+                    ? Icons.confirmation_number_rounded
+                    : Icons.lock_rounded,
                 color: AppColors.primary,
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                height: 1.2,
+                size: 26,
               ),
             ),
-          ),
-        ],
+            SizedBox(width: 16),
+
+            // Content
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Tag
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Color(0xFFE1F1F2),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      promo.promotionCode,
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    promo.shortDescription,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1F1F1F),
+                      height: 1.3,
+                    ),
+                  ),
+                  SizedBox(height: 10),
+                  if (!promo.isUnlocked) ...[
+                    Text(
+                      'Đã hoàn thành ${promo.customerCompletedTrips}/${promo.requiredCompletedTrips} chuyến',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF667085),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Còn ${promo.remainingTripsToUnlock} chuyến nữa để mở khóa',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFFB54708),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                  ],
+                  Row(
+                    children: [
+                      Icon(Icons.schedule, size: 16, color: Color(0xFF757575)),
+                      SizedBox(width: 6),
+                      Text(
+                        context.l10n.remainingUses(promo.remainingUsageCount),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFF757575),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            // Action
+            SizedBox(width: 8),
+            TextButton(
+              onPressed: () {
+                if (!promo.isUnlocked) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(promo.resolvedUnlockMessage)),
+                  );
+                  return;
+                }
+                Navigator.pop(context, promo.promotionCode);
+              },
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 0),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                promo.isUnlocked ? context.l10n.useNow : 'Đang khóa',
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  color: promo.isUnlocked
+                      ? AppColors.primary
+                      : Color(0xFF667085),
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  height: 1.2,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
