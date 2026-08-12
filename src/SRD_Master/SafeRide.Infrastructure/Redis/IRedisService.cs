@@ -13,6 +13,10 @@ namespace SafeRide.Infrastructure.Redis
             string value,
             TimeSpan expiration);
 
+        Task SetPersistentAsync(string key, string value) =>
+            Task.FromException(
+                new NotSupportedException("Persistent Redis values are not supported."));
+
         Task<bool> SetIfNotExistsAsync(
             string key,
             string value,

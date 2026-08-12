@@ -36,7 +36,8 @@ internal static class AdminPromotionRules
         int maxUsageCount,
         decimal minimumOrderValue,
         decimal maximumDiscountValue,
-        int usageLimitPerUser)
+        int usageLimitPerUser,
+        int? requiredCompletedTrips)
     {
         if (!discountType.HasValue || !Enum.IsDefined(discountType.Value))
         {
@@ -93,6 +94,14 @@ internal static class AdminPromotionRules
                 "Giới hạn sử dụng mỗi người phải lớn hơn 0.",
                 400);
         }
+
+        if (requiredCompletedTrips < 0)
+        {
+            throw new PromotionException(
+                "admin_promotion.invalid_required_completed_trips",
+                "Số chuyến hoàn thành tối thiểu không được âm.",
+                400);
+        }
     }
 
     public static void ValidateMaxUsageForUpdate(
@@ -108,7 +117,9 @@ internal static class AdminPromotionRules
         }
     }
 
-    public static AdminPromotionResponse ToResponse(Promotion promotion)
+    public static AdminPromotionResponse ToResponse(
+        Promotion promotion,
+        int requiredCompletedTrips)
     {
         return new AdminPromotionResponse(
             promotion.Id,
@@ -122,6 +133,7 @@ internal static class AdminPromotionRules
             promotion.MinimumOrderValue,
             promotion.MaximumDiscountValue,
             promotion.UsageLimitPerUser,
+            requiredCompletedTrips,
             promotion.IsActive);
     }
 }

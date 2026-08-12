@@ -39,6 +39,9 @@ public sealed class RedisService : IRedisService, IDisposable
     public Task SetAsync(string key, string value, TimeSpan expiration) =>
         Database.StringSetAsync(key, value, expiration);
 
+    public Task SetPersistentAsync(string key, string value) =>
+        Database.StringSetAsync(key, value);
+
     public Task<bool> SetIfNotExistsAsync(
         string key,
         string value,

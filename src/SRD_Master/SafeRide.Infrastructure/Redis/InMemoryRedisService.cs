@@ -19,6 +19,15 @@ public sealed class InMemoryRedisService : IRedisService
         }
     }
 
+    public Task SetPersistentAsync(string key, string value)
+    {
+        lock (_sync)
+        {
+            _entries[key] = new CacheEntry(value, null);
+            return Task.CompletedTask;
+        }
+    }
+
     public Task<bool> SetIfNotExistsAsync(
         string key,
         string value,
@@ -423,7 +432,8 @@ public sealed class InMemoryRedisService : IRedisService
             return null;
         }
 
-        if (entry.ExpiresAt <= DateTimeOffset.UtcNow)
+        if (entry.ExpiresAt.HasValue
+            && entry.ExpiresAt.Value <= DateTimeOffset.UtcNow)
         {
             _entries.TryRemove(key, out _);
             return null;
@@ -520,7 +530,7 @@ public sealed class InMemoryRedisService : IRedisService
         return DateTimeOffset.UtcNow.Add(expiration);
     }
 
-    private sealed record CacheEntry(string Value, DateTimeOffset ExpiresAt);
+    private sealed record CacheEntry(string Value, DateTimeOffset? ExpiresAt);
 
     private sealed record ListCacheEntry(List<string> Values, DateTimeOffset ExpiresAt);
 

@@ -10,13 +10,16 @@ public sealed class CreateAdminPromotionCommandHandler
 {
     private readonly IAdminPromotionRepository _promotionRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IPromotionUnlockRuleStore _unlockRuleStore;
 
     public CreateAdminPromotionCommandHandler(
         IAdminPromotionRepository promotionRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IPromotionUnlockRuleStore unlockRuleStore)
     {
         _promotionRepository = promotionRepository;
         _unitOfWork = unitOfWork;
+        _unlockRuleStore = unlockRuleStore;
     }
 
     public async Task<AdminPromotionResponse> Handle(
@@ -32,7 +35,8 @@ public sealed class CreateAdminPromotionCommandHandler
             request.MaxUsageCount,
             request.MinimumOrderValue,
             request.MaximumDiscountValue,
-            request.UsageLimitPerUser);
+            request.UsageLimitPerUser,
+            request.RequiredCompletedTrips);
 
         if (await _promotionRepository.CodeExistsAsync(
                 promotionCode,
@@ -60,7 +64,20 @@ public sealed class CreateAdminPromotionCommandHandler
         await _promotionRepository.AddAsync(promotion, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return AdminPromotionRules.ToResponse(promotion);
+        var requiredCompletedTrips = request.RequiredCompletedTrips ?? 0;
+        if (requiredCompletedTrips > 0)
+        {
+            await _unlockRuleStore.SaveAsync(
+                promotionCode,
+                requiredCompletedTrips,
+                cancellationToken);
+        }
+        else
+        {
+            await _unlockRuleStore.RemoveAsync(promotionCode, cancellationToken);
+        }
+
+        return AdminPromotionRules.ToResponse(promotion, requiredCompletedTrips);
     }
 
     private static PromotionException DuplicateCodeException()

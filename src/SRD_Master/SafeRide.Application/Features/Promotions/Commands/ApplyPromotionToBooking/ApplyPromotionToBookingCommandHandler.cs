@@ -12,15 +12,18 @@ public sealed class ApplyPromotionToBookingCommandHandler
     private readonly IPromotionRepository _promotionRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly IPromotionUnlockRuleStore _unlockRuleStore;
 
     public ApplyPromotionToBookingCommandHandler(
         IPromotionRepository promotionRepository,
         IUnitOfWork unitOfWork,
-        IDateTimeProvider dateTimeProvider)
+        IDateTimeProvider dateTimeProvider,
+        IPromotionUnlockRuleStore unlockRuleStore)
     {
         _promotionRepository = promotionRepository;
         _unitOfWork = unitOfWork;
         _dateTimeProvider = dateTimeProvider;
+        _unlockRuleStore = unlockRuleStore;
     }
 
     public async Task<ApplyPromotionToBookingResponse> Handle(
@@ -53,6 +56,10 @@ public sealed class ApplyPromotionToBookingCommandHandler
             request.CustomerId,
             promotion.Id,
             promotion.UsageLimitPerUser,
+            cancellationToken);
+        await ValidateCompletedTripsAsync(
+            request.CustomerId,
+            promotion.PromotionCode,
             cancellationToken);
 
         var originalFare = booking.EstimatedFare;
@@ -144,5 +151,24 @@ public sealed class ApplyPromotionToBookingCommandHandler
         PromotionApplicationRules.ValidateCustomerUsageLimit(
             usageCount,
             usageLimitPerUser);
+    }
+
+    private async Task ValidateCompletedTripsAsync(
+        Guid customerId,
+        string promotionCode,
+        CancellationToken cancellationToken)
+    {
+        var requiredCompletedTrips = await _unlockRuleStore
+            .GetRequiredCompletedTripsAsync(promotionCode, cancellationToken);
+        if (requiredCompletedTrips <= 0)
+        {
+            return;
+        }
+
+        var completedTrips = await _promotionRepository
+            .CountCustomerCompletedTripsAsync(customerId, cancellationToken);
+        PromotionUnlockRules.ValidateCompletedTrips(
+            completedTrips,
+            requiredCompletedTrips);
     }
 }

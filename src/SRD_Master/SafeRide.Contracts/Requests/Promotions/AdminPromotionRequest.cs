@@ -21,5 +21,7 @@ public sealed class AdminPromotionRequest
     public decimal MaximumDiscountValue { get; init; }
     [Range(1, int.MaxValue, ErrorMessage = "Giới hạn sử dụng mỗi người phải lớn hơn 0.")]
     public int UsageLimitPerUser { get; init; }
+    [Range(0, int.MaxValue, ErrorMessage = "Số chuyến hoàn thành tối thiểu không được âm.")]
+    public int? RequiredCompletedTrips { get; init; }
     public bool IsActive { get; init; }
 }
