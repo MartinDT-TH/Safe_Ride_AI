@@ -343,6 +343,7 @@ public sealed class BookingTests
                 new VehicleLicenseRequirementService(),
                 new RealtimeNotificationServiceFake(),
                 Repository,
+                new PromotionUnlockRuleStoreFake(),
                 new MatchingPolicyProviderFake(),
                 new BookingLifecycleJobSchedulerFake());
         }
@@ -596,6 +597,13 @@ public sealed class BookingTests
             return Task.FromResult(0);
         }
 
+        public Task<int> CountCustomerCompletedTripsAsync(
+            Guid customerId,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(0);
+        }
+
         public Task AddBookingPromotionAsync(
             BookingPromotion bookingPromotion,
             CancellationToken cancellationToken)
@@ -810,5 +818,27 @@ public sealed class BookingTests
             CancelledBookingIds.Add(bookingId);
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class PromotionUnlockRuleStoreFake : IPromotionUnlockRuleStore
+    {
+        public Task<int> GetRequiredCompletedTripsAsync(
+            string promotionCode,
+            CancellationToken cancellationToken) => Task.FromResult(0);
+
+        public Task<IReadOnlyDictionary<string, int>> GetRequiredCompletedTripsAsync(
+            IReadOnlyCollection<string> promotionCodes,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyDictionary<string, int>>(
+                new Dictionary<string, int>());
+
+        public Task SaveAsync(
+            string promotionCode,
+            int requiredCompletedTrips,
+            CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task RemoveAsync(
+            string promotionCode,
+            CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }
