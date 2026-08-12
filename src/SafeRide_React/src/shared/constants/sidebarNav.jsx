@@ -1,5 +1,6 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faIdCardAlt, faUsers, faClipboardList, faRoute, faExchangeAlt, faTags, faDollarSign, faChartBar, faBell, faChartPie, faQuestionCircle, faSignOutAlt, } from '@fortawesome/free-solid-svg-icons';
+import { faClipboardCheck, faCreditCard, faStar, faPaperPlane } from '@fortawesome/free-solid-svg-icons';
 /** Raw sidebar nav definitions (without active state — that comes from Redux) */
 export const SIDEBAR_NAV_ITEMS = [
     { id: 'drivers', label: 'Tài xế', icon: <FontAwesomeIcon icon={faIdCardAlt}/> },
@@ -13,6 +14,12 @@ export const SIDEBAR_NAV_ITEMS = [
     { id: 'notifications', label: 'Thông báo', icon: <FontAwesomeIcon icon={faBell}/> },
     { id: 'reports', label: 'Báo cáo', icon: <FontAwesomeIcon icon={faChartPie}/> },
 ];
+SIDEBAR_NAV_ITEMS.push(
+    { id: 'staff-driver-verification', label: 'Xác minh Tài xế', icon: <FontAwesomeIcon icon={faClipboardCheck}/> },
+    { id: 'staff-payments', label: 'Trạng thái Thanh toán', icon: <FontAwesomeIcon icon={faCreditCard}/> },
+    { id: 'staff-driver-ratings', label: 'Đánh giá Tài xế', icon: <FontAwesomeIcon icon={faStar}/> },
+    { id: 'staff-notifications', label: 'Yêu cầu Thông báo', icon: <FontAwesomeIcon icon={faPaperPlane}/> },
+);
 export const SIDEBAR_FOOTER_DEFS = [
     { id: 'support', label: 'Hỗ trợ', icon: <FontAwesomeIcon icon={faQuestionCircle}/> },
     { id: 'logout', label: 'Đăng xuất', icon: <FontAwesomeIcon icon={faSignOutAlt}/>, variant: 'danger' },

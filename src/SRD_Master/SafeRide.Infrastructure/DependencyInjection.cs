@@ -307,6 +307,8 @@ public static class DependencyInjection
         services.AddScoped<IAdminBookingManagementService, AdminBookingManagementService>();
         services.AddScoped<IAdminTripManagementService, AdminTripManagementService>();
         services.AddScoped<IAdminNotificationManagementService, AdminNotificationManagementService>();
+        services.AddScoped<IStaffPaymentStatusService, StaffPaymentStatusService>();
+        services.AddScoped<IStaffNotificationRequestService, StaffNotificationRequestService>();
         services.AddScoped<IUserNotificationService, UserNotificationService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddSingleton<IMatchingPolicyProvider, MatchingPolicyProvider>();
