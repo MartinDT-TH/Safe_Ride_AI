@@ -252,20 +252,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                   SizedBox(width: 8),
                 ],
               )
-            : (selectedIndex == 1 && activeBooking == null
-                  ? AppBar(
-                      backgroundColor: Colors.white,
-                      elevation: 0,
-                      title: Text(
-                        context.l10n.activity,
-                        style: TextStyle(
-                          color: Color(0xFF1A1A1A),
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      centerTitle: true,
-                    )
-                  : null),
+            : null,
         body: IndexedStack(index: selectedIndex, children: pages),
         floatingActionButton: selectedIndex == 0
             ? FloatingActionButton(
@@ -498,65 +485,54 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                 SizedBox(height: 32),
 
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    QuickActionItem(
-                      icon: Icons.history_rounded,
-                      title: context.l10n.history,
-                      backgroundColor: Color(0xFFF2F2F2),
-                      iconColor: Colors.black,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => HistoryPage(),
-                          ),
-                        );
-                      },
+                    Expanded(
+                      child: QuickActionItem(
+                        icon: Icons.history_rounded,
+                        title: context.l10n.history,
+                        backgroundColor: Color(0xFFF2F2F2),
+                        iconColor: Colors.black,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => HistoryPage(),
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                    QuickActionItem(
-                      icon: Icons.directions_car_filled_rounded,
-                      title: context.l10n.myVehiclesShort,
-                      backgroundColor: Color(0xFFF2F2F2),
-                      iconColor: Colors.black,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => MyVehiclesPage(),
-                          ),
-                        );
-                      },
+                    Expanded(
+                      child: QuickActionItem(
+                        icon: Icons.directions_car_filled_rounded,
+                        title: context.l10n.myVehiclesShort,
+                        backgroundColor: Color(0xFFF2F2F2),
+                        iconColor: Colors.black,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => MyVehiclesPage(),
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                    QuickActionItem(
-                      icon: Icons.local_offer_rounded,
-                      title: context.l10n.promotions,
-                      backgroundColor: Color(0xFFF2F2F2),
-                      iconColor: Colors.black,
-                      onTap: () {
-                        showModalBottomSheet(
-                          context: context,
-                          isScrollControlled: true,
-                          backgroundColor: Colors.transparent,
-                          builder: (context) => PromotionPage(),
-                        );
-                      },
-                    ),
-                    QuickActionItem(
-                      icon: Icons.star_rounded,
-                      title: context.l10n.sos,
-                      backgroundColor: Color(0xFFFFE8E8),
-                      iconColor: Colors.red,
-                      textColor: Colors.red,
-                      onTap: () {
-                        final activeTrip =
-                            bookingProvider.activeBooking?.tripId != null;
-                        if (!activeTrip) {
-                          _showMessage(context.l10n.noActiveTripForSos);
-                          return;
-                        }
-                        homeProvider.setSelectedIndex(1);
-                      },
+                    Expanded(
+                      child: QuickActionItem(
+                        icon: Icons.local_offer_rounded,
+                        title: context.l10n.promotions,
+                        backgroundColor: Color(0xFFF2F2F2),
+                        iconColor: Colors.black,
+                        onTap: () {
+                          showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: Colors.transparent,
+                            builder: (context) => PromotionPage(),
+                          );
+                        },
+                      ),
                     ),
                   ],
                 ),
@@ -596,7 +572,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
           SizedBox(height: 16),
           Container(
             width: double.infinity,
-            height: 176,
+            height: 144,
             decoration: BoxDecoration(
               color: Colors.grey[200],
               borderRadius: BorderRadius.circular(20),
@@ -641,7 +617,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
         ),
         SizedBox(height: 8),
         SizedBox(
-          height: 176,
+          height: 144,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: bookingProvider.availablePromotions.length,

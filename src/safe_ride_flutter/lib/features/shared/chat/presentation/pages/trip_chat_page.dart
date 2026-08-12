@@ -36,6 +36,7 @@ class _TripChatPageState extends State<TripChatPage> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _picker = ImagePicker();
+  File? _selectedImage;
 
   @override
   void initState() {
@@ -74,11 +75,25 @@ class _TripChatPageState extends State<TripChatPage> {
 
   Future<void> _handleSend() async {
     if (!widget.canSendMessage) return;
+    final provider = context.read<TripChatProvider>();
+    if (provider.isSending) return;
+
+    final selectedImage = _selectedImage;
+    if (selectedImage != null) {
+      final sent = await provider.sendImage(selectedImage);
+      if (!mounted) return;
+      if (sent) {
+        setState(() => _selectedImage = null);
+        _scrollToBottom();
+      }
+      return;
+    }
+
     final text = _messageController.text;
     if (text.trim().isEmpty) return;
 
     _messageController.clear();
-    await context.read<TripChatProvider>().sendMessage(text);
+    await provider.sendMessage(text);
     _scrollToBottom();
   }
 
@@ -93,8 +108,7 @@ class _TripChatPageState extends State<TripChatPage> {
 
       if (image != null && mounted) {
         if (!widget.canSendMessage) return;
-        await context.read<TripChatProvider>().sendImage(File(image.path));
-        _scrollToBottom();
+        setState(() => _selectedImage = File(image.path));
       }
     } catch (e) {
       if (mounted) {
@@ -224,45 +238,115 @@ class _TripChatPageState extends State<TripChatPage> {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          IconButton(
-            onPressed: widget.canSendMessage ? _handlePickImage : null,
-            icon: Icon(
-              Icons.image_outlined,
-              color: widget.canSendMessage ? Color(0xFF667085) : Colors.grey,
-            ),
-          ),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: Color(0xFFF2F4F7),
-                borderRadius: BorderRadius.circular(24),
+          if (_selectedImage != null) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.file(
+                      _selectedImage!,
+                      width: 88,
+                      height: 88,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, error, stackTrace) => Container(
+                        width: 88,
+                        height: 88,
+                        color: Color(0xFFF2F4F7),
+                        alignment: Alignment.center,
+                        child: Icon(
+                          Icons.broken_image_outlined,
+                          color: Color(0xFF98A2B3),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: -8,
+                    right: -8,
+                    child: Material(
+                      color: Color(0xFF344054),
+                      shape: CircleBorder(),
+                      child: InkWell(
+                        customBorder: CircleBorder(),
+                        onTap: () => setState(() => _selectedImage = null),
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Icon(
+                            Icons.close,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              child: TextField(
-                controller: _messageController,
-                enabled: widget.canSendMessage,
-                decoration: InputDecoration(
-                  hintText: widget.canSendMessage
-                      ? context.l10n.messageHint
-                      : context.l10n.tripEnded,
-                  hintStyle: TextStyle(fontSize: 14, color: Color(0xFF98A2B3)),
-                  border: InputBorder.none,
+            ),
+            SizedBox(height: 10),
+          ],
+          Row(
+            children: [
+              IconButton(
+                onPressed: widget.canSendMessage ? _handlePickImage : null,
+                icon: Icon(
+                  Icons.image_outlined,
+                  color: widget.canSendMessage
+                      ? Color(0xFF667085)
+                      : Colors.grey,
                 ),
-                maxLines: null,
-                textInputAction: TextInputAction.send,
-                onSubmitted: (_) => _handleSend(),
               ),
-            ),
-          ),
-          SizedBox(width: 8),
-          IconButton(
-            onPressed: widget.canSendMessage ? _handleSend : null,
-            icon: Icon(
-              Icons.send_rounded,
-              color: widget.canSendMessage ? AppColors.primary : Colors.grey,
-            ),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: Color(0xFFF2F4F7),
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: TextField(
+                    controller: _messageController,
+                    enabled: widget.canSendMessage,
+                    decoration: InputDecoration(
+                      hintText: widget.canSendMessage
+                          ? context.l10n.messageHint
+                          : context.l10n.tripEnded,
+                      hintStyle: TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF98A2B3),
+                      ),
+                      border: InputBorder.none,
+                    ),
+                    maxLines: null,
+                    textInputAction: TextInputAction.send,
+                    onSubmitted: (_) => _handleSend(),
+                  ),
+                ),
+              ),
+              SizedBox(width: 8),
+              IconButton(
+                onPressed: widget.canSendMessage ? _handleSend : null,
+                icon: Consumer<TripChatProvider>(
+                  builder: (context, provider, _) => provider.isSending
+                      ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(
+                          Icons.send_rounded,
+                          color: widget.canSendMessage
+                              ? AppColors.primary
+                              : Colors.grey,
+                        ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -358,7 +442,7 @@ class _MessageBubbleState extends State<_MessageBubble> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    displayedText!,
+                    displayedText,
                     style: TextStyle(
                       color: isMine ? Colors.white : Color(0xFF1D2939),
                       fontSize: 15,
