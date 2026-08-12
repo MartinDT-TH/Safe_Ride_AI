@@ -21,6 +21,10 @@ public interface IPromotionRepository
         long promotionId,
         CancellationToken cancellationToken);
 
+    Task<int> CountCustomerCompletedTripsAsync(
+        Guid customerId,
+        CancellationToken cancellationToken);
+
     Task AddBookingPromotionAsync(
         BookingPromotion bookingPromotion,
         CancellationToken cancellationToken);

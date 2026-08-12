@@ -14,4 +14,5 @@ public sealed record AdminPromotionResponse(
     decimal MinimumOrderValue,
     decimal MaximumDiscountValue,
     int UsageLimitPerUser,
+    int RequiredCompletedTrips,
     bool IsActive);

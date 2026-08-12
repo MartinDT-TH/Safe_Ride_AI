@@ -36,6 +36,12 @@ public sealed class ResilientRedisService : IRedisService
             () => _primary.SetAsync(key, value, expiration));
     }
 
+    public async Task SetPersistentAsync(string key, string value)
+    {
+        await _fallback.SetPersistentAsync(key, value);
+        await TryPrimaryAsync(() => _primary.SetPersistentAsync(key, value));
+    }
+
     public async Task<bool> SetIfNotExistsAsync(
         string key,
         string value,

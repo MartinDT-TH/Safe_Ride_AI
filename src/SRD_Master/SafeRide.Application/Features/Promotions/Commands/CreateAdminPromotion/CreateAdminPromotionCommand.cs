@@ -14,4 +14,5 @@ public sealed record CreateAdminPromotionCommand(
     decimal MinimumOrderValue,
     decimal MaximumDiscountValue,
     int UsageLimitPerUser,
+    int? RequiredCompletedTrips,
     bool IsActive) : IRequest<AdminPromotionResponse>;

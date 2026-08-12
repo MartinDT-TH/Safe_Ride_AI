@@ -19,13 +19,16 @@ public sealed class GetAdminPromotionsQueryHandler
 
     private readonly IAdminPromotionRepository _promotionRepository;
     private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly IPromotionUnlockRuleStore _unlockRuleStore;
 
     public GetAdminPromotionsQueryHandler(
         IAdminPromotionRepository promotionRepository,
-        IDateTimeProvider dateTimeProvider)
+        IDateTimeProvider dateTimeProvider,
+        IPromotionUnlockRuleStore unlockRuleStore)
     {
         _promotionRepository = promotionRepository;
         _dateTimeProvider = dateTimeProvider;
+        _unlockRuleStore = unlockRuleStore;
     }
 
     public async Task<AdminPromotionsPageResponse> Handle(
@@ -55,8 +58,14 @@ public sealed class GetAdminPromotionsQueryHandler
             _dateTimeProvider.UtcNow,
             cancellationToken);
 
+        var requiredTripsByCode = await _unlockRuleStore.GetRequiredCompletedTripsAsync(
+            data.Items.Select(item => item.PromotionCode).ToList(),
+            cancellationToken);
+
         return new AdminPromotionsPageResponse(
-            data.Items.Select(AdminPromotionRules.ToResponse).ToList(),
+            data.Items.Select(item => AdminPromotionRules.ToResponse(
+                item,
+                requiredTripsByCode.GetValueOrDefault(item.PromotionCode))).ToList(),
             new AdminPromotionCountsResponse(
                 data.Total,
                 data.Active,

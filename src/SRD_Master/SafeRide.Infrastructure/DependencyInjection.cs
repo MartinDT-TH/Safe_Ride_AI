@@ -299,6 +299,7 @@ public static class DependencyInjection
         services.AddScoped<IAdminPricingRuleRepository, AdminPricingRuleRepository>();
         services.AddScoped<IPromotionRepository, PromotionRepository>();
         services.AddScoped<IAdminPromotionRepository, PromotionRepository>();
+        services.AddScoped<IPromotionUnlockRuleStore, PromotionUnlockRuleStore>();
         services.AddScoped<IRatingRepository, RatingRepository>();
         services.AddScoped<IReportRepository, ReportRepository>();
         services.AddScoped<ISOSAlertRepository, SOSAlertRepository>();
