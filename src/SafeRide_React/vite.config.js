@@ -15,6 +15,10 @@ export default defineConfig({
         proxy: {
             '/api': apiTarget,
             '/uploads': apiTarget,
+            '/hubs': {
+                target: apiTarget,
+                ws: true,
+            },
         },
     },
 });

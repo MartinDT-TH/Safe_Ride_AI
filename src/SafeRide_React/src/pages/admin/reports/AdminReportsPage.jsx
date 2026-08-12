@@ -17,6 +17,7 @@ import {
     mapAdminReportsPage,
     updateAdminReportStatus,
 } from '../../../features/admin/reports/adminReportsApi';
+import { createAdminReportsConnection } from '../../../features/admin/reports/adminReportsRealtime';
 import './AdminReportsPage.css';
 
 const PAGE_SIZE = 10;
@@ -36,6 +37,8 @@ function AdminReportsPage() {
     const [currentPage, setCurrentPage] = useState(1);
     const [selectedReport, setSelectedReport] = useState(null);
     const [successMessage, setSuccessMessage] = useState('');
+    const [realtimeMessage, setRealtimeMessage] = useState('');
+    const [isRealtimeConnected, setIsRealtimeConnected] = useState(true);
     const { query, setQuery } = useAdminSearch({
         placeholder: 'Tìm kiếm tiêu đề, nội dung hoặc người gửi báo cáo...',
     });
@@ -57,6 +60,27 @@ function AdminReportsPage() {
         totalItems: 0,
         totalPages: 1,
     };
+
+    useEffect(() => {
+        let active = true;
+        const connection = createAdminReportsConnection({
+            onReportCreated: () => {
+                if (!active) return;
+                setCurrentPage(1);
+                setRealtimeMessage('Có báo cáo mới vừa được gửi');
+                refetch();
+            },
+            onConnectionChanged: (connected) => {
+                if (active) setIsRealtimeConnected(connected);
+            },
+        });
+
+        connection.start();
+        return () => {
+            active = false;
+            connection.stop();
+        };
+    }, [refetch]);
 
     const handleSearchChange = (event) => {
         setCurrentPage(1);
@@ -119,6 +143,17 @@ function AdminReportsPage() {
                 </section>
 
                 <section className="admin-reports-panel">
+                    {realtimeMessage && (
+                        <div className="admin-reports-feedback admin-reports-feedback--realtime" role="status">
+                            <span>{realtimeMessage}</span>
+                            <button type="button" onClick={() => setRealtimeMessage('')}>Đã xem</button>
+                        </div>
+                    )}
+                    {!isRealtimeConnected && (
+                        <div className="admin-reports-feedback admin-reports-feedback--realtime-error" role="status">
+                            Không thể kết nối cập nhật báo cáo realtime
+                        </div>
+                    )}
                     {error && (
                         <div className="admin-reports-feedback admin-reports-feedback--error" role="alert">
                             <span>Không thể tải danh sách báo cáo</span>

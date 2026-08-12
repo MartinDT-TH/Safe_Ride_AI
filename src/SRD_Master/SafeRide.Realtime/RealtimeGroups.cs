@@ -2,6 +2,8 @@ namespace SafeRide.Realtime;
 
 public static class RealtimeGroups
 {
+    public const string AdminReports = "admin:reports";
+
     public const string AdminSOS = "admin:sos";
 
     public static string User(Guid userId) => $"user:{userId}";

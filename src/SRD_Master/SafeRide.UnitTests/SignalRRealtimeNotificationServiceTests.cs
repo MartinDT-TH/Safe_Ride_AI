@@ -8,6 +8,27 @@ namespace SafeRide.UnitTests;
 public sealed class SignalRRealtimeNotificationServiceTests
 {
     [Fact]
+    public async Task PublishReportCreatedAsync_SendsToAdminReportsGroup()
+    {
+        var clients = new RecordingHubClients();
+        var service = new SignalRAdminReportRealtimeService(
+            new HubContextFake(clients));
+
+        await service.PublishReportCreatedAsync(
+            new ReportCreatedEvent(
+                7,
+                42,
+                Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                "Báo cáo chuyến đi",
+                ReportStatus.Pending,
+                DateTime.UtcNow));
+
+        var send = Assert.Single(clients.Sends);
+        Assert.Equal(RealtimeGroups.AdminReports, send.GroupName);
+        Assert.Equal("ReportCreated", send.Method);
+    }
+
+    [Fact]
     public async Task PublishTripStatusChangedAsync_SendsToCustomerDriverBookingAndTripGroups()
     {
         var clients = new RecordingHubClients();
