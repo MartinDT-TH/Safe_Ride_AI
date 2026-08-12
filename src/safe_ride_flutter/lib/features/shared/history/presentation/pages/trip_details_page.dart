@@ -176,7 +176,6 @@ class _TripDetailsView extends StatelessWidget {
       Navigator.of(context).pop(true);
     }
   }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -426,10 +425,6 @@ class _TripChatActionCard extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
       ),
     );
   }

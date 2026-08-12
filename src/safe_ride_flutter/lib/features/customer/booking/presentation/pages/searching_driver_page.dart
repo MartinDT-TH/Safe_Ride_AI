@@ -8,6 +8,7 @@ import '../../../../../core/maps/widgets/map_renderer_widget.dart';
 import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../../core/localization/locale_provider.dart';
 import '../../../../../core/localization/trip_status_localizer.dart';
+import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
 import '../../../../../core/services/mobile_config_service.dart';
 import '../../../../../core/services/socket_service.dart';
@@ -23,7 +24,7 @@ import '../widgets/booking_cancel_flow.dart';
 import 'driver_profile_page.dart';
 
 class SearchingDriverPage extends StatefulWidget {
-  SearchingDriverPage({
+  const SearchingDriverPage({
     super.key,
     required this.pickup,
     this.booking,
@@ -425,7 +426,7 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
                   AppPolyline(
                     id: 'direct_route',
                     points: [pickupPos, destPos],
-                    color: _tealColor.withOpacity(0.5),
+                    color: _tealColor.withValues(alpha: 0.5),
                     width: 4,
                   ),
               },
@@ -530,7 +531,7 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
 }
 
 class _SearchingPanel extends StatelessWidget {
-  _SearchingPanel({
+  const _SearchingPanel({
     required this.pickupAddress,
     required this.destinationAddress,
     this.booking,
@@ -700,7 +701,7 @@ class _SearchingPanel extends StatelessWidget {
 }
 
 class _DriverFoundCard extends StatelessWidget {
-  _DriverFoundCard({
+  const _DriverFoundCard({
     required this.booking,
     required this.onTap,
     this.onConfirmTap,
@@ -781,7 +782,7 @@ class _DriverFoundCard extends StatelessWidget {
 
 class _RadarScanner extends StatefulWidget {
   final double size;
-  _RadarScanner({this.size = 120});
+  const _RadarScanner({this.size = 120});
 
   @override
   State<_RadarScanner> createState() => _RadarScannerState();
@@ -919,7 +920,7 @@ class _RadarScannerState extends State<_RadarScanner>
 }
 
 class _BookingSummary extends StatelessWidget {
-  _BookingSummary({
+  const _BookingSummary({
     required this.booking,
     required this.vehicle,
     required this.fareEstimate,
@@ -1039,7 +1040,7 @@ class _BookingSummary extends StatelessWidget {
 }
 
 class _CompactRouteInfo extends StatelessWidget {
-  _CompactRouteInfo({required this.pickup, required this.destination});
+  const _CompactRouteInfo({required this.pickup, required this.destination});
 
   final String pickup;
   final String destination;
@@ -1080,7 +1081,7 @@ class _CompactRouteInfo extends StatelessWidget {
 }
 
 class _LocationRow extends StatelessWidget {
-  _LocationRow({
+  const _LocationRow({
     required this.icon,
     required this.iconColor,
     required this.label,

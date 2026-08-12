@@ -1,6 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:async';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
@@ -13,7 +14,10 @@ import 'dependency_injection/injection.dart';
 import 'features/shared/onboarding/presentation/pages/splash_page.dart';
 import 'features/auth/presentation/providers/auth_provider.dart';
 import 'features/shared/chat/presentation/providers/chat_unread_provider.dart';
+import 'features/trip_sharing/trip_share_deep_link_coordinator.dart';
+import 'l10n/generated/app_localizations.dart';
 
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
   @override

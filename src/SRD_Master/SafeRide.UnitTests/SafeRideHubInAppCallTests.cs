@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.SignalR;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
+using SafeRide.Application.Features.TripSharing;
+using SafeRide.Domain.Enums;
 using SafeRide.Realtime;
 
 namespace SafeRide.UnitTests;
@@ -104,7 +106,8 @@ public sealed class SafeRideHubInAppCallTests
     {
         return new SafeRideHub(
             new DriverRealtimeServiceFake(),
-            new TripContinuationAccessServiceFake())
+            new TripContinuationAccessServiceFake(),
+            new TripSharingServiceFake())
         {
             Clients = clients,
             Context = new HubCallerContextFake()
@@ -242,5 +245,67 @@ public sealed class SafeRideHubInAppCallTests
             long? bookingId = null,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(true);
+    }
+
+    private sealed class TripSharingServiceFake : ITripSharingService
+    {
+        public Task<CreateTripShareResult> CreateAsync(
+            long tripId,
+            Guid sharedByUserId,
+            string recipientPhoneNumber,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<TripShareListItemDto>> ListAsync(
+            long tripId,
+            Guid sharedByUserId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<ReceivedTripShareListItemDto>> ListReceivedAsync(
+            Guid recipientUserId,
+            bool activeOnly,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<ResolveTripShareResult> ResolveAsync(
+            string rawToken,
+            Guid recipientUserId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<SharedTripTrackingDto> GetTrackingAsync(
+            long tripShareId,
+            Guid recipientUserId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task RevokeAsync(
+            long tripId,
+            long tripShareId,
+            Guid sharedByUserId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<bool> CanSubscribeAsync(
+            long tripShareId,
+            Guid recipientUserId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
+
+        public Task PublishLocationAsync(
+            long tripId,
+            double latitude,
+            double longitude,
+            DateTime updatedAt,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task HandleTripLifecycleAsync(
+            long tripId,
+            TripStatus tripStatus,
+            DateTime occurredAt,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 }

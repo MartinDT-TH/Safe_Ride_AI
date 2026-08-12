@@ -112,7 +112,7 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   void _handleViewFeedback(HistoryTrip trip) {
-    _openTripDetails(trip, canRebook: false);
+    _openTripDetails(trip, canRebook: false, canCancelScheduled: false);
   }
 
   bool _canSendChat(String? status) {

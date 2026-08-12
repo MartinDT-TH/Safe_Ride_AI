@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/localization/localization_extensions.dart';
 import '../providers/home_provider.dart';
 import '../widgets/customer_bottom_nav_bar.dart';

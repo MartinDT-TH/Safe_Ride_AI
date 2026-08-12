@@ -12,7 +12,7 @@ import 'confirm_booking_page.dart';
 import '../../../../shared/feedback/presentation/pages/driver_reviews_page.dart';
 
 class DriverProfilePage extends StatelessWidget {
-  DriverProfilePage({
+  const DriverProfilePage({
     super.key,
     required this.driverId,
     this.name = 'SafeRide Driver',
@@ -77,7 +77,7 @@ class DriverProfilePage extends StatelessWidget {
           ],
         ),
         body: SingleChildScrollView(
-          physics: BouncingScrollPhysics(),
+          physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Column(
             children: [
@@ -157,64 +157,30 @@ class DriverProfilePage extends StatelessWidget {
         // --- BOTTOM NAVIGATION BAR ---
         bottomNavigationBar: !canConfirmDriver
             ? null
-            :  Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.06),
-                blurRadius: 16,
-                offset: Offset(0, -4),
-              ),
-            ],
-          ),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => DriverReviewsPage(
-                                  driverId: driverId,
-                                  driverName: name,
-                                ),
-                              ),
-                            );
-                          },
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            side: BorderSide(
-                              color: AppColors.primary,
-                              width: 1.5,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: Text(
-                            context.l10n.viewReviews,
-                            style: TextStyle(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: booking == null || pickup == null
-                              ? null
-                              : () {
+            : Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(24)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 16,
+                      offset: const Offset(0, -4),
+                    ),
+                  ],
+                ),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () {
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
                                       builder: (_) => DriverReviewsPage(
@@ -225,9 +191,8 @@ class DriverProfilePage extends StatelessWidget {
                                   );
                                 },
                                 style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 16,
-                                  ),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 16),
                                   side: const BorderSide(
                                     color: AppColors.primary,
                                     width: 1.5,
@@ -236,9 +201,9 @@ class DriverProfilePage extends StatelessWidget {
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                 ),
-                                child: const Text(
-                                  'Xem đánh giá',
-                                  style: TextStyle(
+                                child: Text(
+                                  context.l10n.viewReviews,
+                                  style: const TextStyle(
                                     color: AppColors.primary,
                                     fontWeight: FontWeight.w700,
                                     fontSize: 16,
@@ -272,18 +237,16 @@ class DriverProfilePage extends StatelessWidget {
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.primary,
                                   foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 16,
-                                  ),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 16),
                                   elevation: 0,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                 ),
-                                // Bỏ Icon và Row, đưa Text ra làm con trực tiếp để tự động căn giữa
-                                child: const Text(
-                                  'Xác nhận thuê',
-                                  style: TextStyle(
+                                child: Text(
+                                  context.l10n.confirmHire,
+                                  style: const TextStyle(
                                     fontWeight: FontWeight.w700,
                                     fontSize: 16,
                                   ),
@@ -306,7 +269,7 @@ class DriverProfilePage extends StatelessWidget {
                               color: Colors.red.shade600,
                             ),
                             label: Text(
-                              'Từ chối và tìm tài xế khác',
+                              context.l10n.rejectAndFindAnotherDriver,
                               style: TextStyle(
                                 color: Colors.red.shade600,
                                 fontWeight: FontWeight.w600,
@@ -320,45 +283,8 @@ class DriverProfilePage extends StatelessWidget {
                               ),
                             ),
                           ),
-                          // Bỏ Icon và Row, đưa Text ra làm con trực tiếp để tự động căn giữa
-                          child: Text(
-                            context.l10n.confirmHire,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 16,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: TextButton.icon(
-                      onPressed: booking == null
-                          ? null
-                          : () => _rejectDriver(context),
-                      icon: Icon(
-                        Icons.close_rounded,
-                        size: 18,
-                        color: Colors.red.shade600,
-                      ),
-                      label: Text(
-                        context.l10n.rejectAndFindAnotherDriver,
-                        style: TextStyle(
-                          color: Colors.red.shade600,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
-                        ),
-                      ),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
+                      ],
                     ),
                   ),
                 ),
@@ -496,7 +422,7 @@ class DriverProfilePage extends StatelessWidget {
 }
 
 class _DriverAvatar extends StatelessWidget {
-  _DriverAvatar({this.avatarUrl, required this.isVerified});
+  const _DriverAvatar({this.avatarUrl, required this.isVerified});
   final String? avatarUrl;
   final bool isVerified;
 
@@ -544,7 +470,7 @@ class _DriverAvatar extends StatelessWidget {
 }
 
 class _ExperienceCard extends StatelessWidget {
-  _ExperienceCard({required this.years});
+  const _ExperienceCard({required this.years});
   final int years;
 
   @override
@@ -589,7 +515,7 @@ class _ExperienceCard extends StatelessWidget {
 }
 
 class _AttributesCard extends StatelessWidget {
-  _AttributesCard();
+  const _AttributesCard();
 
   @override
   Widget build(BuildContext context) {
@@ -647,7 +573,7 @@ class _AttributesCard extends StatelessWidget {
 }
 
 class _StatusCard extends StatelessWidget {
-  _StatusCard({
+  const _StatusCard({
     required this.icon,
     required this.title,
     required this.subtitle,
@@ -665,18 +591,17 @@ class _StatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final trailingWidget = trailing;
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Color(0xFFF0F0F0)),
+        border: Border.all(color: const Color(0xFFF0F0F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 10,
-            offset: Offset(0, 4),
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -690,23 +615,23 @@ class _StatusCard extends StatelessWidget {
             ),
             child: Icon(icon, color: iconColor, size: 24),
           ),
-          SizedBox(width: 16),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   title,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
                     color: Color(0xFF263238),
                   ),
                 ),
-                SizedBox(height: 2),
+                const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 13,
                     color: Color(0xFF78909C),
                     height: 1.3,
@@ -715,7 +640,7 @@ class _StatusCard extends StatelessWidget {
               ],
             ),
           ),
-          if (trailingWidget != null) trailingWidget,
+          if (trailing != null) trailing!,
         ],
       ),
     );
@@ -723,7 +648,7 @@ class _StatusCard extends StatelessWidget {
 }
 
 class _VerifiedBadge extends StatelessWidget {
-  _VerifiedBadge();
+  const _VerifiedBadge();
   @override
   Widget build(BuildContext context) {
     return Container(

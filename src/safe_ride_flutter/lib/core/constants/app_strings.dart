@@ -225,6 +225,7 @@ abstract final class AppConfig {
   );
   // https://safe-ride-ai.onrender.com
   // http://192.168.1.19:5026
+  // http://192.168.1.26:5026 Tho
   static const forceWebSockets = bool.fromEnvironment(
     'FORCE_WEBSOCKETS',
     defaultValue: true, // Dev only or config-based
