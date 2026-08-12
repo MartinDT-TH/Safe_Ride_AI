@@ -43,6 +43,12 @@ String _formatCurrency(num value) => NumberFormat.currency(
   decimalDigits: 0,
 ).format(value);
 
+String _formatTodayIncome(num value) => NumberFormat.currency(
+  locale: LocaleProvider.currentLocale.toLanguageTag(),
+  symbol: 'đ',
+  decimalDigits: 0,
+).format(value);
+
 class DriverDashboardPage extends StatefulWidget {
   DriverDashboardPage({super.key});
 
@@ -124,7 +130,6 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
   }
 
   late DriverDashboardProvider _provider;
-  bool _providerAttached = false;
   DateTime? _lastCameraFitAt;
   static const _cameraFitInterval = Duration(seconds: 3);
 
@@ -136,7 +141,6 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
       final token = context.read<AuthProvider>().token;
       _provider = context.read<DriverDashboardProvider>();
       _provider.addListener(_onProviderUpdated);
-      _providerAttached = true;
       _onProviderUpdated();
       final switchedToCustomer = await _checkActiveCustomerBooking(token);
       if (switchedToCustomer || !mounted) {
@@ -717,6 +721,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
             if (mounted && completed == true) {
               _provider.markTripPaymentCompleted(tripId);
               await _provider.loadActiveTrip();
+              await _provider.loadTodayIncome();
             }
           })
           .whenComplete(() {
@@ -771,7 +776,12 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
       body: IndexedStack(index: _selectedIndex, children: pages),
       bottomNavigationBar: DriverBottomNavBar(
         currentIndex: _selectedIndex,
-        onTap: (index) => setState(() => _selectedIndex = index),
+        onTap: (index) {
+          setState(() => _selectedIndex = index);
+          if (index == 0) {
+            context.read<DriverDashboardProvider>().loadTodayIncome();
+          }
+        },
       ),
     );
   }
@@ -849,73 +859,88 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
           },
         ),
 
-        // 2. Top Bar (Income & Drawer/Notification)
-        SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _CircleIconButton(icon: Icons.menu, onPressed: () {}),
-                _IncomeHeader(),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+        // 2. Top Bar (Income & Notification)
+        Positioned(
+          top: MediaQuery.viewPaddingOf(context).top + 8,
+          left: 16,
+          right: 16,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final incomeWidth = math.min(
+                160.0,
+                math.max(128.0, constraints.maxWidth - 112),
+              );
+              return SizedBox(
+                height: 96,
+                child: Stack(
+                  alignment: Alignment.topCenter,
                   children: [
-                    if (const bool.fromEnvironment('dart.vm.product') == false)
-                      Selector<DriverDashboardProvider, bool>(
-                        selector: (_, provider) => provider.isDemoMode,
-                        builder: (context, isDemoMode, _) => IconButton(
-                          icon: Icon(
-                            isDemoMode
-                                ? Icons.bug_report
-                                : Icons.bug_report_outlined,
-                            color: isDemoMode ? Colors.red : Colors.grey,
-                          ),
-                          onPressed: () {
-                            final nextDemoMode = !isDemoMode;
-                            final provider = context
-                                .read<DriverDashboardProvider>();
-                            provider.toggleDemoMode();
-                            if (nextDemoMode) {
-                              _stopLocationUpdates();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    context.l10n.gpsSimulationEnabled,
-                                  ),
+                    SizedBox(width: incomeWidth, child: _IncomeHeader()),
+                    Align(
+                      alignment: Alignment.topRight,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _CircleIconButton(
+                            icon: Icons.notifications_none_rounded,
+                            hasBadge: context
+                                .select<NotificationProvider, bool>(
+                                  (provider) => provider.unreadCount > 0,
+                                ),
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => NotificationsPage(),
                                 ),
                               );
-                            } else {
-                              _startLocationUpdates();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    context.l10n.gpsSimulationDisabled,
-                                  ),
-                                ),
-                              );
-                            }
-                          },
-                          tooltip: context.l10n.demoGpsMode,
-                        ),
-                      ),
-                    _CircleIconButton(
-                      icon: Icons.notifications_none_rounded,
-                      hasBadge: context.select<NotificationProvider, bool>(
-                        (provider) => provider.unreadCount > 0,
-                      ),
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => NotificationsPage(),
+                            },
                           ),
-                        );
-                      },
+                          if (const bool.fromEnvironment('dart.vm.product') ==
+                              false)
+                            Selector<DriverDashboardProvider, bool>(
+                              selector: (_, provider) => provider.isDemoMode,
+                              builder: (context, isDemoMode, _) => IconButton(
+                                icon: Icon(
+                                  isDemoMode
+                                      ? Icons.bug_report
+                                      : Icons.bug_report_outlined,
+                                  color: isDemoMode ? Colors.red : Colors.grey,
+                                ),
+                                onPressed: () {
+                                  final nextDemoMode = !isDemoMode;
+                                  final provider = context
+                                      .read<DriverDashboardProvider>();
+                                  provider.toggleDemoMode();
+                                  if (nextDemoMode) {
+                                    _stopLocationUpdates();
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          context.l10n.gpsSimulationEnabled,
+                                        ),
+                                      ),
+                                    );
+                                  } else {
+                                    _startLocationUpdates();
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          context.l10n.gpsSimulationDisabled,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
+                                tooltip: context.l10n.demoGpsMode,
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
-              ],
-            ),
+              );
+            },
           ),
         ),
 
@@ -1651,13 +1676,18 @@ class _IncomeHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Selector<
       DriverDashboardProvider,
-      ({double todayIncome, int todayTrips})
+      ({num? income, int trips, bool loading, bool loaded, bool hasError})
     >(
-      selector: (_, provider) =>
-          (todayIncome: provider.todayIncome, todayTrips: provider.todayTrips),
+      selector: (_, provider) => (
+        income: provider.todayIncome,
+        trips: provider.todayTrips,
+        loading: provider.isLoadingIncome,
+        loaded: provider.hasLoadedIncome,
+        hasError: provider.incomeErrorMessage != null,
+      ),
       builder: (context, summary, child) {
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(30),
@@ -1669,53 +1699,76 @@ class _IncomeHeader extends StatelessWidget {
               ),
             ],
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                context.l10n.todayIncomeUpper,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey,
-                ),
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _formatCurrency(summary.todayIncome),
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF006B70),
-                    ),
-                  ),
-                  SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Color(0xFFE8F2F2),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      context.l10n.tripCountShort(summary.todayTrips),
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF006B70),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+          child: _buildContent(context, summary),
         );
       },
+    );
+  }
+
+  Widget _buildContent(
+    BuildContext context,
+    ({num? income, int trips, bool loading, bool loaded, bool hasError})
+    summary,
+  ) {
+    if (!summary.loaded && !summary.hasError) {
+      return Text(
+        'Đang tải thu nhập...',
+        textAlign: TextAlign.center,
+        style: TextStyle(fontSize: 13, color: Color(0xFF667085)),
+      );
+    }
+    if (summary.hasError && !summary.loaded) {
+      return Text(
+        'Không thể tải thu nhập hôm nay.',
+        textAlign: TextAlign.center,
+        style: TextStyle(fontSize: 12, color: Color(0xFFB42318)),
+      );
+    }
+
+    final income = summary.income ?? 0;
+    final detail = income > 0
+        ? '${summary.trips} chuyến'
+        : 'Chưa có thu nhập hôm nay.';
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          context.l10n.todayIncomeUpper,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey,
+          ),
+        ),
+        SizedBox(height: 3),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              _formatTodayIncome(income),
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF006B70),
+              ),
+            ),
+            SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                detail,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF667085),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

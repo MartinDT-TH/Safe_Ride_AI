@@ -208,6 +208,8 @@ Future<void> setupDependencies() async {
       socketService: getIt<SocketService>(),
       sessionManager: getIt<SessionManager>(),
       tripRequestRepository: getIt<DriverTripRequestRepository>(),
+      driverWalletRepository: getIt<DriverWalletRepository>(),
+      historyRepository: getIt<HistoryRepository>(),
     ),
   );
 

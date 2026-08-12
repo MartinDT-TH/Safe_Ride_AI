@@ -46,11 +46,22 @@ class PromoBanner extends StatelessWidget {
       );
     }
 
+    final cardWidth = (MediaQuery.sizeOf(context).width - 40)
+        .clamp(240.0, 384.0)
+        .toDouble();
+
     return Container(
-      width: 280,
-      height: 176,
+      width: cardWidth,
+      height: 144,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.16),
+            blurRadius: 12,
+            offset: Offset(0, 5),
+          ),
+        ],
         image: DecorationImage(
           image: NetworkImage(
             'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&q=80&w=800',
@@ -60,13 +71,14 @@ class PromoBanner extends StatelessWidget {
       ),
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(16),
           gradient: LinearGradient(
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
+            begin: Alignment.bottomCenter,
+            end: Alignment.topCenter,
             colors: [
-              Color(0xFF006B70).withValues(alpha: 0.85),
-              Color(0xFF006B70).withValues(alpha: 0.4),
+              Color(0xFF042F2E).withValues(alpha: 0.92),
+              Color(0xFF134E4A).withValues(alpha: 0.65),
+              Color(0xFF134E4A).withValues(alpha: 0.40),
             ],
           ),
         ),
@@ -79,7 +91,7 @@ class PromoBanner extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
                 promo.promotionCode,
@@ -92,69 +104,50 @@ class PromoBanner extends StatelessWidget {
                 ),
               ),
             ),
-            SizedBox(height: 8),
+            SizedBox(height: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    promo.shortDescription,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      height: 1.15,
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
                     discountText,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      height: 1.1,
                     ),
                   ),
-                  Spacer(),
+                  const Spacer(),
                   if (minOrderText.isNotEmpty || expiryText.isNotEmpty)
-                    Row(
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         if (minOrderText.isNotEmpty)
-                          Expanded(
-                            child: Text(
-                              minOrderText,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ),
-                        if (minOrderText.isNotEmpty &&
-                            expiryText.isNotEmpty) ...[
-                          SizedBox(width: 8),
                           Text(
-                            '•',
-                            style: TextStyle(
+                            minOrderText,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
                               color: Colors.white70,
                               fontSize: 11,
+                              height: 1.2,
                             ),
                           ),
-                          SizedBox(width: 8),
-                        ],
+                        if (minOrderText.isNotEmpty && expiryText.isNotEmpty)
+                          const SizedBox(height: 2),
                         if (expiryText.isNotEmpty)
                           Text(
                             expiryText,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
+                            style: const TextStyle(
                               color: Colors.white70,
                               fontSize: 11,
+                              height: 1.2,
                             ),
                           ),
                       ],

@@ -100,11 +100,11 @@ class TripChatProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> sendImage(File imageFile) async {
+  Future<bool> sendImage(File imageFile) async {
     if (_activeTripId == null ||
         _accessToken == null ||
         _currentUserId == null) {
-      return;
+      return false;
     }
 
     _isSending = true;
@@ -124,9 +124,11 @@ class TripChatProvider extends ChangeNotifier {
         _sortMessages();
         notifyListeners();
       }
+      return true;
     } catch (e) {
       _errorMessage = LocaleProvider.currentLocalizations.chatImageSendFailed;
       notifyListeners();
+      return false;
     } finally {
       _isSending = false;
       notifyListeners();
