@@ -565,9 +565,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
             TextButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop();
-                unawaited(_startInAppCall());
+                unawaited(_confirmAndTriggerSOS());
               },
-              child: Text(context.l10n.callDriver),
+              child: Text(context.l10n.activateSos),
             ),
           ],
         ),
