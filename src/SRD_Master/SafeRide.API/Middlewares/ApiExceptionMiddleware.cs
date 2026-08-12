@@ -131,6 +131,14 @@ public sealed class ApiExceptionMiddleware
                 "map.provider_error",
                 exception.Message);
         }
+        catch (OperationCanceledException)
+            when (context.RequestAborted.IsCancellationRequested)
+        {
+            _logger.LogInformation(
+                "Request was canceled by the client for {Method} {Path}.",
+                context.Request.Method,
+                context.Request.Path);
+        }
         catch (Exception exception)
         {
             _logger.LogError(

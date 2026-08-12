@@ -17,6 +17,9 @@ class AiChatService {
   final Dio _dio;
   final SessionManager _sessionManager;
 
+  static const _messageReceiveTimeout = Duration(seconds: 90);
+  static const _audioReceiveTimeout = Duration(minutes: 3);
+
   Future<List<AiConversation>> getConversations() async {
     final response = await _dio.get<List<dynamic>>(
       'ai-chat/conversations',
@@ -46,7 +49,9 @@ class AiChatService {
             'longitude': currentLocation.longitude,
           },
       },
-      options: await _authorizationOptions(),
+      options: await _authorizationOptions(
+        receiveTimeout: _messageReceiveTimeout,
+      ),
     );
     return AiChatReply.fromJson(response.data!);
   }
@@ -72,7 +77,9 @@ class AiChatService {
           'currentLongitude': currentLocation.longitude.toString(),
         },
       }),
-      options: await _authorizationOptions(),
+      options: await _authorizationOptions(
+        receiveTimeout: _audioReceiveTimeout,
+      ),
     );
     return AiChatReply.fromJson(response.data!);
   }
@@ -95,7 +102,7 @@ class AiChatService {
     );
   }
 
-  Future<Options> _authorizationOptions() async {
+  Future<Options> _authorizationOptions({Duration? receiveTimeout}) async {
     final accessToken = await _sessionManager.getValidAccessToken();
     if (accessToken == null) {
       throw StateError(LocaleProvider.currentLocalizations.sessionExpired);
@@ -103,6 +110,7 @@ class AiChatService {
 
     return Options(
       headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+      receiveTimeout: receiveTimeout,
     );
   }
 }
