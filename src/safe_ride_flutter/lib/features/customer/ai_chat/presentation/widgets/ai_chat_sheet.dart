@@ -14,9 +14,6 @@ import '../../../../../core/maps/models/map_models.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
 import '../../../../../core/maps/widgets/map_renderer_widget.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
-import '../../../../shared/profile/data/models/vehicle_model.dart';
-import '../../../../shared/profile/presentation/providers/vehicle_provider.dart';
-import '../../../../shared/profile/presentation/widgets/vehicle_form_sheet.dart';
 import '../../../booking/data/models/booking_catalog.dart';
 import '../../../booking/data/models/booking_fare_estimate.dart';
 import '../../../booking/data/models/booking_location.dart';
@@ -26,8 +23,6 @@ import '../../../booking/presentation/pages/searching_driver_page.dart';
 import '../../../booking/presentation/providers/booking_provider.dart';
 import '../../data/models/ai_chat_models.dart';
 import '../../data/services/ai_chat_service.dart';
-
-enum _BookingStep { vehicle, promotion, confirmation }
 
 class AiChatSheet extends StatefulWidget {
   AiChatSheet({super.key});
@@ -64,7 +59,6 @@ class _AiChatSheetState extends State<AiChatSheet> {
   PromoModel? _selectedPromo;
   BookingFareEstimate? _fareEstimate;
   String? _bookingNotice;
-  _BookingStep _bookingStep = _BookingStep.vehicle;
   BookingLocation? _currentLocation;
 
   @override
@@ -295,57 +289,37 @@ class _AiChatSheetState extends State<AiChatSheet> {
 
     final catalog = bookingProvider.catalog;
     final vehicles = catalog?.vehicles ?? <BookingVehicleOption>[];
+    final matchingVehicles = _matchingVehicles(vehicles, draft);
     final promotions = bookingProvider.availablePromotions;
-    final vehicleMatches = draft.vehicleQuery == null
-        ? <BookingVehicleOption>[]
-        : vehicles
-              .where((item) => _matchesVehicle(item, draft.vehicleQuery!))
-              .toList();
-    final typeMatches = switch (draft.vehicleType) {
-      'car' => vehicles.where((item) => !item.isMotorbike).toList(),
-      'motorbike' => vehicles.where((item) => item.isMotorbike).toList(),
-      _ => <BookingVehicleOption>[],
-    };
-    final promoMatches = draft.promotionCode == null
-        ? <PromoModel>[]
-        : promotions
-              .where(
-                (item) =>
-                    item.promotionCode.toLowerCase() ==
-                    draft.promotionCode!.trim().toLowerCase(),
-              )
-              .toList();
     setState(() {
-      _selectedVehicle = draft.vehicleQuery == null
-          ? draft.vehicleType == null
-                ? vehicles.firstOrNull
-                : typeMatches.firstOrNull
-          : vehicleMatches.length == 1
-          ? vehicleMatches.single
-          : null;
+      _selectedVehicle = matchingVehicles.firstOrNull;
       _selectedService = catalog?.services
           .where((item) => item.mode == BookingServiceMode.perTrip)
           .firstOrNull;
-      _selectedPromo = promoMatches.length == 1 ? promoMatches.single : null;
-      _bookingNotice = _buildSelectionNotice(
-        draft,
-        vehicleMatches.length,
-        promoMatches.length,
-      );
-      _bookingStep = _BookingStep.vehicle;
+      _selectedPromo = draft.promotionCode == null
+          ? null
+          : promotions
+                .where(
+                  (item) =>
+                      item.promotionCode.toLowerCase() ==
+                      draft.promotionCode!.trim().toLowerCase(),
+                )
+                .firstOrNull;
+      _bookingNotice = vehicles.isEmpty
+          ? context.l10n.noVehicleForAiBooking
+          : matchingVehicles.isEmpty
+          ? context.l10n.noBookableVehicles
+          : null;
       _preparingBooking = false;
     });
     await _estimateFare();
     if (!mounted) return;
     if (draft.useBestPromotion && _fareEstimate != null) {
+      final fare = _fareEstimate!.estimatedFare;
       final bestPromotion = promotions
-          .where(
-            (promo) =>
-                _promotionDiscount(promo, _fareEstimate!.estimatedFare) > 0,
-          )
+          .where((promo) => _promotionDiscount(promo, fare) > 0)
           .fold<PromoModel?>(null, (best, promo) {
             if (best == null) return promo;
-            final fare = _fareEstimate!.estimatedFare;
             return _promotionDiscount(promo, fare) >
                     _promotionDiscount(best, fare)
                 ? promo
@@ -389,39 +363,6 @@ class _AiChatSheetState extends State<AiChatSheet> {
       destination: draft.destination,
     );
     if (mounted) setState(() => _fareEstimate = estimate);
-  }
-
-  Future<void> _addVehicle() async {
-    final vehicleProvider = context.read<VehicleProvider>();
-    final knownIds = vehicleProvider.vehicles.map((item) => item.id).toSet();
-    VehicleModel? savedVehicle;
-    await VehicleFormSheet.show(
-      context,
-      onSave: (vehicle) async {
-        final saved = await vehicleProvider.saveVehicle(vehicle);
-        if (saved) {
-          savedVehicle = vehicleProvider.vehicles
-              .where((item) => !knownIds.contains(item.id))
-              .lastOrNull;
-        }
-        return saved;
-      },
-    );
-    if (!mounted || savedVehicle == null) return;
-    final token = context.read<AuthProvider>().token;
-    if (token == null) return;
-    await context.read<BookingProvider>().loadCatalog(
-      token,
-      forceRefresh: true,
-    );
-    if (!mounted) return;
-    final vehicles = context.read<BookingProvider>().catalog?.vehicles ?? [];
-    setState(() {
-      _selectedVehicle = vehicles
-          .where((item) => item.id == savedVehicle!.id)
-          .firstOrNull;
-    });
-    await _estimateFare();
   }
 
   Future<void> _confirmBooking() async {
@@ -517,7 +458,6 @@ class _AiChatSheetState extends State<AiChatSheet> {
       _selectedPromo = null;
       _fareEstimate = null;
       _bookingNotice = null;
-      _bookingStep = _BookingStep.vehicle;
       _error = null;
     });
   }
@@ -545,10 +485,10 @@ class _AiChatSheetState extends State<AiChatSheet> {
       _error = null;
       _draft = null;
       _selectedVehicle = null;
+      _selectedService = null;
       _selectedPromo = null;
       _fareEstimate = null;
       _bookingNotice = null;
-      _bookingStep = _BookingStep.vehicle;
     });
     try {
       final messages = await _service.getMessages(conversationId);
@@ -606,34 +546,12 @@ class _AiChatSheetState extends State<AiChatSheet> {
             _BookingComposer(
               loading: _preparingBooking,
               creating: _creatingBooking,
-              vehicles:
-                  context.watch<BookingProvider>().catalog?.vehicles ??
-                  [],
-              promotions: context.watch<BookingProvider>().availablePromotions,
               selectedVehicle: _selectedVehicle,
               selectedService: _selectedService,
               selectedPromo: _selectedPromo,
               fareEstimate: _fareEstimate,
               notice: _bookingNotice,
               draft: _draft!,
-              step: _bookingStep,
-              onVehicleSelected: (vehicle) async {
-                setState(() => _selectedVehicle = vehicle);
-                await _estimateFare();
-              },
-              onPromoSelected: (promo) =>
-                  setState(() => _selectedPromo = promo),
-              onContinueFromVehicle: () =>
-                  setState(() => _bookingStep = _BookingStep.promotion),
-              onContinueFromPromotion: () =>
-                  setState(() => _bookingStep = _BookingStep.confirmation),
-              onBack: () => setState(() {
-                _bookingStep = switch (_bookingStep) {
-                  _BookingStep.confirmation => _BookingStep.promotion,
-                  _ => _BookingStep.vehicle,
-                };
-              }),
-              onAddVehicle: _addVehicle,
               onConfirm: _confirmBooking,
             ),
           if (_error != null)
@@ -739,18 +657,31 @@ String _apiErrorMessage(DioException exception, String fallback) {
   return detail;
 }
 
-bool _matchesVehicle(BookingVehicleOption vehicle, String query) {
-  String normalize(String value) =>
-      value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+List<BookingVehicleOption> _matchingVehicles(
+  List<BookingVehicleOption> vehicles,
+  AiBookingDraft draft,
+) {
+  if (draft.vehicleQuery case final query?) {
+    final matches = vehicles.where((vehicle) {
+      String normalize(String value) =>
+          value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      final needle = normalize(query);
+      final name = normalize(vehicle.name);
+      final plate = normalize(vehicle.plateNumber);
+      return needle.isNotEmpty &&
+          (name.contains(needle) ||
+              needle.contains(name) ||
+              plate.contains(needle) ||
+              needle.contains(plate));
+    }).toList();
+    if (matches.isNotEmpty) return matches;
+  }
 
-  final needle = normalize(query);
-  if (needle.isEmpty) return false;
-  final name = normalize(vehicle.name);
-  final plate = normalize(vehicle.plateNumber);
-  return name.contains(needle) ||
-      needle.contains(name) ||
-      plate.contains(needle) ||
-      needle.contains(plate);
+  return switch (draft.vehicleType) {
+    'motorbike' => vehicles.where((vehicle) => vehicle.isMotorbike).toList(),
+    'car' => vehicles.where((vehicle) => !vehicle.isMotorbike).toList(),
+    _ => vehicles,
+  };
 }
 
 double _promotionDiscount(PromoModel promo, double fare) {
@@ -765,30 +696,6 @@ double _promotionDiscount(PromoModel promo, double fare) {
     discount = promo.maximumDiscountValue;
   }
   return discount.clamp(0, fare).toDouble();
-}
-
-String? _buildSelectionNotice(
-  AiBookingDraft draft,
-  int vehicleMatchCount,
-  int promoMatchCount,
-) {
-  final notices = <String>[];
-  final l10n = LocaleProvider.currentLocalizations;
-  if (draft.vehicleQuery != null) {
-    notices.add(
-      vehicleMatchCount == 1
-          ? l10n.vehicleSelectedByQuery(draft.vehicleQuery!)
-          : l10n.vehicleQueryNotFound(draft.vehicleQuery!),
-    );
-  }
-  if (draft.promotionCode != null) {
-    notices.add(
-      promoMatchCount == 1
-          ? l10n.promoApplied(draft.promotionCode!)
-          : l10n.promoUnavailable(draft.promotionCode!),
-    );
-  }
-  return notices.isEmpty ? null : notices.join(' ');
 }
 
 class _ConversationHistorySheet extends StatefulWidget {
@@ -1028,41 +935,23 @@ class _BookingComposer extends StatelessWidget {
   _BookingComposer({
     required this.loading,
     required this.creating,
-    required this.vehicles,
-    required this.promotions,
     required this.selectedVehicle,
     required this.selectedService,
     required this.selectedPromo,
     required this.fareEstimate,
     required this.notice,
     required this.draft,
-    required this.step,
-    required this.onVehicleSelected,
-    required this.onPromoSelected,
-    required this.onContinueFromVehicle,
-    required this.onContinueFromPromotion,
-    required this.onBack,
-    required this.onAddVehicle,
     required this.onConfirm,
   });
 
   final bool loading;
   final bool creating;
-  final List<BookingVehicleOption> vehicles;
-  final List<PromoModel> promotions;
   final BookingVehicleOption? selectedVehicle;
   final BookingServiceOption? selectedService;
   final PromoModel? selectedPromo;
   final BookingFareEstimate? fareEstimate;
   final String? notice;
   final AiBookingDraft draft;
-  final _BookingStep step;
-  final ValueChanged<BookingVehicleOption> onVehicleSelected;
-  final ValueChanged<PromoModel?> onPromoSelected;
-  final VoidCallback onContinueFromVehicle;
-  final VoidCallback onContinueFromPromotion;
-  final VoidCallback onBack;
-  final VoidCallback onAddVehicle;
   final VoidCallback onConfirm;
 
   @override
@@ -1087,32 +976,12 @@ class _BookingComposer extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                if (step != _BookingStep.vehicle)
-                  IconButton(
-                    tooltip: context.l10n.back,
-                    onPressed: onBack,
-                    icon: Icon(Icons.arrow_back_rounded),
-                  ),
-                Expanded(
-                  child: Text(
-                    switch (step) {
-                      _BookingStep.vehicle =>
-                        context.l10n.chooseVehicleQuestion,
-                      _BookingStep.promotion => context.l10n.chooseDiscountCode,
-                      _BookingStep.confirmation => context.l10n.confirmTrip,
-                    },
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-              ],
+            Text(
+              context.l10n.confirmTrip,
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             SizedBox(height: 12),
-            if (notice != null && step != _BookingStep.confirmation) ...[
+            if (notice != null) ...[
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(10),
@@ -1124,162 +993,71 @@ class _BookingComposer extends StatelessWidget {
               ),
               SizedBox(height: 12),
             ],
-            if (step == _BookingStep.vehicle) ...[
+            SizedBox(
+              height: 190,
+              child: _ChatRouteMap(draft: draft, estimate: fareEstimate),
+            ),
+            SizedBox(height: 12),
+            _SummaryRow(
+              label: context.l10n.pickupPoint,
+              value: draft.pickup.address,
+            ),
+            _SummaryRow(
+              label: context.l10n.destinationPoint,
+              value: draft.destination.address,
+            ),
+            if (selectedVehicle != null)
+              _SummaryRow(
+                label: context.l10n.vehicleType,
+                value:
+                    '${selectedVehicle!.name} • ${selectedVehicle!.plateNumber}',
+              ),
+            if (selectedPromo != null)
+              _SummaryRow(
+                label: context.l10n.promotion,
+                value: selectedPromo!.promotionCode,
+              ),
+            if (fareEstimate != null) ...[
+              Divider(height: 20),
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Expanded(
-                    child: Text(
-                      context.l10n.yourVehicles,
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
+                  Text(
+                    '${fareEstimate!.estimatedDistanceKm.toStringAsFixed(1)} km • '
+                    '${context.l10n.minutesValue(fareEstimate!.estimatedDurationMinutes)}',
                   ),
-                  TextButton.icon(
-                    onPressed: onAddVehicle,
-                    icon: Icon(Icons.add_rounded, size: 18),
-                    label: Text(
-                      vehicles.isEmpty
-                          ? context.l10n.addVehicle
-                          : context.l10n.newVehicle,
-                    ),
+                  Text(
+                    NumberFormat.currency(
+                      locale: LocaleProvider.currentLocale.toLanguageTag(),
+                      symbol: 'VND',
+                      decimalDigits: 0,
+                    ).format(fareEstimate!.estimatedFare),
+                    style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
-              if (vehicles.isEmpty)
-                Text(
-                  context.l10n.noVehicleForAiBooking,
-                  style: TextStyle(color: Color(0xFF666666)),
-                )
-              else
-                ...vehicles.map(
-                  (vehicle) => RadioListTile<int>(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    value: vehicle.id,
-                    groupValue: selectedVehicle?.id,
-                    onChanged: (_) => onVehicleSelected(vehicle),
-                    secondary: Icon(
-                      vehicle.isMotorbike
-                          ? Icons.two_wheeler
-                          : Icons.directions_car,
-                    ),
-                    title: Text(vehicle.name),
-                    subtitle: Text('${vehicle.plateNumber} • ${vehicle.color}'),
-                  ),
-                ),
-              SizedBox(height: 8),
-              FilledButton(
-                onPressed: selectedVehicle == null || fareEstimate == null
-                    ? null
-                    : onContinueFromVehicle,
-                child: Text(context.l10n.continueChooseDiscount),
-              ),
             ],
-            if (step == _BookingStep.promotion) ...[
-              if (promotions.isEmpty)
-                Padding(
-                  padding: EdgeInsets.only(top: 6),
-                  child: Text(
-                    context.l10n.noDiscountAvailable,
-                    style: TextStyle(color: Color(0xFF666666)),
-                  ),
-                )
-              else ...[
-                RadioListTile<int>(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  value: -1,
-                  groupValue: selectedPromo?.promotionId ?? -1,
-                  onChanged: (_) => onPromoSelected(null),
-                  title: Text(context.l10n.noDiscount),
-                ),
-                ...promotions.map(
-                  (promo) => RadioListTile<int>(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    value: promo.promotionId,
-                    groupValue: selectedPromo?.promotionId ?? -1,
-                    onChanged: (_) => onPromoSelected(promo),
-                    title: Text(promo.promotionCode),
-                    subtitle: Text(promo.shortDescription),
-                  ),
-                ),
-              ],
-              SizedBox(height: 10),
-              FilledButton(
-                onPressed: onContinueFromPromotion,
-                child: Text(
-                  promotions.isEmpty || selectedPromo == null
-                      ? context.l10n.continueWithoutDiscount
-                      : context.l10n.usePromoCode(selectedPromo!.promotionCode),
-                ),
+            SizedBox(height: 10),
+            FilledButton.icon(
+              onPressed:
+                  creating ||
+                      selectedVehicle == null ||
+                      selectedService == null ||
+                      fareEstimate == null
+                  ? null
+                  : onConfirm,
+              icon: creating
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(Icons.search_rounded),
+              label: Text(context.l10n.confirmAndFindDriverAi),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(46),
+                backgroundColor: Color(0xFF006B70),
               ),
-            ],
-            if (step == _BookingStep.confirmation) ...[
-              SizedBox(
-                height: 190,
-                child: _ChatRouteMap(draft: draft, estimate: fareEstimate),
-              ),
-              SizedBox(height: 12),
-              _SummaryRow(
-                label: context.l10n.pickupPoint,
-                value: draft.pickup.address,
-              ),
-              _SummaryRow(
-                label: context.l10n.destinationPoint,
-                value: draft.destination.address,
-              ),
-              if (selectedVehicle != null)
-                _SummaryRow(
-                  label: context.l10n.vehicleType,
-                  value:
-                      '${selectedVehicle!.name} • ${selectedVehicle!.plateNumber}',
-                ),
-              _SummaryRow(
-                label: context.l10n.promotion,
-                value: selectedPromo?.promotionCode ?? context.l10n.notUsed,
-              ),
-              if (fareEstimate != null) ...[
-                Divider(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '${fareEstimate!.estimatedDistanceKm.toStringAsFixed(1)} km • '
-                      '${context.l10n.minutesValue(fareEstimate!.estimatedDurationMinutes)}',
-                    ),
-                    Text(
-                      NumberFormat.currency(
-                        locale: LocaleProvider.currentLocale.toLanguageTag(),
-                        symbol: 'VND',
-                        decimalDigits: 0,
-                      ).format(fareEstimate!.estimatedFare),
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ],
-              SizedBox(height: 10),
-              FilledButton.icon(
-                onPressed:
-                    creating ||
-                        selectedVehicle == null ||
-                        selectedService == null ||
-                        fareEstimate == null
-                    ? null
-                    : onConfirm,
-                icon: creating
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Icon(Icons.search_rounded),
-                label: Text(context.l10n.confirmAndFindDriverAi),
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(46),
-                  backgroundColor: Color(0xFF006B70),
-                ),
-              ),
-            ],
+            ),
           ],
         ),
       ),
