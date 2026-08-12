@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../../../../core/localization/locale_provider.dart';
 import '../../../../../core/localization/localization_extensions.dart';
+import '../../../../../core/utils/api_date_time.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../trip_sharing/presentation/pages/shared_trip_tracking_page.dart';
 import '../providers/notification_provider.dart';
@@ -149,7 +150,7 @@ class _NotificationCard extends StatelessWidget {
     final sentAtLabel = DateFormat(
       'HH:mm • dd/MM/yyyy',
       Localizations.localeOf(context).toLanguageTag(),
-    ).format(item.sentAt.toLocal());
+    ).format(toVietnamTime(item.sentAt));
 
     return Material(
       color: Colors.transparent,

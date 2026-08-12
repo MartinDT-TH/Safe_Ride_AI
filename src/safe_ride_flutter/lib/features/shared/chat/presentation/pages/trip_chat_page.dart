@@ -5,6 +5,7 @@ import '../../../../../core/localization/localization_extensions.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import '../../../../../core/utils/api_date_time.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
@@ -392,7 +393,7 @@ class _MessageBubbleState extends State<_MessageBubble> {
   @override
   Widget build(BuildContext context) {
     final isMine = message.isMine;
-    final timeStr = DateFormat('HH:mm').format(message.sentAt);
+    final timeStr = DateFormat('HH:mm').format(toVietnamTime(message.sentAt));
     final locale = LocaleProvider.currentLocale.languageCode.toLowerCase();
     final translatedText = message.translations[locale];
     final hasTranslation = !isMine &&

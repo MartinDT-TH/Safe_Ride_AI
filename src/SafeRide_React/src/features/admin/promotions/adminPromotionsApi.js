@@ -10,7 +10,9 @@ const numberFormatter = new Intl.NumberFormat('vi-VN', {
     maximumFractionDigits: 2,
 });
 
-const dateFormatter = new Intl.DateTimeFormat('vi-VN');
+const dateFormatter = new Intl.DateTimeFormat('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+});
 
 export function getAdminPromotionsPath({
     page = 1,

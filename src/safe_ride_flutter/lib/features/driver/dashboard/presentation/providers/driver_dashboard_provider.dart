@@ -234,7 +234,7 @@ class DriverDashboardProvider extends ChangeNotifier {
         if (trip.status != HistoryTripStatus.completed || trip.tripId == null) {
           return false;
         }
-        final completedAt = trip.time.toLocal();
+        final completedAt = trip.time;
         return completedAt.year == now.year &&
             completedAt.month == now.month &&
             completedAt.day == now.day;
