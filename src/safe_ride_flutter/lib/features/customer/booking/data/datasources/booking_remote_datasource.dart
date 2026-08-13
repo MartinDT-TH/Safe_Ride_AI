@@ -402,11 +402,18 @@ class BookingRemoteDatasource {
     String accessToken, {
     required int tripId,
     required bool accepted,
+    int? ratingScore,
+    String? comment,
   }) async {
     try {
       await _dio.post(
         ApiEndpoints.customerReturnConfirmation(tripId),
-        data: {ApiKeys.vehicleReturnedConfirmed: accepted},
+        data: {
+          ApiKeys.vehicleReturnedConfirmed: accepted,
+          ApiKeys.ratingScore: ?ratingScore,
+          if (comment != null && comment.trim().isNotEmpty)
+            ApiKeys.comment: comment.trim(),
+        },
         options: Options(
           headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
         ),

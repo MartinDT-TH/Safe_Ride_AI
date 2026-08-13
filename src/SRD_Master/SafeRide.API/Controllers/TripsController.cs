@@ -187,7 +187,9 @@ public sealed class TripsController : ControllerBase
             customerId,
             tripId,
             request.VehicleReturnedConfirmed,
-            cancellationToken);
+            cancellationToken,
+            request.RatingScore,
+            request.Comment);
 
         return NoContent();
     }
@@ -196,7 +198,7 @@ public sealed class TripsController : ControllerBase
     /// Driver confirms vehicle return on behalf of the customer.
     /// Requires 1–3 evidence photos (multipart/form-data, field name: evidence).
     /// Server captures GPS from Redis; the driver cannot supply source-of-truth location.
-    /// Moves trip WAITING_RETURN_CONFIRM to RETURN_CONFIRMED, then WAITING_PAYMENT.
+    /// Requires successful payment, then completes the trip after return confirmation.
     /// </summary>
     [HttpPost("{tripId:long}/return-confirmation/driver")]
     [Authorize(Roles = "Driver")]

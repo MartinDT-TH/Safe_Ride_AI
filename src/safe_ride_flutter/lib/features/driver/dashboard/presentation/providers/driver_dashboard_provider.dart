@@ -143,15 +143,8 @@ class DriverDashboardProvider extends ChangeNotifier {
 
   ActiveDriverTrip? _activeTrip;
   ActiveDriverTrip? get activeTrip => _activeTrip;
-  int? _tripAwaitingPaymentId;
   final Map<int, Future<bool>> _activeTripDetailsFetches = {};
   final Set<int> _activeTripDetailsLoaded = {};
-
-  int? takeTripAwaitingPayment() {
-    final tripId = _tripAwaitingPaymentId;
-    _tripAwaitingPaymentId = null;
-    return tripId;
-  }
 
   void toggleDemoMode() {
     _isDemoMode = !_isDemoMode;
@@ -319,15 +312,12 @@ class DriverDashboardProvider extends ChangeNotifier {
         destLng: sameTrip ? oldTrip?.destLng : null,
         encodedPolyline: sameTrip ? oldTrip?.encodedPolyline : null,
         arrivalPolyline: sameTrip ? oldTrip?.arrivalPolyline : null,
+        paymentCompleted: sameTrip && oldTrip?.paymentCompleted == true,
       );
       notifyListeners();
       _socketService.joinTrip(update.tripId);
       if (!_hasActiveTripDetails(update.tripId)) {
         _fetchActiveTripDetails(update.bookingId, update.tripId);
-      }
-      if (update.tripStatus == 'WAITING_PAYMENT' && sameTrip) {
-        _tripAwaitingPaymentId = update.tripId;
-        notifyListeners();
       }
     }, key: 'driverDashboard');
 
@@ -336,16 +326,21 @@ class DriverDashboardProvider extends ChangeNotifier {
         return;
       }
 
-      if (update.isSuccess || _isTerminalTripStatus(update.tripStatus)) {
+      if (_isTerminalTripStatus(update.tripStatus)) {
         _clearActiveTrip();
         notifyListeners();
         unawaited(loadTodayIncome());
         return;
       }
 
+      if (update.isSuccess) {
+        _activeTrip = _activeTrip!.copyWith(paymentCompleted: true);
+        notifyListeners();
+        return;
+      }
+
       if (update.tripStatus == 'WAITING_PAYMENT') {
         _activeTrip = _activeTrip!.copyWith(tripStatus: 'WAITING_PAYMENT');
-        _tripAwaitingPaymentId = update.tripId;
         notifyListeners();
       }
     }, key: 'driverDashboardPayment');
@@ -420,7 +415,6 @@ class DriverDashboardProvider extends ChangeNotifier {
     _isLoadingTripRequests = false;
     _errorMessage = null;
     _tripRequestsErrorMessage = null;
-    _tripAwaitingPaymentId = null;
     _clearActiveTrip();
     _status = DriverStatus.offline;
     notifyListeners();
@@ -843,11 +837,7 @@ class DriverDashboardProvider extends ChangeNotifier {
     );
 
     // Reflect locally — SignalR TripStatusChanged will arrive shortly and confirm.
-    if (_activeTrip?.tripId == tripId) {
-      _activeTrip = _activeTrip!.copyWith(tripStatus: 'WAITING_PAYMENT');
-      _tripAwaitingPaymentId = tripId;
-      notifyListeners();
-    }
+    await loadActiveTrip();
   }
 
   Future<void> loadActiveTrip() async {
@@ -880,6 +870,9 @@ class DriverDashboardProvider extends ChangeNotifier {
         final tripStatus = _normalizeTripStatus(
           data[ApiKeys.tripStatus] ?? data['TripStatus'],
         );
+        final paymentCompleted =
+            data['paymentCompleted'] == true ||
+            data['PaymentCompleted'] == true;
         if (bookingId != null && tripId != null && tripStatus != null) {
           if (_isTerminalTripStatus(tripStatus)) {
             _clearActiveTrip();
@@ -900,10 +893,8 @@ class DriverDashboardProvider extends ChangeNotifier {
             destLng: sameTrip ? oldTrip?.destLng : null,
             encodedPolyline: sameTrip ? oldTrip?.encodedPolyline : null,
             arrivalPolyline: sameTrip ? oldTrip?.arrivalPolyline : null,
+            paymentCompleted: paymentCompleted,
           );
-          if (tripStatus == 'WAITING_PAYMENT') {
-            _tripAwaitingPaymentId = tripIdValue;
-          }
           _socketService.joinTrip(tripIdValue);
           if (!_hasActiveTripDetails(tripIdValue)) {
             await _fetchActiveTripDetailsSync(bookingId.toInt(), tripIdValue);
@@ -923,7 +914,7 @@ class DriverDashboardProvider extends ChangeNotifier {
     if (_activeTrip?.tripId != tripId) {
       return;
     }
-    _clearActiveTrip();
+    _activeTrip = _activeTrip!.copyWith(paymentCompleted: true);
     notifyListeners();
   }
 
@@ -1012,10 +1003,8 @@ class DriverDashboardProvider extends ChangeNotifier {
           destLng: sameTrip ? oldTrip?.destLng : null,
           encodedPolyline: sameTrip ? oldTrip?.encodedPolyline : null,
           arrivalPolyline: sameTrip ? oldTrip?.arrivalPolyline : null,
+          paymentCompleted: sameTrip && oldTrip?.paymentCompleted == true,
         );
-        if (_activeTrip!.tripStatus == 'WAITING_PAYMENT') {
-          _tripAwaitingPaymentId = _activeTrip!.tripId;
-        }
         notifyListeners();
         _socketService.joinTrip(update.tripId!);
         if (!_hasActiveTripDetails(update.tripId!)) {
@@ -1149,11 +1138,7 @@ class DriverDashboardProvider extends ChangeNotifier {
   }
 
   void _clearActiveTrip() {
-    final tripId = _activeTrip?.tripId;
     _activeTrip = null;
-    if (_tripAwaitingPaymentId == tripId) {
-      _tripAwaitingPaymentId = null;
-    }
     _activeTripDetailsLoaded.clear();
     _activeTripDetailsFetches.clear();
   }
@@ -1305,6 +1290,7 @@ class ActiveDriverTrip {
     this.destLng,
     this.encodedPolyline,
     this.arrivalPolyline,
+    this.paymentCompleted = false,
   });
 
   final int bookingId;
@@ -1316,6 +1302,7 @@ class ActiveDriverTrip {
   final double? destLng;
   final String? encodedPolyline;
   final String? arrivalPolyline;
+  final bool paymentCompleted;
 
   ActiveDriverTrip copyWith({
     String? tripStatus,
@@ -1325,6 +1312,7 @@ class ActiveDriverTrip {
     double? destLng,
     String? encodedPolyline,
     String? arrivalPolyline,
+    bool? paymentCompleted,
   }) {
     return ActiveDriverTrip(
       bookingId: bookingId,
@@ -1336,6 +1324,7 @@ class ActiveDriverTrip {
       destLng: destLng ?? this.destLng,
       encodedPolyline: encodedPolyline ?? this.encodedPolyline,
       arrivalPolyline: arrivalPolyline ?? this.arrivalPolyline,
+      paymentCompleted: paymentCompleted ?? this.paymentCompleted,
     );
   }
 }

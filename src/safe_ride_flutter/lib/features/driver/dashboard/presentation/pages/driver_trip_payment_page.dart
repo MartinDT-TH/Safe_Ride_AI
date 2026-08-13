@@ -34,6 +34,7 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
   PaymentStatusResult? _paymentStatus;
   _DriverPaymentMode? _selectedMode;
   bool _isLoading = false;
+  bool _isLoadingAmount = true;
   bool _isRefreshing = false;
   bool _isConfirmingCash = false;
   bool _returnedToDashboard = false;
@@ -47,6 +48,9 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadInitialPaymentStatus();
+    });
   }
 
   @override
@@ -58,7 +62,10 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
   @override
   Widget build(BuildContext context) {
     final qrData = _qrPayment?.qrCode ?? _qrPayment?.checkoutUrl;
-    final amount = _paymentStatus?.amount ?? _qrPayment?.amount ?? 0;
+    final statusFinalFare = _paymentStatus?.finalFare;
+    final amount = statusFinalFare != null && statusFinalFare > 0
+        ? statusFinalFare
+        : _paymentStatus?.amount ?? _qrPayment?.amount ?? 0;
     final isPaid =
         _paymentStatus?.isSuccess == true || _qrPayment?.isSuccess == true;
 
@@ -72,9 +79,7 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
           });
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(context.l10n.completePaymentBeforeExit),
-            ),
+            SnackBar(content: Text(context.l10n.completePaymentBeforeExit)),
           );
         }
       },
@@ -133,16 +138,23 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
                   ),
                 ),
                 SizedBox(height: 12),
-                Text(
-                  _formatCurrency(amount),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: _primaryDark,
-                    fontSize: 44,
-                    height: 1,
-                    fontWeight: FontWeight.w900,
+                if (_isLoadingAmount)
+                  SizedBox(
+                    width: 34,
+                    height: 34,
+                    child: CircularProgressIndicator(strokeWidth: 3),
+                  )
+                else
+                  Text(
+                    _formatCurrency(amount),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: _primaryDark,
+                      fontSize: 44,
+                      height: 1,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
-                ),
                 SizedBox(height: 38),
                 Expanded(
                   child: Center(
@@ -476,6 +488,46 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
     }
   }
 
+  Future<void> _loadInitialPaymentStatus() async {
+    final token = context.read<AuthProvider>().token;
+    if (token == null || token.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _isLoadingAmount = false;
+          _errorMessage = context.l10n.sessionExpired;
+        });
+      }
+      return;
+    }
+
+    try {
+      final response = await _dio.post(
+        ApiEndpoints.startDriverTripPayment(widget.tripId),
+        data: const <String, dynamic>{},
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+        ),
+      );
+      final status = PaymentStatusResult.fromJson(
+        Map<String, dynamic>.from(response.data as Map),
+      );
+      if (!mounted) return;
+      setState(() {
+        _paymentStatus = status;
+        _isLoadingAmount = false;
+      });
+      if (status.isSuccess) {
+        _finishAndReturnToDashboard();
+      }
+    } on DioException catch (exception) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingAmount = false;
+        _errorMessage = _extractError(exception);
+      });
+    }
+  }
+
   void _startStatusPolling(String token) {
     _statusTimer?.cancel();
     _statusTimer = Timer.periodic(Duration(seconds: 5), (_) async {
@@ -512,8 +564,17 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
         _statusTimer?.cancel();
         _finishAndReturnToDashboard();
       }
-    } on DioException catch (_) {
-      if (!mounted || showLoading) return;
+    } on DioException catch (exception) {
+      if (!mounted) return;
+      if (showLoading) {
+        setState(() {
+          _errorMessage = _extractError(exception);
+        });
+      }
+    } finally {
+      if (mounted && showLoading) {
+        setState(() => _isLoadingAmount = false);
+      }
     }
   }
 

@@ -69,6 +69,12 @@ class BookingResponse {
   final String? matchingMessage;
   final TripPaymentSummary? payment;
 
+  bool get isSearchingNowBooking =>
+      bookingType == AppValues.bookingNow && bookingStatus == 'Searching';
+
+  bool get isTrackableTrip =>
+      bookingStatus == 'DriverAssigned' && tripId != null;
+
   factory BookingResponse.fromJson(Map<String, dynamic> json) {
     final estimatedFareValue =
         (_value(json, ApiKeys.estimatedFare) as num?)?.toDouble() ?? 0;

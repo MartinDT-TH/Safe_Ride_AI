@@ -65,14 +65,19 @@ class TripDetailsProvider extends ChangeNotifier {
 
       DriverRatingItem? feedback;
       final tripId = booking.tripId ?? _historyTrip.tripId;
+      final bookingDriverId = booking.driverOffer?.driverId.trim();
+      final feedbackDriverId = driverIdForFeedback?.trim().isNotEmpty == true
+          ? driverIdForFeedback!.trim()
+          : bookingDriverId;
 
-      if (driverIdForFeedback != null &&
+      if (feedbackDriverId != null &&
+          feedbackDriverId.isNotEmpty &&
           _feedbackRepository != null &&
           tripId != null) {
         try {
           final summary = await _feedbackRepository.getDriverRatings(
             accessToken,
-            driverId: driverIdForFeedback,
+            driverId: feedbackDriverId,
           );
           feedback = summary.ratings.firstWhere(
             (r) => r.tripId == tripId,

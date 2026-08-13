@@ -75,7 +75,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   Timer? _tripStatusPollingTimer;
   bool _trackingSnapshotRefreshInProgress = false;
   bool _summaryOpened = false;
-  bool _endTripDecisionDialogOpen = false;
+  bool _isWaitingForDriverPayment = false;
   bool _arrivalRouteRefreshInProgress = false;
   bool _incomingCallDialogOpen = false;
   bool _deviationAlertOpen = false;
@@ -109,8 +109,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         (widget.state == TripTrackingState.inProgress
             ? 'IN_PROGRESS'
             : 'DRIVER_ARRIVING');
-    _isPrepaid = widget.booking.payment?.isSuccess == true;
     _isSOSActivated = widget.booking.isSOSActivated;
+    _isPrepaid = widget.booking.payment?.isSuccess == true;
     _initializeRoutes();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -171,6 +171,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       );
       _socketService.removeTripStatusChangedHandler(
         _tripStatusHandlerKey(tripId),
+      );
+      _socketService.removeTripPaymentUpdatedHandler(
+        _tripPaymentHandlerKey(tripId),
       );
       _socketService.removeTripRouteRecalculatedHandler(
         _tripRouteHandlerKey(tripId),
@@ -276,8 +279,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
 
       setState(() {
         _currentTripStatus = booking.tripStatus ?? _currentTripStatus;
-        _isPrepaid = booking.payment?.isSuccess == true;
         _isSOSActivated = _isSOSActivated || booking.isSOSActivated;
+        _isPrepaid = booking.payment?.isSuccess == true;
         _initializeRoutes(booking);
       });
       _handleTripStatus(booking.tripStatus);
@@ -344,14 +347,26 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         });
 
         if (update.tripStatus == 'WAITING_RETURN_CONFIRM') {
-          unawaited(_showDriverEndTripRequest());
-        } else if (_shouldOpenTripSummary(update.tripStatus)) {
-          _openSummaryPage();
+          unawaited(_openSummaryIfPrepaid());
+        } else if (update.tripStatus == 'COMPLETED') {
+          _finishCompletedTrip();
         } else if (update.tripStatus == 'CANCELLED') {
           _showMessage(context.l10n.tripCancelled);
           Navigator.of(context).popUntil((route) => route.isFirst);
         }
       }, key: _tripStatusHandlerKey(tripId));
+
+      _socketService.onTripPaymentUpdated((update) {
+        if (!mounted || update.tripId != tripId) {
+          return;
+        }
+        if (update.isSuccess) {
+          setState(() => _isWaitingForDriverPayment = false);
+          unawaited(_openRatingAfterSuccessfulPayment());
+        } else {
+          setState(() => _isWaitingForDriverPayment = true);
+        }
+      }, key: _tripPaymentHandlerKey(tripId));
 
       _socketService.onTripRouteRecalculated((update) {
         if (!mounted || update.tripId != tripId) {
@@ -656,7 +671,58 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(
-        children: [_buildMap(), _buildTopHeader(), _buildBottomPanel()],
+        children: [
+          _buildMap(),
+          _buildTopHeader(),
+          _buildBottomPanel(),
+          if (_isWaitingForDriverPayment) _buildWaitingPaymentScreen(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWaitingPaymentScreen() {
+    return Positioned.fill(
+      child: ColoredBox(
+        color: Colors.black.withValues(alpha: 0.55),
+        child: SafeArea(
+          child: Center(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 28),
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 36),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(28),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: _tealColor),
+                  SizedBox(height: 24),
+                  Text(
+                    context.l10n.waitingForPayment,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF1D2939),
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    context.l10n.paymentWaitingInstructions,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 15,
+                      height: 1.5,
+                      color: Color(0xFF667085),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1697,12 +1763,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     if (!mounted || booking == null) return;
 
     if (booking.tripStatus == 'WAITING_RETURN_CONFIRM') {
-      setState(() {
-        _currentTripStatus = booking.tripStatus;
-      });
-      unawaited(_showDriverEndTripRequest());
-    } else if (_shouldOpenTripSummary(booking.tripStatus)) {
-      await _openSummaryPage(booking);
+      await _openSummaryIfPrepaid(booking);
+    } else if (booking.tripStatus == 'COMPLETED') {
+      _finishCompletedTrip();
     } else if (booking.tripStatus == 'CANCELLED' ||
         booking.bookingStatus == 'Cancelled') {
       _showMessage(context.l10n.tripCancelled);
@@ -1714,76 +1777,60 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     }
   }
 
-  Future<void> _showDriverEndTripRequest() async {
-    if (!mounted || _endTripDecisionDialogOpen) return;
-    final tripId = widget.booking.tripId;
-    final accessToken = context.read<AuthProvider>().token;
-    if (tripId == null || accessToken == null || accessToken.isEmpty) {
-      _showMessage(context.l10n.tripCannotEndNow);
-      return;
-    }
-
-    _endTripDecisionDialogOpen = true;
-    final accepted = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Tài xế yêu cầu kết thúc chuyến'),
-        content: const Text(
-          'Nếu đồng ý, chuyến đi sẽ kết thúc tại vị trí hiện tại và số tiền '
-          'được tính theo quãng đường thực tế đã đi. Nếu từ chối, chuyến đi '
-          'sẽ tiếp tục đến điểm đến.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Từ chối'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Đồng ý kết thúc'),
-          ),
-        ],
-      ),
-    );
-    _endTripDecisionDialogOpen = false;
-    if (!mounted || accepted == null) return;
-
-    final ok = await context.read<BookingProvider>().respondToDriverEndTrip(
-      accessToken,
-      tripId: tripId,
-      accepted: accepted,
-    );
-    if (!mounted) return;
-    if (!ok) {
-      _showMessage(
-        context.read<BookingProvider>().errorMessage ??
-            context.l10n.returnConfirmationFailed,
-      );
-      return;
-    }
-
-    if (!accepted) {
-      setState(() => _currentTripStatus = 'IN_PROGRESS');
-      _showMessage('Đã từ chối kết thúc sớm. Chuyến đi sẽ tiếp tục.');
-      return;
-    }
-
-    await _refreshTripStatus();
-  }
-
   void _handleTripStatus(String? tripStatus) {
     if (tripStatus == 'WAITING_RETURN_CONFIRM') {
-      unawaited(_showDriverEndTripRequest());
-    } else {
-      _openSummaryIfPostTrip(tripStatus);
+      unawaited(_openSummaryIfPrepaid(widget.booking));
+    } else if (tripStatus == 'COMPLETED') {
+      _finishCompletedTrip();
     }
   }
 
-  void _openSummaryIfPostTrip(String? tripStatus) {
-    if (_shouldOpenTripSummary(tripStatus)) {
-      unawaited(_openSummaryPage());
+  Future<void> _openSummaryIfPrepaid([BookingResponse? booking]) async {
+    if (!mounted || _summaryOpened) return;
+    final activeBooking = context.read<BookingProvider>().activeBooking;
+    final current = booking ?? activeBooking ?? widget.booking;
+    final paymentSucceeded =
+        current.payment?.isSuccess == true ||
+        activeBooking?.payment?.isSuccess == true ||
+        widget.booking.payment?.isSuccess == true;
+    if (paymentSucceeded) {
+      await _openSummaryPage(current);
     }
+  }
+
+  Future<void> _openRatingAfterSuccessfulPayment() async {
+    if (!mounted || _summaryOpened) return;
+    final token = context.read<AuthProvider>().token;
+    BookingResponse? latest;
+    if (token != null && token.isNotEmpty) {
+      latest = await context
+          .read<BookingProvider>()
+          .refreshActiveBookingDetails(
+            token,
+            bookingId: widget.booking.bookingId,
+          );
+    }
+    if (!mounted) return;
+
+    final booking =
+        latest ??
+        context.read<BookingProvider>().activeBooking ??
+        widget.booking;
+    if (booking.tripStatus == 'COMPLETED') {
+      _finishCompletedTrip();
+      return;
+    }
+    if (booking.payment?.isSuccess == true &&
+        booking.tripStatus == 'WAITING_RETURN_CONFIRM') {
+      await _openSummaryPage(booking);
+    }
+  }
+
+  void _finishCompletedTrip() {
+    if (!mounted) return;
+    context.read<BookingProvider>().clearActiveBooking();
+    widget.onSwitchTab?.call(0);
+    _showMessage(context.l10n.tripCompletedThanks);
   }
 
   Future<void> _openSummaryPage([BookingResponse? completedBooking]) async {
@@ -1820,16 +1867,13 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   }
 
   static String _tripStatusHandlerKey(int tripId) => 'tripTracking:$tripId';
+  static String _tripPaymentHandlerKey(int tripId) =>
+      'tripTrackingPayment:$tripId';
   static String _sosHandlerKey(int tripId) => 'tripTrackingSOS:$tripId';
   static String _driverLocationHandlerKey(int tripId) =>
       'tripTrackingLocation:$tripId';
   static String _tripRouteHandlerKey(int tripId) => 'tripTrackingRoute:$tripId';
   static String _callOfferHandlerKey(int tripId) => 'tripTrackingCall:$tripId';
-  static bool _shouldOpenTripSummary(String? status) {
-    if (status == null) return false;
-    final s = status.toUpperCase();
-    return s == 'WAITING_PAYMENT' || s == 'COMPLETED' || s == '6' || s == '7';
-  }
 }
 
 class _RouteProgress {

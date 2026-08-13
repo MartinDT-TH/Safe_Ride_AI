@@ -18,6 +18,11 @@ public interface IPaymentService
         string? cancelUrl,
         CancellationToken cancellationToken);
 
+    Task<PaymentStatusResult> StartDriverPaymentAsync(
+        Guid driverId,
+        long tripId,
+        CancellationToken cancellationToken);
+
     Task<PaymentStatusResult> GetTripPaymentStatusAsync(
         Guid customerId,
         long tripId,

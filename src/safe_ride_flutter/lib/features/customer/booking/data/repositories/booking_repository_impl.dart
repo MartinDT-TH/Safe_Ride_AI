@@ -129,11 +129,15 @@ class BookingRepositoryImpl implements BookingRepository {
     String accessToken, {
     required int tripId,
     required bool accepted,
+    int? ratingScore,
+    String? comment,
   }) {
     return _remoteDatasource.respondToDriverEndTrip(
       accessToken,
       tripId: tripId,
       accepted: accepted,
+      ratingScore: ratingScore,
+      comment: comment,
     );
   }
 

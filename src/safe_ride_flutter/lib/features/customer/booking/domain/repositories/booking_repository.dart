@@ -63,6 +63,8 @@ abstract class BookingRepository {
     String accessToken, {
     required int tripId,
     required bool accepted,
+    int? ratingScore,
+    String? comment,
   });
 
   Future<void> submitTripRating(

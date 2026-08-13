@@ -74,6 +74,7 @@ public sealed class DriverQueryService : IDriverQueryService
             .Include(trip => trip.Booking)
             .Include(trip => trip.ReturnConfirmations)
             .ThenInclude(returnConfirmation => returnConfirmation.Evidence)
+            .Include(trip => trip.Payments)
 
             .Where(trip => trip.DriverId == driverId
                 && trip.TripStatus != TripStatus.COMPLETED
@@ -155,7 +156,8 @@ public sealed class DriverQueryService : IDriverQueryService
                             evidence.ContentType,
                             evidence.DisplayOrder))
                         .ToList()),
-            arrivalPolyline);
+            arrivalPolyline,
+            trip.Payments.Any(payment => payment.PaymentStatus == PaymentStatus.Success));
     }
 
     public async Task<IReadOnlyList<DriverTripRequestDto>> GetOpenTripRequestsAsync(

@@ -276,6 +276,8 @@ abstract final class ApiEndpoints {
   static String triggerTripSOS(int tripId) => '/trips/$tripId/sos';
   static String createDriverTripQrPayment(int tripId) =>
       '/payments/driver/trips/$tripId/qr';
+  static String startDriverTripPayment(int tripId) =>
+      '/payments/driver/trips/$tripId/start';
   static String createCustomerTripQrPayment(int tripId) =>
       '/payments/trips/$tripId/qr';
   static String driverTripPaymentStatus(int tripId) =>

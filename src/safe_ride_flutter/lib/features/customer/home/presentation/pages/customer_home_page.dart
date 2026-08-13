@@ -21,6 +21,7 @@ import '../../../../customer/booking/data/models/booking_catalog.dart';
 import '../../../../customer/booking/data/models/booking_response.dart';
 import '../../../../customer/booking/presentation/pages/booking_options_page.dart';
 import '../../../../customer/booking/presentation/pages/promotion_page.dart';
+import '../../../../customer/booking/presentation/pages/searching_driver_page.dart';
 import '../../../../customer/booking/presentation/pages/trip_tracking_page.dart';
 import '../../../../customer/booking/presentation/providers/booking_provider.dart';
 import '../../../../customer/ai_chat/presentation/widgets/ai_chat_sheet.dart';
@@ -105,11 +106,37 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     final booking = await context.read<BookingProvider>().loadActiveBooking(
       token,
     );
-    final shouldOpenActivity =
-        booking?.bookingType == AppValues.bookingNow || booking?.tripId != null;
-    if (shouldOpenActivity && mounted) {
-      context.read<HomeProvider>().setSelectedIndex(1);
+    if (booking != null && mounted) {
+      await _openActiveBooking(booking);
     }
+  }
+
+  Future<void> _openActiveBooking(BookingResponse booking) async {
+    if (!mounted) return;
+
+    final homeProvider = context.read<HomeProvider>();
+    if (booking.isTrackableTrip) {
+      homeProvider.setSelectedIndex(1);
+      return;
+    }
+
+    final pickup = booking.pickup;
+    if (!booking.isSearchingNowBooking || pickup == null) {
+      return;
+    }
+
+    homeProvider.setSelectedIndex(0);
+    context.read<BookingProvider>().setSearchingBooking(booking);
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SearchingDriverPage(
+          booking: booking,
+          pickup: pickup,
+          destination: booking.destination,
+          vehicle: booking.vehicle,
+        ),
+      ),
+    );
   }
 
   @override
@@ -130,8 +157,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     final hasTrackableActiveBooking =
         activeBooking != null &&
         activePickup != null &&
-        (activeBooking.bookingType == AppValues.bookingNow ||
-            activeBooking.tripId != null);
+        activeBooking.isTrackableTrip;
 
     final List<Widget> pages = [
       _buildHomeContent(auth, bookingProvider),
@@ -406,8 +432,10 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
                 InkWell(
                   onTap: hasActiveBooking
                       ? () {
-                          _showMessage(context.l10n.activeTripNotice);
-                          homeProvider.setSelectedIndex(1);
+                          final activeBooking = bookingProvider.activeBooking;
+                          if (activeBooking != null) {
+                            unawaited(_openActiveBooking(activeBooking));
+                          }
                         }
                       : () => _openBooking(context, BookingType.now),
                   borderRadius: BorderRadius.circular(20),

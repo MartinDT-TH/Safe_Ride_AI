@@ -59,7 +59,7 @@ class _CustomerTripPrepaymentPageState
       backgroundColor: Color(0xFFFBF9F8),
       appBar: AppBar(
         backgroundColor: Color(0xFFFBF9F8),
-        title: Text(context.l10n.prepayment),
+        title: Text(context.l10n.tripPayment),
       ),
       body: SafeArea(
         child: Padding(
@@ -67,7 +67,7 @@ class _CustomerTripPrepaymentPageState
           child: Column(
             children: [
               Text(
-                context.l10n.payosPaymentAmount,
+                context.l10n.customerPaymentAmount,
                 style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
               ),
               SizedBox(height: 10),
@@ -101,7 +101,7 @@ class _CustomerTripPrepaymentPageState
                 SizedBox(height: 8),
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(false),
-                  child: Text(context.l10n.payAfterTrip),
+                  child: Text(context.l10n.back),
                 ),
               ],
             ],
@@ -119,14 +119,10 @@ class _CustomerTripPrepaymentPageState
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.check_circle_rounded,
-            color: Color(0xFF0A8F62),
-            size: 88,
-          ),
+          Icon(Icons.check_circle_rounded, color: Color(0xFF0A8F62), size: 88),
           SizedBox(height: 16),
           Text(
-            context.l10n.prepaid,
+            context.l10n.paid,
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
           ),
           SizedBox(height: 24),

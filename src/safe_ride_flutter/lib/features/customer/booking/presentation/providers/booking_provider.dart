@@ -559,12 +559,16 @@ class BookingProvider extends ChangeNotifier {
     String accessToken, {
     required int tripId,
     required bool accepted,
+    int? ratingScore,
+    String? comment,
   }) async {
     final ok = await _run(() async {
       await _repository.respondToDriverEndTrip(
         accessToken,
         tripId: tripId,
         accepted: accepted,
+        ratingScore: ratingScore,
+        comment: comment,
       );
       return true;
     });

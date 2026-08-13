@@ -319,6 +319,7 @@ public static class DependencyInjection
         services.AddScoped<IDriverWalletService, DriverWalletService>();
         services.AddScoped<IDriverRealtimeService, DriverRealtimeService>();
         services.AddScoped<TripFareFinalizationService>();
+        services.AddScoped<TripPaymentSettlementService>();
         services.AddScoped<ITripStatusService, TripStatusService>();
         services.AddScoped<ITripSharingService, TripSharingService>();
         services.AddScoped<ITripChatService, TripChatService>();

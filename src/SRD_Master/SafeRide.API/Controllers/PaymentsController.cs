@@ -42,6 +42,26 @@ public sealed class PaymentsController : ControllerBase
     }
 
     [Authorize]
+    [HttpPost("driver/trips/{tripId:long}/start")]
+    [AllowTripContinuation(TripContinuationOperation.TripPayment)]
+    [ProducesResponseType<PaymentStatusResult>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<PaymentStatusResult>> StartDriverPayment(
+        long tripId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var driverId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await _paymentService.StartDriverPaymentAsync(
+            driverId,
+            tripId,
+            cancellationToken);
+        return Ok(result);
+    }
+
+    [Authorize]
     [HttpPost("driver/trips/{tripId:long}/qr")]
     [AllowTripContinuation(TripContinuationOperation.TripPayment)]
     [ProducesResponseType<QrPaymentResult>(StatusCodes.Status200OK)]

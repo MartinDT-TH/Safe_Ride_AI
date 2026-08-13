@@ -12,7 +12,6 @@ import '../../../../../core/maps/widgets/live_trip_map_widget.dart';
 import '../../../../../core/services/location_service.dart';
 import '../../../../../core/services/map_api_service.dart';
 import '../../../../../core/services/socket_service.dart';
-import '../../../../../core/utils/currency_formatter.dart';
 import '../../../../../core/widgets/current_location_button.dart';
 import '../../../../../dependency_injection/injection.dart';
 
@@ -87,7 +86,6 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
   DateTime? _lastArrivalRouteRefreshAt;
   AppLatLng? _lastArrivalRouteRefreshOrigin;
   int? _renderedRouteTripId;
-  int? _openingPaymentTripId;
   int? _callSignalTripId;
   bool _arrivalRouteRefreshInProgress = false;
   bool _incomingCallDialogOpen = false;
@@ -171,11 +169,6 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
         );
         _provider.clearSnackbarMessage();
       });
-    }
-
-    final tripAwaitingPaymentId = _provider.takeTripAwaitingPayment();
-    if (tripAwaitingPaymentId != null) {
-      _openTripPayment(tripAwaitingPaymentId);
     }
 
     final activeTrip = _provider.activeTrip;
@@ -703,35 +696,6 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     return false;
   }
 
-  void _openTripPayment(int tripId) {
-    if (_openingPaymentTripId == tripId) return;
-    _openingPaymentTripId = tripId;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-
-      Navigator.of(context)
-          .push<bool>(
-            MaterialPageRoute(
-              builder: (_) => DriverTripPaymentPage(tripId: tripId),
-            ),
-          )
-          .then((completed) async {
-            if (mounted && completed == true) {
-              _provider.markTripPaymentCompleted(tripId);
-              await _provider.loadActiveTrip();
-              await _provider.loadTodayIncome();
-            }
-          })
-          .whenComplete(() {
-            if (mounted && _openingPaymentTripId == tripId) {
-              _openingPaymentTripId = null;
-            }
-          });
-    });
-  }
-
   void _openChat(ActiveDriverTrip trip) {
     final auth = context.read<AuthProvider>();
     final currentUserId = auth.userId;
@@ -1234,10 +1198,7 @@ class _ActiveTripCard extends StatelessWidget {
                     label: Text(context.l10n.message),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Color(0xFF006B70),
-                      side: BorderSide(
-                        color: Color(0xFF006B70),
-                        width: 1.5,
-                      ),
+                      side: BorderSide(color: Color(0xFF006B70), width: 1.5),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -1253,10 +1214,7 @@ class _ActiveTripCard extends StatelessWidget {
                     label: Text(context.l10n.callCustomer),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Color(0xFF006B70),
-                      side: BorderSide(
-                        color: Color(0xFF006B70),
-                        width: 1.5,
-                      ),
+                      side: BorderSide(color: Color(0xFF006B70), width: 1.5),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -1398,7 +1356,9 @@ class _ActiveTripCard extends StatelessWidget {
                 ),
               )
             else if (isWaitingReturn)
-              _buildWaitingReturnSection(context, trip.tripId, isUpdating)
+              trip.paymentCompleted
+                  ? _buildWaitingReturnSection(context, trip.tripId, isUpdating)
+                  : _buildWaitingPaymentSection(context, trip.tripId)
             else if (isReturnConfirmed)
               _buildReturnConfirmedBanner(context)
             else if (isWaitingPayment)
@@ -1434,9 +1394,7 @@ class _ActiveTripCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: Color(0xFFFFF8E1),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: Color(0xFFFFCC02).withValues(alpha: 0.5),
-            ),
+            border: Border.all(color: Color(0xFFFFCC02).withValues(alpha: 0.5)),
           ),
           child: Row(
             children: [
@@ -1500,9 +1458,7 @@ class _ActiveTripCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Color(0xFFE8F7F0),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: Color(0xFF0A8F62).withValues(alpha: 0.3),
-        ),
+        border: Border.all(color: Color(0xFF0A8F62).withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -1532,9 +1488,7 @@ class _ActiveTripCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: Color(0xFFE8F2F2),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: Color(0xFF006B70).withValues(alpha: 0.3),
-            ),
+            border: Border.all(color: Color(0xFF006B70).withValues(alpha: 0.3)),
           ),
           child: Row(
             children: [
@@ -1542,7 +1496,7 @@ class _ActiveTripCard extends StatelessWidget {
               SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  context.l10n.returnConfirmedPaymentRequired,
+                  context.l10n.waitForPayment,
                   style: TextStyle(
                     color: Color(0xFF00545A),
                     fontSize: 14,
