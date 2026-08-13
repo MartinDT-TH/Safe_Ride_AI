@@ -286,7 +286,9 @@ public sealed class TripSharingServiceTests
             fixture.Trip.Id,
             created.TripShareId,
             fixture.Owner.Id);
-        Assert.Single(fixture.Realtime.StatusEvents.Where(x => x.EventName == "TripShareRevoked"));
+        Assert.Single(
+            fixture.Realtime.StatusEvents,
+            statusEvent => statusEvent.EventName == "TripShareRevoked");
         await fixture.Service.RevokeAsync(
             fixture.Trip.Id,
             created.TripShareId,
