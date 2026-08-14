@@ -15,7 +15,9 @@ import '../../../../customer/booking/presentation/providers/booking_provider.dar
 import '../../../../customer/home/presentation/pages/customer_home_page.dart';
 import '../../../../shared/onboarding/presentation/providers/role_provider.dart';
 import '../../../../driver/dashboard/presentation/providers/driver_dashboard_provider.dart';
+import '../../../../shared/feedback/presentation/pages/driver_reviews_page.dart';
 import '../widgets/language_picker_sheet.dart';
+import '../widgets/driver_reviews_profile_menu_tile.dart';
 
 class ProfilePage extends StatefulWidget {
   ProfilePage({super.key});
@@ -180,6 +182,10 @@ class _ProfilePageState extends State<ProfilePage> {
                 icon: Icons.person_search_outlined,
                 title: l10n.editProfile,
                 onTap: () => _navigateToEditProfile(auth),
+              ),
+              DriverReviewsProfileMenuTile(
+                isDriver: roleProvider.isDriver,
+                onTap: () => _navigateToDriverReviews(auth),
               ),
               _buildLinkedAccountItem(auth),
               ProfileMenuTile(
@@ -496,6 +502,23 @@ class _ProfilePageState extends State<ProfilePage> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => EditProfilePage(phoneNumber: auth.phoneNumber),
+      ),
+    );
+  }
+
+  void _navigateToDriverReviews(AuthProvider auth) {
+    final driverId = auth.userId?.trim();
+    if (driverId == null || driverId.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.l10n.sessionExpired)));
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            DriverReviewsPage(driverId: driverId, driverName: auth.fullName),
       ),
     );
   }
