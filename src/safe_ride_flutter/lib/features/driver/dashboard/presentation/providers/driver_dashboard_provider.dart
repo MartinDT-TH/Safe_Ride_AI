@@ -200,6 +200,26 @@ class DriverDashboardProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> reloadDashboardAfterConnectionRestored(
+    String accessToken,
+  ) async {
+    if (accessToken.isEmpty) return;
+
+    _accessToken = accessToken;
+    try {
+      await _socketService.connect();
+      _registerRealtimeHandlers();
+    } catch (error) {
+      debugPrint('DRIVER_DASHBOARD: reconnect realtime failed: $error');
+    }
+
+    await Future.wait([
+      loadActiveTrip(),
+      loadOpenTripRequests(),
+      loadTodayIncome(),
+    ]);
+  }
+
   Future<void> loadTodayIncome() async {
     final token = _accessToken;
     final walletRepository = _driverWalletRepository;

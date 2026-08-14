@@ -173,10 +173,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get information => 'Information';
 
   @override
-  String get serverConnectionError => 'Connection / server error';
+  String get serverConnectionError =>
+      'Unable to connect to the server. Please try again later.';
 
   @override
-  String get serverConnectionErrorTitle => 'Server connection error';
+  String get serverConnectionErrorTitle => 'Server temporarily unavailable';
+
+  @override
+  String get serverConnectionRestored =>
+      'The server is available again. Data is being reloaded.';
+
+  @override
+  String get serverConnectionRestoredTitle => 'Server reconnected';
+
+  @override
+  String get reload => 'Reload';
 
   @override
   String get confirm => 'Confirm';

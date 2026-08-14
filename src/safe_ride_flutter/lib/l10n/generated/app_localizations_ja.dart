@@ -168,10 +168,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String get information => 'お知らせ';
 
   @override
-  String get serverConnectionError => '接続 / サーバーエラー';
+  String get serverConnectionError => 'サーバーに接続できません。しばらくしてからもう一度お試しください。';
 
   @override
-  String get serverConnectionErrorTitle => 'サーバー接続エラー';
+  String get serverConnectionErrorTitle => 'サーバーは一時的に利用できません';
+
+  @override
+  String get serverConnectionRestored => 'サーバーへの接続が復旧しました。データを再読み込みしています。';
+
+  @override
+  String get serverConnectionRestoredTitle => 'サーバーに再接続しました';
+
+  @override
+  String get reload => '再読み込み';
 
   @override
   String get confirm => '確認';

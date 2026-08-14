@@ -168,10 +168,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get information => '通知';
 
   @override
-  String get serverConnectionError => '连接 / 服务器错误';
+  String get serverConnectionError => '无法连接到服务器，请稍后重试。';
 
   @override
-  String get serverConnectionErrorTitle => '服务器连接错误';
+  String get serverConnectionErrorTitle => '服务器暂时不可用';
+
+  @override
+  String get serverConnectionRestored => '服务器连接已恢复，正在重新加载数据。';
+
+  @override
+  String get serverConnectionRestoredTitle => '已重新连接服务器';
+
+  @override
+  String get reload => '重新加载';
 
   @override
   String get confirm => '确认';

@@ -11,6 +11,7 @@ import '../../../../../core/maps/widgets/map_renderer_widget.dart';
 import '../../../../../core/maps/widgets/live_trip_map_widget.dart';
 import '../../../../../core/services/location_service.dart';
 import '../../../../../core/services/map_api_service.dart';
+import '../../../../../core/services/connectivity_service.dart';
 import '../../../../../core/services/socket_service.dart';
 import '../../../../../core/widgets/current_location_button.dart';
 import '../../../../../dependency_injection/injection.dart';
@@ -74,6 +75,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
   int _selectedIndex = 0;
   bool _isLocating = false;
   StreamSubscription<Position>? _positionStream;
+  StreamSubscription<void>? _connectionReloadSubscription;
   AppLatLng? _driverPosition;
   AppLatLng? _lastReportedPosition;
   DateTime? _lastReportedTime;
@@ -89,6 +91,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
   int? _callSignalTripId;
   bool _arrivalRouteRefreshInProgress = false;
   bool _incomingCallDialogOpen = false;
+  bool _connectionReloadInProgress = false;
   static const double _arrivalRerouteThresholdMeters = 35;
   static const double _arrivalRerouteMinMoveMeters = 80;
   static const double _locationUiJitterThresholdMeters = 5;
@@ -139,6 +142,11 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
       final token = context.read<AuthProvider>().token;
       _provider = context.read<DriverDashboardProvider>();
       _provider.addListener(_onProviderUpdated);
+      _connectionReloadSubscription ??= getIt<ConnectivityService>()
+          .reloadRequests
+          .listen((_) {
+            unawaited(_reloadDashboardAfterConnectionRestored());
+          });
       _onProviderUpdated();
       final switchedToCustomer = await _checkActiveCustomerBooking(token);
       if (switchedToCustomer || !mounted) {
@@ -152,6 +160,24 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
         getIt<TripShareDeepLinkCoordinator>().processPendingAfterNavigation(),
       );
     });
+  }
+
+  Future<void> _reloadDashboardAfterConnectionRestored() async {
+    if (!mounted || _connectionReloadInProgress) return;
+    final token = context.read<AuthProvider>().token;
+    if (token == null || token.isEmpty) return;
+
+    _connectionReloadInProgress = true;
+    try {
+      await _provider.reloadDashboardAfterConnectionRestored(token);
+      if (!mounted) return;
+      await context.read<NotificationProvider>().initialize(
+        token,
+        refreshIfInitialized: true,
+      );
+    } finally {
+      _connectionReloadInProgress = false;
+    }
   }
 
   void _onProviderUpdated() {
@@ -298,6 +324,8 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
 
   @override
   void dispose() {
+    unawaited(_connectionReloadSubscription?.cancel());
+    _connectionReloadSubscription = null;
     _provider.removeListener(_onProviderUpdated);
     _removeTripCallHandler();
     _stopLocationUpdates();

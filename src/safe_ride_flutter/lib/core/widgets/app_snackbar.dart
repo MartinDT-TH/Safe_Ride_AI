@@ -5,7 +5,7 @@ import '../localization/locale_provider.dart';
 enum AppSnackBarType { success, error, warning, info, serverError }
 
 class AppSnackBar {
-  static void show(
+  static ScaffoldFeatureController<SnackBar, SnackBarClosedReason> show(
     BuildContext context, {
     required String message,
     required AppSnackBarType type,
@@ -15,7 +15,7 @@ class AppSnackBar {
     Duration duration = const Duration(seconds: 4),
   }) {
     final messenger = ScaffoldMessenger.of(context);
-    _showWithMessenger(
+    return _showWithMessenger(
       messenger,
       message: message,
       type: type,
@@ -26,7 +26,7 @@ class AppSnackBar {
     );
   }
 
-  static void showGlobal(
+  static ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? showGlobal(
     GlobalKey<ScaffoldMessengerState> messengerKey, {
     required String message,
     required AppSnackBarType type,
@@ -36,8 +36,8 @@ class AppSnackBar {
     Duration duration = const Duration(seconds: 4),
   }) {
     final messenger = messengerKey.currentState;
-    if (messenger == null) return;
-    _showWithMessenger(
+    if (messenger == null) return null;
+    return _showWithMessenger(
       messenger,
       message: message,
       type: type,
@@ -48,7 +48,8 @@ class AppSnackBar {
     );
   }
 
-  static void _showWithMessenger(
+  static ScaffoldFeatureController<SnackBar, SnackBarClosedReason>
+  _showWithMessenger(
     ScaffoldMessengerState messenger, {
     required String message,
     required AppSnackBarType type,
@@ -94,15 +95,12 @@ class AppSnackBar {
 
     final resolvedTitle = title ?? defaultTitle;
 
-    messenger.showSnackBar(
+    return messenger.showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
         backgroundColor: Colors.transparent,
         elevation: 0,
-        duration:
-            type == AppSnackBarType.serverError && onAction != null
-                ? Duration(seconds: 8)
-                : duration,
+        duration: duration,
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         content: Container(
           decoration: BoxDecoration(
@@ -178,10 +176,7 @@ class AppSnackBar {
                   ),
                   child: Text(
                     actionLabel,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                   ),
                 ),
               ],

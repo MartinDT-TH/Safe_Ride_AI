@@ -92,9 +92,7 @@ class TripRouteRecalculatedUpdate {
 
     final tripId = (value('tripId') as num?)?.toInt();
     final encodedPolyline = value('encodedPolyline')?.toString();
-    if (tripId == null ||
-        encodedPolyline == null ||
-        encodedPolyline.isEmpty) {
+    if (tripId == null || encodedPolyline == null || encodedPolyline.isEmpty) {
       return null;
     }
 
@@ -152,7 +150,7 @@ class DriverOfferUpdate {
       driverId: _value(data, ApiKeys.driverId)?.toString() ?? '',
       message:
           _value(data, ApiKeys.message)?.toString() ??
-              LocaleProvider.currentLocalizations.newTripMessage,
+          LocaleProvider.currentLocalizations.newTripMessage,
       expiresAt: expiresAtRaw == null
           ? null
           : DateTime.tryParse(expiresAtRaw.toString()),
@@ -257,9 +255,7 @@ class SOSTriggeredUpdate {
 
   final int tripId;
 
-  static SOSTriggeredUpdate? fromSignalRArguments(
-    List<Object?>? arguments,
-  ) {
+  static SOSTriggeredUpdate? fromSignalRArguments(List<Object?>? arguments) {
     if (arguments == null || arguments.isEmpty || arguments.first is! Map) {
       return null;
     }
@@ -665,6 +661,7 @@ class SocketService {
   bool _systemNotificationListenerAttached = false;
   bool _inAppCallListenerAttached = false;
   final List<void Function()> _connectionLostHandlers = [];
+  bool _intentionalDisconnect = false;
   final Map<String, void Function(DriverLocationUpdate update)>
   _driverLocationHandlers = {};
   final Map<String, void Function(TripRouteRecalculatedUpdate update)>
@@ -720,6 +717,7 @@ class SocketService {
   }
 
   Future<void> connect([String? legacyAccessToken]) async {
+    _intentionalDisconnect = false;
     final accessToken =
         await _sessionManager?.getValidAccessToken() ?? legacyAccessToken;
     if (accessToken == null || accessToken.isEmpty) {
@@ -759,6 +757,14 @@ class SocketService {
     _connection!.serverTimeoutInMilliseconds = 60000;
     _connection!.keepAliveIntervalInMilliseconds = 30000;
 
+    _connection!.onreconnecting(({error}) {
+      if (_intentionalDisconnect) return;
+      debugPrint('SOCKET: Reconnecting after connection loss. error=$error');
+      for (final handler in List.of(_connectionLostHandlers)) {
+        handler();
+      }
+    });
+
     _connection!.onreconnected(({connectionId}) {
       debugPrint(
         'SOCKET: Reconnected ($connectionId). Re-joining groups: Trips=$_desiredTripGroups, Bookings=$_desiredBookingGroups',
@@ -769,6 +775,7 @@ class SocketService {
     // When automatic reconnect is exhausted, SignalR fires onclose. We null out
     // the connection object so the next connect() call rebuilds it from scratch.
     _connection!.onclose(({error}) {
+      final shouldNotifyConnectionLost = !_intentionalDisconnect;
       debugPrint('SOCKET: Connection permanently closed. error=$error');
       _connection = null;
       _driverLocationListenerAttached = false;
@@ -785,8 +792,10 @@ class SocketService {
       _joinedTripGroups.clear();
       _joinedBookingGroups.clear();
       _joinedSharedTripGroups.clear();
-      for (final h in List.of(_connectionLostHandlers)) {
-        h();
+      if (shouldNotifyConnectionLost) {
+        for (final h in List.of(_connectionLostHandlers)) {
+          h();
+        }
       }
     });
 
@@ -964,10 +973,7 @@ class SocketService {
 
       if (offerId != null || bookingId != null) {
         for (final handler in List.of(_driverOfferClosedHandlers.values)) {
-          handler(
-            offerId: offerId?.toInt(),
-            bookingId: bookingId?.toInt(),
-          );
+          handler(offerId: offerId?.toInt(), bookingId: bookingId?.toInt());
         }
       }
     }
@@ -1472,6 +1478,7 @@ class SocketService {
   }
 
   Future<void> disconnect() async {
+    _intentionalDisconnect = true;
     if (_connection != null) {
       await _connection!.stop();
     }

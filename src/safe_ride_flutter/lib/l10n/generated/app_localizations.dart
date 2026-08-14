@@ -425,14 +425,32 @@ abstract class AppLocalizations {
   /// No description provided for @serverConnectionError.
   ///
   /// In vi, this message translates to:
-  /// **'Lỗi kết nối / Máy chủ'**
+  /// **'Không thể kết nối đến máy chủ. Vui lòng thử lại sau.'**
   String get serverConnectionError;
 
   /// No description provided for @serverConnectionErrorTitle.
   ///
   /// In vi, this message translates to:
-  /// **'Lỗi kết nối máy chủ'**
+  /// **'Máy chủ tạm thời không khả dụng'**
   String get serverConnectionErrorTitle;
+
+  /// No description provided for @serverConnectionRestored.
+  ///
+  /// In vi, this message translates to:
+  /// **'Máy chủ đã hoạt động trở lại. Dữ liệu đang được tải lại.'**
+  String get serverConnectionRestored;
+
+  /// No description provided for @serverConnectionRestoredTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đã kết nối lại máy chủ'**
+  String get serverConnectionRestoredTitle;
+
+  /// No description provided for @reload.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tải lại'**
+  String get reload;
 
   /// No description provided for @confirm.
   ///

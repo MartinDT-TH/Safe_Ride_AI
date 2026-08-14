@@ -173,10 +173,21 @@ class AppLocalizationsVi extends AppLocalizations {
   String get information => 'Thông báo';
 
   @override
-  String get serverConnectionError => 'Lỗi kết nối / Máy chủ';
+  String get serverConnectionError =>
+      'Không thể kết nối đến máy chủ. Vui lòng thử lại sau.';
 
   @override
-  String get serverConnectionErrorTitle => 'Lỗi kết nối máy chủ';
+  String get serverConnectionErrorTitle => 'Máy chủ tạm thời không khả dụng';
+
+  @override
+  String get serverConnectionRestored =>
+      'Máy chủ đã hoạt động trở lại. Dữ liệu đang được tải lại.';
+
+  @override
+  String get serverConnectionRestoredTitle => 'Đã kết nối lại máy chủ';
+
+  @override
+  String get reload => 'Tải lại';
 
   @override
   String get confirm => 'Xác nhận';

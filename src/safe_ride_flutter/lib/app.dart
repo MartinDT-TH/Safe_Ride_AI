@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'core/localization/locale_provider.dart';
 import 'core/theme/app_theme.dart';
 import 'core/services/connectivity_service.dart';
+import 'core/services/socket_service.dart';
 import 'core/session/session_coordinator.dart';
 import 'dependency_injection/injection.dart';
 
@@ -26,6 +27,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   late final ConnectivityService _connectivityService;
+  late final SocketService _socketService;
   String? _chatSessionSignature;
   double _lastKeyboardInset = 0;
 
@@ -35,6 +37,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _connectivityService = getIt<ConnectivityService>();
     _connectivityService.initialize();
+    _socketService = getIt<SocketService>();
+    _socketService.addConnectionLostHandler(_handleSocketConnectionLost);
     getIt<SessionCoordinator>().start();
     unawaited(
       getIt<TripShareDeepLinkCoordinator>().start(getIt<AuthProvider>()),
@@ -44,9 +48,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _socketService.removeConnectionLostHandler(_handleSocketConnectionLost);
     _connectivityService.dispose();
     unawaited(getIt<TripShareDeepLinkCoordinator>().dispose());
     super.dispose();
+  }
+
+  void _handleSocketConnectionLost() {
+    unawaited(_connectivityService.handleRealtimeConnectionLost());
   }
 
   @override

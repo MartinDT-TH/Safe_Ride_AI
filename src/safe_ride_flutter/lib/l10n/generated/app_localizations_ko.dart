@@ -168,10 +168,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get information => '알림';
 
   @override
-  String get serverConnectionError => '연결 / 서버 오류';
+  String get serverConnectionError => '서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.';
 
   @override
-  String get serverConnectionErrorTitle => '서버 연결 오류';
+  String get serverConnectionErrorTitle => '서버를 일시적으로 사용할 수 없습니다';
+
+  @override
+  String get serverConnectionRestored => '서버 연결이 복구되었습니다. 데이터를 다시 불러오는 중입니다.';
+
+  @override
+  String get serverConnectionRestoredTitle => '서버에 다시 연결됨';
+
+  @override
+  String get reload => '새로고침';
 
   @override
   String get confirm => '확인';
