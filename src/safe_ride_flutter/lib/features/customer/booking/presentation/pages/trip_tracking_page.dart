@@ -747,7 +747,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       driverHeading: _driverHeading,
       padding: EdgeInsets.only(
         top: topSafe + 130,
-        bottom: 320,
+        bottom: 280,
         left: 24,
         right: 24,
       ),
@@ -933,7 +933,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         bounds.$2,
         paddingVal,
         top: 130,
-        bottom: 320,
+        bottom: 280,
         left: 24,
         right: 24,
       ),
@@ -1120,7 +1120,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       child: SafeArea(
         top: false,
         child: Container(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
@@ -1138,7 +1138,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
               Container(
                 width: 40,
                 height: 4,
-                margin: const EdgeInsets.only(bottom: 24),
+                margin: const EdgeInsets.only(bottom: 12),
                 decoration: BoxDecoration(
                   color: Colors.grey[200],
                   borderRadius: BorderRadius.circular(2),
@@ -1146,26 +1146,32 @@ class _TripTrackingPageState extends State<TripTrackingPage>
               ),
               if (!isArriving) ...[
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.check_circle_rounded,
-                          color: _tealColor,
-                          size: 22,
-                        ),
-                        SizedBox(width: 10),
-                        Text(
-                          context.l10n.onCorrectRoute,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 15,
-                            color: Colors.black87,
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.check_circle_rounded,
+                            color: _tealColor,
+                            size: 20,
                           ),
-                        ),
-                      ],
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              context.l10n.onCorrectRoute,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                    SizedBox(width: 8),
                     _SosButton(
                       isActivated: _isSOSActivated,
                       isLoading: _isSendingSOS,
@@ -1173,20 +1179,20 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                     ),
                   ],
                 ),
-                SizedBox(height: 24),
+                SizedBox(height: 12),
               ],
               Row(
                 children: [
                   Stack(
                     children: [
                       CircleAvatar(
-                        radius: 30,
+                        radius: 26,
                         backgroundColor: Colors.grey[200],
                         backgroundImage: offer?.driverAvatarUrl != null
                             ? NetworkImage(offer!.driverAvatarUrl!)
                             : null,
                         child: offer?.driverAvatarUrl == null
-                            ? Icon(Icons.person, size: 30, color: Colors.grey)
+                            ? Icon(Icons.person, size: 26, color: Colors.grey)
                             : null,
                       ),
                       Positioned(
@@ -1225,7 +1231,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                       ),
                     ],
                   ),
-                  SizedBox(width: 16),
+                  SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1237,7 +1243,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                                 offer?.driverName ??
                                     context.l10n.safeRideDriverName,
                                 style: TextStyle(
-                                  fontSize: 18,
+                                  fontSize: 16,
                                   fontWeight: FontWeight.w900,
                                   color: Color(0xFF1A1A1A),
                                 ),
@@ -1293,7 +1299,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                             ],
                           ],
                         ),
-                        SizedBox(height: 4),
+                        SizedBox(height: 3),
                         Text(
                           vehicle == null
                               ? context.l10n.updatingVehicle
@@ -1303,14 +1309,16 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
                   ),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
+                      horizontal: 10,
+                      vertical: 7,
                     ),
                     decoration: BoxDecoration(
                       color: Color(0xFFF2F4F7),
@@ -1331,7 +1339,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                         Text(
                           plateParts.length > 1 ? plateParts.last.trim() : '--',
                           style: TextStyle(
-                            fontSize: 18,
+                            fontSize: 16,
                             fontWeight: FontWeight.w900,
                             color: Color(0xFF1D2939),
                           ),
@@ -1341,13 +1349,13 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                   ),
                 ],
               ),
-              SizedBox(height: 24),
+              SizedBox(height: 12),
               if (isArriving) ...[
                 SizedBox(
                   width: double.infinity,
                   child: _isPrepaid
                       ? Container(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          padding: const EdgeInsets.symmetric(vertical: 11),
                           decoration: BoxDecoration(
                             color: Color(0xFFE5F5F0),
                             borderRadius: BorderRadius.circular(14),
@@ -1377,18 +1385,19 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                           style: ElevatedButton.styleFrom(
                             backgroundColor: _tealColor,
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            minimumSize: const Size.fromHeight(44),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),
                             ),
                             textStyle: TextStyle(
-                              fontSize: 16,
+                              fontSize: 14,
                               fontWeight: FontWeight.w900,
                             ),
                           ),
                         ),
                 ),
-                SizedBox(height: 14),
+                SizedBox(height: 10),
                 Row(
                   children: [
                     Expanded(
@@ -1398,9 +1407,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                         onPressed: _openChat,
                       ),
                     ),
-                    SizedBox(width: 12),
+                    SizedBox(width: 8),
                     Expanded(
-                      flex: 2,
                       child: ElevatedButton.icon(
                         onPressed: _startInAppCall,
                         icon: Icon(Icons.phone_in_talk_rounded),
@@ -1409,18 +1417,22 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                           backgroundColor: _tealColor,
                           foregroundColor: Colors.white,
                           elevation: 0,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          minimumSize: const Size.fromHeight(44),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 10,
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
                           ),
                           textStyle: TextStyle(
                             fontWeight: FontWeight.w900,
-                            fontSize: 16,
+                            fontSize: 14,
                           ),
                         ),
                       ),
                     ),
-                    SizedBox(width: 12),
+                    SizedBox(width: 8),
                     _SosButton(
                       isCircle: true,
                       isActivated: _isSOSActivated,
@@ -1429,47 +1441,48 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                     ),
                   ],
                 ),
-                SizedBox(height: 16),
+                SizedBox(height: 8),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    InkWell(
-                      onTap: _showShareModal,
-                      borderRadius: BorderRadius.circular(8),
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
+                    Expanded(
+                      child: TextButton.icon(
+                        onPressed: _showShareModal,
+                        icon: Icon(Icons.share_outlined, size: 18),
+                        label: Text(
+                          context.l10n.share,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.share_outlined,
-                              color: Colors.black54,
-                              size: 20,
-                            ),
-                            SizedBox(width: 8),
-                            Text(
-                              context.l10n.share,
-                              style: TextStyle(
-                                color: Colors.black87,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
+                        style: TextButton.styleFrom(
+                          foregroundColor: Color(0xFF475467),
+                          minimumSize: const Size.fromHeight(40),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          textStyle: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                     ),
-                    TextButton(
-                      onPressed: () =>
-                          handleBookingBack(context, booking: widget.booking),
-                      child: Text(
-                        context.l10n.cancelBooking,
-                        style: TextStyle(
-                          color: Color(0xFFE53935),
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: TextButton.icon(
+                        onPressed: () =>
+                            handleBookingBack(context, booking: widget.booking),
+                        icon: Icon(Icons.close_rounded, size: 18),
+                        label: Text(
+                          context.l10n.cancelBooking,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Color(0xFFD92D20),
+                          minimumSize: const Size.fromHeight(40),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          textStyle: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                     ),
@@ -1510,7 +1523,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                       ],
                     ),
                   ),
-                  SizedBox(height: 16),
+                  SizedBox(height: 12),
                 ],
                 Row(
                   children: [
@@ -1521,7 +1534,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                         label: context.l10n.message,
                       ),
                     ),
-                    SizedBox(width: 16),
+                    SizedBox(width: 8),
                     Expanded(
                       child: _CircleActionButton(
                         icon: Icons.share_rounded,
@@ -1529,7 +1542,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                         label: context.l10n.share,
                       ),
                     ),
-                    SizedBox(width: 16),
+                    SizedBox(width: 8),
                     Expanded(
                       child: _CircleActionButton(
                         icon: Icons.phone_in_talk_rounded,
@@ -1936,9 +1949,10 @@ class _ActionButton extends StatelessWidget {
       style: OutlinedButton.styleFrom(
         foregroundColor: Color(0xFF1A1A1A),
         side: BorderSide(color: Colors.grey[200]!, width: 1.5),
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        textStyle: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+        minimumSize: const Size.fromHeight(44),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        textStyle: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
       ),
     );
   }
@@ -1958,25 +1972,30 @@ class _CircleActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onPressed,
-      borderRadius: BorderRadius.circular(30),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
+        constraints: const BoxConstraints(minHeight: 44),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
         decoration: BoxDecoration(
           color: Color(0xFFEAF4F4),
-          borderRadius: BorderRadius.circular(30),
+          borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: Color(0xFF006B70), size: 22),
+            Icon(icon, color: Color(0xFF006B70), size: 20),
             if (label != null) ...[
-              SizedBox(width: 8),
-              Text(
-                label!,
-                style: TextStyle(
-                  color: Color(0xFF006B70),
-                  fontWeight: FontWeight.w800,
-                  fontSize: 15,
+              SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Color(0xFF006B70),
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
                 ),
               ),
             ],
@@ -2003,40 +2022,66 @@ class _SosButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final enabled = onTap != null && !isActivated && !isLoading;
     final useCircle = isCircle && !isActivated && !isLoading;
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: Container(
-        padding: useCircle
-            ? const EdgeInsets.all(16)
-            : const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActivated
-              ? Color(0xFF667085)
-              : enabled || isLoading
-              ? Color(0xFFE53935)
-              : Color(0xFFB0B0B0),
-          shape: useCircle ? BoxShape.circle : BoxShape.rectangle,
-          borderRadius: useCircle ? null : BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: (isActivated ? Color(0xFF667085) : Color(0xFFE53935))
-                  .withValues(alpha: 0.3),
-              blurRadius: 8,
-              offset: Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Text(
-          isActivated
-              ? context.l10n.sosActivated
-              : isLoading
-              ? context.l10n.sendingSos
-              : 'SOS',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w900,
-            fontSize: 12,
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: useCircle ? 44 : 104),
+      child: GestureDetector(
+        onTap: enabled ? onTap : null,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 40),
+          padding: useCircle
+              ? const EdgeInsets.all(12)
+              : const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: isActivated
+                ? Color(0xFF667085)
+                : enabled || isLoading
+                ? Color(0xFFE53935)
+                : Color(0xFFB0B0B0),
+            shape: useCircle ? BoxShape.circle : BoxShape.rectangle,
+            borderRadius: useCircle ? null : BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: (isActivated ? Color(0xFF667085) : Color(0xFFE53935))
+                    .withValues(alpha: 0.3),
+                blurRadius: 8,
+                offset: Offset(0, 4),
+              ),
+            ],
           ),
+          child: isActivated
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.check_circle_rounded,
+                      color: Colors.white,
+                      size: 14,
+                    ),
+                    SizedBox(width: 4),
+                    Text(
+                      'SOS',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                )
+              : Text(
+                  isLoading ? context.l10n.sendingSos : 'SOS',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12,
+                  ),
+                ),
         ),
       ),
     );
