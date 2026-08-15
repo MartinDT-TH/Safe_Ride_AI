@@ -206,6 +206,7 @@ app.UseStaticFiles(new StaticFileOptions
 });
 app.UseMiddleware<AuthRateLimitMiddleware>();
 app.UseAuthentication();
+app.UseMiddleware<AccountRestrictionMiddleware>();
 app.UseMiddleware<ProfileCompletionMiddleware>();
 app.UseAuthorization();
 
