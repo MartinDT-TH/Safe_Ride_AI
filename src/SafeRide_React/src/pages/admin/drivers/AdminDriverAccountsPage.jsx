@@ -9,6 +9,7 @@ import StatusBadge from '../../../shared/components/StatusBadge/StatusBadge';
 import Pagination from '../../../shared/components/Pagination/Pagination';
 import ActionFeedback from '../../../shared/components/ActionFeedback/ActionFeedback';
 import AccountActionDialog from '../../../shared/components/AccountActionDialog/AccountActionDialog';
+import { DriverVerificationDetail } from '../../../features/drivers/components';
 import { blockDriver, getDriversPath, mapDriverList, unlockDriver } from '../../../features/drivers/driversApi';
 import '../../../pages/DriversPage.css';
 import '../../../features/drivers/components/DriverTable.css';
@@ -123,7 +124,12 @@ function AdminDriverAccountsPage() {
     return (
         <AdminLayout>
             {selectedDriver ? (
-                <DriverAccountDetails driver={selectedDriver} onBack={() => setSelectedDriver(null)} />
+                <DriverVerificationDetail
+                    driver={selectedDriver}
+                    onBack={() => setSelectedDriver(null)}
+                    actionDriverId={actionDriverId}
+                    canReview={false}
+                />
             ) : (
                 <>
                     <div className="page-header" id="admin-driver-accounts-page-header">
@@ -316,77 +322,6 @@ function AdminDriverAccountTable({
                 totalPages={totalPages}
                 onPageChange={setCurrentPage}
             />
-        </div>
-    );
-}
-
-function DriverAccountDetails({ driver, onBack }) {
-    const status = STATUS_MAP[driver.status] ?? STATUS_MAP.active;
-
-    return (
-        <section className="driver-verification" id="admin-driver-account-details">
-            <button type="button" className="verification-back-btn" onClick={onBack}>
-                <FontAwesomeIcon icon={faEye} />
-                Quay lại
-            </button>
-
-            <div className="verification-title-row">
-                <h1 className="verification-title">Chi tiết tài khoản Tài xế</h1>
-                <StatusBadge label={status.label} variant={status.variant} />
-            </div>
-
-            <div className="verification-grid">
-                <div className="verification-side">
-                    <article className="driver-profile-card">
-                        <div className="profile-photo-ring">
-                            <div className={`profile-photo${driver.avatarUrl ? ' profile-photo--image' : ''}`} style={{ backgroundColor: driver.avatar }}>
-                                {driver.avatarUrl ? <img src={driver.avatarUrl} alt={driver.name} /> : <span>{driver.initials}</span>}
-                            </div>
-                        </div>
-
-                        <h2>{driver.name}</h2>
-                        <p>DRIVER_ID: {driver.driverCode}</p>
-
-                        <dl className="profile-meta-list">
-                            <div>
-                                <dt>Số điện thoại</dt>
-                                <dd>{driver.phone}</dd>
-                            </div>
-                            <div>
-                                <dt>Email</dt>
-                                <dd title={driver.email}>{driver.email}</dd>
-                            </div>
-                            <div>
-                                <dt>Ngày đăng ký</dt>
-                                <dd>{driver.registeredDate}</dd>
-                            </div>
-                            <div>
-                                <dt>Thành phố</dt>
-                                <dd>{driver.city}</dd>
-                            </div>
-                        </dl>
-                    </article>
-                </div>
-
-                <article className="verification-doc-card">
-                    <dl className="document-info-panel">
-                        <InfoItem label="Đánh giá trung bình" value={driver.rating ?? 'N/A'} />
-                        <InfoItem label="Tổng số chuyến" value={driver.trips} />
-                        <InfoItem label="Trạng thái làm việc" value={driver.workStatus} />
-                        <InfoItem label="Trạng thái tài khoản" value={driver.isActive ? 'Đang hoạt động' : 'Bị khóa'} />
-                        <InfoItem label="Lý do khóa" value={driver.banReason ?? 'Không có'} wide />
-                    </dl>
-                </article>
-            </div>
-        </section>
-    );
-}
-
-function InfoItem({ label, value, wide = false }) {
-    return (
-        <div className={wide ? 'document-info-panel__wide' : undefined}>
-            <dt>{label}</dt>
-            <dd>{value}</dd>
         </div>
     );
 }

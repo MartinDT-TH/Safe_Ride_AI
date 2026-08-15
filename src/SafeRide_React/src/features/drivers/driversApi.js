@@ -39,10 +39,7 @@ export function reviewDriverKyc(driverId, status, rejectionReason) {
         }).then(mapDriver);
     }
 
-    return apiRequest(`/admin/drivers/${driverId}/kyc`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status, rejectionReason }),
-    }).then(mapDriver);
+    return Promise.reject(new Error('Chỉ nhân viên mới có quyền duyệt hồ sơ KYC tài xế.'));
 }
 function mapDriver(driver) {
     const idCard = driver.documents.find((document) => document.documentType === 'ID_CARD');
