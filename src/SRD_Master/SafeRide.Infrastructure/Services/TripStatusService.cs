@@ -26,6 +26,7 @@ public sealed class TripStatusService : ITripStatusService
     private readonly IMapRoutingService _mapRoutingService;
     private readonly TripFareFinalizationService _tripFareFinalizationService;
     private readonly TripPaymentSettlementService _tripPaymentSettlementService;
+    private readonly IAccountBanEvaluationService _accountBanEvaluationService;
     private readonly ILogger<TripStatusService> _logger;
 
     public TripStatusService(
@@ -39,6 +40,7 @@ public sealed class TripStatusService : ITripStatusService
         IMapRoutingService mapRoutingService,
         TripFareFinalizationService tripFareFinalizationService,
         TripPaymentSettlementService tripPaymentSettlementService,
+        IAccountBanEvaluationService accountBanEvaluationService,
         ILogger<TripStatusService> logger)
     {
         _dbContext = dbContext;
@@ -51,6 +53,7 @@ public sealed class TripStatusService : ITripStatusService
         _mapRoutingService = mapRoutingService;
         _tripFareFinalizationService = tripFareFinalizationService;
         _tripPaymentSettlementService = tripPaymentSettlementService;
+        _accountBanEvaluationService = accountBanEvaluationService;
         _logger = logger;
     }
 
@@ -309,6 +312,24 @@ public sealed class TripStatusService : ITripStatusService
             TripStatus.COMPLETED,
             customerId,
             cancellationToken);
+        if (ratingScore is not null)
+        {
+            var submittedRatingId = await _dbContext.Ratings
+                .AsNoTracking()
+                .Where(x =>
+                    x.TripId == trip.Id &&
+                    x.CustomerId == customerId &&
+                    x.DriverId == trip.DriverId)
+                .OrderByDescending(x => x.CreatedAt)
+                .Select(x => (long?)x.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (submittedRatingId.HasValue)
+            {
+                await _accountBanEvaluationService.EvaluateRatingAsync(
+                    submittedRatingId.Value,
+                    cancellationToken);
+            }
+        }
 
         await CleanupTripTrackingAsync(trip.Id, cancellationToken);
     }
