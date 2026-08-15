@@ -350,19 +350,14 @@ class _TripSummaryPageState extends State<TripSummaryPage> {
                                     ),
                                   ),
                                 )
-                              : Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      context.l10n.confirmVehicleReturned,
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                    SizedBox(width: 10),
-                                    Icon(Icons.arrow_forward, size: 20),
-                                  ],
+                              : Text(
+                                  context.l10n.confirm,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                  ),
                                 ),
                         ),
                       ),
@@ -548,13 +543,7 @@ class _RatingCard extends StatelessWidget {
             decoration: InputDecoration(
               hintText: context.l10n.driverCommentHint,
               hintStyle: TextStyle(fontSize: 14, color: Color(0xFF98A2B3)),
-              prefixIcon: Padding(
-                padding: const EdgeInsets.only(bottom: 54),
-                child: Icon(
-                  Icons.chat_bubble_outline_rounded,
-                  color: AppColors.primary,
-                ),
-              ),
+              contentPadding: const EdgeInsets.all(14),
               filled: true,
               fillColor: Colors.white,
               border: OutlineInputBorder(
