@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
 import '../../../../../core/maps/models/map_models.dart';
@@ -1111,7 +1110,22 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     final bool isArriving = _trackingState == TripTrackingState.arriving;
     final offer = widget.booking.driverOffer;
     final vehicle = widget.vehicle;
-    final plateParts = vehicle?.plateNumber.split('-') ?? [];
+    final plateNumber = vehicle?.plateNumber.trim() ?? '';
+    final plateSections = plateNumber
+        .split(RegExp(r'\s+'))
+        .where((section) => section.isNotEmpty)
+        .toList();
+    final plateDashIndex = plateNumber.indexOf('-');
+    final plateTop = plateSections.length > 1
+        ? plateSections.first
+        : plateDashIndex > 0
+        ? plateNumber.substring(0, plateDashIndex)
+        : plateNumber;
+    final plateBottom = plateSections.length > 1
+        ? plateSections.skip(1).join(' ')
+        : plateDashIndex > 0 && plateDashIndex < plateNumber.length - 1
+        ? plateNumber.substring(plateDashIndex + 1)
+        : '';
 
     return Positioned(
       bottom: 0,
@@ -1183,121 +1197,94 @@ class _TripTrackingPageState extends State<TripTrackingPage>
               ],
               Row(
                 children: [
-                  Stack(
-                    children: [
-                      CircleAvatar(
-                        radius: 26,
-                        backgroundColor: Colors.grey[200],
-                        backgroundImage: offer?.driverAvatarUrl != null
-                            ? NetworkImage(offer!.driverAvatarUrl!)
-                            : null,
-                        child: offer?.driverAvatarUrl == null
-                            ? Icon(Icons.person, size: 26, color: Colors.grey)
-                            : null,
-                      ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [
-                              BoxShadow(color: Colors.black12, blurRadius: 4),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.star_rounded,
-                                color: Colors.amber,
-                                size: 14,
-                              ),
-                              Text(
-                                offer == null ? ' --' : ' ${offer.rating}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
+                  Semantics(
+                    button: offer != null,
+                    label: offer == null ? null : context.l10n.viewReviews,
+                    child: InkWell(
+                      onTap: offer == null
+                          ? null
+                          : () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => DriverReviewsPage(
+                                    driverId: offer.driverId,
+                                    driverName: offer.driverName,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              );
+                            },
+                      customBorder: const CircleBorder(),
+                      child: Stack(
+                        children: [
+                          CircleAvatar(
+                            radius: 26,
+                            backgroundColor: Colors.grey[200],
+                            backgroundImage: offer?.driverAvatarUrl != null
+                                ? NetworkImage(offer!.driverAvatarUrl!)
+                                : null,
+                            child: offer?.driverAvatarUrl == null
+                                ? Icon(
+                                    Icons.person,
+                                    size: 26,
+                                    color: Colors.grey,
+                                  )
+                                : null,
                           ),
-                        ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black12,
+                                    blurRadius: 4,
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.star_rounded,
+                                    color: Colors.amber,
+                                    size: 14,
+                                  ),
+                                  Text(
+                                    offer == null ? ' --' : ' ${offer.rating}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                   SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                offer?.driverName ??
-                                    context.l10n.safeRideDriverName,
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w900,
-                                  color: Color(0xFF1A1A1A),
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            if (offer != null) ...[
-                              SizedBox(width: 4),
-                              InkWell(
-                                onTap: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => DriverReviewsPage(
-                                        driverId: offer.driverId,
-                                        driverName: offer.driverName,
-                                      ),
-                                    ),
-                                  );
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primary.withValues(
-                                      alpha: 0.1,
-                                    ),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.star_outline_rounded,
-                                        size: 16,
-                                        color: AppColors.primary,
-                                      ),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        context.l10n.viewReviews,
-                                        style: TextStyle(
-                                          color: AppColors.primary,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
+                        Text(
+                          offer?.driverName ?? context.l10n.safeRideDriverName,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF1A1A1A),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         SizedBox(height: 3),
                         Text(
@@ -1316,35 +1303,62 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 7,
-                    ),
+                    width: 92,
+                    padding: const EdgeInsets.all(2),
                     decoration: BoxDecoration(
-                      color: Color(0xFFF2F4F7),
-                      borderRadius: BorderRadius.circular(12),
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(color: Colors.black, width: 2),
                     ),
-                    child: Column(
-                      children: [
-                        Text(
-                          plateParts.isNotEmpty
-                              ? plateParts.first.trim()
-                              : '--',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF667085),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.black, width: 1),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            height: 15,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                plateTop.isNotEmpty ? plateTop : '--',
+                                maxLines: 1,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.black,
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                        Text(
-                          plateParts.length > 1 ? plateParts.last.trim() : '--',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFF1D2939),
+                          Container(
+                            height: 1,
+                            margin: const EdgeInsets.symmetric(vertical: 2),
+                            color: Colors.black,
                           ),
-                        ),
-                      ],
+                          SizedBox(
+                            height: 19,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                plateBottom.isNotEmpty ? plateBottom : '--',
+                                maxLines: 1,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.black,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -1401,7 +1415,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                 Row(
                   children: [
                     Expanded(
-                      child: _ActionButton(
+                      child: _CircleActionButton(
                         icon: Icons.chat_bubble_rounded,
                         label: context.l10n.message,
                         onPressed: _openChat,
@@ -1409,27 +1423,10 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                     ),
                     SizedBox(width: 8),
                     Expanded(
-                      child: ElevatedButton.icon(
+                      child: _CircleActionButton(
+                        icon: Icons.phone_in_talk_rounded,
+                        label: context.l10n.call,
                         onPressed: _startInAppCall,
-                        icon: Icon(Icons.phone_in_talk_rounded),
-                        label: Text(context.l10n.call),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _tealColor,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          minimumSize: const Size.fromHeight(44),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 10,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          textStyle: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 14,
-                          ),
-                        ),
                       ),
                     ),
                     SizedBox(width: 8),
@@ -1445,45 +1442,21 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                 Row(
                   children: [
                     Expanded(
-                      child: TextButton.icon(
+                      child: _CircleActionButton(
+                        icon: Icons.share_outlined,
+                        label: context.l10n.share,
                         onPressed: _showShareModal,
-                        icon: Icon(Icons.share_outlined, size: 18),
-                        label: Text(
-                          context.l10n.share,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        style: TextButton.styleFrom(
-                          foregroundColor: Color(0xFF475467),
-                          minimumSize: const Size.fromHeight(40),
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          textStyle: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
-                          ),
-                        ),
                       ),
                     ),
                     SizedBox(width: 8),
                     Expanded(
-                      child: TextButton.icon(
+                      child: _CircleActionButton(
+                        icon: Icons.close_rounded,
+                        label: context.l10n.cancelBooking,
                         onPressed: () =>
                             handleBookingBack(context, booking: widget.booking),
-                        icon: Icon(Icons.close_rounded, size: 18),
-                        label: Text(
-                          context.l10n.cancelBooking,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        style: TextButton.styleFrom(
-                          foregroundColor: Color(0xFFD92D20),
-                          minimumSize: const Size.fromHeight(40),
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          textStyle: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
-                          ),
-                        ),
+                        foregroundColor: Color(0xFFD92D20),
+                        backgroundColor: Color(0xFFFEECEB),
                       ),
                     ),
                   ],
@@ -1930,42 +1903,18 @@ class _CircleIconButton extends StatelessWidget {
   }
 }
 
-class _ActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onPressed;
-  _ActionButton({
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: onPressed,
-      icon: Icon(icon, size: 20),
-      label: Text(label),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: Color(0xFF1A1A1A),
-        side: BorderSide(color: Colors.grey[200]!, width: 1.5),
-        minimumSize: const Size.fromHeight(44),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        textStyle: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-      ),
-    );
-  }
-}
-
 class _CircleActionButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;
   final String? label;
-  _CircleActionButton({
+  final Color foregroundColor;
+  final Color backgroundColor;
+  const _CircleActionButton({
     required this.icon,
     required this.onPressed,
     this.label,
+    this.foregroundColor = const Color(0xFF006B70),
+    this.backgroundColor = const Color(0xFFEAF4F4),
   });
 
   @override
@@ -1977,13 +1926,13 @@ class _CircleActionButton extends StatelessWidget {
         constraints: const BoxConstraints(minHeight: 44),
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
         decoration: BoxDecoration(
-          color: Color(0xFFEAF4F4),
+          color: backgroundColor,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: Color(0xFF006B70), size: 20),
+            Icon(icon, color: foregroundColor, size: 20),
             if (label != null) ...[
               SizedBox(width: 6),
               Flexible(
@@ -1992,7 +1941,7 @@ class _CircleActionButton extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Color(0xFF006B70),
+                    color: foregroundColor,
                     fontWeight: FontWeight.w800,
                     fontSize: 13,
                   ),
