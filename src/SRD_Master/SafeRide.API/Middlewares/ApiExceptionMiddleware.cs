@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
 using SafeRide.Application.Common.Exceptions;
+using SafeRide.Application.Features.AccountBans;
 using SafeRide.Application.Features.AdminUserAccounts;
 using SafeRide.Application.Features.Auth;
 using SafeRide.Application.Features.Bookings;
@@ -102,6 +103,14 @@ public sealed class ApiExceptionMiddleware
                 exception.Message);
         }
         catch (AdminUserAccountException exception)
+        {
+            await WriteProblemAsync(
+                context,
+                exception.StatusCode,
+                exception.Code,
+                exception.Message);
+        }
+        catch (AccountBanException exception)
         {
             await WriteProblemAsync(
                 context,

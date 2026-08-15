@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using SafeRide.Application.Features.Auth.DTOs;
 using SafeRide.Application.Features.Auth.Services;
 using SafeRide.Application.Features.Auth;
+using SafeRide.Application.Common.Interfaces;
 using SafeRide.Domain.Entities;
 using SafeRide.Infrastructure.Authentication;
 using System.Security.Claims;
@@ -21,6 +22,7 @@ public class AuthController : ControllerBase
     private readonly IAuthService _authService;
     private readonly UserManager<AspNetUser> _userManager;
     private readonly IJwtTokenService _jwtTokenService;
+    private readonly IAccountRestrictionService _accountRestrictionService;
     private readonly ICloudinaryImageService _cloudinaryImageService;
     private readonly IHostEnvironment _environment;
 
@@ -28,12 +30,14 @@ public class AuthController : ControllerBase
         IAuthService authService,
         UserManager<AspNetUser> userManager,
         IJwtTokenService jwtTokenService,
+        IAccountRestrictionService accountRestrictionService,
         ICloudinaryImageService cloudinaryImageService,
         IHostEnvironment environment)
     {
         _authService = authService;
         _userManager = userManager;
         _jwtTokenService = jwtTokenService;
+        _accountRestrictionService = accountRestrictionService;
         _cloudinaryImageService = cloudinaryImageService;
         _environment = environment;;
     }
@@ -119,6 +123,18 @@ public class AuthController : ControllerBase
                     errors = roleResult.Errors.Select(e => e.Description)
                 });
             }
+        }
+        var accountRestriction = await _accountRestrictionService.CheckAccountAccessAsync(
+            user.Id,
+            releaseExpiredTemporaryBans: true,
+            HttpContext.RequestAborted);
+        if (!accountRestriction.IsAllowed)
+        {
+            throw new AuthException(
+                accountRestriction.Code ?? AuthErrorCodes.AccountInactive,
+                accountRestriction.Message ?? "Tài khoản đã bị vô hiệu hóa.",
+                StatusCodes.Status403Forbidden,
+                accountRestriction.RetryAfterSeconds);
         }
 
         var demoProviderKey = request.Provider == "Phone"

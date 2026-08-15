@@ -17,6 +17,7 @@ const RevenuePage = lazy(() => import('./pages/RevenuePage'));
 const TransactionsPage = lazy(() => import('./pages/TransactionsPage'));
 const AdminPromotionsPage = lazy(() => import('./pages/admin/promotions/AdminPromotionsPage'));
 const AdminPricingRulesPage = lazy(() => import('./pages/admin/pricing/AdminPricingRulesPage'));
+const AdminAccountBanSettingsPage = lazy(() => import('./pages/admin/account-bans/AdminAccountBanSettingsPage'));
 const CustomersPage = lazy(() => import('./pages/CustomersPage'));
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
 const BookingsPage = lazy(() => import('./pages/BookingsPage'));
@@ -98,6 +99,9 @@ function App() {
     }
     if (activeSidebarId === 'pricing') {
         return <Suspense fallback={<div className="app-loading">Đang tải trang cấu hình giá...</div>}><AdminPricingRulesPage /></Suspense>;
+    }
+    if (activeSidebarId === 'account-bans') {
+        return <Suspense fallback={<div className="app-loading">Đang tải cấu hình khóa tài khoản...</div>}><AdminAccountBanSettingsPage /></Suspense>;
     }
     if (activeSidebarId === 'notifications') {
         return <Suspense fallback={<div className="app-loading">Đang tải trang thông báo...</div>}><NotificationsPage /></Suspense>;

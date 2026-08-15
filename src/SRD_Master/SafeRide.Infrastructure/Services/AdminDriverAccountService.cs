@@ -8,6 +8,7 @@ using SafeRide.Application.Features.AdminUserAccounts;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
 using SafeRide.Infrastructure.Persistence;
+using System.Security.Claims;
 
 namespace SafeRide.Infrastructure.Services;
 
@@ -17,13 +18,19 @@ public sealed class AdminDriverAccountService : IAdminDriverAccountService
 
     private readonly ApplicationDbContext _db;
     private readonly UserManager<AspNetUser> _userManager;
+    private readonly IAccountRestrictionService _accountRestrictionService;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
     public AdminDriverAccountService(
         ApplicationDbContext db,
-        UserManager<AspNetUser> userManager)
+        UserManager<AspNetUser> userManager,
+        IAccountRestrictionService accountRestrictionService,
+        IHttpContextAccessor httpContextAccessor)
     {
         _db = db;
         _userManager = userManager;
+        _accountRestrictionService = accountRestrictionService;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public async Task<GetAdminDriversResult> GetDriversAsync(
@@ -77,6 +84,15 @@ public sealed class AdminDriverAccountService : IAdminDriverAccountService
             "admin.driver.block_failed",
             "Không thể khóa tài xế.");
 
+        if (TryGetAdminUserId(out var adminUserId))
+        {
+            await _accountRestrictionService.RecordManualLockAsync(
+                driverId,
+                adminUserId,
+                user.BanReason,
+                cancellationToken);
+        }
+
         return (await LoadDriversAsync([driverId], cancellationToken)).Single();
     }
 
@@ -99,6 +115,27 @@ public sealed class AdminDriverAccountService : IAdminDriverAccountService
             result,
             "admin.driver.unlock_failed",
             "Không thể mở khóa tài xế.");
+        if (TryGetAdminUserId(out var adminUserId))
+        {
+            await _accountRestrictionService.RecordManualUnlockAsync(
+                driverId,
+                adminUserId,
+                cancellationToken);
+        }
+        var restriction = await _accountRestrictionService.CheckAccountAccessAsync(
+            driverId,
+            releaseExpiredTemporaryBans: false,
+            cancellationToken);
+        if (!restriction.IsAllowed)
+        {
+            user.IsActive = false;
+            user.BanReason = restriction.Message;
+            user.UpdatedAt = DateTime.UtcNow;
+            EnsureIdentitySucceeded(
+                await _userManager.UpdateAsync(user),
+                "admin.driver.unlock_restricted",
+                "Tài xế vẫn đang bị giới hạn bởi quy tắc khác.");
+        }
 
         return (await LoadDriversAsync([driverId], cancellationToken)).Single();
     }
@@ -263,5 +300,12 @@ public sealed class AdminDriverAccountService : IAdminDriverAccountService
             code,
             message,
             StatusCodes.Status400BadRequest);
+    }
+
+    private bool TryGetAdminUserId(out Guid adminUserId)
+    {
+        return Guid.TryParse(
+            _httpContextAccessor.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier),
+            out adminUserId);
     }
 }

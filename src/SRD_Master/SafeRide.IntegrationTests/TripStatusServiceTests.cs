@@ -790,6 +790,7 @@ public sealed class TripStatusServiceTests
                 new NoOpMapRoutingService(),
                 new TripFareFinalizationService(new FareEstimationService()),
                 new TripPaymentSettlementService(dbContext),
+                new AccountBanEvaluationServiceFake(),
                 NullLogger<TripStatusService>.Instance);
 
             return new TripStatusFixture(
@@ -936,6 +937,19 @@ public sealed class TripStatusServiceTests
         }
 
         public DateTime UtcNow { get; }
+    }
+
+    private sealed class AccountBanEvaluationServiceFake : IAccountBanEvaluationService
+    {
+        public List<long> EvaluatedRatingIds { get; } = [];
+
+        public Task EvaluateRatingAsync(
+            long ratingId,
+            CancellationToken cancellationToken)
+        {
+            EvaluatedRatingIds.Add(ratingId);
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class TrackingRedisService : IRedisService

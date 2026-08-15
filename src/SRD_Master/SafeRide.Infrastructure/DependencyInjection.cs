@@ -28,6 +28,7 @@ using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
 using SafeRide.Infrastructure.Repositories;
 using SafeRide.Infrastructure.Services;
+using SafeRide.Infrastructure.Services.AccountBans;
 using SafeRide.Infrastructure.Simulator;
 using System.Text;
 using SafeRide.Infrastructure.ExternalServices.Cloudinary;
@@ -305,6 +306,10 @@ public static class DependencyInjection
         services.AddScoped<ISOSAlertRepository, SOSAlertRepository>();
         services.AddScoped<IAdminCustomerAccountService, AdminCustomerAccountService>();
         services.AddScoped<IAdminDriverAccountService, AdminDriverAccountService>();
+        services.AddScoped<IAccountBanManagementService, AccountBanService>();
+        services.AddScoped<IAccountBanEvaluationService, AccountBanService>();
+        services.AddScoped<IAccountRestrictionService, AccountBanService>();
+        services.AddScoped<IUserSessionRevocationService, UserSessionRevocationService>();
         services.AddScoped<IAdminBookingManagementService, AdminBookingManagementService>();
         services.AddScoped<IAdminTripManagementService, AdminTripManagementService>();
         services.AddScoped<IAdminNotificationManagementService, AdminNotificationManagementService>();

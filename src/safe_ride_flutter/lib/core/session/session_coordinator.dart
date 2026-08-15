@@ -40,9 +40,12 @@ class SessionCoordinator {
     }
 
     _isNavigating = true;
+    final message =
+        _sessionManager.lastSessionEndMessage ??
+        LocaleProvider.currentLocalizations.sessionExpired;
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(
-        content: Text(LocaleProvider.currentLocalizations.sessionExpired),
+        content: Text(message),
         behavior: SnackBarBehavior.floating,
       ),
     );

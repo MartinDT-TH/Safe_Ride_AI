@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SafeRide.Application.Features.Auth;
+using SafeRide.Application.Features.AccountBans.DTOs;
 using System.Data;
 using System.Security.Cryptography;
 using System.Text;
@@ -35,6 +36,7 @@ public sealed class AuthService : IAuthService
     private readonly IGoogleTokenVerifier _googleTokenVerifier;
     private readonly IJwtTokenService _jwtTokenService;
     private readonly ITripSessionQueryService _tripSessionQueryService;
+    private readonly IAccountRestrictionService _accountRestrictionService;
     private readonly IRedisService _redisService;
     private readonly ISpeedSmsService _smsService;
     private readonly ISender _sender;
@@ -47,6 +49,7 @@ public sealed class AuthService : IAuthService
         ApplicationDbContext dbContext,
         IJwtTokenService jwtTokenService,
         ITripSessionQueryService tripSessionQueryService,
+        IAccountRestrictionService accountRestrictionService,
         IRedisService redisService,
         ISpeedSmsService smsService,
         ISender sender,
@@ -59,6 +62,7 @@ public sealed class AuthService : IAuthService
         _dbContext = dbContext;
         _jwtTokenService = jwtTokenService;
         _tripSessionQueryService = tripSessionQueryService;
+        _accountRestrictionService = accountRestrictionService;
         _redisService = redisService;
         _smsService = smsService;
         _sender = sender;
@@ -94,6 +98,7 @@ public sealed class AuthService : IAuthService
                 StatusCodes.Status404NotFound);
         }
 
+        await EnsureAccountRestrictionAsync(user.Id);
         EnsureUserActive(user);
         var phoneNumber = NormalizePhoneNumber(request.PhoneNumber);
         if (string.IsNullOrWhiteSpace(phoneNumber))
@@ -125,6 +130,7 @@ public sealed class AuthService : IAuthService
         await VerifyOtpCodeAsync(phoneNumber, request.OtpCode, "login");
 
         var (user, isNewUser) = await FindOrCreatePhoneUserAsync(phoneNumber);
+        await EnsureAccountRestrictionAsync(user.Id);
         EnsureUserActive(user);
         await EnsurePhoneLoginAsync(user, phoneNumber);
         await EnsureCustomerRoleAsync(user);
@@ -146,6 +152,7 @@ public sealed class AuthService : IAuthService
                 StatusCodes.Status404NotFound);
         }
 
+        await EnsureAccountRestrictionAsync(user.Id);
         EnsureUserActive(user);
         var phoneNumber = NormalizePhoneNumber(request.PhoneNumber);
         if (string.IsNullOrWhiteSpace(phoneNumber))
@@ -188,6 +195,7 @@ public sealed class AuthService : IAuthService
             await EnsureGoogleLoginAsync(user, googleUser.Subject);
         }
 
+        await EnsureAccountRestrictionAsync(user.Id);
         EnsureUserActive(user);
         await EnsureCustomerRoleAsync(user);
         return await GenerateTokenResponseAsync(
@@ -330,6 +338,22 @@ public sealed class AuthService : IAuthService
                 AuthErrorCodes.RefreshTokenReused,
                 "Refresh token đã được sử dụng lại. Phiên hiện tại đã bị thu hồi.",
                 StatusCodes.Status401Unauthorized);
+        }
+
+        var accountRestriction = await _accountRestrictionService.CheckAccountAccessAsync(
+            refreshToken.UserId,
+            releaseExpiredTemporaryBans: true,
+            CancellationToken.None);
+        if (!accountRestriction.IsAllowed)
+        {
+            await RevokeSessionTokensAsync(refreshToken.SessionId);
+            await transaction.CommitAsync();
+            await TryRemoveCacheAsync(oldCacheKey);
+            throw CreateAccountRestrictionException(accountRestriction);
+        }
+        if (!refreshToken.User.IsActive)
+        {
+            await _dbContext.Entry(refreshToken.User).ReloadAsync();
         }
 
         if (!refreshToken.User.IsActive)
@@ -625,6 +649,7 @@ public sealed class AuthService : IAuthService
         if (users.Count == 1)
         {
             var existing = users[0];
+            await EnsureAccountRestrictionAsync(existing.Id);
             EnsureUserActive(existing);
             if (!existing.PhoneNumberConfirmed)
             {
@@ -674,6 +699,7 @@ public sealed class AuthService : IAuthService
         if (users.Count == 1)
         {
             var existing = users[0];
+            await EnsureAccountRestrictionAsync(existing.Id);
             EnsureUserActive(existing);
             existing.EmailConfirmed = true;
             existing.FullName ??= googleUser.Name;
@@ -796,6 +822,30 @@ public sealed class AuthService : IAuthService
         {
             throw CreateInactiveAccountException();
         }
+    }
+
+    private async Task EnsureAccountRestrictionAsync(Guid userId)
+    {
+        var result = await _accountRestrictionService.CheckAccountAccessAsync(
+            userId,
+            releaseExpiredTemporaryBans: true,
+            CancellationToken.None);
+        if (!result.IsAllowed)
+        {
+            throw CreateAccountRestrictionException(result);
+        }
+    }
+
+    private static AuthException CreateAccountRestrictionException(
+        AccountRestrictionCheckResult result)
+    {
+        return new AuthException(
+            result.Code ?? AuthErrorCodes.AccountInactive,
+            string.IsNullOrWhiteSpace(result.Message)
+                ? "Tài khoản đã bị vô hiệu hóa."
+                : result.Message,
+            StatusCodes.Status403Forbidden,
+            result.RetryAfterSeconds);
     }
 
     private static AuthException CreateInactiveAccountException()
@@ -927,6 +977,7 @@ public sealed class AuthService : IAuthService
                 StatusCodes.Status404NotFound);
         }
 
+        await EnsureAccountRestrictionAsync(user.Id);
         EnsureUserActive(user);
         return user;
     }
