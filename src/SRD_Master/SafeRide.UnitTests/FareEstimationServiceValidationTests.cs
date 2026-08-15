@@ -27,6 +27,29 @@ public sealed class FareEstimationServiceValidationTests
     }
 
     [Fact]
+    public void FinalizeFare_WhenEarlyEndHasZeroDistance_UsesMinimumFare()
+    {
+        var trip = new Trip
+        {
+            Booking = new Booking
+            {
+                EstimatedDistanceKm = 10m,
+                EstimatedFare = 100_000m
+            }
+        };
+        var service = new TripFareFinalizationService(new FareEstimationService());
+
+        var result = service.Calculate(
+            trip,
+            actualDistanceKm: 0m,
+            actualDurationMinutes: 0,
+            minimumFare: 2_000m);
+
+        Assert.Equal(2_000m, result.ActualFare);
+        Assert.Equal(2_000m, result.FinalFare);
+    }
+
+    [Fact]
     public void CalculateFare_HourlyRuleWithZeroUnitPrice_RejectsInvalidRule()
     {
         var service = new FareEstimationService();

@@ -16,6 +16,12 @@ public interface ITripStatusService
         long tripId,
         CancellationToken cancellationToken);
 
+    Task RespondToEndTripRequestAsync(
+        Guid customerId,
+        long tripId,
+        bool accepted,
+        CancellationToken cancellationToken);
+
     Task ConfirmReturnByCustomerAsync(
         Guid customerId,
         long tripId,

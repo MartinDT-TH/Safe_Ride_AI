@@ -159,6 +159,37 @@ public sealed class TripsController : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("{tripId:long}/end-response")]
+    [Authorize(Roles = "Customer")]
+    [AllowTripContinuation(TripContinuationOperation.TripReturnConfirmation)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RespondToEndRequest(
+        long tripId,
+        [FromBody] RespondToEndTripRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var customerId))
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Unauthorized",
+                Detail = "Không xác định được tài khoản khách hàng."
+            });
+        }
+
+        await _tripStatusService.RespondToEndTripRequestAsync(
+            customerId,
+            tripId,
+            request.Accepted,
+            cancellationToken);
+
+        return NoContent();
+    }
+
     [HttpPost("{tripId:long}/return-confirmation/customer")]
     [Authorize(Roles = "Customer")]
     [AllowTripContinuation(TripContinuationOperation.TripReturnConfirmation)]

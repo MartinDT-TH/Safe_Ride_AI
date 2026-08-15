@@ -78,6 +78,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   bool _arrivalRouteRefreshInProgress = false;
   bool _incomingCallDialogOpen = false;
   bool _deviationAlertOpen = false;
+  bool _endTripRequestDialogOpen = false;
+  bool _respondingToEndTripRequest = false;
   bool _isSendingSOS = false;
   late bool _isSOSActivated;
   late bool _isPrepaid;
@@ -170,6 +172,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       );
       _socketService.removeTripStatusChangedHandler(
         _tripStatusHandlerKey(tripId),
+      );
+      _socketService.removeTripEndRequestedHandler(
+        _tripEndRequestHandlerKey(tripId),
       );
       _socketService.removeTripPaymentUpdatedHandler(
         _tripPaymentHandlerKey(tripId),
@@ -354,6 +359,11 @@ class _TripTrackingPageState extends State<TripTrackingPage>
           Navigator.of(context).popUntil((route) => route.isFirst);
         }
       }, key: _tripStatusHandlerKey(tripId));
+
+      _socketService.onTripEndRequested((update) {
+        if (!mounted || update.tripId != tripId) return;
+        unawaited(_showEndTripRequestDialog(update.tripId));
+      }, key: _tripEndRequestHandlerKey(tripId));
 
       _socketService.onTripPaymentUpdated((update) {
         if (!mounted || update.tripId != tripId) {
@@ -1763,6 +1773,47 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     }
   }
 
+  Future<void> _showEndTripRequestDialog(int? tripId) async {
+    if (!mounted || tripId == null || _endTripRequestDialogOpen) return;
+    _endTripRequestDialogOpen = true;
+    final accepted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.l10n.driverEndTripRequestTitle),
+        content: Text(context.l10n.driverEndTripRequestMessage),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(context.l10n.continueTrip),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(context.l10n.agree),
+          ),
+        ],
+      ),
+    );
+    _endTripRequestDialogOpen = false;
+    if (!mounted || accepted == null || _respondingToEndTripRequest) return;
+
+    final token = context.read<AuthProvider>().token;
+    if (token == null || token.isEmpty) return;
+    setState(() => _respondingToEndTripRequest = true);
+    final succeeded = await context
+        .read<BookingProvider>()
+        .respondToEndTripRequest(token, tripId: tripId, accepted: accepted);
+    if (!mounted) return;
+    setState(() => _respondingToEndTripRequest = false);
+    if (!succeeded) {
+      _showMessage(context.l10n.endTripResponseFailed);
+    } else if (!accepted) {
+      _showMessage(context.l10n.continueTrip);
+    } else {
+      unawaited(_refreshTripStatus());
+    }
+  }
+
   void _handleTripStatus(String? tripStatus) {
     if (tripStatus == 'WAITING_RETURN_CONFIRM') {
       unawaited(_openSummaryIfPrepaid(widget.booking));
@@ -1853,6 +1904,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   }
 
   static String _tripStatusHandlerKey(int tripId) => 'tripTracking:$tripId';
+  static String _tripEndRequestHandlerKey(int tripId) =>
+      'tripTrackingEndRequest:$tripId';
   static String _tripPaymentHandlerKey(int tripId) =>
       'tripTrackingPayment:$tripId';
   static String _sosHandlerKey(int tripId) => 'tripTrackingSOS:$tripId';

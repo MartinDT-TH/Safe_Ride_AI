@@ -23,13 +23,22 @@ public sealed class TripStatusServiceTests
     private static readonly DateTime UtcNow =
         new(2026, 6, 15, 8, 0, 0, DateTimeKind.Utc);
     [Fact]
-    public async Task EndTrip_MovesTripToWaitingReturnConfirmation()
+    public async Task EndTrip_AfterCustomerAccepts_MovesTripToWaitingReturnConfirmation()
     {
         using var fixture = await TripStatusFixture.CreateAsync(TripStatus.IN_PROGRESS);
         fixture.Redis.SetTripTrackingSnapshot(CreateTripTrackingSnapshot(fixture.TripId, 5_200));
         await fixture.Service.EndTripAsync(
             fixture.DriverId,
             fixture.TripId,
+            CancellationToken.None);
+        var pendingTrip = await fixture.DbContext.Trips
+            .SingleAsync(x => x.Id == fixture.TripId);
+        Assert.Equal(TripStatus.IN_PROGRESS, pendingTrip.TripStatus);
+
+        await fixture.Service.RespondToEndTripRequestAsync(
+            fixture.CustomerId,
+            fixture.TripId,
+            accepted: true,
             CancellationToken.None);
 
         var trip = await fixture.DbContext.Trips
@@ -66,7 +75,7 @@ public sealed class TripStatusServiceTests
     }
 
     [Fact]
-    public async Task EndTrip_WhenNoTrustedGps_DoesNotUseEstimatedDistanceForPayment()
+    public async Task EndTrip_WhenCustomerRejects_KeepsTripInProgress()
     {
         using var fixture = await TripStatusFixture.CreateAsync(TripStatus.IN_PROGRESS);
 
@@ -74,7 +83,34 @@ public sealed class TripStatusServiceTests
             fixture.DriverId,
             fixture.TripId,
             CancellationToken.None);
-        await fixture.AddSuccessfulPaymentAsync(20_000m);
+        await fixture.Service.RespondToEndTripRequestAsync(
+            fixture.CustomerId,
+            fixture.TripId,
+            accepted: false,
+            CancellationToken.None);
+
+        var trip = await fixture.DbContext.Trips
+            .SingleAsync(x => x.Id == fixture.TripId);
+        Assert.Equal(TripStatus.IN_PROGRESS, trip.TripStatus);
+        Assert.Null(trip.EndedAt);
+        Assert.Null(trip.FinalFare);
+    }
+
+    [Fact]
+    public async Task EndTrip_WhenDistanceIsZero_UsesMinimumEarlyEndFare()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.IN_PROGRESS);
+
+        await fixture.Service.EndTripAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            CancellationToken.None);
+        await fixture.Service.RespondToEndTripRequestAsync(
+            fixture.CustomerId,
+            fixture.TripId,
+            accepted: true,
+            CancellationToken.None);
+        await fixture.AddSuccessfulPaymentAsync(2_000m);
         await fixture.Service.ConfirmReturnByCustomerAsync(
             fixture.CustomerId,
             fixture.TripId,
@@ -88,9 +124,9 @@ public sealed class TripStatusServiceTests
         var payment = Assert.Single(trip.Payments);
 
         Assert.Equal(0m, trip.ActualDistanceKm);
-        Assert.Equal(30_000m, trip.ActualFare);
-        Assert.Equal(20_000m, trip.FinalFare);
-        Assert.Equal(20_000m, payment.Amount);
+        Assert.Equal(2_000m, trip.ActualFare);
+        Assert.Equal(2_000m, trip.FinalFare);
+        Assert.Equal(2_000m, payment.Amount);
         Assert.Equal(PaymentStatus.Success, payment.PaymentStatus);
         Assert.Equal(TripStatus.COMPLETED, trip.TripStatus);
         Assert.NotEqual(trip.Booking.EstimatedDistanceKm, trip.ActualDistanceKm);
@@ -106,6 +142,11 @@ public sealed class TripStatusServiceTests
         await fixture.Service.EndTripAsync(
             fixture.DriverId,
             fixture.TripId,
+            CancellationToken.None);
+        await fixture.Service.RespondToEndTripRequestAsync(
+            fixture.CustomerId,
+            fixture.TripId,
+            accepted: true,
             CancellationToken.None);
         await fixture.AddSuccessfulPaymentAsync(23_846m);
         await fixture.Service.ConfirmReturnByCustomerAsync(
@@ -977,6 +1018,7 @@ public sealed class TripStatusServiceTests
             string value,
             TimeSpan expiration)
         {
+            _values[key] = value;
             if (key.StartsWith("sr:driver:status:", StringComparison.Ordinal))
             {
                 DriverStatusValue = value;
@@ -1009,6 +1051,7 @@ public sealed class TripStatusServiceTests
 
         public Task RemoveAsync(string key)
         {
+            _values.Remove(key);
             RemovedKeys.Add(key);
             return Task.CompletedTask;
         }

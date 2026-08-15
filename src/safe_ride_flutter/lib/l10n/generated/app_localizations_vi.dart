@@ -2448,4 +2448,29 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get offerCustomerConfirmed => 'Khách đã xác nhận';
+
+  @override
+  String get driverEndTripRequestTitle => 'Yêu cầu kết thúc chuyến';
+
+  @override
+  String get driverEndTripRequestMessage =>
+      'Tài xế muốn kết thúc chuyến đi ngay bây giờ. Nếu đồng ý, cước phí sẽ được tính theo tỷ lệ quãng đường thực tế đã đi, tối thiểu 2.000đ.';
+
+  @override
+  String get continueTrip => 'Tiếp tục chuyến';
+
+  @override
+  String get endTripRequestSent =>
+      'Đã gửi yêu cầu kết thúc chuyến. Đang chờ khách hàng xác nhận.';
+
+  @override
+  String get endTripRequestAccepted => 'Khách hàng đã đồng ý kết thúc chuyến.';
+
+  @override
+  String get endTripRequestRejected =>
+      'Khách hàng đã từ chối. Chuyến đi tiếp tục.';
+
+  @override
+  String get endTripResponseFailed =>
+      'Không thể phản hồi yêu cầu kết thúc chuyến. Vui lòng thử lại.';
 }

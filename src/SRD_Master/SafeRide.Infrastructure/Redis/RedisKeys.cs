@@ -61,6 +61,9 @@ public static class RedisKeys
     public static string TripLive(long tripId) =>
         $"sr:trip:live:{tripId}";
 
+    public static string TripEndRequest(long tripId) =>
+        $"sr:trip:end-request:{tripId}";
+
     public static string TripTrackingPath(long tripId) =>
         $"sr:trip:path:{tripId}";
 

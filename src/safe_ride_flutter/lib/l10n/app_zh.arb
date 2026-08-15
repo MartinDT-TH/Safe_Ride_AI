@@ -249,4 +249,5 @@
   ,"ratingStars":"{count} 星","demoGpsMode":"GPS 模拟模式"
   ,"serviceDisabled":"请开启设备的位置服务。","permissionRequired":"SafeRide 需要位置权限以确定上车点。","locationNotFound":"未找到匹配的位置。","destinationRequired":"请输入目的地。","statusLabel":"状态","selectPromotion":"选择优惠","enterPromoCode":"输入优惠码","apply":"应用","expired":"已过期"
   ,"statusOnline":"在线","statusOffline":"离线","statusBusy":"行程中","offerSent":"已发送给司机","offerRejected":"已拒绝","offerCustomerConfirmed":"客户已确认"
+  ,"driverEndTripRequestTitle":"结束行程请求","driverEndTripRequestMessage":"司机希望立即结束行程。如果您同意，车费将按实际行驶距离计算，最低收费为2,000越南盾。","continueTrip":"继续行程","endTripRequestSent":"已发送结束行程请求，正在等待乘客确认。","endTripRequestAccepted":"乘客已同意结束行程。","endTripRequestRejected":"乘客已拒绝，行程将继续。","endTripResponseFailed":"无法回应结束行程请求，请重试。"
 }
