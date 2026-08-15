@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../application/services/document_image_cropper.dart';
 import '../../application/services/identity_ocr_scanner.dart';
 import '../../../../../core/constants/app_colors.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../../core/widgets/custom_button.dart';
 import '../../data/models/identity_verification_submission.dart';
 import 'criminal_record_upload_page.dart';
@@ -11,7 +12,7 @@ import 'document_camera_page.dart';
 enum LicenseType { motorbike, car }
 
 class LicenseUploadPage extends StatefulWidget {
-  const LicenseUploadPage({super.key, this.submission});
+  LicenseUploadPage({super.key, this.submission});
 
   final IdentityVerificationSubmission? submission;
 
@@ -29,6 +30,9 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
   DateTime? _expiryDate;
   bool _hasNoExpiryDate = false;
   bool _isScanning = false;
+  bool _hasQrLicenseData = false;
+  IdentityScanMethod? _lastScanMethod;
+  IdentityScanMethod? _activeScanMethod;
   String? _ocrRawText;
   late final IdentityVerificationSubmission _submission;
 
@@ -59,16 +63,19 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
 
   Future<void> _pickImage(bool isFront) async {
     try {
-      final file = await Navigator.of(context).push<File>(
+      final capture = await Navigator.of(context).push<DocumentCaptureResult>(
         MaterialPageRoute(
           builder: (_) => DocumentCameraPage(
-            title: isFront ? 'Mặt trước GPLX' : 'Mặt sau GPLX',
-            instruction: 'Đặt bằng lái nằm gọn trong khung, đủ sáng và rõ nét.',
+            title: isFront ? context.l10n.licenseFront : context.l10n.licenseBack,
+            instruction: context.l10n.licenseCameraInstruction,
+            focusPoint: isFront ? null : const Offset(0.3, 0.65),
+            scanQrLive: !isFront,
           ),
         ),
       );
 
-      if (file != null) {
+      if (capture != null) {
+        final file = capture.croppedImage;
         setState(() {
           if (isFront) {
             _frontImage = file;
@@ -76,79 +83,138 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
             _backImage = file;
           }
         });
-        await _scanLicenseImage(file);
+        await _scanLicenseImage(
+          file,
+          isFront: isFront,
+          qrFallbackImage: capture.originalImage,
+          detectedQrPayload: capture.qrPayload,
+        );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Không thể mở camera. Vui lòng kiểm tra quyền.'),
+          SnackBar(
+            content: Text(context.l10n.cameraOpenFailed),
           ),
         );
       }
     }
   }
 
-  Future<void> _scanLicenseImage(File image) async {
-    setState(() => _isScanning = true);
+  Future<void> _scanLicenseImage(
+    File image, {
+    required bool isFront,
+    File? qrFallbackImage,
+    String? detectedQrPayload,
+  }) async {
+    setState(() {
+      _isScanning = true;
+      _activeScanMethod = IdentityScanMethod.qr;
+    });
     try {
       final result = await _ocrScanner.scanImage(
         image: image,
+        qrFallbackImage: qrFallbackImage,
+        detectedQrPayload: detectedQrPayload,
         documentType: IdentityOcrDocumentType.drivingLicense,
+        allowOcrFallback: isFront,
+        onQrNotDetected: () async {
+          if (!mounted) return;
+          setState(() => _activeScanMethod = IdentityScanMethod.ocr);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.l10n.ocrScanningOnDevice)),
+          );
+        },
+        onQrDetectedButInvalid: () async {
+          if (!mounted) return;
+          setState(() => _activeScanMethod = IdentityScanMethod.ocr);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Đã nhận diện QR GPLX nhưng không giải mã được dữ liệu. Đang chuyển sang OCR.',
+              ),
+            ),
+          );
+        },
       );
       if (!mounted) return;
       setState(() {
         _ocrRawText = result.rawText;
-        if (result.fullName != null) {
+        _lastScanMethod = result.scanMethod;
+        final isQrResult = result.scanMethod == IdentityScanMethod.qr;
+        if (isQrResult) _hasQrLicenseData = true;
+
+        if (result.fullName != null &&
+            (isQrResult ||
+                (!_hasQrLicenseData &&
+                    _fullNameController.text.trim().isEmpty))) {
           _fullNameController.text = result.fullName!;
         }
-        if (result.documentNumber != null) {
+        if (result.documentNumber != null &&
+            (isQrResult ||
+                (!_hasQrLicenseData &&
+                    _licenseNumberController.text.trim().isEmpty))) {
           _licenseNumberController.text = result.documentNumber!;
         }
         if (result.licenseClass != null &&
-            _grades.contains(result.licenseClass)) {
+            _grades.contains(result.licenseClass) &&
+            (isQrResult || (!_hasQrLicenseData && _selectedGrade == null))) {
           _selectedGrade = result.licenseClass;
         }
-        _issuedDate = result.issueDate ?? _issuedDate;
-        _expiryDate = result.expiryDate ?? _expiryDate;
+        if (result.issueDate != null &&
+            (isQrResult || (!_hasQrLicenseData && _issuedDate == null))) {
+          _issuedDate = result.issueDate;
+        }
+        if (result.hasNoExpiryDate && isQrResult) {
+          _hasNoExpiryDate = true;
+          _expiryDate = null;
+        } else if (result.expiryDate != null &&
+            (isQrResult || (!_hasQrLicenseData && _expiryDate == null))) {
+          _hasNoExpiryDate = false;
+          _expiryDate = result.expiryDate;
+        }
       });
+      if (result.scanMethod == IdentityScanMethod.ocr) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.ocrMlKitScanned)),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã quét QR GPLX thành công.')),
+        );
+      }
+    } on QrNotDetectedException {
+      if (!mounted) return;
+      setState(() => _backImage = null);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đã quét OCR bằng Google ML Kit.')),
+        const SnackBar(
+          content: Text(
+            'Không nhận diện được QR GPLX ở mặt sau. Vui lòng chụp lại rõ mã QR.',
+          ),
+        ),
+      );
+    } on QrPayloadInvalidException {
+      if (!mounted) return;
+      setState(() => _backImage = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Đã thấy QR GPLX nhưng dữ liệu không đúng định dạng. Vui lòng chụp lại.',
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Không thể quét OCR từ ảnh GPLX này.')),
+        SnackBar(content: Text(context.l10n.licenseOcrFailed)),
       );
     } finally {
-      if (mounted) setState(() => _isScanning = false);
-    }
-  }
-
-  Future<void> _selectDate(BuildContext context, bool isIssued) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(1990),
-      lastDate: DateTime(2100),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(primary: AppColors.primary),
-          ),
-          child: child!,
-        );
-      },
-    );
-    if (picked != null) {
-      setState(() {
-        if (isIssued) {
-          _issuedDate = picked;
-        } else {
-          _expiryDate = picked;
-          _hasNoExpiryDate = false;
-        }
-      });
+      if (mounted) {
+        setState(() {
+          _isScanning = false;
+          _activeScanMethod = null;
+        });
+      }
     }
   }
 
@@ -167,11 +233,11 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF263238)),
+          icon: Icon(Icons.arrow_back, color: Color(0xFF263238)),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          'Xác minh danh tính',
+        title: Text(
+          context.l10n.identityVerification,
           style: TextStyle(
             color: AppColors.primary,
             fontSize: 18,
@@ -182,50 +248,50 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
       ),
       body: Column(
         children: [
-          const Divider(height: 1, color: Color(0xFFF0F0F0)),
+          Divider(height: 1, color: Color(0xFFF0F0F0)),
           Expanded(
             child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
+              physics: BouncingScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 20),
+                  SizedBox(height: 20),
                   _buildStepIndicator(),
-                  const SizedBox(height: 32),
-                  const Text(
-                    'Loại bằng lái',
+                  SizedBox(height: 32),
+                  Text(
+                    context.l10n.licenseType,
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       color: Color(0xFF263238),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   _buildTypeSelector(),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Ảnh chụp bằng lái xe',
+                  SizedBox(height: 24),
+                  Text(
+                    context.l10n.licensePhotos,
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       color: Color(0xFF263238),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   Row(
                     children: [
                       Expanded(
                         child: _PhotoUploadBoxSmall(
-                          label: 'Mặt trước',
+                          label: context.l10n.frontSide,
                           image: _frontImage,
                           onTap: () => _pickImage(true),
                         ),
                       ),
-                      const SizedBox(width: 16),
+                      SizedBox(width: 16),
                       Expanded(
                         child: _PhotoUploadBoxSmall(
-                          label: 'Mặt sau',
+                          label: context.l10n.backSide,
                           image: _backImage,
                           onTap: () => _pickImage(false),
                         ),
@@ -233,18 +299,17 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
                     ],
                   ),
                   if (_isScanning || _ocrRawText != null) ...[
-                    const SizedBox(height: 12),
+                    SizedBox(height: 12),
                     _buildOcrStatus(),
                   ],
-                  const SizedBox(height: 24),
+                  SizedBox(height: 24),
                   _buildInputField(
-                    label: 'Họ và Tên',
+                    label: context.l10n.fullName,
                     child: TextField(
                       controller: _fullNameController,
-                      textCapitalization: TextCapitalization.words,
-                      onChanged: (_) => setState(() {}),
-                      decoration: const InputDecoration(
-                        hintText: 'Nhập họ và tên trên GPLX',
+                      readOnly: true,
+                      decoration: InputDecoration(
+                        hintText: context.l10n.licenseNameHint,
                         hintStyle: TextStyle(
                           color: Color(0xFF919191),
                           fontSize: 15,
@@ -265,14 +330,14 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  SizedBox(height: 20),
                   _buildInputField(
-                    label: 'Số bằng lái (GPLX)',
+                    label: context.l10n.licenseNumber,
                     child: TextField(
                       controller: _licenseNumberController,
-                      onChanged: (_) => setState(() {}),
-                      decoration: const InputDecoration(
-                        hintText: 'Nhập số trên bằng lái',
+                      readOnly: true,
+                      decoration: InputDecoration(
+                        hintText: context.l10n.licenseNumberHint,
                         hintStyle: TextStyle(
                           color: Color(0xFF919191),
                           fontSize: 15,
@@ -293,12 +358,12 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  SizedBox(height: 20),
                   _buildInputField(
-                    label: 'Hạng bằng',
+                    label: context.l10n.licenseClass,
                     child: DropdownButtonFormField<String>(
                       initialValue: _selectedGrade,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         border: OutlineInputBorder(
                           borderSide: BorderSide(color: Color(0xFFCFD8DC)),
                         ),
@@ -313,8 +378,8 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
                           vertical: 14,
                         ),
                       ),
-                      hint: const Text(
-                        'Chọn hạng bằng',
+                      hint: Text(
+                        context.l10n.selectLicenseClass,
                         style: TextStyle(
                           color: Color(0xFF919191),
                           fontSize: 15,
@@ -328,53 +393,47 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
                             ),
                           )
                           .toList(),
-                      onChanged: (val) => setState(() => _selectedGrade = val),
+                      onChanged: null,
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  SizedBox(height: 20),
                   Row(
                     children: [
                       Expanded(
                         child: _buildInputField(
-                          label: 'Ngày cấp',
+                          label: context.l10n.issueDate,
                           child: _DateSelector(
                             value: _issuedDate,
-                            onTap: () => _selectDate(context, true),
+                            enabled: false,
+                            onTap: () {},
                           ),
                         ),
                       ),
-                      const SizedBox(width: 16),
+                      SizedBox(width: 16),
                       Expanded(
                         child: _buildInputField(
-                          label: 'Ngày hết hạn',
+                          label: context.l10n.expiryDate,
                           child: _DateSelector(
                             value: _expiryDate,
                             placeholder: _hasNoExpiryDate
-                                ? 'Không giới hạn'
+                                ? context.l10n.unlimited
                                 : 'mm/dd/yyyy',
-                            enabled: !_hasNoExpiryDate,
-                            onTap: () => _selectDate(context, false),
+                            enabled: false,
+                            onTap: () {},
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   CheckboxListTile(
                     value: _hasNoExpiryDate,
-                    onChanged: (value) {
-                      setState(() {
-                        _hasNoExpiryDate = value ?? false;
-                        if (_hasNoExpiryDate) {
-                          _expiryDate = null;
-                        }
-                      });
-                    },
+                    onChanged: null,
                     contentPadding: EdgeInsets.zero,
                     controlAffinity: ListTileControlAffinity.leading,
                     activeColor: AppColors.primary,
-                    title: const Text(
-                      'Bằng lái không có ngày hết hạn',
+                    title: Text(
+                      context.l10n.licenseNoExpiry,
                       style: TextStyle(
                         color: Color(0xFF455A64),
                         fontSize: 15,
@@ -382,7 +441,7 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 40),
+                  SizedBox(height: 40),
                 ],
               ),
             ),
@@ -397,12 +456,12 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
-              offset: const Offset(0, -5),
+              offset: Offset(0, -5),
             ),
           ],
         ),
         child: CustomButton(
-          text: 'Tiếp tục',
+          text: context.l10n.continueAction,
           onPressed:
               (_hasFrontImage &&
                   _hasBackImage &&
@@ -417,9 +476,9 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
                     _fullNameController.text,
                   )) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
+                      SnackBar(
                         content: Text(
-                          'Họ và Tên trên CCCD và GPLX không trùng khớp.',
+                          context.l10n.idAndLicenseNameMismatch,
                         ),
                       ),
                     );
@@ -454,9 +513,9 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: const [
+          children: [
             Text(
-              'Bước 2/3',
+              context.l10n.stepTwoOfThree,
               style: TextStyle(
                 color: AppColors.primary,
                 fontWeight: FontWeight.w800,
@@ -464,7 +523,7 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
               ),
             ),
             Text(
-              'Tải lên GPLX',
+              context.l10n.uploadLicense,
               style: TextStyle(
                 color: Color(0xFF78909C),
                 fontWeight: FontWeight.w600,
@@ -473,10 +532,10 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: 12),
         ClipRRect(
           borderRadius: BorderRadius.circular(10),
-          child: const LinearProgressIndicator(
+          child: LinearProgressIndicator(
             value: 0.66,
             minHeight: 8,
             backgroundColor: Color(0xFFF0F0F0),
@@ -491,14 +550,14 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
     return Container(
       height: 50,
       decoration: BoxDecoration(
-        color: const Color(0xFFF0F0F0),
+        color: Color(0xFFF0F0F0),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         children: [
           Expanded(
             child: _TypeToggleItem(
-              label: 'Xe máy',
+              label: context.l10n.motorbike,
               isSelected: _selectedType == LicenseType.motorbike,
               onTap: () =>
                   setState(() => _selectedType = LicenseType.motorbike),
@@ -506,7 +565,7 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
           ),
           Expanded(
             child: _TypeToggleItem(
-              label: 'Ô tô',
+              label: context.l10n.car,
               isSelected: _selectedType == LicenseType.car,
               onTap: () => setState(() => _selectedType = LicenseType.car),
             ),
@@ -522,13 +581,13 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w600,
             color: Color(0xFF455A64),
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         child,
       ],
     );
@@ -539,9 +598,9 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF8E1),
+        color: Color(0xFFFFF8E1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFFFE082)),
+        border: Border.all(color: Color(0xFFFFE082)),
       ),
       child: Row(
         children: [
@@ -550,13 +609,17 @@ class _LicenseUploadPageState extends State<LicenseUploadPage> {
             color: AppColors.primary,
             size: 20,
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: 8),
           Expanded(
             child: Text(
               _isScanning
-                  ? 'Đang quét OCR trên thiết bị...'
-                  : 'OCR đã tự điền thông tin GPLX',
-              style: const TextStyle(
+                  ? _activeScanMethod == IdentityScanMethod.qr
+                        ? 'Đang quét QR GPLX...'
+                        : context.l10n.ocrScanningOnDevice
+                  : _lastScanMethod == IdentityScanMethod.qr
+                  ? 'QR đã tự điền thông tin GPLX'
+                  : context.l10n.licenseOcrFilled,
+              style: TextStyle(
                 color: Color(0xFF455A64),
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
@@ -670,7 +733,7 @@ class _TypeToggleItem extends StatelessWidget {
   final bool isSelected;
   final VoidCallback onTap;
 
-  const _TypeToggleItem({
+  _TypeToggleItem({
     required this.label,
     required this.isSelected,
     required this.onTap,
@@ -690,7 +753,7 @@ class _TypeToggleItem extends StatelessWidget {
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? Colors.white : const Color(0xFF607D8B),
+            color: isSelected ? Colors.white : Color(0xFF607D8B),
             fontWeight: FontWeight.w700,
             fontSize: 15,
           ),
@@ -705,7 +768,7 @@ class _PhotoUploadBoxSmall extends StatelessWidget {
   final File? image;
   final VoidCallback onTap;
 
-  const _PhotoUploadBoxSmall({
+  _PhotoUploadBoxSmall({
     required this.label,
     this.image,
     required this.onTap,
@@ -721,7 +784,7 @@ class _PhotoUploadBoxSmall extends StatelessWidget {
             painter: _DashedRectPainter(
               color: image != null
                   ? AppColors.primary
-                  : const Color(0xFFCFD8DC),
+                  : Color(0xFFCFD8DC),
             ),
             child: AspectRatio(
               aspectRatio: DocumentImageCropper.documentAspectRatio,
@@ -734,15 +797,15 @@ class _PhotoUploadBoxSmall extends StatelessWidget {
                     ? Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.add_a_photo_outlined,
                             color: Color(0xFF607D8B),
                             size: 28,
                           ),
-                          const SizedBox(height: 8),
+                          SizedBox(height: 8),
                           Text(
                             label,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
                               color: Color(0xFF455A64),
@@ -768,11 +831,11 @@ class _PhotoUploadBoxSmall extends StatelessWidget {
               top: 8,
               child: Container(
                 padding: const EdgeInsets.all(2),
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   color: AppColors.primary,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.check, color: Colors.white, size: 14),
+                child: Icon(Icons.check, color: Colors.white, size: 14),
               ),
             ),
         ],
@@ -787,7 +850,7 @@ class _DateSelector extends StatelessWidget {
   final bool enabled;
   final VoidCallback onTap;
 
-  const _DateSelector({
+  _DateSelector({
     this.value,
     this.placeholder = 'mm/dd/yyyy',
     this.enabled = true,
@@ -801,7 +864,7 @@ class _DateSelector extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         decoration: BoxDecoration(
-          border: Border.all(color: const Color(0xFFCFD8DC)),
+          border: Border.all(color: Color(0xFFCFD8DC)),
           borderRadius: BorderRadius.circular(4),
         ),
         child: Row(
@@ -813,10 +876,10 @@ class _DateSelector extends StatelessWidget {
                   : '${value!.day}/${value!.month}/${value!.year}',
               style: TextStyle(
                 color: value == null
-                    ? const Color(0xFF919191)
+                    ? Color(0xFF919191)
                     : enabled
                     ? Colors.black
-                    : const Color(0xFF607D8B),
+                    : Color(0xFF607D8B),
                 fontSize: 15,
               ),
             ),

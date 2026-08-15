@@ -38,19 +38,11 @@ internal static class AdminPricingRuleRules
                 400);
         }
 
-        if (pricePerKm.HasValue && pricePerKm.Value < 0)
+        if (baseFare == 0 && minFare == 0)
         {
             throw new PricingRuleException(
-                "admin_pricing_rule.invalid_price_per_km",
-                "Giá mỗi km không được nhỏ hơn 0.",
-                400);
-        }
-
-        if (pricePerHour.HasValue && pricePerHour.Value < 0)
-        {
-            throw new PricingRuleException(
-                "admin_pricing_rule.invalid_price_per_hour",
-                "Giá mỗi giờ không được nhỏ hơn 0.",
+                "admin_pricing_rule.invalid_currency_value",
+                "Giá cơ bản hoặc giá tối thiểu phải lớn hơn 0.",
                 400);
         }
 
@@ -59,6 +51,22 @@ internal static class AdminPricingRuleRules
             throw new PricingRuleException(
                 "admin_pricing_rule.invalid_unit_price",
                 "Mỗi cấu hình giá phải có đúng một loại giá theo km hoặc theo giờ.",
+                400);
+        }
+
+        if (pricePerKm.HasValue && pricePerKm.Value <= 0)
+        {
+            throw new PricingRuleException(
+                "admin_pricing_rule.invalid_price_per_km",
+                "Giá mỗi km phải lớn hơn 0.",
+                400);
+        }
+
+        if (pricePerHour.HasValue && pricePerHour.Value <= 0)
+        {
+            throw new PricingRuleException(
+                "admin_pricing_rule.invalid_price_per_hour",
+                "Giá mỗi giờ phải lớn hơn 0.",
                 400);
         }
     }

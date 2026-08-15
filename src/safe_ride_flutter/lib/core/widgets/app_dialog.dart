@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
-import '../constants/app_strings.dart';
+import '../localization/localization_extensions.dart';
 
 class AppDialog extends StatelessWidget {
   final IconData icon;
@@ -13,15 +13,15 @@ class AppDialog extends StatelessWidget {
   final VoidCallback onConfirm;
   final VoidCallback? onCancel;
 
-  const AppDialog({
+  AppDialog({
     super.key,
     required this.icon,
     this.iconColor = Colors.red,
     this.iconBackgroundColor = const Color(0xFFFFEBEE),
     required this.title,
     required this.description,
-    this.confirmText = AppStrings.confirm,
-    this.cancelText = AppStrings.cancel,
+    this.confirmText = '',
+    this.cancelText = '',
     required this.onConfirm,
     this.onCancel,
   });
@@ -46,29 +46,29 @@ class AppDialog extends StatelessWidget {
               ),
               child: Icon(icon, color: iconColor, size: 32),
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: 24),
             // Tiêu đề
             Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
                 color: Color(0xFF1A1A1A),
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             // Nội dung mô tả
             Text(
               description,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 15,
                 color: Color(0xFF666666),
                 height: 1.5,
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 32),
+            SizedBox(height: 32),
             // Hàng nút bấm
             Column(
               children: [
@@ -87,15 +87,15 @@ class AppDialog extends StatelessWidget {
                       ),
                     ),
                     child: Text(
-                      confirmText,
-                      style: const TextStyle(
+                      confirmText.isEmpty ? context.l10n.confirm : confirmText,
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
                 // Nút Hủy (Outlined)
                 SizedBox(
                   width: double.infinity,
@@ -103,15 +103,15 @@ class AppDialog extends StatelessWidget {
                   child: OutlinedButton(
                     onPressed: onCancel ?? () => Navigator.pop(context),
                     style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Color(0xFFE0E0E0)),
+                      side: BorderSide(color: Color(0xFFE0E0E0)),
                       foregroundColor: AppColors.primary,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
                     ),
                     child: Text(
-                      cancelText,
-                      style: const TextStyle(
+                      cancelText.isEmpty ? context.l10n.cancel : cancelText,
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
@@ -134,8 +134,8 @@ class AppDialog extends StatelessWidget {
     Color iconBackgroundColor = const Color(0xFFFFEBEE),
     required String title,
     required String description,
-    String confirmText = AppStrings.confirm,
-    String cancelText = AppStrings.cancel,
+    String confirmText = '',
+    String cancelText = '',
     required VoidCallback onConfirm,
     VoidCallback? onCancel,
   }) {

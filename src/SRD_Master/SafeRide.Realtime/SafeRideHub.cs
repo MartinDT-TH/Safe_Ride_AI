@@ -13,13 +13,16 @@ public sealed class SafeRideHub : Hub
 {
     private readonly IDriverRealtimeService _driverRealtimeService;
     private readonly ITripContinuationAccessService _tripContinuationAccessService;
+    private readonly ITripSharingService _tripSharingService;
 
     public SafeRideHub(
         IDriverRealtimeService driverRealtimeService,
-        ITripContinuationAccessService tripContinuationAccessService)
+        ITripContinuationAccessService tripContinuationAccessService,
+        ITripSharingService tripSharingService)
     {
         _driverRealtimeService = driverRealtimeService;
         _tripContinuationAccessService = tripContinuationAccessService;
+        _tripSharingService = tripSharingService;
     }
 
     public override async Task OnConnectedAsync()
@@ -34,6 +37,18 @@ public sealed class SafeRideHub : Hub
                 await Groups.AddToGroupAsync(
                     Context.ConnectionId,
                     RealtimeGroups.Driver(userId));
+            }
+            if (Context.User?.IsInRole("Admin") == true)
+            {
+                await Groups.AddToGroupAsync(
+                    Context.ConnectionId,
+                    RealtimeGroups.AdminReports);
+            }
+            if (Context.User?.IsInRole("Admin") == true)
+            {
+                await Groups.AddToGroupAsync(
+                    Context.ConnectionId,
+                    RealtimeGroups.AdminSOS);
             }
         }
 
@@ -74,6 +89,61 @@ public sealed class SafeRideHub : Hub
         return Groups.RemoveFromGroupAsync(
             Context.ConnectionId,
             RealtimeGroups.Trip(tripId));
+    }
+
+    [Authorize(Roles = "Admin")]
+    public Task JoinAdminReportsGroup()
+    {
+        return Groups.AddToGroupAsync(
+            Context.ConnectionId,
+            RealtimeGroups.AdminReports);
+    }
+
+    [Authorize(Roles = "Admin")]
+    public Task LeaveAdminReportsGroup()
+    {
+        return Groups.RemoveFromGroupAsync(
+            Context.ConnectionId,
+            RealtimeGroups.AdminReports);
+    }
+
+    public async Task SubscribeSharedTrip(long tripShareId)
+    {
+        if (!TryGetUserId(out var userId)
+            || !await _tripSharingService.CanSubscribeAsync(
+                tripShareId,
+                userId,
+                Context.ConnectionAborted))
+        {
+            throw new HubException("Bạn không có quyền theo dõi chuyến đi được chia sẻ này.");
+        }
+
+        await Groups.AddToGroupAsync(
+            Context.ConnectionId,
+            RealtimeGroups.TripShare(tripShareId));
+    }
+
+    public Task UnsubscribeSharedTrip(long tripShareId)
+    {
+        return Groups.RemoveFromGroupAsync(
+            Context.ConnectionId,
+            RealtimeGroups.TripShare(tripShareId));
+    }
+
+    [Authorize(Roles = "Admin")]
+    public Task JoinAdminSOSGroup()
+    {
+        return Groups.AddToGroupAsync(
+            Context.ConnectionId,
+            RealtimeGroups.AdminSOS);
+    }
+
+    [Authorize(Roles = "Admin")]
+    public Task LeaveAdminSOSGroup()
+    {
+        return Groups.RemoveFromGroupAsync(
+            Context.ConnectionId,
+            RealtimeGroups.AdminSOS);
     }
 
     public Task SendInAppCallOffer(InAppCallSignal signal)

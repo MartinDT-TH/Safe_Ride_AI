@@ -53,6 +53,7 @@ public sealed class AiChatService : IAiChatService
         CancellationToken cancellationToken)
     {
         EnsureEnabled();
+        var languageCode = NormalizeLanguageCode(request.LanguageCode);
         var content = request.Message?.Trim() ?? "";
         if (content.Length is 0 || content.Length > _options.MaxMessageLength)
             throw new ArgumentException($"Tin nhắn phải có từ 1 đến {_options.MaxMessageLength} ký tự.");
@@ -68,7 +69,10 @@ public sealed class AiChatService : IAiChatService
 
         var context = await GetContextAsync(userId, conversation.Id, cancellationToken);
         var generated = await GenerateAsync(
-            context, IsValidCurrentLocation(request.CurrentLocation), cancellationToken);
+            context,
+            IsValidCurrentLocation(request.CurrentLocation),
+            languageCode,
+            cancellationToken);
         var draftResolution = await ResolveBookingDraftAsync(
             generated, request.CurrentLocation, cancellationToken);
         var draft = draftResolution.Draft;
@@ -76,8 +80,9 @@ public sealed class AiChatService : IAiChatService
         {
             generated = generated with
             {
-                Reply = $"Mình đã dùng vị trí hiện tại làm điểm đón và ghi nhận điểm đến "
-                    + $"“{generated.DestinationAddress}”. Bạn hãy kiểm tra lộ trình rồi tiếp tục đặt chuyến nhé."
+                Reply = BuildCurrentLocationReply(
+                    generated.DestinationAddress,
+                    languageCode)
             };
         }
         if (draft is null &&
@@ -87,7 +92,10 @@ public sealed class AiChatService : IAiChatService
         {
             generated = generated with
             {
-                Reply = BuildGeocodingFailureReply(generated, draftResolution)
+                Reply = BuildGeocodingFailureReply(
+                    generated,
+                    draftResolution,
+                    languageCode)
             };
         }
 
@@ -116,6 +124,7 @@ public sealed class AiChatService : IAiChatService
         string mimeType,
         string? conversationId,
         AiCurrentLocationRequest? currentLocation,
+        string? languageCode,
         CancellationToken cancellationToken)
     {
         EnsureEnabled();
@@ -145,13 +154,22 @@ public sealed class AiChatService : IAiChatService
             cancellationToken);
         try
         {
-            var transcript = await TranscribeAsync(bytes, mimeType, cancellationToken);
+            var normalizedLanguageCode = NormalizeLanguageCode(languageCode);
+            var transcript = await TranscribeAsync(
+                bytes,
+                mimeType,
+                normalizedLanguageCode,
+                cancellationToken);
             if (string.IsNullOrWhiteSpace(transcript))
                 throw new ArgumentException("Không nhận diện được nội dung trong file ghi âm.");
 
             var reply = await SendAsync(
                 userId,
-                new SendAiChatMessageRequest(transcript, conversationId, currentLocation),
+                new SendAiChatMessageRequest(
+                    transcript,
+                    conversationId,
+                    currentLocation,
+                    normalizedLanguageCode),
                 cancellationToken);
             var messageId = ObjectId.Parse(reply.UserMessage.Id);
             await _messages.UpdateOneAsync(
@@ -167,7 +185,7 @@ public sealed class AiChatService : IAiChatService
             {
                 UserMessage = reply.UserMessage with
                 {
-                    Content = "Tin nhắn thoại",
+                    Content = VoiceMessageLabel(normalizedLanguageCode),
                     IsAudio = true,
                     AudioUrl = upload.Url,
                     AudioMimeType = mimeType,
@@ -198,6 +216,7 @@ public sealed class AiChatService : IAiChatService
     private async Task<string> TranscribeAsync(
         byte[] audio,
         string mimeType,
+        string languageCode,
         CancellationToken cancellationToken)
     {
         var body = new
@@ -208,7 +227,11 @@ public sealed class AiChatService : IAiChatService
                 {
                     parts = new object[]
                     {
-                        new { text = "Phiên âm chính xác file ghi âm này sang tiếng Việt. Chỉ trả về nội dung đã nói, không giải thích." },
+                        new
+                        {
+                            text = $"Transcribe this audio accurately. Return only the spoken text without explanation. "
+                                + $"Prefer {LanguageName(languageCode)} writing when the speech permits it; do not translate the meaning."
+                        },
                         new
                         {
                             inline_data = new
@@ -275,7 +298,10 @@ public sealed class AiChatService : IAiChatService
                             item.BookingDraft.Destination.Latitude,
                             item.BookingDraft.Destination.Longitude),
                         item.BookingDraft.VehicleQuery,
-                        item.BookingDraft.PromotionCode),
+                        item.BookingDraft.PromotionCode,
+                        item.BookingDraft.VehicleType,
+                        item.BookingDraft.UseBestPromotion,
+                        item.BookingDraft.AutoBook),
                 item.IsAudio,
                 item.AudioUrl,
                 item.AudioMimeType,
@@ -337,6 +363,7 @@ public sealed class AiChatService : IAiChatService
     private async Task<GeneratedReply> GenerateAsync(
         IReadOnlyList<CachedMessage> context,
         bool hasCurrentLocation,
+        string languageCode,
         CancellationToken cancellationToken)
     {
         var locationInstruction = hasCurrentLocation
@@ -349,9 +376,10 @@ public sealed class AiChatService : IAiChatService
               điểm đón cụ thể.
               """;
         var prompt = $$"""
-            Bạn là trợ lý SafeRide và chỉ trả lời bằng tiếng Việt. Bạn hỗ trợ khách hàng sử dụng
-            ứng dụng và chuẩn bị thông tin đặt chuyến, nhưng không tự tạo booking, không tự xác nhận
-            giá và không khẳng định đã có tài xế.
+            Bạn là trợ lý SafeRide. Luôn trả lời bằng {{LanguageName(languageCode)}} (mã {{languageCode}}),
+            kể cả khi lịch sử hội thoại dùng ngôn ngữ khác. Bạn hỗ trợ khách hàng sử dụng
+            ứng dụng, trích xuất chính xác ý định đặt chuyến để ứng dụng quyết định có tạo booking
+            tự động hay không, và không khẳng định đã có tài xế.
 
             Hãy nhận biết các cách diễn đạt như "đặt từ A đến B", "đón ở A đi B" hoặc tương đương.
             Các câu rút gọn như "đến X", "đi X", "đặt xe đến X" luôn có X là điểm đến;
@@ -366,8 +394,16 @@ public sealed class AiChatService : IAiChatService
             còn thiếu. Trả lời ngắn gọn, tự nhiên và không tuyên bố rằng chuyến xe đã được đặt.
 
             Nếu người dùng nhắc tên xe hoặc biển số xe, điền nguyên văn phần nhận diện đó vào
-            vehicleQuery. Nếu người dùng nhắc mã giảm giá, điền mã vào promotionCode. Không tự
-            bịa xe hoặc mã khi người dùng không cung cấp.
+            vehicleQuery. Nếu người dùng yêu cầu loại phương tiện chung, đặt vehicleType thành
+            "car" cho ô tô/xe hơi hoặc "motorbike" cho xe máy; không điền vehicleQuery bằng tên
+            loại phương tiện chung. Nếu người dùng nhắc mã giảm giá, điền mã vào promotionCode.
+            Nếu họ yêu cầu voucher/mã giảm giá tối ưu, tốt nhất hoặc giảm nhiều nhất thì đặt
+            useBestPromotion=true và không tự bịa promotionCode.
+
+            Đặt autoBook=true khi người dùng ra lệnh rõ ràng đặt xe/tìm tài xế ngay và đã có đủ
+            điểm đến (điểm đón có thể lấy từ GPS). autoBook=false nếu họ chỉ hỏi thông tin, đang
+            cân nhắc, hoặc yêu cầu chưa đủ rõ. Khi autoBook=true, trả lời rằng hệ thống đang chuẩn
+            bị đặt chuyến và tìm tài xế; không nói rằng đã tìm thấy tài xế.
 
             {{locationInstruction}}
             """;
@@ -391,12 +427,15 @@ public sealed class AiChatService : IAiChatService
                         pickupAddress = new { type = "STRING", nullable = true },
                         destinationAddress = new { type = "STRING", nullable = true },
                         vehicleQuery = new { type = "STRING", nullable = true },
-                        promotionCode = new { type = "STRING", nullable = true }
+                        promotionCode = new { type = "STRING", nullable = true },
+                        vehicleType = new { type = "STRING", nullable = true },
+                        useBestPromotion = new { type = "BOOLEAN" },
+                        autoBook = new { type = "BOOLEAN" }
                     },
                     required = new[]
                     {
                         "reply", "pickupAddress", "destinationAddress", "vehicleQuery",
-                        "promotionCode"
+                        "promotionCode", "vehicleType", "useBestPromotion", "autoBook"
                     }
                 }
             }
@@ -505,7 +544,10 @@ public sealed class AiChatService : IAiChatService
                     destination.Lat,
                     destination.Lng),
                 NormalizeHint(generated.VehicleQuery),
-                NormalizeHint(generated.PromotionCode)),
+                NormalizeHint(generated.PromotionCode),
+                NormalizeVehicleType(generated.VehicleType),
+                generated.UseBestPromotion,
+                generated.AutoBook),
             true,
             true,
             useCurrentLocation);
@@ -585,20 +627,97 @@ public sealed class AiChatService : IAiChatService
 
     private static string BuildGeocodingFailureReply(
         GeneratedReply generated,
-        BookingDraftResolution resolution)
+        BookingDraftResolution resolution,
+        string languageCode)
     {
+        var pickup = generated.PickupAddress;
+        var destination = generated.DestinationAddress;
+        if (languageCode == "en")
+        {
+            if (!resolution.PickupResolved && !resolution.DestinationResolved)
+                return $"I couldn't find pickup “{pickup}” or destination “{destination}”. Add the district, city, or province for both locations.";
+            if (!resolution.PickupResolved)
+                return $"I couldn't find the exact pickup “{pickup}”. Add the district, city, or province.";
+            return $"I couldn't find the exact destination “{destination}”. Add the district, city, or province.";
+        }
+        if (languageCode == "ko")
+        {
+            if (!resolution.PickupResolved && !resolution.DestinationResolved)
+                return $"출발지 ‘{pickup}’와 목적지 ‘{destination}’를 찾지 못했습니다. 두 위치의 구·시·도를 추가해 주세요.";
+            if (!resolution.PickupResolved)
+                return $"출발지 ‘{pickup}’를 정확히 찾지 못했습니다. 구·시·도를 추가해 주세요.";
+            return $"목적지 ‘{destination}’를 정확히 찾지 못했습니다. 구·시·도를 추가해 주세요.";
+        }
+        if (languageCode == "ja")
+        {
+            if (!resolution.PickupResolved && !resolution.DestinationResolved)
+                return $"乗車地「{pickup}」と目的地「{destination}」が見つかりません。両方の区、市、都道府県を追加してください。";
+            if (!resolution.PickupResolved)
+                return $"乗車地「{pickup}」を正確に特定できません。区、市、都道府県を追加してください。";
+            return $"目的地「{destination}」を正確に特定できません。区、市、都道府県を追加してください。";
+        }
+        if (languageCode == "zh")
+        {
+            if (!resolution.PickupResolved && !resolution.DestinationResolved)
+                return $"未找到上车点“{pickup}”和目的地“{destination}”。请补充两个地点的区、市或省信息。";
+            if (!resolution.PickupResolved)
+                return $"未能准确找到上车点“{pickup}”。请补充区、市或省信息。";
+            return $"未能准确找到目的地“{destination}”。请补充区、市或省信息。";
+        }
+
         if (!resolution.PickupResolved && !resolution.DestinationResolved)
-            return $"Mình chưa tìm thấy điểm đón “{generated.PickupAddress}” và điểm đến "
-                + $"“{generated.DestinationAddress}”. Bạn vui lòng bổ sung phường, quận hoặc "
+            return $"Mình chưa tìm thấy điểm đón “{pickup}” và điểm đến "
+                + $"“{destination}”. Bạn vui lòng bổ sung phường, quận hoặc "
                 + "tỉnh/thành phố cho cả hai địa điểm nhé.";
 
         if (!resolution.PickupResolved)
-            return $"Mình chưa tìm thấy chính xác điểm đón “{generated.PickupAddress}”. "
+            return $"Mình chưa tìm thấy chính xác điểm đón “{pickup}”. "
                 + "Bạn vui lòng bổ sung phường, quận hoặc tỉnh/thành phố nhé.";
 
-        return $"Mình chưa tìm thấy chính xác điểm đến “{generated.DestinationAddress}”. "
+        return $"Mình chưa tìm thấy chính xác điểm đến “{destination}”. "
             + "Bạn vui lòng bổ sung phường, quận hoặc tỉnh/thành phố nhé.";
     }
+
+    private static string BuildCurrentLocationReply(
+        string? destination,
+        string languageCode) => languageCode switch
+        {
+            "en" => $"I used your current location as the pickup and noted “{destination}” as the destination. Check the route, then continue booking.",
+            "ko" => $"현재 위치를 출발지로 사용하고 ‘{destination}’를 목적지로 기록했습니다. 경로를 확인한 뒤 예약을 계속해 주세요.",
+            "ja" => $"現在地を乗車地として使用し、「{destination}」を目的地として記録しました。ルートを確認して予約を続けてください。",
+            "zh" => $"已将您的当前位置设为上车点，并记录目的地“{destination}”。请确认路线后继续预订。",
+            _ => $"Mình đã dùng vị trí hiện tại làm điểm đón và ghi nhận điểm đến “{destination}”. Bạn hãy kiểm tra lộ trình rồi tiếp tục đặt chuyến nhé."
+        };
+
+    private static string VoiceMessageLabel(string languageCode) =>
+        languageCode switch
+        {
+            "en" => "Voice message",
+            "ko" => "음성 메시지",
+            "ja" => "音声メッセージ",
+            "zh" => "语音消息",
+            _ => "Tin nhắn thoại"
+        };
+
+    private static string NormalizeLanguageCode(string? languageCode) =>
+        languageCode?.Trim().ToLowerInvariant() switch
+        {
+            "en" => "en",
+            "ko" => "ko",
+            "ja" => "ja",
+            "zh" or "zh-cn" or "zh-hans" => "zh",
+            _ => "vi"
+        };
+
+    private static string LanguageName(string languageCode) =>
+        languageCode switch
+        {
+            "en" => "English",
+            "ko" => "Korean",
+            "ja" => "Japanese",
+            "zh" => "Simplified Chinese",
+            _ => "Vietnamese"
+        };
 
     private async Task<IReadOnlyList<CachedMessage>> GetContextAsync(
         Guid userId, ObjectId conversationId, CancellationToken cancellationToken)
@@ -654,7 +773,10 @@ public sealed class AiChatService : IAiChatService
                     Longitude = bookingDraft.Destination.Longitude
                 },
                 VehicleQuery = bookingDraft.VehicleQuery,
-                PromotionCode = bookingDraft.PromotionCode
+                PromotionCode = bookingDraft.PromotionCode,
+                VehicleType = bookingDraft.VehicleType,
+                UseBestPromotion = bookingDraft.UseBestPromotion,
+                AutoBook = bookingDraft.AutoBook
             },
         CreatedAt = createdAt,
         ExpiresAt = expiresAt
@@ -678,7 +800,10 @@ public sealed class AiChatService : IAiChatService
                         message.BookingDraft.Destination.Latitude,
                         message.BookingDraft.Destination.Longitude),
                     message.BookingDraft.VehicleQuery,
-                    message.BookingDraft.PromotionCode),
+                    message.BookingDraft.PromotionCode,
+                    message.BookingDraft.VehicleType,
+                    message.BookingDraft.UseBestPromotion,
+                    message.BookingDraft.AutoBook),
             message.IsAudio,
             message.AudioUrl,
             message.AudioMimeType,
@@ -686,6 +811,14 @@ public sealed class AiChatService : IAiChatService
 
     private static string? NormalizeHint(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string? NormalizeVehicleType(string? value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            "car" => "car",
+            "motorbike" => "motorbike",
+            _ => null
+        };
 
     private void EnsureEnabled()
     {
@@ -767,7 +900,10 @@ public sealed class AiChatService : IAiChatService
         string? PickupAddress,
         string? DestinationAddress,
         string? VehicleQuery,
-        string? PromotionCode);
+        string? PromotionCode,
+        string? VehicleType,
+        bool UseBestPromotion,
+        bool AutoBook);
     private sealed record BookingDraftResolution(
         AiBookingDraftDto? Draft,
         bool PickupResolved,

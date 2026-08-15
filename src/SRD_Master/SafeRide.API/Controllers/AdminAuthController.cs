@@ -27,6 +27,30 @@ public sealed class AdminAuthController : ControllerBase
         [FromBody] AdminLoginRequest request)
     {
         var user = await _userManager.FindByEmailAsync(request.Email.Trim());
+        if (user is not null
+            && user.IsActive
+            && await _userManager.CheckPasswordAsync(user, request.Password)
+            && await _userManager.IsInRoleAsync(user, "Staff"))
+        {
+            var staffRoles = await _userManager.GetRolesAsync(user);
+            var staffAccessToken = await _jwtTokenService.GenerateAccessTokenAsync(user, staffRoles);
+            var staffRefreshToken = await _jwtTokenService.GenerateRefreshTokenAsync(
+                user.Id, request.DeviceId, request.DeviceName ?? "SafeRide Staff Web");
+
+            return Ok(new AuthResponse
+            {
+                AccessToken = staffAccessToken.Token,
+                RefreshToken = staffRefreshToken,
+                ExpiresIn = staffAccessToken.ExpiresIn,
+                UserId = user.Id,
+                FullName = user.FullName ?? user.Email ?? "Staff",
+                Email = user.Email,
+                AvatarUrl = user.AvatarUrl,
+                Roles = staffRoles,
+                NextStep = "staffHome"
+            });
+        }
+
         if (user is null || !user.IsActive ||
             !await _userManager.CheckPasswordAsync(user, request.Password) ||
             !await _userManager.IsInRoleAsync(user, "Admin"))

@@ -69,9 +69,9 @@ public sealed class BookingRepository : IBookingRepository
                 cancellationToken);
     }
 
-    public Task<Booking?> GetCustomerBookingWithDetailsAsync(
+    public Task<Booking?> GetBookingWithDetailsForUserAsync(
         long bookingId,
-        Guid customerId,
+        Guid userId,
         CancellationToken cancellationToken)
     {
         return _dbContext.Bookings
@@ -86,7 +86,8 @@ public sealed class BookingRepository : IBookingRepository
                 .ThenInclude(bookingPromotion => bookingPromotion.Promotion)
             .FirstOrDefaultAsync(
                 booking => booking.BookingId == bookingId
-                    && booking.CustomerId == customerId,
+                    && (booking.CustomerId == userId
+                        || (booking.Trip != null && booking.Trip.DriverId == userId)),
                 cancellationToken);
     }
 
@@ -109,6 +110,35 @@ public sealed class BookingRepository : IBookingRepository
                 && (booking.BookingStatus == BookingStatus.Searching
                     || booking.BookingStatus == BookingStatus.DriverAssigned))
             .OrderByDescending(booking => booking.UpdatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public Task<Booking?> GetActiveBookingAsync(
+        Guid customerId,
+        CancellationToken cancellationToken)
+    {
+        return _dbContext.Bookings
+            .AsNoTracking()
+            .Include(booking => booking.Vehicle)
+            .Include(booking => booking.Trip)
+                .ThenInclude(trip => trip!.ReturnConfirmations)
+                    .ThenInclude(returnConfirmation => returnConfirmation.Evidence)
+            .Include(booking => booking.Trip)
+                .ThenInclude(trip => trip!.Payments)
+            .Include(booking => booking.BookingPromotions)
+                .ThenInclude(bookingPromotion => bookingPromotion.Promotion)
+            .Where(booking => booking.CustomerId == customerId
+                && ((booking.BookingType == BookingType.Now
+                        && (booking.BookingStatus == BookingStatus.Searching
+                            || booking.BookingStatus == BookingStatus.DriverAssigned))
+                    || (booking.BookingType == BookingType.Scheduled
+                        && (booking.BookingStatus == BookingStatus.PendingSchedule
+                            || booking.BookingStatus == BookingStatus.Searching
+                            || booking.BookingStatus == BookingStatus.DriverAssigned))))
+            .OrderByDescending(booking => booking.Trip != null)
+            .ThenByDescending(booking => booking.BookingType == BookingType.Now)
+            .ThenBy(booking => booking.ScheduledAt ?? DateTime.MaxValue)
+            .ThenByDescending(booking => booking.UpdatedAt)
             .FirstOrDefaultAsync(cancellationToken);
     }
 

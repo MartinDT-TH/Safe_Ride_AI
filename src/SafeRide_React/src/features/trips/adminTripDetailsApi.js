@@ -1,3 +1,5 @@
+import { getCurrentManagementRole, MANAGEMENT_ROLES } from '../auth/managementRoles';
+
 const currencyFormatter = new Intl.NumberFormat('vi-VN', {
   style: 'currency',
   currency: 'VND',
@@ -9,6 +11,16 @@ const numberFormatter = new Intl.NumberFormat('vi-VN', {
 });
 
 export function getAdminTripDetailsPath({ tripId, bookingId } = {}) {
+  if (getCurrentManagementRole() === MANAGEMENT_ROLES.staff) {
+    if (bookingId) {
+      return `/staff/trips/by-booking/${encodeURIComponent(bookingId)}`;
+    }
+
+    if (tripId) {
+      return `/staff/trips/${encodeURIComponent(tripId)}`;
+    }
+  }
+
   if (bookingId) {
     return `/admin/trips/by-booking/${encodeURIComponent(bookingId)}`;
   }
@@ -314,6 +326,7 @@ function formatDateTime(value) {
   }
 
   return new Intl.DateTimeFormat('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -333,6 +346,7 @@ function formatTime(value) {
   }
 
   return new Intl.DateTimeFormat('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
     hour: '2-digit',
     minute: '2-digit',
   }).format(date);

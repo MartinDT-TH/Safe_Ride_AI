@@ -7,6 +7,7 @@ using SafeRide.Application.Features.AdminCustomers.Queries.GetAdminCustomers;
 using SafeRide.Application.Features.AdminUserAccounts;
 using SafeRide.Domain.Entities;
 using SafeRide.Infrastructure.Persistence;
+using System.Security.Claims;
 
 namespace SafeRide.Infrastructure.Services;
 
@@ -17,13 +18,19 @@ public sealed class AdminCustomerAccountService : IAdminCustomerAccountService
 
     private readonly ApplicationDbContext _db;
     private readonly UserManager<AspNetUser> _userManager;
+    private readonly IAccountRestrictionService _accountRestrictionService;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
     public AdminCustomerAccountService(
         ApplicationDbContext db,
-        UserManager<AspNetUser> userManager)
+        UserManager<AspNetUser> userManager,
+        IAccountRestrictionService accountRestrictionService,
+        IHttpContextAccessor httpContextAccessor)
     {
         _db = db;
         _userManager = userManager;
+        _accountRestrictionService = accountRestrictionService;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public async Task<GetAdminCustomersResult> GetCustomersAsync(CancellationToken cancellationToken)
@@ -77,6 +84,14 @@ public sealed class AdminCustomerAccountService : IAdminCustomerAccountService
             result,
             "admin.customer.block_failed",
             "Không thể khóa khách hàng.");
+        if (TryGetAdminUserId(out var adminUserId))
+        {
+            await _accountRestrictionService.RecordManualLockAsync(
+                customerId,
+                adminUserId,
+                user.BanReason,
+                cancellationToken);
+        }
 
         return (await LoadCustomersAsync([customerId], cancellationToken)).Single();
     }
@@ -100,6 +115,27 @@ public sealed class AdminCustomerAccountService : IAdminCustomerAccountService
             result,
             "admin.customer.unlock_failed",
             "Không thể mở khóa khách hàng.");
+        if (TryGetAdminUserId(out var adminUserId))
+        {
+            await _accountRestrictionService.RecordManualUnlockAsync(
+                customerId,
+                adminUserId,
+                cancellationToken);
+        }
+        var restriction = await _accountRestrictionService.CheckAccountAccessAsync(
+            customerId,
+            releaseExpiredTemporaryBans: false,
+            cancellationToken);
+        if (!restriction.IsAllowed)
+        {
+            user.IsActive = false;
+            user.BanReason = restriction.Message;
+            user.UpdatedAt = DateTime.UtcNow;
+            EnsureIdentitySucceeded(
+                await _userManager.UpdateAsync(user),
+                "admin.customer.unlock_restricted",
+                "Khách hàng vẫn đang bị giới hạn bởi quy tắc khác.");
+        }
 
         return (await LoadCustomersAsync([customerId], cancellationToken)).Single();
     }
@@ -169,5 +205,12 @@ public sealed class AdminCustomerAccountService : IAdminCustomerAccountService
             code,
             message,
             StatusCodes.Status400BadRequest);
+    }
+
+    private bool TryGetAdminUserId(out Guid adminUserId)
+    {
+        return Guid.TryParse(
+            _httpContextAccessor.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier),
+            out adminUserId);
     }
 }

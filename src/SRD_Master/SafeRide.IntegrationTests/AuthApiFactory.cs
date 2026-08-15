@@ -37,7 +37,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
                 ["Jwt:AccessTokenMinutes"] = "15",
                 ["Jwt:RefreshTokenDays"] = "30",
                 ["GoogleMaps:ApiKey"] = "test-google-maps-key",
-                ["GoogleMaps:RoutesApiUrl"] = "https://routes.googleapis.com/directions/v2:computeRoutes",
+                ["GoogleMaps:RoutesApiUrl"] = "https://routes.googleapis.com/v2:computeRoutes",
                 ["GoogleMaps:GeocodingApiUrl"] = "https://maps.googleapis.com/maps/api/geocode/json",
                 ["OpenRouteService:DirectionsApiUrl"] = "https://api.openrouteservice.org/v2/directions/driving-car",
                 ["OpenRouteService:MatrixApiUrl"] = "https://api.openrouteservice.org/v2/matrix/driving-car"
@@ -130,6 +130,60 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
             CREATE INDEX IX_RefreshTokens_UserId ON RefreshTokens (UserId);
             CREATE INDEX IX_RefreshTokens_SessionId_RevokedAt
                 ON RefreshTokens (SessionId, RevokedAt);
+            CREATE TABLE AccountBanConfigurations (
+                Id INTEGER NOT NULL PRIMARY KEY,
+                NegativeFeedbackThreshold INTEGER NOT NULL,
+                NegativeRatingMaxScore INTEGER NOT NULL,
+                TemporaryBanDurationDays INTEGER NOT NULL,
+                MaximumTemporaryBans INTEGER NOT NULL,
+                IsEnabled INTEGER NOT NULL,
+                CreatedAt TEXT NOT NULL,
+                UpdatedAt TEXT NOT NULL,
+                UpdatedByUserId TEXT NULL
+            );
+            INSERT INTO AccountBanConfigurations (
+                Id,
+                NegativeFeedbackThreshold,
+                NegativeRatingMaxScore,
+                TemporaryBanDurationDays,
+                MaximumTemporaryBans,
+                IsEnabled,
+                CreatedAt,
+                UpdatedAt,
+                UpdatedByUserId)
+            VALUES (
+                1,
+                5,
+                2,
+                15,
+                3,
+                1,
+                '2026-08-15T00:00:00Z',
+                '2026-08-15T00:00:00Z',
+                NULL);
+            CREATE TABLE AccountBanHistories (
+                Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                UserId TEXT NOT NULL,
+                BanType TEXT NOT NULL,
+                Source TEXT NOT NULL,
+                Status TEXT NOT NULL DEFAULT 'Active',
+                Reason TEXT NOT NULL,
+                Trigger TEXT NULL,
+                StartedAt TEXT NOT NULL,
+                EndsAt TEXT NULL,
+                CreatedAt TEXT NOT NULL,
+                CreatedByUserId TEXT NULL,
+                TriggeringRatingId INTEGER NULL,
+                NegativeFeedbackCount INTEGER NULL,
+                TemporaryBanSequence INTEGER NULL,
+                ReleasedAt TEXT NULL,
+                ReleasedByUserId TEXT NULL,
+                ReleaseReason TEXT NULL
+            );
+            CREATE INDEX IX_AccountBanHistories_UserId_Status
+                ON AccountBanHistories (UserId, Status);
+            CREATE INDEX IX_AccountBanHistories_TriggeringRatingId
+                ON AccountBanHistories (TriggeringRatingId);
             CREATE TABLE DriverProfiles (
                 DriverId TEXT NOT NULL PRIMARY KEY,
                 IdentityCardNumber TEXT NOT NULL,

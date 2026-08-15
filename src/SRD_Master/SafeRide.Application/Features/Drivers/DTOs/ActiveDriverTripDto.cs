@@ -13,4 +13,5 @@ public sealed record ActiveDriverTripDto(
     double? DestLng,
     string? EncodedPolyline,
     TripReturnConfirmationSummaryDto? ReturnConfirmation = null,
-    string? ArrivalPolyline = null);
+    string? ArrivalPolyline = null,
+    bool PaymentCompleted = false);

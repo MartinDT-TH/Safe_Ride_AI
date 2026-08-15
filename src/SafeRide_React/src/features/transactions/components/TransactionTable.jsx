@@ -1,11 +1,26 @@
+import { forwardRef } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faArrowUpRightFromSquare, faBuildingColumns, faEllipsisVertical, faFilter, faMoneyBill } from '@fortawesome/free-solid-svg-icons';
+import { faArrowUpRightFromSquare, faBuildingColumns, faCalendarDays, faChevronDown, faEllipsisVertical, faFilter, faMoneyBill } from '@fortawesome/free-solid-svg-icons';
+import DatePicker, { registerLocale } from 'react-datepicker';
+import { vi } from 'date-fns/locale/vi';
 import { Pagination, StatusBadge } from '../../../shared/components';
 import { STATUS_META } from '../transactionConstants';
+import 'react-datepicker/dist/react-datepicker.css';
+
+registerLocale('vi', vi);
 
 const moneyFormatter = new Intl.NumberFormat('vi-VN');
 
 function TransactionTable({ transactions, filters, onFilterChange, currentPage, totalPages, totalItems, onPageChange }) {
+  const usesDateRange = Object.hasOwn(filters, 'fromDate') || Object.hasOwn(filters, 'toDate');
+  const rangeStart = parseDateValue(filters.fromDate);
+  const rangeEnd = parseDateValue(filters.toDate);
+
+  const handleDateRangeChange = ([start, end]) => {
+    onFilterChange('fromDate', formatDateValue(start));
+    onFilterChange('toDate', formatDateValue(end));
+  };
+
   return (
     <section className="transaction-panel">
       <div className="transaction-filters">
@@ -20,7 +35,25 @@ function TransactionTable({ transactions, filters, onFilterChange, currentPage, 
         </label>
         <label className="transaction-field">
           <span>Khoảng ngày</span>
-          <input type="date" value={filters.date} onChange={(event) => onFilterChange('date', event.target.value)} />
+          {usesDateRange ? <DatePicker
+            locale="vi"
+            dateFormat="dd/MM/yyyy"
+            selectsRange
+            startDate={rangeStart}
+            endDate={rangeEnd}
+            onChange={handleDateRangeChange}
+            isClearable
+            placeholderText="Chọn ngày bắt đầu – kết thúc"
+            customInput={<TransactionDateButton />}
+          /> : <DatePicker
+            locale="vi"
+            dateFormat="dd/MM/yyyy"
+            selected={parseDateValue(filters.date)}
+            onChange={(date) => onFilterChange('date', formatDateValue(date))}
+            isClearable
+            placeholderText="Chọn ngày"
+            customInput={<TransactionDateButton />}
+          />}
         </label>
         <label className="transaction-field">
           <span>Phương thức</span>
@@ -66,6 +99,34 @@ function TransactionTable({ transactions, filters, onFilterChange, currentPage, 
       </footer>
     </section>
   );
+}
+
+const TransactionDateButton = forwardRef(function TransactionDateButton(
+  { value, onClick, placeholder },
+  ref,
+) {
+  return (
+    <button ref={ref} type="button" className="transaction-date-picker" onClick={onClick}>
+      <FontAwesomeIcon icon={faCalendarDays} />
+      <span>{value || placeholder || 'Chọn ngày'}</span>
+      <FontAwesomeIcon icon={faChevronDown} />
+    </button>
+  );
+});
+
+function parseDateValue(value) {
+  if (!value) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatDateValue(date) {
+  if (!date) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 export default TransactionTable;

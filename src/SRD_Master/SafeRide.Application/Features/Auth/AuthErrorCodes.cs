@@ -4,6 +4,8 @@ public static class AuthErrorCodes
 {
     public const string AccountInactive = "auth.account_inactive";
     public const string AccountLocked = "auth.account_locked";
+    public const string AccountTemporarilyBanned = "auth.account_temporarily_banned";
+    public const string AccountPermanentlyBanned = "auth.account_permanently_banned";
     public const string AccountConflict = "auth.account_conflict";
     public const string InvalidRefreshToken = "auth.invalid_refresh_token";
     public const string RefreshTokenExpired = "auth.refresh_token_expired";

@@ -95,6 +95,8 @@
 }
 
 .bookings-filter {
+  position: relative;
+  z-index: 20;
   display: grid;
   grid-template-columns: minmax(280px, 1.7fr) minmax(180px, 0.8fr) minmax(280px, 1fr) auto;
   align-items: end;
@@ -155,17 +157,57 @@
 .bookings-date-range {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 14px;
+  gap: 6px;
+  padding: 5px 8px;
   color: var(--sr-gray-500);
 }
 
-.bookings-date-range input {
+.bookings-date-range .react-datepicker-wrapper {
   min-width: 0;
+  flex: 1;
+}
+
+.bookings-date-picker {
+  width: 100%;
+  min-width: 124px;
+  height: 42px;
+  padding: 0 10px;
   border: 0;
+  border-radius: 11px;
   background: transparent;
   color: var(--sr-gray-800);
-  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-align: left;
+}
+
+.bookings-date-picker:hover,
+.bookings-date-picker:focus-visible {
+  background: #edf6f6;
+  outline: none;
+}
+
+.bookings-date-picker > svg {
+  color: #028090;
+}
+
+.bookings-date-picker > span {
+  display: grid;
+  gap: 1px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.bookings-date-picker small {
+  color: var(--sr-gray-500);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.bookings-date-picker strong {
+  color: #173437;
+  font-size: 13px;
 }
 
 .bookings-date-range__separator {
@@ -194,6 +236,8 @@
 }
 
 .bookings-table-panel {
+  position: relative;
+  z-index: 1;
   overflow: hidden;
 }
 
@@ -246,6 +290,19 @@
   text-align: left;
 }
 
+.bookings-table th:first-child,
+.bookings-table td:first-child {
+  width: 140px;
+  min-width: 140px;
+}
+
+.bookings-table th:first-child .bookings-sort {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  white-space: nowrap;
+}
+
 .bookings-table td {
   padding: 18px;
   border-bottom: 1px solid #e3eaeb;
@@ -281,15 +338,49 @@
 }
 
 .bookings-table__code-cell {
-  display: grid;
-  gap: 6px;
+  white-space: nowrap;
 }
 
 .bookings-table__code-cell strong {
+  display: block;
+  margin-bottom: 6px;
   color: #006572;
+  white-space: nowrap;
+}
+
+.bookings-date-range .react-datepicker-popper {
+  z-index: 40;
+}
+
+.bookings-date-range .react-datepicker {
+  overflow: hidden;
+  border: 1px solid #d0dcde;
+  border-radius: 14px;
+  font-family: var(--sr-font);
+  box-shadow: 0 18px 45px rgba(18, 50, 55, 0.18);
+}
+
+.bookings-date-range .react-datepicker__header {
+  border-bottom: 1px solid #e3ebec;
+  background: #f0f7f7;
+}
+
+.bookings-date-range .react-datepicker__day--selected,
+.bookings-date-range .react-datepicker__day--keyboard-selected,
+.bookings-date-range .react-datepicker__day--range-start,
+.bookings-date-range .react-datepicker__day--range-end {
+  color: #fff;
+  background: #028090;
+}
+
+.bookings-date-range .react-datepicker__day--in-range,
+.bookings-date-range .react-datepicker__day--in-selecting-range {
+  color: #006572;
+  background: #dff0f1;
 }
 
 .bookings-table__code-cell small {
+  display: block;
   color: var(--sr-gray-500);
 }
 

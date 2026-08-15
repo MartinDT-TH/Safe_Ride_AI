@@ -1,4 +1,5 @@
 using SafeRide.Application.Common.Realtime;
+using SafeRide.Application.Features.TripSharing;
 
 namespace SafeRide.Application.Common.Interfaces;
 
@@ -24,6 +25,14 @@ public interface IRealtimeNotificationService
         TripStatusChangedEvent notification,
         CancellationToken cancellationToken = default);
 
+    Task PublishTripEndRequestedAsync(
+        TripEndRequestedEvent notification,
+        CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    Task PublishTripEndRequestRespondedAsync(
+        TripEndRequestRespondedEvent notification,
+        CancellationToken cancellationToken = default) => Task.CompletedTask;
+
     Task PublishTripPaymentPendingAsync(
         TripPaymentPendingEvent notification,
         CancellationToken cancellationToken = default);
@@ -32,9 +41,18 @@ public interface IRealtimeNotificationService
         TripPaymentSucceededEvent notification,
         CancellationToken cancellationToken = default);
 
+    Task PublishSOSTriggeredAsync(
+        SOSTriggeredEvent notification,
+        CancellationToken cancellationToken = default);
+
     Task PublishDriverLocationUpdatedAsync(
         DriverLocationUpdatedEvent notification,
         CancellationToken cancellationToken = default);
+
+    Task PublishTripRouteRecalculatedAsync(
+        TripRouteRecalculatedEvent notification,
+        CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
 
     Task PublishDriverOfferCreatedAsync(
         DriverOfferCreatedEvent notification,
@@ -75,4 +93,13 @@ public interface IRealtimeNotificationService
     Task PublishBookingExpiredAsync(
         BookingExpiredEvent notification,
         CancellationToken cancellationToken = default);
+
+    Task PublishSharedTripLocationUpdatedAsync(
+        SharedTripLocationUpdate notification,
+        CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    Task PublishSharedTripStatusAsync(
+        SharedTripStatusUpdate notification,
+        string eventName,
+        CancellationToken cancellationToken = default) => Task.CompletedTask;
 }

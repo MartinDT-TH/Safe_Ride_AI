@@ -4,16 +4,19 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:intl/intl.dart';
 
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/localization/localization_extensions.dart';
+import '../../../../../core/localization/locale_provider.dart';
 import '../../../../../core/network/auth_header.dart';
 import '../../../../../core/network/dio_client.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../driver/dashboard/data/models/payment_models.dart';
 
 class CustomerTripPrepaymentPage extends StatefulWidget {
-  const CustomerTripPrepaymentPage({super.key, required this.tripId});
+  CustomerTripPrepaymentPage({super.key, required this.tripId});
 
   final int tripId;
 
@@ -53,52 +56,52 @@ class _CustomerTripPrepaymentPageState
     final amount = _paymentStatus?.amount ?? _qrPayment?.amount ?? 0;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFBF9F8),
+      backgroundColor: Color(0xFFFBF9F8),
       appBar: AppBar(
-        backgroundColor: const Color(0xFFFBF9F8),
-        title: const Text('Thanh toán trước'),
+        backgroundColor: Color(0xFFFBF9F8),
+        title: Text(context.l10n.tripPayment),
       ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 28),
           child: Column(
             children: [
-              const Text(
-                'Số tiền thanh toán qua PayOS',
+              Text(
+                context.l10n.customerPaymentAmount,
                 style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
               ),
-              const SizedBox(height: 10),
+              SizedBox(height: 10),
               Text(
                 _formatCurrency(amount),
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.primary,
                   fontSize: 40,
                   fontWeight: FontWeight.w900,
                 ),
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: 24),
               Expanded(child: Center(child: _buildContent(qrData))),
               if (!_isPaid) ...[
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
                   height: 52,
                   child: OutlinedButton.icon(
                     onPressed: _isRefreshing ? null : _refreshStatus,
                     icon: _isRefreshing
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.sync_rounded),
-                    label: const Text('Kiểm tra thanh toán'),
+                        : Icon(Icons.sync_rounded),
+                    label: Text(context.l10n.checkPayment),
                   ),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Để sau chuyến thanh toán'),
+                  child: Text(context.l10n.back),
                 ),
               ],
             ],
@@ -110,26 +113,22 @@ class _CustomerTripPrepaymentPageState
 
   Widget _buildContent(String? qrData) {
     if (_isLoading) {
-      return const CircularProgressIndicator();
+      return CircularProgressIndicator();
     }
     if (_isPaid) {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.check_circle_rounded,
-            color: Color(0xFF0A8F62),
-            size: 88,
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'Đã thanh toán trước',
+          Icon(Icons.check_circle_rounded, color: Color(0xFF0A8F62), size: 88),
+          SizedBox(height: 16),
+          Text(
+            context.l10n.paid,
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: 24),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Quay lại chuyến đi'),
+            child: Text(context.l10n.backToTrip),
           ),
         ],
       );
@@ -138,16 +137,16 @@ class _CustomerTripPrepaymentPageState
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.error_outline_rounded, color: Colors.red, size: 56),
-          const SizedBox(height: 12),
+          Icon(Icons.error_outline_rounded, color: Colors.red, size: 56),
+          SizedBox(height: 12),
           Text(
-            _errorMessage ?? 'Không thể tạo mã QR PayOS.',
+            _errorMessage ?? context.l10n.payosQrCreateFailed,
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           ElevatedButton(
             onPressed: _createQrPayment,
-            child: const Text('Thử lại'),
+            child: Text(context.l10n.tryAgain),
           ),
         ],
       );
@@ -163,15 +162,13 @@ class _CustomerTripPrepaymentPageState
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(28),
-            boxShadow: const [
-              BoxShadow(color: Colors.black12, blurRadius: 20),
-            ],
+            boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 20)],
           ),
           child: QrImageView(data: qrData, backgroundColor: Colors.white),
         ),
-        const SizedBox(height: 20),
-        const Text(
-          'Quét mã bằng ứng dụng ngân hàng để thanh toán',
+        SizedBox(height: 20),
+        Text(
+          context.l10n.scanQrToPay,
           textAlign: TextAlign.center,
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
@@ -184,7 +181,7 @@ class _CustomerTripPrepaymentPageState
     if (token == null || token.isEmpty) {
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Phiên đăng nhập đã hết hạn.';
+        _errorMessage = context.l10n.sessionExpired;
       });
       return;
     }
@@ -222,7 +219,7 @@ class _CustomerTripPrepaymentPageState
   void _startPolling(String token) {
     _statusTimer?.cancel();
     _statusTimer = Timer.periodic(
-      const Duration(seconds: 4),
+      Duration(seconds: 4),
       (_) => _loadStatus(token),
     );
   }
@@ -254,20 +251,20 @@ class _CustomerTripPrepaymentPageState
     }
   }
 
-  static String _extractError(DioException exception) {
+  String _extractError(DioException exception) {
     final data = exception.response?.data;
     if (data is Map) {
       final detail = data[ApiKeys.detail]?.toString();
       if (detail != null && detail.isNotEmpty) return detail;
     }
-    return 'Không thể tạo mã QR PayOS.';
+    return context.l10n.payosQrCreateFailed;
   }
 
-  static String _formatCurrency(double value) {
-    final formatted = value.round().toString().replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-      (match) => '${match[1]}.',
-    );
-    return '$formattedđ';
+  String _formatCurrency(double value) {
+    return NumberFormat.currency(
+      locale: LocaleProvider.currentLocale.toLanguageTag(),
+      symbol: 'VND',
+      decimalDigits: 0,
+    ).format(value);
   }
 }

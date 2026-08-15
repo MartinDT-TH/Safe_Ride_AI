@@ -49,6 +49,8 @@ public sealed class UserNotificationService
                 x.Title,
                 x.Content,
                 x.NotificationType,
+                x.ReferenceId,
+                x.TranslationsJson,
                 x.IsRead,
                 x.SentAt,
                 x.ReadAt))
@@ -89,6 +91,8 @@ public sealed class UserNotificationService
             notification.Title,
             notification.Content,
             notification.NotificationType,
+            notification.ReferenceId,
+            notification.TranslationsJson,
             notification.IsRead,
             notification.SentAt,
             notification.ReadAt);

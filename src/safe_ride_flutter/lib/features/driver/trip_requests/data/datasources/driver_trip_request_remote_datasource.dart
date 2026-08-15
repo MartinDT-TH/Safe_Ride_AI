@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/network/auth_header.dart';
 import '../../../../../core/network/dio_client.dart';
+import '../../../../../core/localization/locale_provider.dart';
 import '../models/driver_trip_request_model.dart';
 
 class DriverTripRequestRemoteDatasource {
@@ -32,7 +33,9 @@ class DriverTripRequestRemoteDatasource {
           )
           .toList();
     } on FormatException {
-      throw const DriverTripRequestApiException(BookingStrings.sessionExpired);
+      throw DriverTripRequestApiException(
+        LocaleProvider.currentLocalizations.sessionExpired,
+      );
     } on DioException catch (exception) {
       final data = exception.response?.data;
       if (data is Map) {
@@ -46,8 +49,8 @@ class DriverTripRequestRemoteDatasource {
         }
       }
 
-      throw const DriverTripRequestApiException(
-        'Không thể tải yêu cầu chuyến. Vui lòng thử lại.',
+      throw DriverTripRequestApiException(
+        LocaleProvider.currentLocalizations.tripRequestsLoadFailed,
       );
     }
   }

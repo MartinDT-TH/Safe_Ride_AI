@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:safe_ride/features/customer/booking/data/models/booking_location.dart';
+import 'package:safe_ride/features/customer/booking/data/models/booking_response.dart';
 import 'package:safe_ride/features/customer/booking/data/models/create_booking_request.dart';
 
 void main() {
@@ -30,5 +31,39 @@ void main() {
     expect(json['scheduledAt'], scheduledAt.toUtc().toIso8601String());
     expect(json['pickupLatitude'], 10.762622);
     expect(json['destinationLongitude'], 106.651856);
+  });
+
+  test('scheduled booking response converts UTC to phone local time', () {
+    final response = BookingResponse.fromJson({
+      'bookingId': 42,
+      'bookingType': 'Scheduled',
+      'bookingStatus': 'PendingSchedule',
+      'scheduledAt': '2026-06-16T01:30:00Z',
+      'estimatedDistanceKm': 5.2,
+      'estimatedDurationMinutes': 30,
+      'estimatedFare': 72000,
+      'encodedPolyline': '',
+      'message': 'OK',
+    });
+
+    expect(response.scheduledAt, DateTime.utc(2026, 6, 16, 1, 30).toLocal());
+    expect(response.scheduledAt!.isUtc, isFalse);
+  });
+
+  test('scheduled booking response treats legacy offset-less value as UTC', () {
+    final response = BookingResponse.fromJson({
+      'bookingId': 43,
+      'bookingType': 'Scheduled',
+      'bookingStatus': 'PendingSchedule',
+      'scheduledAt': '2026-06-16T01:30:00',
+      'estimatedDistanceKm': 5.2,
+      'estimatedDurationMinutes': 30,
+      'estimatedFare': 72000,
+      'encodedPolyline': '',
+      'message': 'OK',
+    });
+
+    expect(response.scheduledAt, DateTime.utc(2026, 6, 16, 1, 30).toLocal());
+    expect(response.scheduledAt!.isUtc, isFalse);
   });
 }

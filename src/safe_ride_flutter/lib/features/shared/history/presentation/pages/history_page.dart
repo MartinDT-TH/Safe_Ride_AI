@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/widgets/app_loading_screen.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../customer/booking/presentation/pages/rebook_trip_page.dart';
 import '../../../../customer/booking/presentation/providers/booking_provider.dart';
@@ -15,20 +16,16 @@ import '../widgets/interactive_button.dart';
 import '../widgets/trip_history_card.dart';
 import 'package:safe_ride/features/shared/feedback/presentation/pages/report_trip_page.dart';
 import 'package:safe_ride/features/shared/chat/presentation/pages/trip_chat_page.dart';
+import 'package:safe_ride/features/shared/chat/presentation/providers/chat_unread_provider.dart';
 
 class HistoryPage extends StatefulWidget {
-  const HistoryPage({super.key});
+  HistoryPage({super.key});
 
   @override
   State<HistoryPage> createState() => _HistoryPageState();
 }
 
 class _HistoryPageState extends State<HistoryPage> {
-  static const _loadErrorTitle = 'Không thể tải lịch sử chuyến đi.';
-  static const _emptyTitle = 'Không có dữ liệu chuyến đi.';
-  static const _invalidRebookDataMessage =
-      'Chuyến đi này chưa có đủ dữ liệu để đặt lại.';
-
   @override
   void initState() {
     super.initState();
@@ -53,11 +50,11 @@ class _HistoryPageState extends State<HistoryPage> {
     final token = authProvider.token;
 
     if (token == null || token.isEmpty) {
-      _showMessage(BookingStrings.sessionExpired);
+      _showMessage(context.l10n.sessionExpired);
       return;
     }
 
-    AppLoadingScreen.show(context, message: 'Đang tải thông tin chuyến đi...');
+    AppLoadingScreen.show(context, message: context.l10n.loadingTrip);
     final details = await bookingProvider.getPastBookingDetails(
       token,
       bookingId: trip.id,
@@ -67,14 +64,14 @@ class _HistoryPageState extends State<HistoryPage> {
     if (!mounted) return;
 
     if (details == null) {
-      _showMessage(bookingProvider.errorMessage ?? AppStrings.genericError);
+      _showMessage(bookingProvider.errorMessage ?? context.l10n.genericError);
       return;
     }
 
     if (details.pickup == null ||
         details.destination == null ||
         details.vehicle == null) {
-      _showMessage(_invalidRebookDataMessage);
+      _showMessage(context.l10n.tripNotRebookable);
       return;
     }
 
@@ -84,9 +81,9 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Future<void> _handleReport(HistoryTrip trip) async {
-    final result = await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => ReportTripPage(trip: trip)),
-    );
+    final result = await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => ReportTripPage(trip: trip)));
 
     if (result == true) {
       _loadHistory();
@@ -98,7 +95,7 @@ class _HistoryPageState extends State<HistoryPage> {
     final currentUserId = auth.userId;
 
     if (trip.tripId == null || currentUserId == null) {
-      _showMessage('Không thể mở trò chuyện lúc này.');
+      _showMessage(context.l10n.chatOpenFailed);
       return;
     }
 
@@ -107,11 +104,15 @@ class _HistoryPageState extends State<HistoryPage> {
         builder: (_) => TripChatPage(
           tripId: trip.tripId!,
           currentUserId: currentUserId,
-          receiverName: trip.driverName ?? 'Tài xế SafeRide',
+          receiverName: trip.driverName ?? context.l10n.safeRideDriver,
           canSendMessage: _canSendChat(trip.status.name),
         ),
       ),
     );
+  }
+
+  void _handleViewFeedback(HistoryTrip trip) {
+    _openTripDetails(trip, canRebook: false, canCancelScheduled: false);
   }
 
   bool _canSendChat(String? status) {
@@ -120,12 +121,24 @@ class _HistoryPageState extends State<HistoryPage> {
     return normalized != 'CANCELLED';
   }
 
-  Future<void> _openTripDetails(HistoryTrip trip, {required bool canRebook}) {
-    return Navigator.of(context).push(
+  Future<void> _openTripDetails(
+    HistoryTrip trip, {
+    required bool canRebook,
+    required bool canCancelScheduled,
+  }) async {
+    final cancelled = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => TripDetailsPage(trip: trip, canRebook: canRebook),
+        builder: (_) => TripDetailsPage(
+          trip: trip,
+          canRebook: canRebook,
+          canCancelScheduled: canCancelScheduled,
+        ),
       ),
     );
+
+    if (cancelled == true && mounted) {
+      await _loadHistory();
+    }
   }
 
   void _showMessage(String message) {
@@ -145,12 +158,12 @@ class _HistoryPageState extends State<HistoryPage> {
     final isDriver = currentRole == AppValues.roleDriver;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFCF9F9),
+      backgroundColor: Color(0xFFFCF9F9),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: const Text(
-          HistoryStrings.tripHistory,
+        title: Text(
+          context.l10n.tripHistory,
           style: TextStyle(
             color: Colors.black,
             fontWeight: FontWeight.bold,
@@ -166,7 +179,7 @@ class _HistoryPageState extends State<HistoryPage> {
             child: Consumer<HistoryProvider>(
               builder: (context, provider, child) {
                 if (provider.isLoading && provider.trips.isEmpty) {
-                  return const Center(child: CircularProgressIndicator());
+                  return Center(child: CircularProgressIndicator());
                 }
 
                 return RefreshIndicator(
@@ -176,37 +189,37 @@ class _HistoryPageState extends State<HistoryPage> {
                       ? _buildFeedbackList(
                           child: Column(
                             children: [
-                              const Text(
-                                _loadErrorTitle,
+                              Text(
+                                context.l10n.historyLoadFailed,
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              const SizedBox(height: 8),
+                              SizedBox(height: 8),
                               Text(
                                 provider.errorMessage!,
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: Color(0xFF626A6C),
-                                ),
+                                style: TextStyle(color: Color(0xFF626A6C)),
                               ),
-                              const SizedBox(height: 16),
+                              SizedBox(height: 16),
                               ElevatedButton(
                                 onPressed: _loadHistory,
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.primary,
                                   foregroundColor: Colors.white,
                                 ),
-                                child: const Text(AppStrings.confirm),
+                                child: Text(context.l10n.confirm),
                               ),
                             ],
                           ),
                         )
                       : provider.trips.isEmpty
-                      ? _buildFeedbackList(child: const Text(_emptyTitle))
+                      ? _buildFeedbackList(
+                          child: Text(context.l10n.noTripHistory),
+                        )
                       : ListView.builder(
-                          physics: const AlwaysScrollableScrollPhysics(),
+                          physics: AlwaysScrollableScrollPhysics(),
                           padding: const EdgeInsets.symmetric(
                             horizontal: 20,
                             vertical: 16,
@@ -219,22 +232,35 @@ class _HistoryPageState extends State<HistoryPage> {
                                 trip.status != HistoryTripStatus.booked;
 
                             return InteractiveButton(
-                              onTap: () =>
-                                  _openTripDetails(trip, canRebook: canRebook),
+                              onTap: () => _openTripDetails(
+                                trip,
+                                canRebook: canRebook,
+                                canCancelScheduled: !isDriver,
+                              ),
                               borderRadius: BorderRadius.circular(24),
                               child: TripHistoryCard(
+                                unreadChatCount: context
+                                    .watch<ChatUnreadProvider>()
+                                    .unreadCountForTrip(trip.tripId),
                                 onChat: trip.tripId != null
                                     ? () => _handleChat(trip)
+                                    : null,
+                                onViewFeedback:
+                                    isDriver &&
+                                        trip.status ==
+                                            HistoryTripStatus.completed &&
+                                        trip.tripId != null
+                                    ? () => _handleViewFeedback(trip)
                                     : null,
                                 trip: trip,
                                 onReport:
                                     (isDriver ||
-                                            trip.status ==
-                                                HistoryTripStatus.booked)
-                                        ? null
-                                        : () => _handleReport(trip),
-                                onRebook:
-                                    canRebook ? () => _handleRebook(trip) : null,
+                                        trip.status == HistoryTripStatus.booked)
+                                    ? null
+                                    : () => _handleReport(trip),
+                                onRebook: canRebook
+                                    ? () => _handleRebook(trip)
+                                    : null,
                               ),
                             );
                           },
@@ -250,9 +276,9 @@ class _HistoryPageState extends State<HistoryPage> {
 
   Widget _buildFeedbackList({required Widget child}) {
     return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
+      physics: AlwaysScrollableScrollPhysics(),
       children: [
-        const SizedBox(height: 120),
+        SizedBox(height: 120),
         Center(child: child),
       ],
     );
@@ -265,7 +291,7 @@ class _HistoryPageState extends State<HistoryPage> {
       child: Container(
         padding: const EdgeInsets.all(6),
         decoration: BoxDecoration(
-          color: const Color(0xFFF2F4F4),
+          color: Color(0xFFF2F4F4),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Consumer<HistoryProvider>(
@@ -273,25 +299,25 @@ class _HistoryPageState extends State<HistoryPage> {
             return Row(
               children: [
                 _buildFilterItem(
-                  HistoryStrings.all,
+                  context.l10n.historyFilterAll,
                   HistoryFilter.all,
                   provider.currentFilter == HistoryFilter.all,
                   provider,
                 ),
                 _buildFilterItem(
-                  HistoryStrings.completed,
+                  context.l10n.completed,
                   HistoryFilter.completed,
                   provider.currentFilter == HistoryFilter.completed,
                   provider,
                 ),
                 _buildFilterItem(
-                  HistoryStrings.cancelled,
+                  context.l10n.historyFilterCancelled,
                   HistoryFilter.cancelled,
                   provider.currentFilter == HistoryFilter.cancelled,
                   provider,
                 ),
                 _buildFilterItem(
-                  HistoryStrings.booked,
+                  context.l10n.historyFilterBooked,
                   HistoryFilter.booked,
                   provider.currentFilter == HistoryFilter.booked,
                   provider,
@@ -315,7 +341,7 @@ class _HistoryPageState extends State<HistoryPage> {
         onTap: () => provider.setFilter(filter),
         borderRadius: BorderRadius.circular(12),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
+          duration: Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
             color: isSelected ? AppColors.primary : Colors.transparent,
@@ -325,7 +351,7 @@ class _HistoryPageState extends State<HistoryPage> {
             label,
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: isSelected ? Colors.white : const Color(0xFF626A6C),
+              color: isSelected ? Colors.white : Color(0xFF626A6C),
               fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
             ),
           ),

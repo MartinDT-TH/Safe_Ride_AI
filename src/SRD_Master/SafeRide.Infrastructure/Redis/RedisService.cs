@@ -39,6 +39,9 @@ public sealed class RedisService : IRedisService, IDisposable
     public Task SetAsync(string key, string value, TimeSpan expiration) =>
         Database.StringSetAsync(key, value, expiration);
 
+    public Task SetPersistentAsync(string key, string value) =>
+        Database.StringSetAsync(key, value);
+
     public Task<bool> SetIfNotExistsAsync(
         string key,
         string value,
@@ -390,7 +393,15 @@ public sealed class RedisService : IRedisService, IDisposable
                 Format(options.MaxInferredSpeedKmh)
             });
 
-        var values = (RedisResult[])result;
+        var values = (RedisResult[]?)result
+            ?? throw new InvalidOperationException(
+                "Redis trip tracking script returned no result.");
+        if (values.Length < 5)
+        {
+            throw new InvalidOperationException(
+                "Redis trip tracking script returned an incomplete result.");
+        }
+
         return new TripTrackingUpdateResult(
             values[0].ToString() == "1",
             values[1].ToString() == "1",

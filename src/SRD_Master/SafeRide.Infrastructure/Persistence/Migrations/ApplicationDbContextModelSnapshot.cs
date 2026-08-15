@@ -126,6 +126,291 @@ namespace SafeRide.Infrastructure.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("SafeRide.Domain.Entities.AccountBanConfiguration", b =>
+                {
+                    b.Property<long>("Id")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("(getutcdate())");
+
+                    b.Property<bool>("IsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<int>("MaximumTemporaryBans")
+                        .HasColumnType("int");
+
+                    b.Property<int>("NegativeFeedbackThreshold")
+                        .HasColumnType("int");
+
+                    b.Property<int>("NegativeRatingMaxScore")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TemporaryBanDurationDays")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("(getutcdate())");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id")
+                        .HasName("PK_AccountBanConfigurations");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.ToTable("AccountBanConfigurations", (string)null, t =>
+                        {
+                            t.HasCheckConstraint("CK_AccountBanConfigurations_MaximumTemporaryBans", "[MaximumTemporaryBans] > 0");
+
+                            t.HasCheckConstraint("CK_AccountBanConfigurations_NegativeFeedbackThreshold", "[NegativeFeedbackThreshold] > 0");
+
+                            t.HasCheckConstraint("CK_AccountBanConfigurations_NegativeRatingMaxScore", "[NegativeRatingMaxScore] BETWEEN 1 AND 5");
+
+                            t.HasCheckConstraint("CK_AccountBanConfigurations_Singleton", "[Id] = 1");
+
+                            t.HasCheckConstraint("CK_AccountBanConfigurations_TemporaryBanDurationDays", "[TemporaryBanDurationDays] > 0");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1L,
+                            NegativeFeedbackThreshold = 5,
+                            NegativeRatingMaxScore = 2,
+                            TemporaryBanDurationDays = 15,
+                            MaximumTemporaryBans = 3,
+                            IsEnabled = true,
+                            CreatedAt = new DateTime(2026, 8, 15, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedAt = new DateTime(2026, 8, 15, 0, 0, 0, 0, DateTimeKind.Utc)
+                        });
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.AccountBanHistory", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("BanType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("(getutcdate())");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("EndsAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("NegativeFeedbackCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("ReleasedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("ReleasedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ReleaseReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasDefaultValue("Active");
+
+                    b.Property<int?>("TemporaryBanSequence")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Trigger")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<long?>("TriggeringRatingId")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id")
+                        .HasName("PK_AccountBanHistories");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("ReleasedByUserId");
+
+                    b.HasIndex("TriggeringRatingId");
+
+                    b.HasIndex("UserId", "Status");
+
+                    b.HasIndex("UserId", "Source", "BanType", "CreatedAt");
+
+                    b.ToTable("AccountBanHistories", (string)null, t =>
+                        {
+                            t.HasCheckConstraint("CK_AccountBanHistories_EndAfterStart", "[EndsAt] IS NULL OR [EndsAt] > [StartedAt]");
+
+                            t.HasCheckConstraint("CK_AccountBanHistories_NegativeFeedbackCount", "[NegativeFeedbackCount] IS NULL OR [NegativeFeedbackCount] >= 0");
+
+                            t.HasCheckConstraint("CK_AccountBanHistories_TemporaryBanSequence", "[TemporaryBanSequence] IS NULL OR [TemporaryBanSequence] > 0");
+                        });
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.AccountBanConfiguration", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.AspNetUser", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_AccountBanConfigurations_UpdatedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.AccountBanHistory", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.AspNetUser", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_AccountBanHistories_CreatedByUser");
+
+                    b.HasOne("SafeRide.Domain.Entities.AspNetUser", "ReleasedByUser")
+                        .WithMany()
+                        .HasForeignKey("ReleasedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_AccountBanHistories_ReleasedByUser");
+
+                    b.HasOne("SafeRide.Domain.Entities.Rating", "TriggeringRating")
+                        .WithMany()
+                        .HasForeignKey("TriggeringRatingId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_AccountBanHistories_TriggeringRating");
+
+                    b.HasOne("SafeRide.Domain.Entities.AspNetUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_AccountBanHistories_User");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("ReleasedByUser");
+
+                    b.Navigation("TriggeringRating");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.AdminNotification", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasMaxLength(140)
+                        .HasColumnType("nvarchar(140)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("(getutcdate())");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("NotificationType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<DateTime?>("RejectedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("RejectedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("RejectedReason")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasDefaultValueSql("('Pending')");
+
+                    b.Property<string>("TargetAudience")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_AdminNotifications");
+
+                    b.HasIndex("ApprovedBy");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("NotificationType");
+
+                    b.HasIndex("RejectedBy");
+
+                    b.HasIndex("TargetAudience");
+
+                    b.HasIndex("Status", "CreatedAt");
+
+                    b.ToTable("AdminNotifications", (string)null);
+                });
+
             modelBuilder.Entity("SafeRide.Domain.Entities.AspNetRole", b =>
                 {
                     b.Property<Guid>("Id")
@@ -457,7 +742,7 @@ namespace SafeRide.Infrastructure.Migrations
                         .HasDefaultValueSql("(getutcdate())");
 
                     b.Property<decimal>("DiscountAmount")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(18, 2)");
 
                     b.HasKey("BookingId", "PromotionId")
                         .HasName("PK__BookingP__96B958114224E6FD");
@@ -478,12 +763,19 @@ namespace SafeRide.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
+                    b.Property<string>("Address")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
                     b.Property<string>("BackImageUrl")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<DateOnly?>("DateOfBirth")
+                        .HasColumnType("date");
 
                     b.Property<string>("DocumentNumber")
                         .HasMaxLength(50)
@@ -508,6 +800,15 @@ namespace SafeRide.Infrastructure.Migrations
                     b.Property<string>("FrontImageUrl")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("FullName")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Gender")
+                        .HasMaxLength(10)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(10)");
 
                     b.Property<DateOnly?>("IssueDate")
                         .HasColumnType("date");
@@ -647,6 +948,9 @@ namespace SafeRide.Infrastructure.Migrations
                     b.Property<DateTime?>("ReadAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<long?>("ReferenceId")
+                        .HasColumnType("bigint");
+
                     b.Property<DateTime>("SentAt")
                         .HasColumnType("datetime2");
 
@@ -655,13 +959,17 @@ namespace SafeRide.Infrastructure.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
 
+                    b.Property<string>("TranslationsJson")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<Guid>("UserId")
                         .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id")
                         .HasName("PK__Notifica__3214EC07BC6B781B");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId", "NotificationType", "ReferenceId")
+                        .HasDatabaseName("IX_Notifications_UserId_Type_Reference");
 
                     b.ToTable("Notifications");
                 });
@@ -675,7 +983,7 @@ namespace SafeRide.Infrastructure.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
                     b.Property<decimal>("Amount")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(18, 2)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
@@ -740,7 +1048,7 @@ namespace SafeRide.Infrastructure.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
                     b.Property<decimal>("BaseFare")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(18, 2)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
@@ -1411,22 +1719,29 @@ namespace SafeRide.Infrastructure.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("(sysutcdatetime())");
 
                     b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("OpenedAt")
                         .HasColumnType("datetime2");
 
                     b.Property<Guid>("RecipientUserId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<string>("ShareToken")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(100)");
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<Guid>("SharedByUserId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .IsUnicode(false)
+                        .HasColumnType("char(64)");
 
                     b.Property<long>("TripId")
                         .HasColumnType("bigint");
@@ -1434,13 +1749,30 @@ namespace SafeRide.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("PK__TripShar__3214EC079FAF0E0E");
 
-                    b.HasIndex("RecipientUserId");
+                    b.HasIndex("RecipientUserId")
+                        .HasDatabaseName("IX_TripShares_RecipientUserId");
 
                     b.HasIndex("SharedByUserId");
 
-                    b.HasIndex("TripId");
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("UX_TripShares_TokenHash");
 
-                    b.ToTable("TripShares");
+                    b.HasIndex("TripId")
+                        .HasDatabaseName("IX_TripShares_TripId");
+
+                    b.HasIndex("TripId", "RecipientUserId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_TripShares_ActiveRecipient")
+                        .HasFilter("[RevokedAt] IS NULL");
+
+                    b.HasIndex("TripId", "ExpiresAt", "RevokedAt")
+                        .HasDatabaseName("IX_TripShares_ActiveLookup");
+
+                    b.ToTable("TripShares", t =>
+                        {
+                            t.HasCheckConstraint("CK_TripShares_DifferentUsers", "[SharedByUserId] <> [RecipientUserId]");
+                        });
                 });
 
             modelBuilder.Entity("SafeRide.Domain.Entities.Vehicle", b =>
@@ -1672,6 +2004,34 @@ namespace SafeRide.Infrastructure.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.AdminNotification", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.AspNetUser", "ApprovedByUser")
+                        .WithMany()
+                        .HasForeignKey("ApprovedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_AdminNotifications_ApprovedByUser");
+
+                    b.HasOne("SafeRide.Domain.Entities.AspNetUser", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_AdminNotifications_CreatedByUser");
+
+                    b.HasOne("SafeRide.Domain.Entities.AspNetUser", "RejectedByUser")
+                        .WithMany()
+                        .HasForeignKey("RejectedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_AdminNotifications_RejectedByUser");
+
+                    b.Navigation("ApprovedByUser");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("RejectedByUser");
                 });
 
             modelBuilder.Entity("SafeRide.Domain.Entities.Booking", b =>

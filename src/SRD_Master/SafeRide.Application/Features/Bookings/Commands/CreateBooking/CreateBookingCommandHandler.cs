@@ -24,6 +24,7 @@ public sealed class CreateBookingCommandHandler
     private readonly IPromotionRepository _promotionRepository;
     private readonly IMatchingPolicyProvider _matchingPolicyProvider;
     private readonly IBookingLifecycleJobScheduler _jobScheduler;
+    private readonly IPromotionUnlockRuleStore _promotionUnlockRuleStore;
 
     public CreateBookingCommandHandler(
         IBookingRepository bookingRepository,
@@ -35,6 +36,7 @@ public sealed class CreateBookingCommandHandler
         IVehicleLicenseRequirementService vehicleLicenseRequirementService,
         IRealtimeNotificationService realtimeNotificationService,
         IPromotionRepository promotionRepository,
+        IPromotionUnlockRuleStore promotionUnlockRuleStore,
         IMatchingPolicyProvider matchingPolicyProvider,
         IBookingLifecycleJobScheduler jobScheduler)
     {
@@ -47,6 +49,7 @@ public sealed class CreateBookingCommandHandler
         _vehicleLicenseRequirementService = vehicleLicenseRequirementService;
         _realtimeNotificationService = realtimeNotificationService;
         _promotionRepository = promotionRepository;
+        _promotionUnlockRuleStore = promotionUnlockRuleStore;
         _matchingPolicyProvider = matchingPolicyProvider;
         _jobScheduler = jobScheduler;
     }
@@ -451,6 +454,10 @@ public sealed class CreateBookingCommandHandler
             promotion.Id,
             promotion.UsageLimitPerUser,
             cancellationToken);
+        await ValidateCompletedTripsAsync(
+            booking.CustomerId,
+            promotion.PromotionCode,
+            cancellationToken);
 
         var discountAmount = PromotionApplicationRules.CalculateDiscountAmount(
             promotion,
@@ -481,6 +488,25 @@ public sealed class CreateBookingCommandHandler
         PromotionApplicationRules.ValidateCustomerUsageLimit(
             usageCount,
             usageLimitPerUser);
+    }
+
+    private async Task ValidateCompletedTripsAsync(
+        Guid customerId,
+        string promotionCode,
+        CancellationToken cancellationToken)
+    {
+        var requiredCompletedTrips = await _promotionUnlockRuleStore
+            .GetRequiredCompletedTripsAsync(promotionCode, cancellationToken);
+        if (requiredCompletedTrips <= 0)
+        {
+            return;
+        }
+
+        var completedTrips = await _promotionRepository
+            .CountCustomerCompletedTripsAsync(customerId, cancellationToken);
+        PromotionUnlockRules.ValidateCompletedTrips(
+            completedTrips,
+            requiredCompletedTrips);
     }
 
     private sealed record CreateBookingPromotionResult(

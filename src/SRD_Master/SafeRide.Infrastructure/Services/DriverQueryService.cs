@@ -13,6 +13,8 @@ namespace SafeRide.Infrastructure.Services;
 
 public sealed class DriverQueryService : IDriverQueryService
 {
+    private const decimal DriverShareRate = 0.70m;
+
     private readonly ApplicationDbContext _dbContext;
     private readonly IRedisService _redisService;
     private readonly IMapRoutingService _mapRoutingService;
@@ -72,6 +74,7 @@ public sealed class DriverQueryService : IDriverQueryService
             .Include(trip => trip.Booking)
             .Include(trip => trip.ReturnConfirmations)
             .ThenInclude(returnConfirmation => returnConfirmation.Evidence)
+            .Include(trip => trip.Payments)
 
             .Where(trip => trip.DriverId == driverId
                 && trip.TripStatus != TripStatus.COMPLETED
@@ -153,7 +156,8 @@ public sealed class DriverQueryService : IDriverQueryService
                             evidence.ContentType,
                             evidence.DisplayOrder))
                         .ToList()),
-            arrivalPolyline);
+            arrivalPolyline,
+            trip.Payments.Any(payment => payment.PaymentStatus == PaymentStatus.Success));
     }
 
     public async Task<IReadOnlyList<DriverTripRequestDto>> GetOpenTripRequestsAsync(
@@ -310,6 +314,28 @@ public sealed class DriverQueryService : IDriverQueryService
             .Select(x => new WalletIncomeRow(x.Amount, x.CreatedAt))
             .ToListAsync(cancellationToken);
 
+        var cashIncome = await _dbContext.Payments
+            .AsNoTracking()
+            .Where(x => x.Trip.DriverId == driverId
+                && x.PaymentMethod == PaymentMethod.CASH
+                && x.PaymentStatus == PaymentStatus.Success
+                && x.PaidAt != null
+                && x.PaidAt >= queryStartUtc
+                && x.PaidAt < queryEndUtc)
+            .Select(x => new
+            {
+                Fare = x.Trip.ActualFare ?? x.Trip.Booking.EstimatedFare,
+                PaidAt = x.PaidAt!.Value
+            })
+            .ToListAsync(cancellationToken);
+
+        incomeTransactions.AddRange(cashIncome.Select(x => new WalletIncomeRow(
+            decimal.Round(
+                x.Fare * DriverShareRate,
+                0,
+                MidpointRounding.AwayFromZero),
+            x.PaidAt)));
+
         var recentTransactions = await _dbContext.WalletTransactions
             .AsNoTracking()
             .Where(x => x.WalletId == wallet.Id)
@@ -335,6 +361,33 @@ public sealed class DriverQueryService : IDriverQueryService
                 x.Description,
                 x.CreatedAt))
             .ToListAsync(cancellationToken);
+
+        var recentCashReceipts = await _dbContext.Payments
+            .AsNoTracking()
+            .Where(x => x.Trip.DriverId == driverId
+                && x.PaymentMethod == PaymentMethod.CASH
+                && x.PaymentStatus == PaymentStatus.Success
+                && x.PaidAt != null)
+            .OrderByDescending(x => x.PaidAt)
+            .ThenByDescending(x => x.Id)
+            .Take(recentLimit)
+            .Select(x => new DriverWalletTransactionDto(
+                -x.Id,
+                x.TripId,
+                WalletTransactionType.Income,
+                x.Amount,
+                true,
+                "Đã nhận tiền mặt chuyến #TRP-" + x.TripId,
+                "Tiền mặt đã nhận trực tiếp từ khách hàng",
+                x.PaidAt!.Value))
+            .ToListAsync(cancellationToken);
+
+        recentTransactions.AddRange(recentCashReceipts);
+        recentTransactions = recentTransactions
+            .OrderByDescending(x => x.CreatedAt)
+            .ThenByDescending(x => x.Id)
+            .Take(recentLimit)
+            .ToList();
 
         var savedBankAccount = await _dbContext.WithdrawalRequests
             .AsNoTracking()

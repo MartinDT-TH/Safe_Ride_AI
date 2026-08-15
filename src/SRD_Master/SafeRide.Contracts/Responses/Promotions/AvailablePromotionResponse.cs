@@ -13,4 +13,9 @@ public sealed record AvailablePromotionResponse(
     decimal MaximumDiscountValue,
     int UsageLimitPerUser,
     int? RemainingUsageCount,
-    string ShortDescription);
+    string ShortDescription,
+    int RequiredCompletedTrips,
+    int CustomerCompletedTrips,
+    int RemainingTripsToUnlock,
+    bool IsUnlocked,
+    string? UnlockMessage);

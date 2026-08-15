@@ -18,7 +18,7 @@ public sealed class JwtTokenServiceTests
     };
 
     [Fact]
-    public async Task AccessToken_ContainsIdentityAndRoleClaims()
+    public async Task AccessToken_ContainsStableIdentityClaims()
     {
         var user = new AspNetUser
         {
@@ -38,8 +38,11 @@ public sealed class JwtTokenServiceTests
         Assert.Equal(Options.Issuer, token.Issuer);
         Assert.Equal(user.Id.ToString(), token.Subject);
         Assert.Contains(token.Claims, claim =>
-            (claim.Type == ClaimTypes.Role || claim.Type == "role") &&
-            claim.Value == "Customer");
+            claim.Type == ClaimTypes.NameIdentifier
+            && claim.Value == user.Id.ToString());
+        Assert.Contains(token.Claims, claim =>
+            claim.Type == ClaimTypes.Email
+            && claim.Value == user.Email);
         Assert.Equal(Options.AccessTokenMinutes * 60, result.ExpiresIn);
     }
 

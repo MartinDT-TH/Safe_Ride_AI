@@ -221,10 +221,11 @@ abstract final class LocationStrings {
 abstract final class AppConfig {
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://192.168.1.26:5026/api/',
+    defaultValue: 'https://saferidefpt.runasp.net/api/',
   );
   // https://safe-ride-ai.onrender.com
   // http://192.168.1.19:5026
+  // http://192.168.1.26:5026 Tho
   static const forceWebSockets = bool.fromEnvironment(
     'FORCE_WEBSOCKETS',
     defaultValue: true, // Dev only or config-based
@@ -272,8 +273,11 @@ abstract final class ApiEndpoints {
       '/bookings/$bookingId/confirm-driver-offer/$offerId';
   static String tripStatus(int tripId) => '/trips/$tripId/status';
   static String completeTrip(int tripId) => '/trips/$tripId/complete';
+  static String triggerTripSOS(int tripId) => '/trips/$tripId/sos';
   static String createDriverTripQrPayment(int tripId) =>
       '/payments/driver/trips/$tripId/qr';
+  static String startDriverTripPayment(int tripId) =>
+      '/payments/driver/trips/$tripId/start';
   static String createCustomerTripQrPayment(int tripId) =>
       '/payments/trips/$tripId/qr';
   static String driverTripPaymentStatus(int tripId) =>
@@ -293,6 +297,8 @@ abstract final class ApiEndpoints {
   static const identityVerificationDocuments =
       '/identity-verification/documents';
   static String endTrip(int tripId) => '/trips/$tripId/end';
+  static String respondToEndTripRequest(int tripId) =>
+      '/trips/$tripId/end-response';
   static String customerReturnConfirmation(int tripId) =>
       '/trips/$tripId/return-confirmation/customer';
   static String driverReturnConfirmation(int tripId) =>
@@ -302,6 +308,7 @@ abstract final class ApiEndpoints {
 abstract final class ApiKeys {
   static const authorization = 'Authorization';
   static const bearer = 'Bearer';
+  static const requiresAuth = 'requiresAuth';
   static const userId = 'userId';
   static const phoneNumber = 'phoneNumber';
   static const otpCode = 'otpCode';
@@ -364,6 +371,7 @@ abstract final class ApiKeys {
   static const paidAt = 'paidAt';
   static const tripStatus = 'tripStatus';
   static const tripId = 'tripId';
+  static const isSOSActivated = 'isSOSActivated';
   static const address = 'address';
   static const latitude = 'latitude';
   static const longitude = 'longitude';
@@ -442,6 +450,7 @@ abstract final class StorageKeys {
   static const continuationAbsoluteExpiresAt =
       'auth.continuation_absolute_expires_at';
   static const deviceId = 'device.id';
+  static const pendingTripShareToken = 'trip_share.pending_token';
 }
 
 abstract final class DeviceStrings {

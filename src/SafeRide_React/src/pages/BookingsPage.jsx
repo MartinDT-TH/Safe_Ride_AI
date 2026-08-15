@@ -1,4 +1,6 @@
-import { useMemo, useState } from 'react';
+import { forwardRef, useMemo, useState } from 'react';
+import DatePicker, { registerLocale } from 'react-datepicker';
+import { vi } from 'date-fns/locale/vi';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
     faCalendarDays,
@@ -25,7 +27,10 @@ import {
     mapAdminBookingsPage,
 } from '../features/bookings/bookingsApi';
 import AdminTripDetailsPage from './AdminTripDetailsPage';
+import 'react-datepicker/dist/react-datepicker.css';
 import './BookingsPage.css';
+
+registerLocale('vi', vi);
 
 const PAGE_SIZE = 10;
 const EMPTY_COUNTS = {
@@ -84,6 +89,13 @@ function BookingsPage() {
             ...current,
             [name]: value,
         }));
+    };
+
+    const handleStatusChange = (status) => {
+        const nextFilters = { ...draftFilters, status };
+        setCurrentPage(1);
+        setDraftFilters(nextFilters);
+        setAppliedFilters(normalizeDateRangeFilters(nextFilters));
     };
 
     const handleApplyFilters = () => {
@@ -180,7 +192,7 @@ function BookingsPage() {
                         <span>Trạng thái</span>
                         <select
                             value={draftFilters.status}
-                            onChange={(event) => handleDraftChange('status', event.target.value)}
+                            onChange={(event) => handleStatusChange(event.target.value)}
                         >
                             <option value="all">Tất cả trạng thái</option>
                             <option value="Searching">Đang chờ (Pending)</option>
@@ -195,17 +207,28 @@ function BookingsPage() {
                     <label className="bookings-filter__field">
                         <span>Khoảng ngày</span>
                         <div className="bookings-date-range">
-                            <FontAwesomeIcon icon={faCalendarDays} />
-                            <input
-                                type="date"
-                                value={draftFilters.fromDate}
-                                onChange={(event) => handleDraftChange('fromDate', event.target.value)}
+                            <DatePicker
+                                locale="vi"
+                                dateFormat="dd/MM/yyyy"
+                                selected={parseDateInput(draftFilters.fromDate)}
+                                onChange={(date) => handleDraftChange('fromDate', formatDateInput(date))}
+                                selectsStart
+                                startDate={parseDateInput(draftFilters.fromDate)}
+                                endDate={parseDateInput(draftFilters.toDate)}
+                                maxDate={parseDateInput(draftFilters.toDate)}
+                                customInput={<BookingDateButton label="Từ ngày" />}
                             />
-                            <span className="bookings-date-range__separator">-</span>
-                            <input
-                                type="date"
-                                value={draftFilters.toDate}
-                                onChange={(event) => handleDraftChange('toDate', event.target.value)}
+                            <span className="bookings-date-range__separator">→</span>
+                            <DatePicker
+                                locale="vi"
+                                dateFormat="dd/MM/yyyy"
+                                selected={parseDateInput(draftFilters.toDate)}
+                                onChange={(date) => handleDraftChange('toDate', formatDateInput(date))}
+                                selectsEnd
+                                startDate={parseDateInput(draftFilters.fromDate)}
+                                endDate={parseDateInput(draftFilters.toDate)}
+                                minDate={parseDateInput(draftFilters.fromDate)}
+                                customInput={<BookingDateButton label="Đến ngày" />}
                             />
                         </div>
                     </label>
@@ -557,7 +580,27 @@ function normalizeDateRangeFilters(filters) {
     return filters;
 }
 
+const BookingDateButton = forwardRef(function BookingDateButton({ value, onClick, label }, ref) {
+    return (
+        <button ref={ref} type="button" className="bookings-date-picker" onClick={onClick}>
+            <FontAwesomeIcon icon={faCalendarDays} />
+            <span>
+                <small>{label}</small>
+                <strong>{value}</strong>
+            </span>
+        </button>
+    );
+});
+
+function parseDateInput(value) {
+    if (!value) return null;
+    const [year, month, day] = value.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function formatDateInput(date) {
+    if (!date) return '';
     const year = date.getFullYear();
     const month = `${date.getMonth() + 1}`.padStart(2, '0');
     const day = `${date.getDate()}`.padStart(2, '0');

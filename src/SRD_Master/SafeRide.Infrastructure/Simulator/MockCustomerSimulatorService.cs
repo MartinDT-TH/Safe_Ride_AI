@@ -320,17 +320,46 @@ public sealed class MockCustomerSimulatorService : BackgroundService
                 if (trip is null || trip.TripStatus == TripStatus.CANCELLED) return;
 
                 await tripStatusService.EndTripAsync(driverId, trip.Id, cancellationToken);
+                await tripStatusService.RespondToEndTripRequestAsync(
+                    booking.CustomerId,
+                    trip.Id,
+                    accepted: true,
+                    cancellationToken);
                 _logger.LogInformation("DemoFlow ended trip {TripId} for real driver {DriverId}; waiting for return confirmation", trip.Id, driverId);
 
                 if (_simulatorOptionsMonitor.CurrentValue.MockCustomerAutoConfirmDriver)
                 {
-                    await Task.Delay(1000, cancellationToken);
+                    var paymentWaitDeadline = DateTime.UtcNow.AddMinutes(5);
+                    var paymentSucceeded = false;
+                    while (!cancellationToken.IsCancellationRequested
+                        && DateTime.UtcNow < paymentWaitDeadline)
+                    {
+                        paymentSucceeded = await dbContext.Payments
+                            .AsNoTracking()
+                            .AnyAsync(
+                                payment => payment.TripId == trip.Id
+                                    && payment.PaymentStatus == PaymentStatus.Success,
+                                cancellationToken);
+                        if (paymentSucceeded) break;
+                        await Task.Delay(2000, cancellationToken);
+                    }
+
+                    if (!paymentSucceeded)
+                    {
+                        _logger.LogWarning(
+                            "DemoFlow timed out waiting for payment on trip {TripId}; return confirmation was not submitted",
+                            trip.Id);
+                        return;
+                    }
+
                     await tripStatusService.ConfirmReturnByCustomerAsync(
                         booking.CustomerId,
                         trip.Id,
                         vehicleReturnedConfirmed: true,
-                        cancellationToken);
-                    _logger.LogInformation("DemoFlow confirmed return for trip {TripId}; waiting for driver payment handling", trip.Id);
+                        cancellationToken,
+                        ratingScore: 5,
+                        comment: "Demo auto rating");
+                    _logger.LogInformation("DemoFlow confirmed return and completed paid trip {TripId}", trip.Id);
                 }
             }
         }

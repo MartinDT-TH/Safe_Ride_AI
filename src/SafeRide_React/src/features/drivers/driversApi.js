@@ -1,8 +1,15 @@
 import { apiRequest } from '../../shared/api/apiClient';
+import { getCurrentManagementRole, MANAGEMENT_ROLES } from '../auth/managementRoles';
 export function getDrivers(status = 'all') {
     return apiRequest(getDriversPath(status)).then(mapDriverList);
 }
 export function getDriversPath(status) {
+    if (getCurrentManagementRole() === MANAGEMENT_ROLES.staff) {
+        return status === 'all'
+            ? '/staff/drivers'
+            : `/staff/drivers?status=${encodeURIComponent(status)}`;
+    }
+
     return status === 'all'
         ? '/admin/drivers'
         : `/admin/drivers?status=${encodeURIComponent(status)}`;
@@ -25,10 +32,14 @@ export function unlockDriver(driverId) {
     }).then(mapDriver);
 }
 export function reviewDriverKyc(driverId, status, rejectionReason) {
-    return apiRequest(`/admin/drivers/${driverId}/kyc`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status, rejectionReason }),
-    }).then(mapDriver);
+    if (getCurrentManagementRole() === MANAGEMENT_ROLES.staff) {
+        return apiRequest(`/staff/drivers/${driverId}/kyc`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status, rejectionReason }),
+        }).then(mapDriver);
+    }
+
+    return Promise.reject(new Error('Chỉ nhân viên mới có quyền duyệt hồ sơ KYC tài xế.'));
 }
 function mapDriver(driver) {
     const idCard = driver.documents.find((document) => document.documentType === 'ID_CARD');
@@ -66,6 +77,7 @@ function formatShortDate(value) {
         return value;
     }
     return new Intl.DateTimeFormat('vi-VN', {
+        timeZone: 'Asia/Ho_Chi_Minh',
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NetTopologySuite.Geometries;
 using SafeRide.Application.Common.Interfaces;
@@ -12,6 +13,7 @@ using SafeRide.Infrastructure.ExternalServices.Cloudinary;
 using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
 using SafeRide.Infrastructure.Services;
+using SafeRide.Infrastructure.TripChat;
 
 namespace SafeRide.IntegrationTests;
 
@@ -54,6 +56,73 @@ public sealed class TripChatServiceTests
         Assert.Equal("Text", payload.MessageType);
         Assert.Equal("Anh tới chưa?", payload.Message);
         Assert.Null(payload.ImageUrl);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_WithTranslation_StoresOriginalAndTranslations()
+    {
+        await using var dbContext = CreateDbContext();
+        var redis = new InMemoryRedisService();
+        var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var trip = SeedTrip(dbContext, customerId, driverId, TripStatus.IN_PROGRESS);
+        await dbContext.SaveChangesAsync();
+        var translation = new TripChatTranslation(
+            "en",
+            new Dictionary<string, string>
+            {
+                ["vi"] = "Tôi đang ở cổng chính.",
+                ["en"] = "I am at the main entrance."
+            });
+        var service = CreateService(
+            dbContext,
+            redis,
+            new TripChatTranslationServiceFake(translation));
+
+        var result = await service.SendMessageAsync(
+            customerId,
+            trip.Id,
+            "I am at the main entrance.");
+
+        Assert.Equal("I am at the main entrance.", result.Message);
+        Assert.Equal("en", result.SourceLanguage);
+        Assert.Equal("Tôi đang ở cổng chính.", result.Translations?["vi"]);
+
+        var stored = await redis.ListRangeAsync(RedisKeys.TripChatMessages(trip.Id));
+        var payload = JsonSerializer.Deserialize<TripChatMessageDto>(
+            Assert.Single(stored),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.Equal("I am at the main entrance.", payload?.Message);
+        Assert.Equal("Tôi đang ở cổng chính.", payload?.Translations?["vi"]);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_WithUnsafeLanguage_FiltersOriginalAndTranslations()
+    {
+        await using var dbContext = CreateDbContext();
+        var redis = new InMemoryRedisService();
+        var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var trip = SeedTrip(dbContext, customerId, driverId, TripStatus.IN_PROGRESS);
+        await dbContext.SaveChangesAsync();
+        var translation = new TripChatTranslation(
+            "vi",
+            new Dictionary<string, string>
+            {
+                ["en"] = "You are an asshole"
+            });
+        var service = CreateService(
+            dbContext,
+            redis,
+            new TripChatTranslationServiceFake(translation));
+
+        var result = await service.SendMessageAsync(
+            customerId,
+            trip.Id,
+            "Đồ đéo biết lái xe");
+
+        Assert.Equal("Đồ *** biết lái xe", result.Message);
+        Assert.Equal("You are an *******", result.Translations?["en"]);
     }
 
     [Theory]
@@ -118,7 +187,15 @@ public sealed class TripChatServiceTests
 
         Assert.Equal("Text", result.MessageType);
         Assert.Equal("Cảm ơn anh", result.Message);
+        Assert.Equal(trip.BookingId, result.BookingId);
+        Assert.Equal(customerId, result.SenderId);
+        Assert.Equal("Cảm ơn anh", result.MessagePreview);
+        Assert.Equal(result.SentAt, result.CreatedAt);
         Assert.Single(await redis.ListRangeAsync(RedisKeys.TripChatMessages(trip.Id)));
+        Assert.Equal(
+            "1",
+            await redis.GetAsync(RedisKeys.TripChatUnread(trip.Id, driverId)));
+        Assert.Null(await redis.GetAsync(RedisKeys.TripChatUnread(trip.Id, customerId)));
     }
 
     [Fact]
@@ -161,6 +238,69 @@ public sealed class TripChatServiceTests
     }
 
     [Fact]
+    public async Task GetUnreadSummaryAsync_ReturnsRecipientUnreadAndLastMessage()
+    {
+        await using var dbContext = CreateDbContext();
+        var redis = new InMemoryRedisService();
+        var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var trip = SeedTrip(dbContext, customerId, driverId, TripStatus.IN_PROGRESS);
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext, redis);
+
+        await service.SendMessageAsync(customerId, trip.Id, "Anh tới chưa?");
+        await service.SendMessageAsync(customerId, trip.Id, "Em đang đợi");
+
+        var summary = await service.GetUnreadSummaryAsync(driverId);
+
+        Assert.Equal(2, summary.TotalUnread);
+        var item = Assert.Single(summary.Items);
+        Assert.Equal(trip.Id, item.TripId);
+        Assert.Equal(trip.BookingId, item.BookingId);
+        Assert.Equal(2, item.UnreadCount);
+        Assert.Equal("Em đang đợi", item.LastMessagePreview);
+        Assert.Equal(UtcNow, item.LastMessageAt);
+    }
+
+    [Fact]
+    public async Task MarkReadAsync_RemovesOnlyCurrentUsersUnreadCount()
+    {
+        await using var dbContext = CreateDbContext();
+        var redis = new InMemoryRedisService();
+        var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var trip = SeedTrip(dbContext, customerId, driverId, TripStatus.IN_PROGRESS);
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext, redis);
+        await service.SendMessageAsync(customerId, trip.Id, "Tin cho tài xế");
+        await service.SendMessageAsync(driverId, trip.Id, "Tin cho khách");
+
+        await service.MarkReadAsync(driverId, trip.Id);
+
+        Assert.Null(await redis.GetAsync(RedisKeys.TripChatUnread(trip.Id, driverId)));
+        Assert.Equal(
+            "1",
+            await redis.GetAsync(RedisKeys.TripChatUnread(trip.Id, customerId)));
+    }
+
+    [Fact]
+    public async Task MarkReadAsync_WithUnauthorizedUser_Throws()
+    {
+        await using var dbContext = CreateDbContext();
+        var redis = new InMemoryRedisService();
+        var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var trip = SeedTrip(dbContext, customerId, driverId, TripStatus.IN_PROGRESS);
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext, redis);
+
+        var exception = await Assert.ThrowsAsync<BookingException>(
+            () => service.MarkReadAsync(Guid.NewGuid(), trip.Id));
+
+        Assert.Equal("Bạn không có quyền truy cập cuộc trò chuyện này.", exception.Message);
+    }
+
+    [Fact]
     public async Task SendMessageAsync_KeepsOnlyLast100MessagesInRedis()
     {
         await using var dbContext = CreateDbContext();
@@ -197,7 +337,10 @@ public sealed class TripChatServiceTests
             dbContext,
             redis,
             new DateTimeProviderFake(UtcNow),
-            new CloudinaryImageServiceFake());
+            new CloudinaryImageServiceFake(),
+            new TripChatTranslationServiceFake(),
+            new TripChatContentFilter(),
+            NullLogger<TripChatService>.Instance);
 
         await service.ShortenMessageTtlAsync(4);
 
@@ -328,13 +471,26 @@ public sealed class TripChatServiceTests
 
     private static TripChatService CreateService(
         ApplicationDbContext dbContext,
-        InMemoryRedisService redis)
+        InMemoryRedisService redis,
+        ITripChatTranslationService? translationService = null)
     {
         return new TripChatService(
             dbContext,
             redis,
             new DateTimeProviderFake(UtcNow),
-            new CloudinaryImageServiceFake());
+            new CloudinaryImageServiceFake(),
+            translationService ?? new TripChatTranslationServiceFake(),
+            new TripChatContentFilter(),
+            NullLogger<TripChatService>.Instance);
+    }
+
+    private sealed class TripChatTranslationServiceFake(
+        TripChatTranslation? translation = null) : ITripChatTranslationService
+    {
+        public Task<TripChatTranslation?> TranslateAsync(
+            string message,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(translation);
     }
 
     private static Trip SeedTrip(
@@ -438,6 +594,21 @@ public sealed class TripChatServiceTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(
                 $"https://res.cloudinary.com/test/image/upload/saferide/trip-chat/{tripId}/{Guid.NewGuid():N}.webp");
+
+        public Task<CloudinaryAudioUpload> UploadAiChatAudioAsync(
+            Guid userId,
+            Stream stream,
+            string fileName,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(
+                new CloudinaryAudioUpload(
+                    $"https://res.cloudinary.com/test/video/upload/saferide/ai-chat/{userId:N}/{fileName}",
+                    $"saferide/ai-chat/{userId:N}/{fileName}"));
+
+        public Task DeleteAiChatAudioAsync(
+            string publicId,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     private sealed class RedisServiceFake : IRedisService

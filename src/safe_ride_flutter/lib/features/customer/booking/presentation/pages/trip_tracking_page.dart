@@ -4,15 +4,19 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../../../../../core/constants/app_colors.dart';
+import 'package:share_plus/share_plus.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
 import '../../../../../core/maps/models/map_models.dart';
 import '../../../../../core/maps/widgets/live_trip_map_widget.dart';
 import '../../../../../core/services/map_api_service.dart';
 import '../../../../../core/services/mobile_config_service.dart';
 import '../../../../../core/services/socket_service.dart';
+import '../../../../../core/utils/validators.dart';
 import '../../../../../dependency_injection/injection.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
+import '../../../../trip_sharing/data/models/trip_share_models.dart';
+import '../../../../trip_sharing/presentation/providers/trip_sharing_provider.dart';
 import '../../data/models/booking_catalog.dart';
 import '../../data/models/booking_location.dart';
 import '../../data/models/booking_response.dart';
@@ -29,7 +33,7 @@ import '../../../../shared/chat/presentation/pages/trip_chat_page.dart';
 enum TripTrackingState { arriving, inProgress }
 
 class TripTrackingPage extends StatefulWidget {
-  const TripTrackingPage({
+  TripTrackingPage({
     super.key,
     required this.state,
     required this.booking,
@@ -58,6 +62,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   final MapApiService _mapApiService = MapApiService();
   final List<AppLatLng> _arrivalRoutePoints = [];
   final List<AppLatLng> _tripRoutePoints = [];
+  final List<AppLatLng> _actualPathPoints = [];
   AppLatLng? _driverPosition;
   double _driverHeading = 0;
   DateTime? _lastCameraFitAt;
@@ -69,9 +74,14 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   Timer? _tripStatusPollingTimer;
   bool _trackingSnapshotRefreshInProgress = false;
   bool _summaryOpened = false;
-  bool _isCompletingTrip = false;
+  bool _isWaitingForDriverPayment = false;
   bool _arrivalRouteRefreshInProgress = false;
   bool _incomingCallDialogOpen = false;
+  bool _deviationAlertOpen = false;
+  bool _endTripRequestDialogOpen = false;
+  bool _respondingToEndTripRequest = false;
+  bool _isSendingSOS = false;
+  late bool _isSOSActivated;
   late bool _isPrepaid;
   late String? _currentTripStatus;
   static const _tealColor = Color(0xFF006B70);
@@ -93,18 +103,19 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     super.initState();
     _pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 2),
+      duration: Duration(seconds: 2),
     )..repeat(reverse: true);
     _currentTripStatus =
         widget.booking.tripStatus ??
         (widget.state == TripTrackingState.inProgress
             ? 'IN_PROGRESS'
             : 'DRIVER_ARRIVING');
+    _isSOSActivated = widget.booking.isSOSActivated;
     _isPrepaid = widget.booking.payment?.isSuccess == true;
     _initializeRoutes();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _openSummaryIfPostTrip(widget.booking.tripStatus);
+      _handleTripStatus(widget.booking.tripStatus);
       _socketService.addConnectionLostHandler(_onSocketConnectionLost);
       unawaited(_connectTripSocket());
       unawaited(_refreshTrackingSnapshot());
@@ -119,8 +130,13 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       _currentTripStatus = widget.booking.tripStatus ?? _currentTripStatus;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        _openSummaryIfPostTrip(widget.booking.tripStatus);
+        _handleTripStatus(widget.booking.tripStatus);
       });
+    }
+    if (!oldWidget.booking.isSOSActivated &&
+        widget.booking.isSOSActivated &&
+        !_isSOSActivated) {
+      _isSOSActivated = true;
     }
 
     if (oldWidget.booking.tripId == null && widget.booking.tripId != null) {
@@ -157,6 +173,16 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       _socketService.removeTripStatusChangedHandler(
         _tripStatusHandlerKey(tripId),
       );
+      _socketService.removeTripEndRequestedHandler(
+        _tripEndRequestHandlerKey(tripId),
+      );
+      _socketService.removeTripPaymentUpdatedHandler(
+        _tripPaymentHandlerKey(tripId),
+      );
+      _socketService.removeTripRouteRecalculatedHandler(
+        _tripRouteHandlerKey(tripId),
+      );
+      _socketService.removeSOSTriggeredHandler(_sosHandlerKey(tripId));
       _socketService.removeInAppCallOfferHandler(_callOfferHandlerKey(tripId));
       await _socketService.leaveTrip(tripId);
     } catch (e) {
@@ -173,9 +199,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     _joinedTripId = null;
     _tripSocketConnecting = false;
     if (mounted) {
-      _showMessage('Mất kết nối tới máy chủ. Đang thử kết nối lại...');
+      _showMessage(context.l10n.serverDisconnectedRetrying);
       _tripSocketRetryTimer?.cancel();
-      _tripSocketRetryTimer = Timer(const Duration(seconds: 3), () {
+      _tripSocketRetryTimer = Timer(Duration(seconds: 3), () {
         if (mounted) unawaited(_connectTripSocket());
       });
     }
@@ -205,6 +231,20 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         }
       } on FormatException {
         _tripRoutePoints.clear();
+      }
+    }
+
+    final actualPolyline = booking.actualEncodedPolyline;
+    if (actualPolyline != null && actualPolyline.isNotEmpty) {
+      try {
+        final points = decodePolyline(actualPolyline);
+        if (points.isNotEmpty) {
+          _actualPathPoints
+            ..clear()
+            ..addAll(points);
+        }
+      } on FormatException {
+        _actualPathPoints.clear();
       }
     }
 
@@ -243,10 +283,11 @@ class _TripTrackingPageState extends State<TripTrackingPage>
 
       setState(() {
         _currentTripStatus = booking.tripStatus ?? _currentTripStatus;
+        _isSOSActivated = _isSOSActivated || booking.isSOSActivated;
         _isPrepaid = booking.payment?.isSuccess == true;
         _initializeRoutes(booking);
       });
-      _openSummaryIfPostTrip(booking.tripStatus);
+      _handleTripStatus(booking.tripStatus);
       _fitMapToVisibleRoute();
     } finally {
       _trackingSnapshotRefreshInProgress = false;
@@ -287,6 +328,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
             _driverHeading = _calculateHeading(_driverPosition!, rawPosition);
           }
           _driverPosition = rawPosition;
+          if (_trackingState == TripTrackingState.inProgress) {
+            _actualPathPoints.add(rawPosition);
+          }
         });
 
         _fitMapToVisibleRoute(throttled: true);
@@ -306,13 +350,68 @@ class _TripTrackingPageState extends State<TripTrackingPage>
           _currentTripStatus = update.tripStatus;
         });
 
-        if (_shouldOpenTripSummary(update.tripStatus)) {
-          _openSummaryPage();
+        if (update.tripStatus == 'WAITING_RETURN_CONFIRM') {
+          unawaited(_openSummaryIfPrepaid());
+        } else if (update.tripStatus == 'COMPLETED') {
+          _finishCompletedTrip();
         } else if (update.tripStatus == 'CANCELLED') {
-          _showMessage('Chuyến đi đã được hủy.');
+          _showMessage(context.l10n.tripCancelled);
           Navigator.of(context).popUntil((route) => route.isFirst);
         }
       }, key: _tripStatusHandlerKey(tripId));
+
+      _socketService.onTripEndRequested((update) {
+        if (!mounted || update.tripId != tripId) return;
+        unawaited(_showEndTripRequestDialog(update.tripId));
+      }, key: _tripEndRequestHandlerKey(tripId));
+
+      _socketService.onTripPaymentUpdated((update) {
+        if (!mounted || update.tripId != tripId) {
+          return;
+        }
+        if (update.isSuccess) {
+          setState(() => _isWaitingForDriverPayment = false);
+          unawaited(_openRatingAfterSuccessfulPayment());
+        } else {
+          setState(() => _isWaitingForDriverPayment = true);
+        }
+      }, key: _tripPaymentHandlerKey(tripId));
+
+      _socketService.onTripRouteRecalculated((update) {
+        if (!mounted || update.tripId != tripId) {
+          return;
+        }
+
+        try {
+          final points = decodePolyline(update.encodedPolyline);
+          if (points.length < 2) {
+            return;
+          }
+
+          setState(() {
+            _tripRoutePoints
+              ..clear()
+              ..addAll(points);
+          });
+          _fitMapToVisibleRoute();
+          if (update.shouldAlertCustomer) {
+            unawaited(_showRouteDeviationAlert(update.message));
+          }
+        } on FormatException {
+          debugPrint('Tracking: Invalid recalculated trip polyline.');
+        }
+      }, key: _tripRouteHandlerKey(tripId));
+
+      _socketService.onSOSTriggered((update) {
+        if (!mounted || update.tripId != tripId || _isSOSActivated) {
+          return;
+        }
+        context.read<BookingProvider>().markSOSActivated(tripId);
+        setState(() {
+          _isSOSActivated = true;
+          _isSendingSOS = false;
+        });
+      }, key: _sosHandlerKey(tripId));
 
       _socketService.onInAppCallOffer((signal) {
         if (!mounted || signal.tripId != tripId || signal.sdp == null) {
@@ -331,11 +430,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     } catch (e) {
       debugPrint('Tracking Error: $e');
       if (mounted) {
-        _showMessage(
-          'Không thể kết nối theo dõi vị trí tài xế. Đang thử lại...',
-        );
+        _showMessage(context.l10n.driverLocationTrackingRetrying);
         _tripSocketRetryTimer?.cancel();
-        _tripSocketRetryTimer = Timer(const Duration(seconds: 3), () {
+        _tripSocketRetryTimer = Timer(Duration(seconds: 3), () {
           if (mounted) {
             unawaited(_connectTripSocket());
           }
@@ -467,16 +564,180 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       );
   }
 
+  Future<void> _showRouteDeviationAlert(String message) async {
+    if (!mounted || _deviationAlertOpen) return;
+    _deviationAlertOpen = true;
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          icon: Icon(
+            Icons.health_and_safety_outlined,
+            color: Colors.orange,
+            size: 34,
+          ),
+          title: Text(context.l10n.safetyCheck),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _showMessage(context.l10n.safetyConfirmed);
+              },
+              child: Text(context.l10n.iAmSafe),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                unawaited(_confirmAndTriggerSOS());
+              },
+              child: Text(context.l10n.activateSos),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      _deviationAlertOpen = false;
+    }
+  }
+
+  bool get _canTriggerSOS {
+    final status = _currentTripStatus?.toUpperCase();
+    return status == 'ACCEPTED' ||
+        status == 'ARRIVED' ||
+        status == 'IN_PROGRESS';
+  }
+
+  Future<void> _confirmAndTriggerSOS() async {
+    if (_isSendingSOS || _isSOSActivated || !_canTriggerSOS) {
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.l10n.activateSosQuestion),
+        content: Text(context.l10n.activateSosDescription),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(context.l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: Text(context.l10n.activateSos),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    final tripId = widget.booking.tripId;
+    final token = context.read<AuthProvider>().token;
+    if (tripId == null || token == null || token.isEmpty) {
+      _showMessage(context.l10n.sosActivationFailed);
+      return;
+    }
+
+    setState(() => _isSendingSOS = true);
+    final bookingProvider = context.read<BookingProvider>();
+    final location = await bookingProvider.getCurrentLocation();
+    if (!mounted) return;
+    if (location == null) {
+      setState(() => _isSendingSOS = false);
+      _showMessage(context.l10n.sosLocationFailed);
+      return;
+    }
+
+    final success = await bookingProvider.triggerSOS(
+      token,
+      tripId: tripId,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      message: context.l10n.emergencyHelpMessage,
+    );
+    if (!mounted) return;
+
+    final duplicate = bookingProvider.errorStatusCode == 409;
+    setState(() {
+      _isSendingSOS = false;
+      _isSOSActivated = success || duplicate;
+    });
+    if (duplicate) {
+      bookingProvider.markSOSActivated(tripId);
+      _showMessage(context.l10n.sosActivatedForTrip);
+    } else if (success) {
+      _showMessage(context.l10n.sosActivatedHelpComing);
+    } else {
+      _showMessage(context.l10n.sosActivationFailed);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(
-        children: [_buildMap(), _buildTopHeader(), _buildBottomPanel()],
+        children: [
+          _buildMap(),
+          _buildTopHeader(),
+          _buildBottomPanel(),
+          if (_isWaitingForDriverPayment) _buildWaitingPaymentScreen(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWaitingPaymentScreen() {
+    return Positioned.fill(
+      child: ColoredBox(
+        color: Colors.black.withValues(alpha: 0.55),
+        child: SafeArea(
+          child: Center(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 28),
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 36),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(28),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: _tealColor),
+                  SizedBox(height: 24),
+                  Text(
+                    context.l10n.waitingForPayment,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF1D2939),
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    context.l10n.paymentWaitingInstructions,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 15,
+                      height: 1.5,
+                      color: Color(0xFF667085),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildMap() {
+    final topSafe = MediaQuery.of(context).viewPadding.top;
     return LiveTripMapWidget(
       trackingState: _trackingState == TripTrackingState.arriving
           ? LiveTripTrackingState.arriving
@@ -490,11 +751,12 @@ class _TripTrackingPageState extends State<TripTrackingPage>
           : null,
       arrivalRoutePoints: _arrivalRoutePoints,
       tripRoutePoints: _tripRoutePoints,
+      actualPathPoints: _actualPathPoints,
       driverPosition: _driverPosition,
       driverHeading: _driverHeading,
-      padding: const EdgeInsets.only(
-        top: 130,
-        bottom: 320,
+      padding: EdgeInsets.only(
+        top: topSafe + 130,
+        bottom: 280,
         left: 24,
         right: 24,
       ),
@@ -680,7 +942,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         bounds.$2,
         paddingVal,
         top: 130,
-        bottom: 320,
+        bottom: 280,
         left: 24,
         right: 24,
       ),
@@ -731,7 +993,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                     widget.onSwitchTab?.call(0);
                   },
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Expanded(
                   child: Container(
                     padding: const EdgeInsets.symmetric(
@@ -745,7 +1007,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.12),
                           blurRadius: 16,
-                          offset: const Offset(0, 4),
+                          offset: Offset(0, 4),
                         ),
                       ],
                     ),
@@ -753,17 +1015,21 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         _buildLiveIndicator(),
-                        const SizedBox(width: 8),
+                        SizedBox(width: 8),
                         Flexible(
                           child: Text(
                             _currentTripStatus == 'ARRIVED'
-                                ? 'Tài xế đã đến điểm đón'
+                                ? context.l10n.driverAtPickup
                                 : _currentTripStatus == 'WAITING_PAYMENT'
-                                ? 'Chờ thanh toán cho tài xế'
+                                ? context.l10n.waitingDriverPayment
                                 : isArriving
-                                ? 'Tài xế đang đến • ${_getArrivalDurationMinutes()} phút'
-                                : 'Đang di chuyển • ${_getTripDurationMinutes()} phút',
-                            style: const TextStyle(
+                                ? context.l10n.driverArrivingMinutes(
+                                    _getArrivalDurationMinutes(),
+                                  )
+                                : context.l10n.movingMinutes(
+                                    _getTripDurationMinutes(),
+                                  ),
+                            style: TextStyle(
                               fontWeight: FontWeight.w800,
                               fontSize: 13,
                               color: _tealColor,
@@ -775,8 +1041,8 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
-                const Opacity(
+                SizedBox(width: 12),
+                Opacity(
                   opacity: 0,
                   child: _CircleIconButton(
                     icon: Icons.arrow_back,
@@ -786,7 +1052,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
               ],
             ),
             if (!isArriving && widget.destination != null) ...[
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 18,
@@ -799,23 +1065,23 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.08),
                       blurRadius: 12,
-                      offset: const Offset(0, 4),
+                      offset: Offset(0, 4),
                     ),
                   ],
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.location_on_rounded,
                       color: Colors.redAccent,
                       size: 18,
                     ),
-                    const SizedBox(width: 8),
+                    SizedBox(width: 8),
                     Flexible(
                       child: Text(
                         widget.destination!.address,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 14,
                           color: Color(0xFF1D2939),
@@ -839,7 +1105,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       child: Container(
         width: 10,
         height: 10,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: Colors.red,
           shape: BoxShape.circle,
           boxShadow: [
@@ -854,471 +1120,445 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     final bool isArriving = _trackingState == TripTrackingState.arriving;
     final offer = widget.booking.driverOffer;
     final vehicle = widget.vehicle;
-    final plateParts = vehicle?.plateNumber.split('-') ?? const [];
+    final plateNumber = vehicle?.plateNumber.trim() ?? '';
+    final plateSections = plateNumber
+        .split(RegExp(r'\s+'))
+        .where((section) => section.isNotEmpty)
+        .toList();
+    final plateDashIndex = plateNumber.indexOf('-');
+    final plateTop = plateSections.length > 1
+        ? plateSections.first
+        : plateDashIndex > 0
+        ? plateNumber.substring(0, plateDashIndex)
+        : plateNumber;
+    final plateBottom = plateSections.length > 1
+        ? plateSections.skip(1).join(' ')
+        : plateDashIndex > 0 && plateDashIndex < plateNumber.length - 1
+        ? plateNumber.substring(plateDashIndex + 1)
+        : '';
 
     return Positioned(
       bottom: 0,
       left: 0,
       right: 0,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black12,
-              blurRadius: 24,
-              offset: Offset(0, -10),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 24),
-              decoration: BoxDecoration(
-                color: Colors.grey[200],
-                borderRadius: BorderRadius.circular(2),
+      child: SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black12,
+                blurRadius: 24,
+                offset: Offset(0, -10),
               ),
-            ),
-            if (!isArriving) ...[
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              if (!isArriving) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.check_circle_rounded,
+                            color: _tealColor,
+                            size: 20,
+                          ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              context.l10n.onCorrectRoute,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    _SosButton(
+                      isActivated: _isSOSActivated,
+                      isLoading: _isSendingSOS,
+                      onTap: _canTriggerSOS ? _confirmAndTriggerSOS : null,
+                    ),
+                  ],
+                ),
+                SizedBox(height: 12),
+              ],
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Row(
-                    children: [
-                      Icon(
-                        Icons.check_circle_rounded,
-                        color: _tealColor,
-                        size: 22,
+                  Semantics(
+                    button: offer != null,
+                    label: offer == null ? null : context.l10n.viewReviews,
+                    child: InkWell(
+                      onTap: offer == null
+                          ? null
+                          : () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => DriverReviewsPage(
+                                    driverId: offer.driverId,
+                                    driverName: offer.driverName,
+                                  ),
+                                ),
+                              );
+                            },
+                      customBorder: const CircleBorder(),
+                      child: Stack(
+                        children: [
+                          CircleAvatar(
+                            radius: 26,
+                            backgroundColor: Colors.grey[200],
+                            backgroundImage: offer?.driverAvatarUrl != null
+                                ? NetworkImage(offer!.driverAvatarUrl!)
+                                : null,
+                            child: offer?.driverAvatarUrl == null
+                                ? Icon(
+                                    Icons.person,
+                                    size: 26,
+                                    color: Colors.grey,
+                                  )
+                                : null,
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black12,
+                                    blurRadius: 4,
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.star_rounded,
+                                    color: Colors.amber,
+                                    size: 14,
+                                  ),
+                                  Text(
+                                    offer == null ? ' --' : ' ${offer.rating}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      SizedBox(width: 10),
-                      Text(
-                        'Bạn đang đi đúng lộ trình',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 15,
-                          color: Colors.black87,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                  _SosButton(
-                    onTap: () => _showMessage('Đã gửi tín hiệu SOS khẩn cấp!'),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          offer?.driverName ?? context.l10n.safeRideDriverName,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF1A1A1A),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        SizedBox(height: 3),
+                        Text(
+                          vehicle == null
+                              ? context.l10n.updatingVehicle
+                              : '${vehicle.name} - ${vehicle.color}',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    width: 92,
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(color: Colors.black, width: 2),
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.black, width: 1),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            height: 15,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                plateTop.isNotEmpty ? plateTop : '--',
+                                maxLines: 1,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.black,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Container(
+                            height: 1,
+                            margin: const EdgeInsets.symmetric(vertical: 2),
+                            color: Colors.black,
+                          ),
+                          SizedBox(
+                            height: 19,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                plateBottom.isNotEmpty ? plateBottom : '--',
+                                maxLines: 1,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.black,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
-            ],
-            Row(
-              children: [
-                Stack(
-                  children: [
-                    CircleAvatar(
-                      radius: 30,
-                      backgroundColor: Colors.grey[200],
-                      backgroundImage: offer?.driverAvatarUrl != null
-                          ? NetworkImage(offer!.driverAvatarUrl!)
-                          : null,
-                      child: offer?.driverAvatarUrl == null
-                          ? const Icon(
-                              Icons.person,
-                              size: 30,
-                              color: Colors.grey,
-                            )
-                          : null,
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: const [
-                            BoxShadow(color: Colors.black12, blurRadius: 4),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.star_rounded,
-                              color: Colors.amber,
-                              size: 14,
-                            ),
-                            Text(
-                              offer == null ? ' --' : ' ${offer.rating}',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
+              SizedBox(height: 12),
+              if (isArriving) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: _isPrepaid
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(vertical: 11),
+                          decoration: BoxDecoration(
+                            color: Color(0xFFE5F5F0),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.check_circle_rounded,
+                                color: Color(0xFF0A8F62),
                               ),
+                              SizedBox(width: 8),
+                              Text(
+                                context.l10n.prepaid,
+                                style: TextStyle(
+                                  color: Color(0xFF08734F),
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ElevatedButton.icon(
+                          onPressed: _openPrepayment,
+                          icon: Icon(Icons.qr_code_2_rounded),
+                          label: Text(context.l10n.prepayWithPayos),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _tealColor,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size.fromHeight(44),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
                             ),
-                          ],
+                            textStyle: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
                         ),
+                ),
+                SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _CircleActionButton(
+                        icon: Icons.chat_bubble_rounded,
+                        label: context.l10n.message,
+                        onPressed: _openChat,
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: _CircleActionButton(
+                        icon: Icons.phone_in_talk_rounded,
+                        label: context.l10n.call,
+                        onPressed: _startInAppCall,
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    _SosButton(
+                      isCircle: true,
+                      isActivated: _isSOSActivated,
+                      isLoading: _isSendingSOS,
+                      onTap: _canTriggerSOS ? _confirmAndTriggerSOS : null,
+                    ),
+                  ],
+                ),
+                SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _CircleActionButton(
+                        icon: Icons.share_outlined,
+                        label: context.l10n.share,
+                        onPressed: _showShareModal,
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: _CircleActionButton(
+                        icon: Icons.close_rounded,
+                        label: context.l10n.cancelBooking,
+                        onPressed: () =>
+                            handleBookingBack(context, booking: widget.booking),
+                        foregroundColor: Color(0xFFD92D20),
+                        backgroundColor: Color(0xFFFEECEB),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              offer?.driverName ?? 'Tài xế SafeRide',
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w900,
-                                color: Color(0xFF1A1A1A),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (offer != null) ...[
-                            const SizedBox(width: 4),
-                            InkWell(
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => DriverReviewsPage(
-                                      driverId: offer.driverId,
-                                      driverName: offer.driverName,
-                                    ),
-                                  ),
-                                );
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.star_outline_rounded,
-                                      size: 16,
-                                      color: AppColors.primary,
-                                    ),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      'Xem đánh giá',
-                                      style: TextStyle(
-                                        color: AppColors.primary,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        vehicle == null
-                            ? 'Đang cập nhật xe'
-                            : '${vehicle.name} - ${vehicle.color}',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF2F4F7),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        plateParts.isNotEmpty ? plateParts.first.trim() : '--',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF667085),
-                        ),
-                      ),
-                      Text(
-                        plateParts.length > 1 ? plateParts.last.trim() : '--',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFF1D2939),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            if (isArriving) ...[
-              SizedBox(
-                width: double.infinity,
-                child: _isPrepaid
-                    ? Container(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE5F5F0),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.check_circle_rounded,
-                              color: Color(0xFF0A8F62),
-                            ),
-                            SizedBox(width: 8),
-                            Text(
-                              'Đã thanh toán trước',
-                              style: TextStyle(
-                                color: Color(0xFF08734F),
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ElevatedButton.icon(
-                        onPressed: _openPrepayment,
-                        icon: const Icon(Icons.qr_code_2_rounded),
-                        label: const Text('Thanh toán trước bằng PayOS'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _tealColor,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 15),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          textStyle: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
-              ),
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: _ActionButton(
-                      icon: Icons.chat_bubble_rounded,
-                      label: 'Nhắn tin',
-                      onPressed: _openChat,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: ElevatedButton.icon(
-                      onPressed: _startInAppCall,
-                      icon: const Icon(Icons.phone_in_talk_rounded),
-                      label: const Text('Gọi điện'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _tealColor,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        textStyle: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 16,
-                        ),
+              ] else ...[
+                if (_currentTripStatus == 'WAITING_PAYMENT') ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Color(0xFFE8F2F2),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: Color(0xFF006B70).withValues(alpha: 0.28),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  _SosButton(
-                    isCircle: true,
-                    onTap: () => _showMessage('Đã gửi tín hiệu SOS khẩn cấp!'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  InkWell(
-                    onTap: _showShareModal,
-                    borderRadius: BorderRadius.circular(8),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.share_outlined,
-                            color: Colors.black54,
-                            size: 20,
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            'Chia sẻ',
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.payments_rounded,
+                          color: _tealColor,
+                          size: 22,
+                        ),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            widget.booking.payment?.message ??
+                                context.l10n.payDriverToComplete,
                             style: TextStyle(
-                              color: Colors.black87,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
+                              color: Color(0xFF00545A),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              height: 1.35,
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () =>
-                        handleBookingBack(context, booking: widget.booking),
-                    child: const Text(
-                      'Hủy chuyến',
-                      style: TextStyle(
-                        color: Color(0xFFE53935),
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ] else ...[
-              if (_currentTripStatus == 'WAITING_PAYMENT') ...[
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE8F2F2),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: const Color(0xFF006B70).withValues(alpha: 0.28),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.payments_rounded,
-                        color: _tealColor,
-                        size: 22,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          widget.booking.payment?.message ??
-                              'Vui lòng thanh toán cho tài xế để hoàn tất chuyến đi.',
-                          style: const TextStyle(
-                            color: Color(0xFF00545A),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            height: 1.35,
-                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-              Row(
-                children: [
-                  Expanded(
-                    child: _CircleActionButton(
-                      icon: Icons.chat_bubble_rounded,
-                      onPressed: _openChat,
-                      label: 'Nhắn tin',
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _CircleActionButton(
-                      icon: Icons.share_rounded,
-                      onPressed: _showShareModal,
-                      label: 'Chia sẻ',
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _CircleActionButton(
-                      icon: Icons.phone_in_talk_rounded,
-                      onPressed: _startInAppCall,
-                      label: 'Gọi điện',
-                    ),
-                  ),
+                  SizedBox(height: 12),
                 ],
-              ),
-              if (_currentTripStatus == 'IN_PROGRESS') ...[
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _isCompletingTrip ? null : _completeTrip,
-                    icon: _isCompletingTrip
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.check_circle_rounded),
-                    label: Text(
-                      _isCompletingTrip
-                          ? 'Đang kết thúc...'
-                          : 'Kết thúc chuyến',
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _tealColor,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _CircleActionButton(
+                        icon: Icons.chat_bubble_rounded,
+                        onPressed: _openChat,
+                        label: context.l10n.message,
                       ),
                     ),
-                  ),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: _CircleActionButton(
+                        icon: Icons.share_rounded,
+                        onPressed: _showShareModal,
+                        label: context.l10n.share,
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: _CircleActionButton(
+                        icon: Icons.phone_in_talk_rounded,
+                        onPressed: _startInAppCall,
+                        label: context.l10n.call,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ],
-          ],
+          ),
         ),
       ),
     );
   }
 
   void _showShareModal() {
+    final tripId = widget.booking.tripId;
+    if (tripId == null) {
+      _showMessage('Chuyến đi chưa sẵn sàng để chia sẻ.');
+      return;
+    }
     showDialog(
       context: context,
-      builder: (context) => const Center(child: ShareTripModal()),
+      builder: (context) => Center(child: ShareTripModal(tripId: tripId)),
     );
   }
 
   Future<void> _openPrepayment() async {
     final tripId = widget.booking.tripId;
     if (tripId == null) {
-      _showMessage('Chuyến đi chưa sẵn sàng để thanh toán.');
+      _showMessage(context.l10n.tripNotReadyForPayment);
       return;
     }
 
@@ -1342,15 +1582,15 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     final driverName = widget.booking.driverOffer?.driverName;
 
     if (tripId == null) {
-      _showMessage('Chuyến đi chưa sẵn sàng để trò chuyện.');
+      _showMessage(context.l10n.tripNotReadyForChat);
       return;
     }
     if (accessToken == null || accessToken.isEmpty) {
-      _showMessage('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      _showMessage(context.l10n.sessionExpired);
       return;
     }
     if (currentUserId == null) {
-      _showMessage('Không thể xác định tài khoản để mở trò chuyện.');
+      _showMessage(context.l10n.chatAccountUnknown);
       return;
     }
 
@@ -1360,8 +1600,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
           tripId: tripId,
           currentUserId: currentUserId,
           receiverName: driverName,
-          canSendMessage:
-              _canSendChat(_currentTripStatus),
+          canSendMessage: _canSendChat(_currentTripStatus),
         ),
       ),
     );
@@ -1379,7 +1618,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     final tripId = widget.booking.tripId;
     final accessToken = context.read<AuthProvider>().token;
     if (tripId == null || accessToken == null || accessToken.isEmpty) {
-      _showMessage('Chưa thể gọi khi chuyến đi chưa sẵn sàng.');
+      _showMessage(context.l10n.tripNotReadyForCall);
       return;
     }
 
@@ -1391,7 +1630,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         builder: (_) => InAppVoiceCallPage(
           tripId: tripId,
           bookingId: widget.booking.bookingId,
-          peerName: widget.booking.driverOffer?.driverName ?? 'Tài xế SafeRide',
+          peerName:
+              widget.booking.driverOffer?.driverName ??
+              context.l10n.safeRideDriverName,
           accessToken: accessToken,
         ),
       ),
@@ -1432,19 +1673,22 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         builder: (dialogContext) {
           incomingDialogContext = dialogContext;
           return AlertDialog(
-            title: const Text('Cuộc gọi đến'),
+            title: Text(context.l10n.incomingCall),
             content: Text(
-              '${widget.booking.driverOffer?.driverName ?? 'Tài xế'} đang gọi cho bạn.',
+              context.l10n.driverCalling(
+                widget.booking.driverOffer?.driverName ??
+                    context.l10n.safeRideDriverName,
+              ),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(false),
-                child: const Text('Từ chối'),
+                child: Text(context.l10n.decline),
               ),
               FilledButton.icon(
                 onPressed: () => Navigator.of(dialogContext).pop(true),
-                icon: const Icon(Icons.call_rounded),
-                label: const Text('Nghe máy'),
+                icon: Icon(Icons.call_rounded),
+                label: Text(context.l10n.answer),
               ),
             ],
           );
@@ -1468,7 +1712,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         builder: (_) => InAppVoiceCallPage(
           tripId: signal.tripId,
           bookingId: signal.bookingId ?? widget.booking.bookingId,
-          peerName: widget.booking.driverOffer?.driverName ?? 'Tài xế SafeRide',
+          peerName:
+              widget.booking.driverOffer?.driverName ??
+              context.l10n.safeRideDriverName,
           accessToken: accessToken,
           initialOffer: signal,
         ),
@@ -1512,11 +1758,13 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         );
     if (!mounted || booking == null) return;
 
-    if (_shouldOpenTripSummary(booking.tripStatus)) {
-      await _openSummaryPage(booking);
+    if (booking.tripStatus == 'WAITING_RETURN_CONFIRM') {
+      await _openSummaryIfPrepaid(booking);
+    } else if (booking.tripStatus == 'COMPLETED') {
+      _finishCompletedTrip();
     } else if (booking.tripStatus == 'CANCELLED' ||
         booking.bookingStatus == 'Cancelled') {
-      _showMessage('Chuyến đi đã được hủy.');
+      _showMessage(context.l10n.tripCancelled);
       Navigator.of(context).popUntil((route) => route.isFirst);
     } else {
       setState(() {
@@ -1525,37 +1773,101 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     }
   }
 
-  Future<void> _completeTrip() async {
-    final tripId = widget.booking.tripId;
-    final accessToken = context.read<AuthProvider>().token;
-    if (tripId == null || accessToken == null || accessToken.isEmpty) {
-      _showMessage('Không thể kết thúc chuyến lúc này.');
-      return;
-    }
-
-    setState(() => _isCompletingTrip = true);
-    final ok = await context.read<BookingProvider>().completeTrip(
-      accessToken,
-      tripId: tripId,
+  Future<void> _showEndTripRequestDialog(int? tripId) async {
+    if (!mounted || tripId == null || _endTripRequestDialogOpen) return;
+    _endTripRequestDialogOpen = true;
+    final accepted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.l10n.driverEndTripRequestTitle),
+        content: Text(context.l10n.driverEndTripRequestMessage),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(context.l10n.continueTrip),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(context.l10n.agree),
+          ),
+        ],
+      ),
     );
+    _endTripRequestDialogOpen = false;
+    if (!mounted || accepted == null || _respondingToEndTripRequest) return;
+
+    final token = context.read<AuthProvider>().token;
+    if (token == null || token.isEmpty) return;
+    setState(() => _respondingToEndTripRequest = true);
+    final succeeded = await context
+        .read<BookingProvider>()
+        .respondToEndTripRequest(token, tripId: tripId, accepted: accepted);
     if (!mounted) return;
-
-    setState(() => _isCompletingTrip = false);
-    if (!ok) {
-      _showMessage(
-        context.read<BookingProvider>().errorMessage ??
-            'Không thể kết thúc chuyến. Vui lòng thử lại.',
-      );
-      return;
+    setState(() => _respondingToEndTripRequest = false);
+    if (!succeeded) {
+      _showMessage(context.l10n.endTripResponseFailed);
+    } else if (!accepted) {
+      _showMessage(context.l10n.continueTrip);
+    } else {
+      unawaited(_refreshTripStatus());
     }
-
-    await _refreshTripStatus();
   }
 
-  void _openSummaryIfPostTrip(String? tripStatus) {
-    if (_shouldOpenTripSummary(tripStatus)) {
-      unawaited(_openSummaryPage());
+  void _handleTripStatus(String? tripStatus) {
+    if (tripStatus == 'WAITING_RETURN_CONFIRM') {
+      unawaited(_openSummaryIfPrepaid(widget.booking));
+    } else if (tripStatus == 'COMPLETED') {
+      _finishCompletedTrip();
     }
+  }
+
+  Future<void> _openSummaryIfPrepaid([BookingResponse? booking]) async {
+    if (!mounted || _summaryOpened) return;
+    final activeBooking = context.read<BookingProvider>().activeBooking;
+    final current = booking ?? activeBooking ?? widget.booking;
+    final paymentSucceeded =
+        current.payment?.isSuccess == true ||
+        activeBooking?.payment?.isSuccess == true ||
+        widget.booking.payment?.isSuccess == true;
+    if (paymentSucceeded) {
+      await _openSummaryPage(current);
+    }
+  }
+
+  Future<void> _openRatingAfterSuccessfulPayment() async {
+    if (!mounted || _summaryOpened) return;
+    final token = context.read<AuthProvider>().token;
+    BookingResponse? latest;
+    if (token != null && token.isNotEmpty) {
+      latest = await context
+          .read<BookingProvider>()
+          .refreshActiveBookingDetails(
+            token,
+            bookingId: widget.booking.bookingId,
+          );
+    }
+    if (!mounted) return;
+
+    final booking =
+        latest ??
+        context.read<BookingProvider>().activeBooking ??
+        widget.booking;
+    if (booking.tripStatus == 'COMPLETED') {
+      _finishCompletedTrip();
+      return;
+    }
+    if (booking.payment?.isSuccess == true &&
+        booking.tripStatus == 'WAITING_RETURN_CONFIRM') {
+      await _openSummaryPage(booking);
+    }
+  }
+
+  void _finishCompletedTrip() {
+    if (!mounted) return;
+    context.read<BookingProvider>().clearActiveBooking();
+    widget.onSwitchTab?.call(0);
+    _showMessage(context.l10n.tripCompletedThanks);
   }
 
   Future<void> _openSummaryPage([BookingResponse? completedBooking]) async {
@@ -1592,21 +1904,15 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   }
 
   static String _tripStatusHandlerKey(int tripId) => 'tripTracking:$tripId';
+  static String _tripEndRequestHandlerKey(int tripId) =>
+      'tripTrackingEndRequest:$tripId';
+  static String _tripPaymentHandlerKey(int tripId) =>
+      'tripTrackingPayment:$tripId';
+  static String _sosHandlerKey(int tripId) => 'tripTrackingSOS:$tripId';
   static String _driverLocationHandlerKey(int tripId) =>
       'tripTrackingLocation:$tripId';
+  static String _tripRouteHandlerKey(int tripId) => 'tripTrackingRoute:$tripId';
   static String _callOfferHandlerKey(int tripId) => 'tripTrackingCall:$tripId';
-  static bool _shouldOpenTripSummary(String? status) {
-    if (status == null) return false;
-    final s = status.toUpperCase();
-    return s == 'WAITING_RETURN_CONFIRM' ||
-        s == 'RETURN_CONFIRMED' ||
-        s == 'WAITING_PAYMENT' ||
-        s == 'COMPLETED' ||
-        s == '4' ||
-        s == '5' ||
-        s == '6' ||
-        s == '7';
-  }
 }
 
 class _RouteProgress {
@@ -1615,7 +1921,7 @@ class _RouteProgress {
   final double progress;
   final double distanceMeters;
 
-  const _RouteProgress({
+  _RouteProgress({
     required this.point,
     required this.segmentIndex,
     required this.progress,
@@ -1626,7 +1932,7 @@ class _RouteProgress {
 class _CircleIconButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onPressed;
-  const _CircleIconButton({required this.icon, this.onPressed});
+  _CircleIconButton({required this.icon, this.onPressed});
 
   @override
   Widget build(BuildContext context) {
@@ -1638,7 +1944,7 @@ class _CircleIconButton extends StatelessWidget {
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 10,
-            offset: const Offset(0, 4),
+            offset: Offset(0, 4),
           ),
         ],
       ),
@@ -1650,66 +1956,48 @@ class _CircleIconButton extends StatelessWidget {
   }
 }
 
-class _ActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onPressed;
-  const _ActionButton({
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: onPressed,
-      icon: Icon(icon, size: 20),
-      label: Text(label),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: const Color(0xFF1A1A1A),
-        side: BorderSide(color: Colors.grey[200]!, width: 1.5),
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-      ),
-    );
-  }
-}
-
 class _CircleActionButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;
   final String? label;
+  final Color foregroundColor;
+  final Color backgroundColor;
   const _CircleActionButton({
     required this.icon,
     required this.onPressed,
     this.label,
+    this.foregroundColor = const Color(0xFF006B70),
+    this.backgroundColor = const Color(0xFFEAF4F4),
   });
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onPressed,
-      borderRadius: BorderRadius.circular(30),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
+        constraints: const BoxConstraints(minHeight: 44),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
         decoration: BoxDecoration(
-          color: const Color(0xFFEAF4F4),
-          borderRadius: BorderRadius.circular(30),
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: const Color(0xFF006B70), size: 22),
+            Icon(icon, color: foregroundColor, size: 20),
             if (label != null) ...[
-              const SizedBox(width: 8),
-              Text(
-                label!,
-                style: const TextStyle(
-                  color: Color(0xFF006B70),
-                  fontWeight: FontWeight.w800,
-                  fontSize: 15,
+              SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: foregroundColor,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
                 ),
               ),
             ],
@@ -1722,147 +2010,258 @@ class _CircleActionButton extends StatelessWidget {
 
 class _SosButton extends StatelessWidget {
   final bool isCircle;
+  final bool isActivated;
+  final bool isLoading;
   final VoidCallback? onTap;
-  const _SosButton({this.isCircle = false, this.onTap});
+  _SosButton({
+    this.isCircle = false,
+    this.isActivated = false,
+    this.isLoading = false,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: isCircle
-            ? const EdgeInsets.all(16)
-            : const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: const Color(0xFFE53935),
-          shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
-          borderRadius: isCircle ? null : BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFE53935).withValues(alpha: 0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: const Text(
-          'SOS',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w900,
-            fontSize: 12,
+    final enabled = onTap != null && !isActivated && !isLoading;
+    final useCircle = isCircle && !isActivated && !isLoading;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: useCircle ? 44 : 104),
+      child: GestureDetector(
+        onTap: enabled ? onTap : null,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 40),
+          padding: useCircle
+              ? const EdgeInsets.all(12)
+              : const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: isActivated
+                ? Color(0xFF667085)
+                : enabled || isLoading
+                ? Color(0xFFE53935)
+                : Color(0xFFB0B0B0),
+            shape: useCircle ? BoxShape.circle : BoxShape.rectangle,
+            borderRadius: useCircle ? null : BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: (isActivated ? Color(0xFF667085) : Color(0xFFE53935))
+                    .withValues(alpha: 0.3),
+                blurRadius: 8,
+                offset: Offset(0, 4),
+              ),
+            ],
           ),
+          child: isActivated
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.check_circle_rounded,
+                      color: Colors.white,
+                      size: 14,
+                    ),
+                    SizedBox(width: 4),
+                    Text(
+                      'SOS',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                )
+              : Text(
+                  isLoading ? context.l10n.sendingSos : 'SOS',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12,
+                  ),
+                ),
         ),
       ),
     );
   }
 }
 
-class ShareTripModal extends StatelessWidget {
-  const ShareTripModal({super.key});
+class ShareTripModal extends StatefulWidget {
+  const ShareTripModal({super.key, required this.tripId});
+  final int tripId;
+
+  @override
+  State<ShareTripModal> createState() => _ShareTripModalState();
+}
+
+class _ShareTripModalState extends State<ShareTripModal> {
+  final _phoneController = TextEditingController();
+  String? _validationError;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadShares());
+  }
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadShares() async {
+    await context.read<TripSharingProvider>().load(widget.tripId);
+  }
+
+  Future<void> _createShare() async {
+    final phone = PhoneNumberValidator.normalizePhone(_phoneController.text);
+    if (phone.isEmpty) {
+      setState(() => _validationError = 'Số điện thoại không hợp lệ.');
+      return;
+    }
+    setState(() => _validationError = null);
+    final created = await context.read<TripSharingProvider>().create(
+      tripId: widget.tripId,
+      phoneNumber: phone,
+    );
+    if (!mounted || created == null) return;
+
+    // The share was created successfully. Close this app dialog before opening
+    // Android's native share sheet so the customer is never left behind a modal.
+    Navigator.of(context).pop();
+
+    final message = 'Theo dõi chuyến đi SafeRide của tôi: ${created.shareUrl}';
+    try {
+      await Share.share(message);
+    } catch (_) {
+      await Clipboard.setData(ClipboardData(text: message));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Đã sao chép liên kết chia sẻ vào khay nhớ tạm!'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _revoke(TripShareListItem item) async {
+    await context.read<TripSharingProvider>().revoke(
+      widget.tripId,
+      item.tripShareId,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Material(
       color: Colors.transparent,
       child: Container(
-        margin: const EdgeInsets.all(28),
-        padding: const EdgeInsets.all(28),
+        constraints: const BoxConstraints(maxHeight: 650),
+        margin: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.15),
-              blurRadius: 30,
-              offset: const Offset(0, 10),
-            ),
-          ],
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Chia sẻ lộ trình',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w900,
-                color: Color(0xFF1A1A1A),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Gửi link bên dưới cho người thân để theo dõi chuyến đi của bạn theo thời gian thực.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Color(0xFF667085),
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 28),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF2F4F7),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0xFFEAECF0)),
-              ),
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'saferide.vn/track/SR94210',
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: Color(0xFF1D2939),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+        child: Consumer<TripSharingProvider>(
+          builder: (context, provider, _) => SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Chia sẻ chuyến đi',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Nhập đúng số điện thoại đã đăng ký SafeRide. Người nhận chỉ có quyền theo dõi.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Color(0xFF667085), height: 1.4),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  onChanged: (_) {
+                    if (_validationError != null) {
+                      setState(() => _validationError = null);
+                    }
+                  },
+                  decoration: const InputDecoration(
+                    labelText: 'Số điện thoại người nhận',
+                    hintText: '0905123456',
+                    border: OutlineInputBorder(),
                   ),
-                  const SizedBox(width: 8),
-                  InkWell(
-                    onTap: () {
-                      Clipboard.setData(
-                        const ClipboardData(text: 'saferide.vn/track/SR94210'),
-                      );
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Đã sao chép liên kết'),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    },
-                    child: const Icon(
-                      Icons.copy_rounded,
-                      size: 20,
-                      color: Color(0xFF006B70),
-                    ),
+                ),
+                if (_validationError != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    _validationError!,
+                    style: const TextStyle(color: Colors.red),
                   ),
                 ],
-              ),
-            ),
-            const SizedBox(height: 28),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF006B70),
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
+                if (provider.errorMessage != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    provider.errorMessage!,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ],
+                if (provider.shares.any((item) => item.isActive)) ...[
+                  const Divider(height: 28),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Đang chia sẻ',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  ...provider.shares
+                      .where((item) => item.isActive)
+                      .map(
+                        (item) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(item.recipient.fullName),
+                          subtitle: Text(item.recipient.maskedPhoneNumber),
+                          trailing: TextButton(
+                            onPressed: provider.isLoading
+                                ? null
+                                : () => _revoke(item),
+                            child: const Text('Thu hồi'),
+                          ),
+                        ),
+                      ),
+                ],
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: provider.isLoading ? null : _createShare,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF006B70),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: Text(
+                      provider.isLoading
+                          ? 'Đang xử lý...'
+                          : 'Tạo và chia sẻ liên kết',
+                    ),
                   ),
                 ),
-                child: const Text(
-                  'Đóng',
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Đóng'),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

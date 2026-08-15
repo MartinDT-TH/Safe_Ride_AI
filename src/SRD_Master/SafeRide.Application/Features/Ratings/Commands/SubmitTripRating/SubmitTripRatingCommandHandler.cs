@@ -11,15 +11,18 @@ public sealed class SubmitTripRatingCommandHandler
     private readonly IRatingRepository _ratingRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly IAccountBanEvaluationService _accountBanEvaluationService;
 
     public SubmitTripRatingCommandHandler(
         IRatingRepository ratingRepository,
         IUnitOfWork unitOfWork,
-        IDateTimeProvider dateTimeProvider)
+        IDateTimeProvider dateTimeProvider,
+        IAccountBanEvaluationService accountBanEvaluationService)
     {
         _ratingRepository = ratingRepository;
         _unitOfWork = unitOfWork;
         _dateTimeProvider = dateTimeProvider;
+        _accountBanEvaluationService = accountBanEvaluationService;
     }
 
     public async Task<SubmitTripRatingResponse> Handle(
@@ -57,6 +60,9 @@ public sealed class SubmitTripRatingCommandHandler
 
         await _ratingRepository.AddRatingAsync(rating, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await _accountBanEvaluationService.EvaluateRatingAsync(
+            rating.Id,
+            cancellationToken);
 
         return new SubmitTripRatingResponse(
             trip.Id,

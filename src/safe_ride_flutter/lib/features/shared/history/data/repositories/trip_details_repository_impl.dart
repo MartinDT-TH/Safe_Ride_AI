@@ -1,4 +1,5 @@
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/localization/locale_provider.dart';
 import '../../../../customer/booking/data/datasources/booking_remote_datasource.dart';
 import '../../../../customer/booking/data/models/booking_response.dart';
 import '../../../../customer/booking/domain/repositories/booking_repository.dart';
@@ -22,7 +23,9 @@ class TripDetailsRepositoryImpl implements TripDetailsRepository {
     } on BookingApiException catch (exception) {
       throw TripDetailsRepositoryException(exception.message);
     } catch (_) {
-      throw const TripDetailsRepositoryException(AppStrings.genericError);
+      throw TripDetailsRepositoryException(
+        LocaleProvider.currentLocalizations.genericError,
+      );
     }
   }
 }

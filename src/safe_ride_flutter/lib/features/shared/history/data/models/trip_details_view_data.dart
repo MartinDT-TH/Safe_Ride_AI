@@ -1,16 +1,23 @@
 import '../../../../customer/booking/data/models/booking_catalog.dart';
 import '../../../../customer/booking/data/models/booking_location.dart';
 import '../../../../customer/booking/data/models/booking_response.dart';
+import 'package:safe_ride/features/shared/feedback/data/models/driver_rating_item.dart';
+import '../../../../../core/localization/locale_provider.dart';
 import 'history_trip.dart';
 
 class TripDetailsViewData {
-  const TripDetailsViewData({required this.historyTrip, this.booking});
+  const TripDetailsViewData({
+    required this.historyTrip,
+    this.booking,
+    this.feedback,
+  });
 
   final HistoryTrip historyTrip;
   final BookingResponse? booking;
+  final DriverRatingItem? feedback;
 
   int get bookingId => booking?.bookingId ?? historyTrip.id;
-  int? get tripId => booking?.tripId;
+  int? get tripId => booking?.tripId ?? historyTrip.tripId;
 
   DateTime get bookingTime => booking?.scheduledAt ?? historyTrip.time;
 
@@ -186,33 +193,37 @@ class TripDetailsViewData {
   }
 
   String get statusLabel {
+    final l10n = LocaleProvider.currentLocalizations;
     return switch (normalizedStatus) {
-      'COMPLETED' || '5' => 'Hoàn thành',
-      'CANCELLED' || 'CANCEL' || '3' || '8' => 'Đã hủy',
-      'EXPIRED' || '4' => 'Hết hạn',
-      'WAITING_PAYMENT' || '6' => 'Chờ thanh toán',
-      'RETURN_CONFIRMED' => 'Đã xác nhận trả xe',
-      'WAITING_RETURN_CONFIRM' => 'Chờ xác nhận trả xe',
-      'IN_PROGRESS' => 'Đang di chuyển',
-      'ARRIVED' => 'Đã đến điểm đón',
-      'DRIVER_ARRIVING' => 'Tài xế đang đến',
-      'ACCEPTED' => 'Đã nhận chuyến',
-      'DRIVERASSIGNED' || 'DRIVER_ASSIGNED' || '2' => 'Đã ghép tài xế',
-      'SEARCHING' || '1' => 'Đang tìm tài xế',
-      'PENDINGSCHEDULE' || 'PENDING_SCHEDULE' || '0' => 'Chờ khởi hành',
-      'BOOKED' => 'Đã đặt',
-      _ => 'Đang xử lý',
+      'COMPLETED' || '5' => l10n.statusCompleted,
+      'CANCELLED' || 'CANCEL' || '3' || '8' => l10n.statusCancelled,
+      'EXPIRED' || '4' => l10n.expired,
+      'WAITING_PAYMENT' || '6' => l10n.waitingDriverPayment,
+      'RETURN_CONFIRMED' => l10n.returnConfirmedStatus,
+      'WAITING_RETURN_CONFIRM' => l10n.waitingReturnConfirmation,
+      'IN_PROGRESS' => l10n.statusInProgress,
+      'ARRIVED' => l10n.statusArrived,
+      'DRIVER_ARRIVING' => l10n.statusDriverArriving,
+      'ACCEPTED' => l10n.statusAccepted,
+      'DRIVERASSIGNED' || 'DRIVER_ASSIGNED' || '2' => l10n.driverConfirmed,
+      'SEARCHING' || '1' => l10n.searchingDriver,
+      'PENDINGSCHEDULE' ||
+      'PENDING_SCHEDULE' ||
+      '0' => l10n.awaitingConfirmation,
+      'BOOKED' => l10n.historyFilterBooked,
+      _ => l10n.processing,
     };
   }
 
   String get paymentStatusLabel {
+    final l10n = LocaleProvider.currentLocalizations;
     final status = paymentStatus?.toUpperCase();
     return switch (status) {
-      'SUCCESS' => 'Đã thanh toán',
-      'PENDING' => 'Chờ thanh toán',
-      'FAILED' => 'Thanh toán thất bại',
-      'CANCELLED' => 'Đã hủy thanh toán',
-      _ => payment == null ? 'Chưa có thông tin' : 'Đang xử lý',
+      'SUCCESS' => l10n.paid,
+      'PENDING' => l10n.waitingDriverPayment,
+      'FAILED' => l10n.genericError,
+      'CANCELLED' => l10n.statusCancelled,
+      _ => payment == null ? l10n.unknown : l10n.processing,
     };
   }
 
@@ -231,13 +242,21 @@ class TripDetailsViewData {
   bool get hasMapCoordinates =>
       _hasCoordinates(pickupLocation) || _hasCoordinates(destinationLocation);
 
-  bool get hasFeedback => false;
+  bool get hasFeedback => feedback != null;
 
-  String get feedbackText => 'Chưa có dữ liệu đánh giá cho chuyến đi này.';
+  String get feedbackText =>
+      feedback?.comment ??
+      LocaleProvider.currentLocalizations.customerHasNotReviewed;
 
-  int? get ratingScore => null;
+  int? get ratingScore => feedback?.score;
 
-  String? get feedbackComment => null;
+  String? get feedbackComment => feedback?.comment;
+
+  String? get feedbackCustomerName => feedback?.customerName;
+
+  String? get feedbackCustomerAvatarUrl => feedback?.customerAvatarUrl;
+
+  DateTime? get feedbackCreatedAt => feedback?.createdAt;
 
   static bool _hasCoordinates(BookingLocation? location) {
     if (location == null) {

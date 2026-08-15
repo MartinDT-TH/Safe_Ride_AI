@@ -8,16 +8,21 @@ import 'package:http_parser/http_parser.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/network/auth_header.dart';
 import '../../../../../core/network/dio_client.dart';
+import '../../../../../core/localization/locale_provider.dart';
+import '../../../../../core/localization/api_error_localizer.dart';
 import '../../../../../core/services/socket_service.dart';
 import '../../../../../core/session/session_manager.dart';
 import '../../../trip_requests/data/datasources/driver_trip_request_remote_datasource.dart';
 import '../../../trip_requests/data/models/driver_trip_request_model.dart';
 import '../../../trip_requests/domain/repositories/driver_trip_request_repository.dart';
+import '../../../wallet/domain/repositories/driver_wallet_repository.dart';
+import '../../../../shared/history/data/models/history_trip.dart';
+import '../../../../shared/history/domain/repositories/history_repository.dart';
 
 enum DriverStatus { offline, online }
 
 class _PendingDriverLocationUpdate {
-  const _PendingDriverLocationUpdate({
+  _PendingDriverLocationUpdate({
     required this.latitude,
     required this.longitude,
     this.clientTimestampUtc,
@@ -61,9 +66,13 @@ class DriverDashboardProvider extends ChangeNotifier {
     Dio? dio,
     SessionManager? sessionManager,
     DriverTripRequestRepository? tripRequestRepository,
+    DriverWalletRepository? driverWalletRepository,
+    HistoryRepository? historyRepository,
   }) : _socketService = socketService ?? SocketService(),
        _dio = dio ?? DioClient().dio,
-       _tripRequestRepository = tripRequestRepository {
+       _tripRequestRepository = tripRequestRepository,
+       _driverWalletRepository = driverWalletRepository,
+       _historyRepository = historyRepository {
     _sessionExpiredSubscription = sessionManager?.sessionExpiredStream.listen((
       _,
     ) {
@@ -74,6 +83,8 @@ class DriverDashboardProvider extends ChangeNotifier {
   final SocketService _socketService;
   final Dio _dio;
   final DriverTripRequestRepository? _tripRequestRepository;
+  final DriverWalletRepository? _driverWalletRepository;
+  final HistoryRepository? _historyRepository;
   String? _accessToken;
   StreamSubscription<void>? _sessionExpiredSubscription;
   static const int _maxPendingLocationUpdates = 20;
@@ -83,13 +94,20 @@ class DriverDashboardProvider extends ChangeNotifier {
   DriverStatus _status = DriverStatus.offline;
   DriverStatus get status => _status;
 
-  // debug: Mock value until driver income summary API is available.
-  final double _todayIncome = 500000;
-  double get todayIncome => _todayIncome;
+  num? _todayIncome;
+  num? get todayIncome => _todayIncome;
 
-  // debug: Mock value until driver trip summary API is available.
-  final int _todayTrips = 3;
+  int _todayTrips = 0;
   int get todayTrips => _todayTrips;
+
+  bool _isLoadingIncome = false;
+  bool get isLoadingIncome => _isLoadingIncome;
+
+  bool _hasLoadedIncome = false;
+  bool get hasLoadedIncome => _hasLoadedIncome;
+
+  String? _incomeErrorMessage;
+  String? get incomeErrorMessage => _incomeErrorMessage;
 
   bool _hasNewRequest = false;
   bool get hasNewRequest => _hasNewRequest;
@@ -125,15 +143,8 @@ class DriverDashboardProvider extends ChangeNotifier {
 
   ActiveDriverTrip? _activeTrip;
   ActiveDriverTrip? get activeTrip => _activeTrip;
-  int? _tripAwaitingPaymentId;
   final Map<int, Future<bool>> _activeTripDetailsFetches = {};
   final Set<int> _activeTripDetailsLoaded = {};
-
-  int? takeTripAwaitingPayment() {
-    final tripId = _tripAwaitingPaymentId;
-    _tripAwaitingPaymentId = null;
-    return tripId;
-  }
 
   void toggleDemoMode() {
     _isDemoMode = !_isDemoMode;
@@ -174,6 +185,7 @@ class DriverDashboardProvider extends ChangeNotifier {
     }
 
     _accessToken = accessToken;
+    unawaited(loadTodayIncome());
     await _socketService.connect();
     _registerRealtimeHandlers();
     try {
@@ -188,16 +200,81 @@ class DriverDashboardProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> reloadDashboardAfterConnectionRestored(
+    String accessToken,
+  ) async {
+    if (accessToken.isEmpty) return;
+
+    _accessToken = accessToken;
+    try {
+      await _socketService.connect();
+      _registerRealtimeHandlers();
+    } catch (error) {
+      debugPrint('DRIVER_DASHBOARD: reconnect realtime failed: $error');
+    }
+
+    await Future.wait([
+      loadActiveTrip(),
+      loadOpenTripRequests(),
+      loadTodayIncome(),
+    ]);
+  }
+
+  Future<void> loadTodayIncome() async {
+    final token = _accessToken;
+    final walletRepository = _driverWalletRepository;
+    final historyRepository = _historyRepository;
+    if (token == null ||
+        token.isEmpty ||
+        walletRepository == null ||
+        historyRepository == null) {
+      return;
+    }
+    if (_isLoadingIncome) return;
+
+    _isLoadingIncome = true;
+    _incomeErrorMessage = null;
+    notifyListeners();
+    try {
+      final wallet = await walletRepository.getWallet(token, period: 'Day');
+      final history = await historyRepository.getBookingHistory(
+        token,
+        role: AppValues.roleDriver,
+      );
+      final now = DateTime.now();
+      _todayIncome = wallet.income.total;
+      _todayTrips = history.where((trip) {
+        if (trip.status != HistoryTripStatus.completed || trip.tripId == null) {
+          return false;
+        }
+        final completedAt = trip.time;
+        return completedAt.year == now.year &&
+            completedAt.month == now.month &&
+            completedAt.day == now.day;
+      }).length;
+      _hasLoadedIncome = true;
+    } catch (error) {
+      debugPrint('DRIVER_DASHBOARD: Load today income failed: $error');
+      _incomeErrorMessage = 'Không thể tải thu nhập hôm nay.';
+    } finally {
+      _isLoadingIncome = false;
+      notifyListeners();
+    }
+  }
+
   void _registerRealtimeHandlers() {
     _socketService.onDriverOfferReceived((offer) {
       _currentRequest = TripRequest(
         offerId: offer.offerId,
         bookingId: offer.bookingId,
         expectedIncome: 0,
-        pickupDistance: 'Đang tính',
-        pickupTime: offer.expiresAt == null ? '30 giây' : 'Sắp hết hạn',
+        pickupDistance: LocaleProvider.currentLocalizations.calculating,
+        pickupTime: offer.expiresAt == null
+            ? LocaleProvider.currentLocalizations.secondsRemaining(30)
+            : LocaleProvider.currentLocalizations.expiresSoon,
         pickupAddress: offer.message,
-        destinationAddress: 'Mở chi tiết chuyến sau khi nhận',
+        destinationAddress:
+            LocaleProvider.currentLocalizations.viewTripAfterAccept,
       );
       _hasNewRequest = true;
       notifyListeners();
@@ -213,14 +290,18 @@ class DriverDashboardProvider extends ChangeNotifier {
 
       // Robust check: if we are waiting for confirmation and get any closed offer event for this driver,
       // it's likely the one we are waiting for.
-      if (isMatch || (offerId == null && bookingId == null && _isWaitingForCustomerConfirmation)) {
+      if (isMatch ||
+          (offerId == null &&
+              bookingId == null &&
+              _isWaitingForCustomerConfirmation)) {
         if (currentBookingId != null) {
           _socketService.leaveBooking(currentBookingId);
         }
         _hasNewRequest = false;
         _currentRequest = null;
         _isWaitingForCustomerConfirmation = false;
-        _snackbarMessage = 'Khách hàng đã hủy yêu cầu đặt tài xế.';
+        _snackbarMessage =
+            LocaleProvider.currentLocalizations.customerCancelledDriverRequest;
         notifyListeners();
       }
       if (_activeTrip == null) {
@@ -228,11 +309,13 @@ class DriverDashboardProvider extends ChangeNotifier {
       }
     }, key: 'driverDashboardOfferClosed');
     _socketService.onTripStatusChanged((update) {
-      if (update.tripStatus == 'COMPLETED' ||
-          update.tripStatus == 'CANCELLED') {
+      if (_isTerminalTripStatus(update.tripStatus)) {
         if (_activeTrip?.tripId == update.tripId) {
           _clearActiveTrip();
           notifyListeners();
+        }
+        if (update.tripStatus == 'COMPLETED') {
+          unawaited(loadTodayIncome());
         }
         return;
       }
@@ -249,32 +332,43 @@ class DriverDashboardProvider extends ChangeNotifier {
         destLng: sameTrip ? oldTrip?.destLng : null,
         encodedPolyline: sameTrip ? oldTrip?.encodedPolyline : null,
         arrivalPolyline: sameTrip ? oldTrip?.arrivalPolyline : null,
+        paymentCompleted: sameTrip && oldTrip?.paymentCompleted == true,
       );
       notifyListeners();
       _socketService.joinTrip(update.tripId);
       if (!_hasActiveTripDetails(update.tripId)) {
         _fetchActiveTripDetails(update.bookingId, update.tripId);
       }
-      if (update.tripStatus == 'WAITING_PAYMENT' && sameTrip) {
-        _tripAwaitingPaymentId = update.tripId;
-        notifyListeners();
-      }
     }, key: 'driverDashboard');
+
+    _socketService.onTripEndRequestResponded((update) {
+      if (_activeTrip?.tripId != update.tripId) return;
+      _snackbarMessage = update.accepted == true
+          ? LocaleProvider.currentLocalizations.endTripRequestAccepted
+          : LocaleProvider.currentLocalizations.endTripRequestRejected;
+      notifyListeners();
+    }, key: 'driverDashboardEndRequest');
 
     _socketService.onTripPaymentUpdated((update) {
       if (_activeTrip?.tripId != update.tripId) {
         return;
       }
 
-      if (update.isSuccess || update.tripStatus == 'COMPLETED') {
+      if (_isTerminalTripStatus(update.tripStatus)) {
         _clearActiveTrip();
+        notifyListeners();
+        unawaited(loadTodayIncome());
+        return;
+      }
+
+      if (update.isSuccess) {
+        _activeTrip = _activeTrip!.copyWith(paymentCompleted: true);
         notifyListeners();
         return;
       }
 
       if (update.tripStatus == 'WAITING_PAYMENT') {
         _activeTrip = _activeTrip!.copyWith(tripStatus: 'WAITING_PAYMENT');
-        _tripAwaitingPaymentId = update.tripId;
         notifyListeners();
       }
     }, key: 'driverDashboardPayment');
@@ -304,7 +398,7 @@ class DriverDashboardProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('Failed to go online: $e');
-      _errorMessage = 'Không thể online. Vui lòng thử lại.';
+      _errorMessage = LocaleProvider.currentLocalizations.onlineFailed;
       notifyListeners();
       rethrow;
     }
@@ -349,7 +443,6 @@ class DriverDashboardProvider extends ChangeNotifier {
     _isLoadingTripRequests = false;
     _errorMessage = null;
     _tripRequestsErrorMessage = null;
-    _tripAwaitingPaymentId = null;
     _clearActiveTrip();
     _status = DriverStatus.offline;
     notifyListeners();
@@ -364,6 +457,9 @@ class DriverDashboardProvider extends ChangeNotifier {
       }
     }
     _socketService.removeTripStatusChangedHandler('driverDashboard');
+    _socketService.removeTripEndRequestRespondedHandler(
+      'driverDashboardEndRequest',
+    );
     _socketService.removeTripPaymentUpdatedHandler('driverDashboardPayment');
     _socketService.removeDriverLocationUpdatedHandler('driverDashboardDemo');
     _socketService.removeBookingUpdatedHandler('driverDashboardBooking');
@@ -380,7 +476,7 @@ class DriverDashboardProvider extends ChangeNotifier {
       bookingId: 0,
       expectedIncome: 120000,
       pickupDistance: '1.5 km',
-      pickupTime: '5 phút',
+      pickupTime: LocaleProvider.currentLocalizations.minutesValue(5),
       pickupAddress: '80 Trần Duy Hưng, Cầu Giấy',
       destinationAddress: 'Sân bay Nội Bài, Sóc Sơn',
     );
@@ -405,23 +501,77 @@ class DriverDashboardProvider extends ChangeNotifier {
       key: 'driverDashboardBooking',
     );
     try {
-      await _dio.post(
+      // Join before accepting when possible; the HTTP response remains the recovery
+      // source if the assignment event races with group membership.
+      try {
+        await _socketService.joinBooking(request.bookingId);
+      } catch (error) {
+        debugPrint('Failed to join booking before accepting: $error');
+      }
+      final response = await _dio.post(
         ApiEndpoints.acceptDriverOffer(request.offerId),
         options: Options(
           headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
         ),
       );
-      // Join booking group to receive updates (like cancellation)
-      await _socketService.joinBooking(request.bookingId);
 
-      // Wait for SignalR 'BookingDriverAssigned' event.
       _errorMessage = null;
-      loadOpenTripRequests();
-      _isWaitingForCustomerConfirmation = true;
-      loadOpenTripRequests();
+      final data = response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : const <String, dynamic>{};
+      final bookingStatus =
+          (data[ApiKeys.bookingStatus] ?? data['BookingStatus'])?.toString();
+      final tripId = (data[ApiKeys.tripId] ?? data['TripId']) as num?;
+      final tripStatus = _normalizeTripStatus(
+        data[ApiKeys.tripStatus] ?? data['TripStatus'],
+      );
+      final driverOfferRaw = data[ApiKeys.driverOffer] ?? data['DriverOffer'];
+      final driverOffer = driverOfferRaw is Map
+          ? Map<String, dynamic>.from(driverOfferRaw)
+          : const <String, dynamic>{};
+      final offerStatus =
+          (driverOffer[ApiKeys.offerStatus] ?? driverOffer['OfferStatus'])
+              ?.toString();
+
+      if (bookingStatus == 'DriverAssigned' && tripId != null) {
+        final tripIdValue = tripId.toInt();
+        _hasNewRequest = false;
+        _currentRequest = null;
+        _isWaitingForCustomerConfirmation = false;
+        _openTripRequests.clear();
+        _activeTrip = ActiveDriverTrip(
+          bookingId: request.bookingId,
+          tripId: tripIdValue,
+          tripStatus: tripStatus ?? 'ACCEPTED',
+        );
+        try {
+          await _socketService.leaveBooking(request.bookingId);
+          await _socketService.joinTrip(tripIdValue);
+        } catch (error) {
+          debugPrint(
+            'Failed to update realtime groups after assignment: $error',
+          );
+        }
+        await _fetchActiveTripDetailsSync(request.bookingId, tripIdValue);
+      } else if (bookingStatus == 'Searching' &&
+          offerStatus == 'DriverAccepted' &&
+          tripId == null) {
+        _isWaitingForCustomerConfirmation = true;
+        try {
+          await _socketService.joinBooking(request.bookingId);
+        } catch (error) {
+          debugPrint('Failed to join booking while waiting: $error');
+        }
+      } else {
+        // Recover from an unexpected/stale response using the durable active-trip API.
+        _isWaitingForCustomerConfirmation = false;
+        await loadActiveTrip();
+      }
+
+      unawaited(loadOpenTripRequests());
     } catch (e) {
       debugPrint('Failed to accept request: $e');
-      _errorMessage = 'Không thể nhận chuyến. Vui lòng thử lại.';
+      _errorMessage = LocaleProvider.currentLocalizations.acceptTripFailed;
       _hasNewRequest = false;
       _currentRequest = null;
     } finally {
@@ -450,7 +600,7 @@ class DriverDashboardProvider extends ChangeNotifier {
       loadOpenTripRequests();
     } catch (e) {
       debugPrint('Failed to decline request: $e');
-      _errorMessage = 'Không thể từ chối chuyến. Vui lòng thử lại.';
+      _errorMessage = LocaleProvider.currentLocalizations.declineTripFailed;
     } finally {
       _hasNewRequest = false;
       _currentRequest = null;
@@ -485,11 +635,14 @@ class DriverDashboardProvider extends ChangeNotifier {
         ..addAll(requests.map(_mapTripRequest));
       _applyTripRequestState(requests);
     } on DriverTripRequestApiException catch (exception) {
-      _tripRequestsErrorMessage = exception.message;
+      _tripRequestsErrorMessage = ApiErrorLocalizer.translate(
+        LocaleProvider.currentLocalizations,
+        fallback: exception.message,
+      );
     } catch (e) {
       debugPrint('Failed to load trip requests: $e');
       _tripRequestsErrorMessage =
-          'KhÃ´ng thá»ƒ táº£i yÃªu cáº§u chuyáº¿n. Vui lÃ²ng thá»­ láº¡i.';
+          LocaleProvider.currentLocalizations.tripRequestsLoadFailed;
     } finally {
       _isLoadingTripRequests = false;
       notifyListeners();
@@ -633,8 +786,7 @@ class DriverDashboardProvider extends ChangeNotifier {
     }
   }
 
-  /// Ends an IN_PROGRESS trip — moves it to WAITING_RETURN_CONFIRM.
-  /// Returns true on success. Does NOT set COMPLETED.
+  /// Requests customer approval before ending an IN_PROGRESS trip.
   Future<bool> endTripAsync() async {
     final trip = _activeTrip;
     final token = _accessToken;
@@ -645,13 +797,16 @@ class DriverDashboardProvider extends ChangeNotifier {
     _isUpdatingTrip = true;
     notifyListeners();
     try {
+      // Make the latest queued GPS points visible to fare finalization before
+      // the backend closes the trip tracking snapshot.
+      await _flushPendingLocationUpdates();
       await _dio.post(
         ApiEndpoints.endTrip(trip.tripId),
         options: Options(
           headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
         ),
       );
-      _activeTrip = trip.copyWith(tripStatus: 'WAITING_RETURN_CONFIRM');
+      _snackbarMessage = LocaleProvider.currentLocalizations.endTripRequestSent;
       return true;
     } catch (e) {
       debugPrint('Failed to end trip: $e');
@@ -672,7 +827,9 @@ class DriverDashboardProvider extends ChangeNotifier {
     final token = _accessToken;
     if (token == null) throw Exception('Not authenticated');
     if (evidenceFiles.isEmpty || evidenceFiles.length > 3) {
-      throw Exception('Cần từ 1 đến 3 ảnh bằng chứng.');
+      throw Exception(
+        LocaleProvider.currentLocalizations.evidencePhotoCountError,
+      );
     }
 
     final formFields = <String, dynamic>{};
@@ -710,11 +867,7 @@ class DriverDashboardProvider extends ChangeNotifier {
     );
 
     // Reflect locally — SignalR TripStatusChanged will arrive shortly and confirm.
-    if (_activeTrip?.tripId == tripId) {
-      _activeTrip = _activeTrip!.copyWith(tripStatus: 'WAITING_PAYMENT');
-      _tripAwaitingPaymentId = tripId;
-      notifyListeners();
-    }
+    await loadActiveTrip();
   }
 
   Future<void> loadActiveTrip() async {
@@ -747,7 +900,16 @@ class DriverDashboardProvider extends ChangeNotifier {
         final tripStatus = _normalizeTripStatus(
           data[ApiKeys.tripStatus] ?? data['TripStatus'],
         );
+        final paymentCompleted =
+            data['paymentCompleted'] == true ||
+            data['PaymentCompleted'] == true;
         if (bookingId != null && tripId != null && tripStatus != null) {
+          if (_isTerminalTripStatus(tripStatus)) {
+            _clearActiveTrip();
+            unawaited(_socketService.leaveTrip(tripId.toInt()));
+            return;
+          }
+
           final oldTrip = _activeTrip;
           final tripIdValue = tripId.toInt();
           final sameTrip = oldTrip?.tripId == tripIdValue;
@@ -761,10 +923,8 @@ class DriverDashboardProvider extends ChangeNotifier {
             destLng: sameTrip ? oldTrip?.destLng : null,
             encodedPolyline: sameTrip ? oldTrip?.encodedPolyline : null,
             arrivalPolyline: sameTrip ? oldTrip?.arrivalPolyline : null,
+            paymentCompleted: paymentCompleted,
           );
-          if (tripStatus == 'WAITING_PAYMENT') {
-            _tripAwaitingPaymentId = tripIdValue;
-          }
           _socketService.joinTrip(tripIdValue);
           if (!_hasActiveTripDetails(tripIdValue)) {
             await _fetchActiveTripDetailsSync(bookingId.toInt(), tripIdValue);
@@ -773,8 +933,7 @@ class DriverDashboardProvider extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('Error loading active trip: $e');
-      _errorMessage =
-          'Không thể tải dữ liệu chuyến đi hiện tại. Vui lòng thử lại.';
+      _errorMessage = LocaleProvider.currentLocalizations.activeTripLoadFailed;
     } finally {
       _isLoadingActiveTrip = false;
       notifyListeners();
@@ -785,7 +944,7 @@ class DriverDashboardProvider extends ChangeNotifier {
     if (_activeTrip?.tripId != tripId) {
       return;
     }
-    _clearActiveTrip();
+    _activeTrip = _activeTrip!.copyWith(paymentCompleted: true);
     notifyListeners();
   }
 
@@ -811,8 +970,10 @@ class DriverDashboardProvider extends ChangeNotifier {
         ),
       );
 
-      if (tripStatus == 'COMPLETED' || tripStatus == 'CANCELLED') {
+      if (_isTerminalTripStatus(tripStatus)) {
         _clearActiveTrip();
+        unawaited(_socketService.leaveTrip(trip.tripId));
+        unawaited(loadOpenTripRequests());
       } else {
         _activeTrip = trip.copyWith(tripStatus: tripStatus);
       }
@@ -824,11 +985,16 @@ class DriverDashboardProvider extends ChangeNotifier {
   }
 
   void _handleBookingUpdate(dynamic update) {
-    if (update.status == 'Cancelled' || update.status == 'Expired') {
+    final isTerminal =
+        _isTerminalBookingStatus(update.status?.toString()) ||
+        _isTerminalTripStatus(update.tripStatus?.toString());
+    if (isTerminal) {
       var changed = false;
       if (_activeTrip?.bookingId == update.bookingId) {
+        final tripId = _activeTrip!.tripId;
         _socketService.leaveBooking(update.bookingId);
         _clearActiveTrip();
+        unawaited(_socketService.leaveTrip(tripId));
         changed = true;
       }
       if (_currentRequest?.bookingId == update.bookingId) {
@@ -837,14 +1003,17 @@ class DriverDashboardProvider extends ChangeNotifier {
         _currentRequest = null;
         _isWaitingForCustomerConfirmation = false;
         if (update.status == 'Cancelled') {
-          _snackbarMessage = 'Khách hàng đã hủy yêu cầu đặt tài xế.';
+          _snackbarMessage = LocaleProvider
+              .currentLocalizations
+              .customerCancelledDriverRequest;
         }
         changed = true;
       }
       if (changed) {
         notifyListeners();
       }
-      loadOpenTripRequests();
+      unawaited(loadOpenTripRequests());
+      return;
     } else if (update.status == 'DriverAssigned' || update.tripId != null) {
       if (update.tripId != null) {
         _socketService.leaveBooking(update.bookingId);
@@ -864,10 +1033,8 @@ class DriverDashboardProvider extends ChangeNotifier {
           destLng: sameTrip ? oldTrip?.destLng : null,
           encodedPolyline: sameTrip ? oldTrip?.encodedPolyline : null,
           arrivalPolyline: sameTrip ? oldTrip?.arrivalPolyline : null,
+          paymentCompleted: sameTrip && oldTrip?.paymentCompleted == true,
         );
-        if (_activeTrip!.tripStatus == 'WAITING_PAYMENT') {
-          _tripAwaitingPaymentId = _activeTrip!.tripId;
-        }
         notifyListeners();
         _socketService.joinTrip(update.tripId!);
         if (!_hasActiveTripDetails(update.tripId!)) {
@@ -943,7 +1110,7 @@ class DriverDashboardProvider extends ChangeNotifier {
         );
 
         if (response.statusCode == 204 && remainingRetries > 0) {
-          await Future.delayed(const Duration(seconds: 1));
+          await Future.delayed(Duration(seconds: 1));
           continue;
         }
 
@@ -1048,14 +1215,14 @@ class DriverDashboardProvider extends ChangeNotifier {
       ),
       pickupAddress: request.pickupAddress,
       destinationAddress: request.destinationAddress.trim().isEmpty
-          ? 'ChÆ°a cÃ³ Ä‘iá»ƒm Ä‘áº¿n'
+          ? LocaleProvider.currentLocalizations.noDestination
           : request.destinationAddress,
     );
   }
 
   static String _formatPickupDistance(double? distanceKm) {
     if (distanceKm == null || distanceKm <= 0) {
-      return 'Äang tÃ­nh';
+      return LocaleProvider.currentLocalizations.calculating;
     }
 
     if (distanceKm < 1) {
@@ -1073,14 +1240,16 @@ class DriverDashboardProvider extends ChangeNotifier {
     DateTime? expiresAt,
   ) {
     if (pickupDurationMinutes != null && pickupDurationMinutes > 0) {
-      return '$pickupDurationMinutes phÃºt';
+      return LocaleProvider.currentLocalizations.minutesValue(
+        pickupDurationMinutes,
+      );
     }
 
     if (expiresAt != null) {
-      return 'Sáº¯p háº¿t háº¡n';
+      return LocaleProvider.currentLocalizations.expiresSoon;
     }
 
-    return 'Äang tÃ­nh';
+    return LocaleProvider.currentLocalizations.calculating;
   }
 
   static String? _normalizeTripStatus(Object? value) {
@@ -1118,6 +1287,21 @@ class DriverDashboardProvider extends ChangeNotifier {
     };
   }
 
+  static bool _isTerminalTripStatus(String? value) {
+    final normalized = value?.trim().toUpperCase();
+    return normalized == 'COMPLETED' ||
+        normalized == 'CANCELLED' ||
+        normalized == 'CANCELED';
+  }
+
+  static bool _isTerminalBookingStatus(String? value) {
+    final normalized = value?.trim().toUpperCase();
+    return normalized == 'COMPLETED' ||
+        normalized == 'CANCELLED' ||
+        normalized == 'CANCELED' ||
+        normalized == 'EXPIRED';
+  }
+
   @override
   void dispose() {
     _sessionExpiredSubscription?.cancel();
@@ -1126,7 +1310,7 @@ class DriverDashboardProvider extends ChangeNotifier {
 }
 
 class ActiveDriverTrip {
-  const ActiveDriverTrip({
+  ActiveDriverTrip({
     required this.bookingId,
     required this.tripId,
     required this.tripStatus,
@@ -1136,6 +1320,7 @@ class ActiveDriverTrip {
     this.destLng,
     this.encodedPolyline,
     this.arrivalPolyline,
+    this.paymentCompleted = false,
   });
 
   final int bookingId;
@@ -1147,6 +1332,7 @@ class ActiveDriverTrip {
   final double? destLng;
   final String? encodedPolyline;
   final String? arrivalPolyline;
+  final bool paymentCompleted;
 
   ActiveDriverTrip copyWith({
     String? tripStatus,
@@ -1156,6 +1342,7 @@ class ActiveDriverTrip {
     double? destLng,
     String? encodedPolyline,
     String? arrivalPolyline,
+    bool? paymentCompleted,
   }) {
     return ActiveDriverTrip(
       bookingId: bookingId,
@@ -1167,6 +1354,7 @@ class ActiveDriverTrip {
       destLng: destLng ?? this.destLng,
       encodedPolyline: encodedPolyline ?? this.encodedPolyline,
       arrivalPolyline: arrivalPolyline ?? this.arrivalPolyline,
+      paymentCompleted: paymentCompleted ?? this.paymentCompleted,
     );
   }
 }

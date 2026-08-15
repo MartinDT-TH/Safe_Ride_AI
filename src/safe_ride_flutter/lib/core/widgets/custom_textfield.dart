@@ -11,7 +11,7 @@ class CustomTextField extends StatelessWidget {
   final String? prefixText;
   final Widget? prefixIcon;
 
-  const CustomTextField({
+  CustomTextField({
     super.key,
     required this.controller,
     required this.hintText,
@@ -31,9 +31,9 @@ class CustomTextField extends StatelessWidget {
         prefixText: prefixText,
         prefixIcon: prefixIcon,
         prefixIconConstraints: prefixIcon != null
-            ? const BoxConstraints(minWidth: 0, minHeight: 0)
+            ? BoxConstraints(minWidth: 0, minHeight: 0)
             : null,
-        prefixStyle: const TextStyle(
+        prefixStyle: TextStyle(
           fontSize: 16,
           color: AppColors.textPrimary,
           fontWeight: FontWeight.w500,
@@ -50,17 +50,17 @@ class CustomTextField extends StatelessWidget {
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
 
-          borderSide: const BorderSide(color: AppColors.border),
+          borderSide: BorderSide(color: AppColors.border),
         ),
 
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
 
-          borderSide: const BorderSide(color: AppColors.border),
+          borderSide: BorderSide(color: AppColors.border),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+          borderSide: BorderSide(color: AppColors.primary, width: 2),
         ),
       ),
     );

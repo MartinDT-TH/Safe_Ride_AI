@@ -36,6 +36,13 @@ fun apiKey(name: String): String {
         ?: ""
 }
 
+fun buildValue(name: String, fallback: String): String {
+    return dartDefines[name]
+        ?.takeIf { it.isNotBlank() }
+        ?: localApiKeys[name]?.toString()?.takeIf { it.isNotBlank() }
+        ?: fallback
+}
+
 android {
     namespace = "com.android.safe_ride"
     compileSdk = flutter.compileSdkVersion
@@ -60,6 +67,10 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         manifestPlaceholders["googleMapsApiKey"] = apiKey("GOOGLE_MAPS_API_KEY")
+        manifestPlaceholders["tripShareScheme"] = buildValue("TRIP_SHARE_SCHEME", "http")
+        manifestPlaceholders["tripShareHost"] = buildValue("TRIP_SHARE_HOST", "demotripshare.runasp.net")
+        manifestPlaceholders["tripSharePathPrefix"] = buildValue("TRIP_SHARE_PATH_PREFIX", "/trip-share")
+        manifestPlaceholders["tripShareAutoVerify"] = buildValue("TRIP_SHARE_AUTO_VERIFY", "true")
         resValue(
             "string",
             "default_web_client_id",
@@ -72,6 +83,10 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }

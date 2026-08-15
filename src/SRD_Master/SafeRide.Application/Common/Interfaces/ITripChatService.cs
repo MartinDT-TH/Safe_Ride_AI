@@ -28,6 +28,15 @@ public interface ITripChatService
         long tripId,
         CancellationToken cancellationToken = default);
 
+    Task<TripChatUnreadSummaryDto> GetUnreadSummaryAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default);
+
+    Task MarkReadAsync(
+        Guid userId,
+        long tripId,
+        CancellationToken cancellationToken = default);
+
     Task ShortenMessageTtlAsync(
         long tripId,
         CancellationToken cancellationToken = default);

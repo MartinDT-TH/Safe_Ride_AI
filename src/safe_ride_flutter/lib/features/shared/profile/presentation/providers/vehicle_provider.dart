@@ -2,6 +2,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../../../core/storage/secure_storage_service.dart';
+import '../../../../../core/localization/locale_provider.dart';
+import '../../../../../core/localization/api_error_localizer.dart';
 import '../../data/models/vehicle_model.dart';
 import '../../domain/repositories/vehicle_repository.dart';
 
@@ -89,7 +91,7 @@ class VehicleProvider extends ChangeNotifier {
   Future<String> _requireAccessToken() async {
     final token = await _storage.readAccessToken();
     if (token == null || token.isEmpty) {
-      throw StateError('Phiên đăng nhập đã hết hạn.');
+      throw StateError(LocaleProvider.currentLocalizations.sessionExpired);
     }
     return token;
   }
@@ -102,15 +104,19 @@ class VehicleProvider extends ChangeNotifier {
     if (error is DioException) {
       final data = error.response?.data;
       if (data is Map) {
-        return data['message']?.toString() ??
-            data['detail']?.toString() ??
-            'Không thể xử lý yêu cầu.';
+        return ApiErrorLocalizer.translate(
+          LocaleProvider.currentLocalizations,
+          fallback:
+              data['message']?.toString() ?? data['detail']?.toString(),
+        );
       }
     }
     if (error is StateError) {
-      return error.message;
+      return ApiErrorLocalizer.translate(
+        LocaleProvider.currentLocalizations,
+        fallback: error.message,
+      );
     }
-    return 'Không thể kết nối đến máy chủ. Vui lòng thử lại.';
+    return LocaleProvider.currentLocalizations.genericError;
   }
 }
-

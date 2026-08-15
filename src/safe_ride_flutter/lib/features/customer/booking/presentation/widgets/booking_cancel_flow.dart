@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../auth/presentation/providers/auth_provider.dart';
@@ -9,7 +10,7 @@ import 'cancel_booking_sheet.dart';
 bool isBookingCancellable(BookingResponse? booking) {
   final status = booking?.bookingStatus;
   final tripStatus = booking?.tripStatus;
-  if (status == 'Searching') {
+  if (status == 'PendingSchedule' || status == 'Searching') {
     return true;
   }
 
@@ -41,6 +42,24 @@ Future<void> handleBookingBack(
     return;
   }
 
+  final cancelled = await requestBookingCancellation(context, booking: booking);
+  if (!cancelled || !context.mounted) {
+    return;
+  }
+
+  // Navigate back to home (root)
+  Navigator.of(context).popUntil((route) => route.isFirst);
+}
+
+Future<bool> requestBookingCancellation(
+  BuildContext context, {
+  required BookingResponse booking,
+}) async {
+  if (!isBookingCancellable(booking)) {
+    _showMessage(context, context.l10n.tripCannotBeCancelled);
+    return false;
+  }
+
   final reason = await CancelBookingSheet.show(
     context,
     bookingId: booking.bookingId,
@@ -50,14 +69,14 @@ Future<void> handleBookingBack(
     debugPrint(
       'CANCEL_FLOW: Cancellation cancelled by user or context unmounted',
     );
-    return;
+    return false;
   }
 
   final token = context.read<AuthProvider>().token;
   if (token == null || token.isEmpty) {
     debugPrint('CANCEL_FLOW: No token found for cancellation');
-    _showMessage(context, 'Phiên đăng nhập đã hết hạn.');
-    return;
+    _showMessage(context, context.l10n.sessionExpired);
+    return false;
   }
 
   debugPrint(
@@ -69,13 +88,13 @@ Future<void> handleBookingBack(
     reason: reason,
   );
 
-  if (!context.mounted) return;
+  if (!context.mounted) return false;
 
   if (result == null) {
     final error = context.read<BookingProvider>().errorMessage;
     debugPrint('CANCEL_FLOW: Cancellation failed: $error');
-    _showMessage(context, error ?? 'Không thể hủy chuyến. Vui lòng thử lại.');
-    return;
+    _showMessage(context, error ?? context.l10n.cancelTripFailed);
+    return false;
   }
 
   debugPrint(
@@ -90,12 +109,13 @@ Future<void> handleBookingBack(
   _showMessage(
     context,
     result.bookingStatus == 'Expired'
-        ? 'Chuyến đã hết thời gian chờ và được kết thúc.'
-        : 'Đã hủy chuyến thành công.',
+        ? context.l10n.tripWaitExpired
+        : booking.bookingType == 'Scheduled'
+        ? context.l10n.scheduledTripCancelledSuccessfully
+        : context.l10n.tripCancelledSuccessfully,
   );
 
-  // Navigate back to home (root)
-  Navigator.of(context).popUntil((route) => route.isFirst);
+  return true;
 }
 
 void _showMessage(BuildContext context, String message) {

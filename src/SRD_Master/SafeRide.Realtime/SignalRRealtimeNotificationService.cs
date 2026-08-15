@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.SignalR;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Realtime;
+using SafeRide.Application.Features.TripSharing;
 
 namespace SafeRide.Realtime;
 
@@ -86,6 +87,28 @@ public sealed class SignalRRealtimeNotificationService
                 cancellationToken));
     }
 
+    public Task PublishTripEndRequestedAsync(
+        TripEndRequestedEvent notification,
+        CancellationToken cancellationToken = default)
+    {
+        return SendToUserAsync(
+            notification.CustomerId,
+            "TripEndRequested",
+            notification,
+            cancellationToken);
+    }
+
+    public Task PublishTripEndRequestRespondedAsync(
+        TripEndRequestRespondedEvent notification,
+        CancellationToken cancellationToken = default)
+    {
+        return SendToDriverAsync(
+            notification.DriverId,
+            "TripEndRequestResponded",
+            notification,
+            cancellationToken);
+    }
+
     public Task PublishTripPaymentPendingAsync(
         TripPaymentPendingEvent notification,
         CancellationToken cancellationToken = default)
@@ -140,6 +163,52 @@ public sealed class SignalRRealtimeNotificationService
                 cancellationToken));
     }
 
+    public Task PublishSOSTriggeredAsync(
+        SOSTriggeredEvent notification,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.WhenAll(
+            SendToUserAsync(
+                notification.CustomerId,
+                "SOSTriggered",
+                notification,
+                cancellationToken),
+            SendToDriverAsync(
+                notification.DriverId,
+                "SOSTriggered",
+                notification,
+                cancellationToken),
+            SendToBookingAsync(
+                notification.BookingId,
+                "SOSTriggered",
+                notification,
+                cancellationToken),
+            SendToTripAsync(
+                notification.TripId,
+                "SOSTriggered",
+                notification,
+                cancellationToken),
+            _hubContext.Clients
+                .Group(RealtimeGroups.AdminSOS)
+                .SendAsync(
+                    "SOSTriggered",
+                    new AdminSOSTriggeredEvent(
+                        notification.SosAlertId,
+                        notification.TripId,
+                        notification.BookingId,
+                        notification.CustomerId,
+                        notification.CustomerName,
+                        notification.CustomerPhoneNumber,
+                        notification.DriverId,
+                        notification.DriverName,
+                        notification.DriverPhoneNumber,
+                        notification.Latitude,
+                        notification.Longitude,
+                        notification.EmergencyMessage,
+                        notification.CreatedAt),
+                cancellationToken));
+    }
+
     public Task PublishDriverLocationUpdatedAsync(
         DriverLocationUpdatedEvent notification,
         CancellationToken cancellationToken = default)
@@ -156,6 +225,17 @@ public sealed class SignalRRealtimeNotificationService
         return SendToTripAsync(
             notification.TripId.Value,
             "DriverLocationUpdated",
+            notification,
+            cancellationToken);
+    }
+
+    public Task PublishTripRouteRecalculatedAsync(
+        TripRouteRecalculatedEvent notification,
+        CancellationToken cancellationToken = default)
+    {
+        return SendToTripAsync(
+            notification.TripId,
+            "TripRouteRecalculated",
             notification,
             cancellationToken);
     }
@@ -380,6 +460,28 @@ public sealed class SignalRRealtimeNotificationService
                 "BookingExpired",
                 notification,
                 cancellationToken));
+    }
+
+    public Task PublishSharedTripLocationUpdatedAsync(
+        SharedTripLocationUpdate notification,
+        CancellationToken cancellationToken = default)
+    {
+        return _hubContext.Clients
+            .Group(RealtimeGroups.TripShare(notification.TripShareId))
+            .SendAsync(
+                "SharedTripLocationUpdated",
+                notification,
+                cancellationToken);
+    }
+
+    public Task PublishSharedTripStatusAsync(
+        SharedTripStatusUpdate notification,
+        string eventName,
+        CancellationToken cancellationToken = default)
+    {
+        return _hubContext.Clients
+            .Group(RealtimeGroups.TripShare(notification.TripShareId))
+            .SendAsync(eventName, notification, cancellationToken);
     }
 
     private Task SendToUserAsync<T>(

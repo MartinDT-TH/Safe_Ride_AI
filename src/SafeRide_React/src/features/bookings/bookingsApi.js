@@ -1,4 +1,5 @@
 import { apiRequest } from '../../shared/api/apiClient';
+import { getCurrentManagementRole, MANAGEMENT_ROLES } from '../auth/managementRoles';
 
 const currencyFormatter = new Intl.NumberFormat('vi-VN', {
     style: 'currency',
@@ -37,6 +38,10 @@ export function getAdminBookingsPath({
 
     if (toDate) {
         params.set('toDate', toDate);
+    }
+
+    if (getCurrentManagementRole() === MANAGEMENT_ROLES.staff) {
+        return `/staff/bookings?${params.toString()}`;
     }
 
     return `/admin/bookings?${params.toString()}`;
@@ -122,6 +127,7 @@ function formatDateTime(value) {
     }
 
     return new Intl.DateTimeFormat('vi-VN', {
+        timeZone: 'Asia/Ho_Chi_Minh',
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
@@ -141,6 +147,7 @@ function formatDate(value) {
     }
 
     return new Intl.DateTimeFormat('vi-VN', {
+        timeZone: 'Asia/Ho_Chi_Minh',
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',

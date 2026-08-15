@@ -4,9 +4,12 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:intl/intl.dart';
 
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/localization/localization_extensions.dart';
+import '../../../../../core/localization/locale_provider.dart';
 import '../../../../../core/network/auth_header.dart';
 import '../../../../../core/network/dio_client.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
@@ -15,7 +18,7 @@ import '../../data/models/payment_models.dart';
 enum _DriverPaymentMode { qr, cash }
 
 class DriverTripPaymentPage extends StatefulWidget {
-  const DriverTripPaymentPage({super.key, required this.tripId});
+  DriverTripPaymentPage({super.key, required this.tripId});
 
   final int tripId;
 
@@ -31,6 +34,7 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
   PaymentStatusResult? _paymentStatus;
   _DriverPaymentMode? _selectedMode;
   bool _isLoading = false;
+  bool _isLoadingAmount = true;
   bool _isRefreshing = false;
   bool _isConfirmingCash = false;
   bool _returnedToDashboard = false;
@@ -44,6 +48,9 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadInitialPaymentStatus();
+    });
   }
 
   @override
@@ -55,7 +62,10 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
   @override
   Widget build(BuildContext context) {
     final qrData = _qrPayment?.qrCode ?? _qrPayment?.checkoutUrl;
-    final amount = _paymentStatus?.amount ?? _qrPayment?.amount ?? 0;
+    final statusFinalFare = _paymentStatus?.finalFare;
+    final amount = statusFinalFare != null && statusFinalFare > 0
+        ? statusFinalFare
+        : _paymentStatus?.amount ?? _qrPayment?.amount ?? 0;
     final isPaid =
         _paymentStatus?.isSuccess == true || _qrPayment?.isSuccess == true;
 
@@ -69,9 +79,7 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
           });
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Vui lòng hoàn thành thanh toán trước khi thoát'),
-            ),
+            SnackBar(content: Text(context.l10n.completePaymentBeforeExit)),
           );
         }
       },
@@ -81,7 +89,7 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
           backgroundColor: _surface,
           elevation: 0.8,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded),
+            icon: Icon(Icons.arrow_back_ios_new_rounded),
             color: _primary,
             onPressed: () {
               if (isPaid) {
@@ -95,16 +103,16 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
                 });
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Vui lòng hoàn thành thanh toán.'),
+                  SnackBar(
+                    content: Text(context.l10n.completePayment),
                     duration: Duration(seconds: 2),
                   ),
                 );
               }
             },
           ),
-          title: const Text(
-            'Thanh toán chuyến đi',
+          title: Text(
+            context.l10n.tripPayment,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
@@ -121,7 +129,7 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
             child: Column(
               children: [
                 Text(
-                  'Số tiền khách cần thanh toán',
+                  context.l10n.customerPaymentAmount,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: _muted,
@@ -129,27 +137,34 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  _formatCurrency(amount),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: _primaryDark,
-                    fontSize: 44,
-                    height: 1,
-                    fontWeight: FontWeight.w900,
+                SizedBox(height: 12),
+                if (_isLoadingAmount)
+                  SizedBox(
+                    width: 34,
+                    height: 34,
+                    child: CircularProgressIndicator(strokeWidth: 3),
+                  )
+                else
+                  Text(
+                    _formatCurrency(amount),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: _primaryDark,
+                      fontSize: 44,
+                      height: 1,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 38),
+                SizedBox(height: 38),
                 Expanded(
                   child: Center(
                     child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 220),
+                      duration: Duration(milliseconds: 220),
                       child: _buildPaymentContent(qrData, isPaid),
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
+                SizedBox(height: 20),
                 if (_selectedMode == _DriverPaymentMode.qr)
                   SizedBox(
                     width: double.infinity,
@@ -159,18 +174,20 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
                           ? null
                           : _refreshStatus,
                       icon: _isRefreshing
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 20,
                               height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2.2,
                               ),
                             )
-                          : const Icon(Icons.sync_rounded),
-                      label: Text(isPaid ? 'Đã thanh toán' : 'Kiểm tra lại'),
+                          : Icon(Icons.sync_rounded),
+                      label: Text(
+                        isPaid ? context.l10n.paid : context.l10n.checkAgain,
+                      ),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: _primary,
-                        side: const BorderSide(color: _primary, width: 2),
+                        side: BorderSide(color: _primary, width: 2),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
@@ -188,7 +205,7 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
   Widget _buildPaymentContent(String? qrData, bool isPaid) {
     if (_selectedMode == null) {
       return _PaymentChoicePanel(
-        key: const ValueKey('choice'),
+        key: ValueKey('choice'),
         onQrPressed: _createQrPayment,
         onCashPressed: _confirmCashPayment,
         isConfirmingCash: _isConfirmingCash,
@@ -196,7 +213,7 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
     }
 
     if (_isLoading) {
-      return const SizedBox(
+      return SizedBox(
         key: ValueKey('loading'),
         width: 42,
         height: 42,
@@ -207,33 +224,33 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
     if (isPaid) {
       final isCash = _paymentStatus?.paymentMethod?.toLowerCase() == 'cash';
       return Column(
-        key: const ValueKey('paid'),
+        key: ValueKey('paid'),
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             width: 96,
             height: 96,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: Color(0xFFE5F5F0),
               shape: BoxShape.circle,
             ),
-            child: const Icon(
+            child: Icon(
               Icons.check_circle_rounded,
               color: Color(0xFF0A8F62),
               size: 64,
             ),
           ),
-          const SizedBox(height: 22),
+          SizedBox(height: 22),
           Text(
-            isCash ? 'Đã xác nhận tiền mặt' : 'Khách đã thanh toán',
+            isCash ? context.l10n.cashConfirmed : context.l10n.customerPaid,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               color: _primaryDark,
               fontSize: 24,
               fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(height: 32),
+          SizedBox(height: 32),
           SizedBox(
             width: double.infinity,
             height: 54,
@@ -246,8 +263,8 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
                   borderRadius: BorderRadius.circular(14),
                 ),
               ),
-              child: const Text(
-                'Về màn hình chính',
+              child: Text(
+                context.l10n.backToHome,
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
@@ -258,21 +275,21 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
 
     if (_errorMessage != null || qrData == null || qrData.isEmpty) {
       return Column(
-        key: const ValueKey('error'),
+        key: ValueKey('error'),
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.error_outline_rounded, color: Colors.red, size: 54),
-          const SizedBox(height: 16),
+          Icon(Icons.error_outline_rounded, color: Colors.red, size: 54),
+          SizedBox(height: 16),
           Text(
-            _errorMessage ?? 'Không thể tạo mã QR thanh toán.',
+            _errorMessage ?? context.l10n.paymentQrCreateFailed,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               color: _muted,
               fontSize: 17,
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: 20),
           ElevatedButton(
             onPressed: _selectedMode == _DriverPaymentMode.cash
                 ? _confirmCashPayment
@@ -283,11 +300,11 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
             ),
             child: Text(
               _selectedMode == _DriverPaymentMode.cash
-                  ? 'Xác nhận lại tiền mặt'
-                  : 'Tạo lại mã QR',
+                  ? context.l10n.reconfirmCash
+                  : context.l10n.recreateQr,
             ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           TextButton(
             onPressed: () {
               _statusTimer?.cancel();
@@ -295,14 +312,14 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
                 _selectedMode = null;
               });
             },
-            child: const Text('Chuyển phương thức khác'),
+            child: Text(context.l10n.switchPaymentMethod),
           ),
         ],
       );
     }
 
     return Column(
-      key: const ValueKey('qr'),
+      key: ValueKey('qr'),
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
@@ -312,12 +329,12 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(32),
-            border: Border.all(color: const Color(0xFFE4E1DF), width: 1.2),
+            border: Border.all(color: Color(0xFFE4E1DF), width: 1.2),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.14),
                 blurRadius: 22,
-                offset: const Offset(0, 12),
+                offset: Offset(0, 12),
               ),
             ],
           ),
@@ -331,21 +348,21 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
             ),
           ),
         ),
-        const SizedBox(height: 28),
+        SizedBox(height: 28),
         Container(
           height: 46,
           padding: const EdgeInsets.symmetric(horizontal: 22),
           decoration: BoxDecoration(
-            color: const Color(0xFFDDE8EA),
+            color: Color(0xFFDDE8EA),
             borderRadius: BorderRadius.circular(24),
           ),
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.qr_code_scanner_rounded, color: _muted, size: 24),
               SizedBox(width: 8),
               Text(
-                'Đưa khách quét mã này',
+                context.l10n.customerScanQr,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -357,7 +374,7 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
             ],
           ),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: 16),
         TextButton(
           onPressed: () {
             _statusTimer?.cancel();
@@ -365,8 +382,8 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
               _selectedMode = null;
             });
           },
-          child: const Text(
-            'Chuyển phương thức khác',
+          child: Text(
+            context.l10n.switchPaymentMethod,
             style: TextStyle(
               color: _primary,
               fontSize: 16,
@@ -384,7 +401,7 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
     if (token == null || token.isEmpty) {
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Phiên đăng nhập đã hết hạn.';
+        _errorMessage = context.l10n.sessionExpired;
       });
       return;
     }
@@ -426,7 +443,7 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
     if (token == null || token.isEmpty) {
       setState(() {
         _selectedMode = _DriverPaymentMode.cash;
-        _errorMessage = 'Phiên đăng nhập đã hết hạn.';
+        _errorMessage = context.l10n.sessionExpired;
       });
       return;
     }
@@ -465,15 +482,55 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
         _isConfirmingCash = false;
         _errorMessage = _extractError(
           exception,
-          fallback: 'Không thể xác nhận thanh toán tiền mặt.',
+          fallback: context.l10n.cashPaymentConfirmFailed,
         );
+      });
+    }
+  }
+
+  Future<void> _loadInitialPaymentStatus() async {
+    final token = context.read<AuthProvider>().token;
+    if (token == null || token.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _isLoadingAmount = false;
+          _errorMessage = context.l10n.sessionExpired;
+        });
+      }
+      return;
+    }
+
+    try {
+      final response = await _dio.post(
+        ApiEndpoints.startDriverTripPayment(widget.tripId),
+        data: const <String, dynamic>{},
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+        ),
+      );
+      final status = PaymentStatusResult.fromJson(
+        Map<String, dynamic>.from(response.data as Map),
+      );
+      if (!mounted) return;
+      setState(() {
+        _paymentStatus = status;
+        _isLoadingAmount = false;
+      });
+      if (status.isSuccess) {
+        _finishAndReturnToDashboard();
+      }
+    } on DioException catch (exception) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingAmount = false;
+        _errorMessage = _extractError(exception);
       });
     }
   }
 
   void _startStatusPolling(String token) {
     _statusTimer?.cancel();
-    _statusTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+    _statusTimer = Timer.periodic(Duration(seconds: 5), (_) async {
       await _loadStatus(token, showLoading: false);
     });
   }
@@ -507,15 +564,21 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
         _statusTimer?.cancel();
         _finishAndReturnToDashboard();
       }
-    } on DioException catch (_) {
-      if (!mounted || showLoading) return;
+    } on DioException catch (exception) {
+      if (!mounted) return;
+      if (showLoading) {
+        setState(() {
+          _errorMessage = _extractError(exception);
+        });
+      }
+    } finally {
+      if (mounted && showLoading) {
+        setState(() => _isLoadingAmount = false);
+      }
     }
   }
 
-  static String _extractError(
-    DioException exception, {
-    String fallback = 'Không thể tạo mã QR thanh toán.',
-  }) {
+  static String _extractError(DioException exception, {String? fallback}) {
     final data = exception.response?.data;
     if (data is Map) {
       final detail = data[ApiKeys.detail]?.toString();
@@ -523,7 +586,8 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
         return detail;
       }
     }
-    return fallback;
+    return fallback ??
+        LocaleProvider.currentLocalizations.paymentQrCreateFailed;
   }
 
   void _finishAndReturnToDashboard() {
@@ -536,16 +600,16 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
   }
 
   static String _formatCurrency(double value) {
-    final formatter = value.round().toString().replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-      (match) => '${match[1]}.',
-    );
-    return '$formatterđ';
+    return NumberFormat.currency(
+      locale: LocaleProvider.currentLocale.toLanguageTag(),
+      symbol: 'VND',
+      decimalDigits: 0,
+    ).format(value);
   }
 }
 
 class _PaymentChoicePanel extends StatelessWidget {
-  const _PaymentChoicePanel({
+  _PaymentChoicePanel({
     super.key,
     required this.onQrPressed,
     required this.onCashPressed,
@@ -561,14 +625,14 @@ class _PaymentChoicePanel extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(
+        Icon(
           Icons.payments_rounded,
           color: _DriverTripPaymentPageState._primary,
           size: 64,
         ),
-        const SizedBox(height: 18),
-        const Text(
-          'Chọn phương thức khách thanh toán',
+        SizedBox(height: 18),
+        Text(
+          context.l10n.chooseCustomerPaymentMethod,
           textAlign: TextAlign.center,
           style: TextStyle(
             color: _DriverTripPaymentPageState._primaryDark,
@@ -576,14 +640,14 @@ class _PaymentChoicePanel extends StatelessWidget {
             fontWeight: FontWeight.w900,
           ),
         ),
-        const SizedBox(height: 28),
+        SizedBox(height: 28),
         SizedBox(
           width: double.infinity,
           height: 58,
           child: ElevatedButton.icon(
             onPressed: onQrPressed,
-            icon: const Icon(Icons.qr_code_2_rounded),
-            label: const Text('Thanh toán QR'),
+            icon: Icon(Icons.qr_code_2_rounded),
+            label: Text(context.l10n.qrPayment),
             style: ElevatedButton.styleFrom(
               backgroundColor: _DriverTripPaymentPageState._primary,
               foregroundColor: Colors.white,
@@ -593,23 +657,23 @@ class _PaymentChoicePanel extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 14),
+        SizedBox(height: 14),
         SizedBox(
           width: double.infinity,
           height: 58,
           child: OutlinedButton.icon(
             onPressed: isConfirmingCash ? null : onCashPressed,
             icon: isConfirmingCash
-                ? const SizedBox(
+                ? SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2.2),
                   )
-                : const Icon(Icons.attach_money_rounded),
-            label: const Text('Trả tiền mặt'),
+                : Icon(Icons.attach_money_rounded),
+            label: Text(context.l10n.cashPayment),
             style: OutlinedButton.styleFrom(
               foregroundColor: _DriverTripPaymentPageState._primary,
-              side: const BorderSide(
+              side: BorderSide(
                 color: _DriverTripPaymentPageState._primary,
                 width: 2,
               ),

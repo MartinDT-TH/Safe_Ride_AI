@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../../core/constants/app_colors.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/models/booking_catalog.dart';
 import '../../data/models/booking_fare_estimate.dart';
@@ -14,7 +15,7 @@ class DriverProfilePage extends StatelessWidget {
   const DriverProfilePage({
     super.key,
     required this.driverId,
-    this.name = 'Nguyễn Văn An',
+    this.name = 'SafeRide Driver',
     this.avatarUrl =
         'https://img.freepik.com/free-photo/handsome-young-man-with-new-haircut_176420-19636.jpg',
     this.rating = 4.9,
@@ -43,6 +44,11 @@ class DriverProfilePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final canConfirmDriver =
+        booking?.bookingType == 'Now' &&
+        booking?.bookingStatus == 'Searching' &&
+        booking?.driverOffer?.offerStatus == 'DriverAccepted';
+
     return PopScope(
       canPop: true,
       child: Scaffold(
@@ -51,11 +57,11 @@ class DriverProfilePage extends StatelessWidget {
           backgroundColor: Colors.white,
           elevation: 0,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: AppColors.primary),
+            icon: Icon(Icons.arrow_back, color: AppColors.primary),
             onPressed: () => Navigator.pop(context),
           ),
-          title: const Text(
-            'Hồ sơ tài xế',
+          title: Text(
+            context.l10n.driverProfile,
             style: TextStyle(
               color: AppColors.primary,
               fontSize: 18,
@@ -65,7 +71,7 @@ class DriverProfilePage extends StatelessWidget {
           centerTitle: true,
           actions: [
             IconButton(
-              icon: const Icon(Icons.more_vert, color: Color(0xFF6B6B6B)),
+              icon: Icon(Icons.more_vert, color: Color(0xFF6B6B6B)),
               onPressed: () {},
             ),
           ],
@@ -75,42 +81,42 @@ class DriverProfilePage extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Column(
             children: [
-              const SizedBox(height: 24),
+              SizedBox(height: 24),
               _DriverAvatar(avatarUrl: avatarUrl, isVerified: isVerified),
-              const SizedBox(height: 20),
+              SizedBox(height: 20),
               Text(
                 name,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w800,
                   color: Color(0xFF1F1F1F),
                   letterSpacing: -0.5,
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.star, color: Color(0xFFFFB800), size: 18),
-                  const SizedBox(width: 4),
+                  Icon(Icons.star, color: Color(0xFFFFB800), size: 18),
+                  SizedBox(width: 4),
                   Text(
                     rating.toString(),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
                       color: Color(0xFF1F1F1F),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  SizedBox(width: 10),
                   Container(
                     width: 1.5,
                     height: 14,
-                    color: const Color(0xFFE2E2E2),
+                    color: Color(0xFFE2E2E2),
                   ),
-                  const SizedBox(width: 10),
+                  SizedBox(width: 10),
                   Text(
-                    '${tripCount.toString().replaceAllMapped(RegExp(r"(\d{1,3})(?=(\d{3})+(?!\d))"), (Match m) => "${m[1]},")}+ chuyến đi',
-                    style: const TextStyle(
+                    context.l10n.tripCountPlus(tripCount.toString()),
+                    style: TextStyle(
                       color: Color(0xFF6B6B6B),
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
@@ -118,176 +124,187 @@ class DriverProfilePage extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 32),
+              SizedBox(height: 32),
               Row(
                 children: [
                   Expanded(child: _ExperienceCard(years: experienceYears)),
-                  const SizedBox(width: 16),
-                  const Expanded(child: _AttributesCard()),
+                  SizedBox(width: 16),
+                  Expanded(child: _AttributesCard()),
                 ],
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: 20),
               _StatusCard(
                 icon: Icons.assignment_turned_in_outlined,
-                title: 'Trạng thái KYC',
-                subtitle: 'Hồ sơ đã được duyệt bởi hệ thống',
-                trailing: const _VerifiedBadge(),
-                iconBgColor: const Color(0xFFE8F5E9),
-                iconColor: const Color(0xFF4CAF50),
+                title: context.l10n.kycStatus,
+                subtitle: context.l10n.kycApprovedDescription,
+                trailing: _VerifiedBadge(),
+                iconBgColor: Color(0xFFE8F5E9),
+                iconColor: Color(0xFF4CAF50),
               ),
-              const SizedBox(height: 12),
-              const _StatusCard(
+              SizedBox(height: 12),
+              _StatusCard(
                 icon: Icons.gavel_outlined,
-                title: 'Lý lịch tư pháp',
-                subtitle: 'Hoàn toàn trong sạch & minh bạch',
+                title: context.l10n.criminalRecord,
+                subtitle: context.l10n.cleanCriminalRecord,
                 iconBgColor: Color(0xFFF5F5F5),
                 iconColor: Color(0xFF757575),
               ),
-              const SizedBox(height: 32),
+              SizedBox(height: 32),
             ],
           ),
         ),
 
         // --- BOTTOM NAVIGATION BAR ---
-        bottomNavigationBar: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.06),
-                blurRadius: 16,
-                offset: const Offset(0, -4),
-              ),
-            ],
-          ),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => DriverReviewsPage(
-                                  driverId: driverId,
-                                  driverName: name,
-                                ),
-                              ),
-                            );
-                          },
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            side: const BorderSide(
-                              color: AppColors.primary,
-                              width: 1.5,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text(
-                            'Xem đánh giá',
-                            style: TextStyle(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: booking == null || pickup == null
-                              ? null
-                              : () {
+        bottomNavigationBar: !canConfirmDriver
+            ? null
+            : Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(24)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 16,
+                      offset: const Offset(0, -4),
+                    ),
+                  ],
+                ),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () {
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
-                                      builder: (_) => ConfirmBookingPage(
-                                        booking: booking!,
-                                        pickup: pickup!,
-                                        destination: destination,
-                                        fareEstimate: fareEstimate,
-                                        vehicle: vehicle,
+                                      builder: (_) => DriverReviewsPage(
+                                        driverId: driverId,
                                         driverName: name,
-                                        driverRating: rating,
-                                        driverTripCount: tripCount,
-                                        driverExperienceYears: experienceYears,
                                       ),
                                     ),
                                   );
                                 },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                                style: OutlinedButton.styleFrom(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 16),
+                                  side: const BorderSide(
+                                    color: AppColors.primary,
+                                    width: 1.5,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: Text(
+                                  context.l10n.viewReviews,
+                                  style: const TextStyle(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: booking == null || pickup == null
+                                    ? null
+                                    : () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) => ConfirmBookingPage(
+                                              booking: booking!,
+                                              pickup: pickup!,
+                                              destination: destination,
+                                              fareEstimate: fareEstimate,
+                                              vehicle: vehicle,
+                                              driverName: name,
+                                              driverRating: rating,
+                                              driverTripCount: tripCount,
+                                              driverExperienceYears:
+                                                  experienceYears,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: Colors.white,
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 16),
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: Text(
+                                  context.l10n.confirmHire,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 16,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: TextButton.icon(
+                            onPressed: booking == null
+                                ? null
+                                : () => _rejectDriver(context),
+                            icon: Icon(
+                              Icons.close_rounded,
+                              size: 18,
+                              color: Colors.red.shade600,
+                            ),
+                            label: Text(
+                              context.l10n.rejectAndFindAnotherDriver,
+                              style: TextStyle(
+                                color: Colors.red.shade600,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
+                              ),
+                            ),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
                           ),
-                          // Bỏ Icon và Row, đưa Text ra làm con trực tiếp để tự động căn giữa
-                          child: const Text(
-                            'Xác nhận thuê',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 16,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: TextButton.icon(
-                      onPressed: booking == null ? null : () => _rejectDriver(context),
-                      icon: Icon(
-                        Icons.close_rounded,
-                        size: 18,
-                        color: Colors.red.shade600,
-                      ),
-                      label: Text(
-                        'Từ chối và tìm tài xế khác',
-                        style: TextStyle(
-                          color: Colors.red.shade600,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
-                        ),
-                      ),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
+                      ],
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
-        ),
       ),
     );
   }
 
   // --- POPUP TỪ CHỐI ---
   Future<void> _rejectDriver(BuildContext context) async {
+    if (booking?.bookingType != 'Now' ||
+        booking?.bookingStatus != 'Searching' ||
+        booking?.driverOffer?.offerStatus != 'DriverAccepted') {
+      return;
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: Colors.white,
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -306,18 +323,18 @@ class DriverProfilePage extends StatelessWidget {
                   size: 32,
                 ),
               ),
-              const SizedBox(height: 20),
-              const Text(
-                'Từ chối tài xế?',
+              SizedBox(height: 20),
+              Text(
+                context.l10n.rejectDriverQuestion,
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w800,
                   color: Color(0xFF1F1F1F),
                 ),
               ),
-              const SizedBox(height: 12),
-              const Text(
-                'Hệ thống sẽ bỏ qua tài xế này và tiếp tục tìm kiếm người khác cho bạn.',
+              SizedBox(height: 12),
+              Text(
+                context.l10n.rejectDriverDescription,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 15,
@@ -325,7 +342,7 @@ class DriverProfilePage extends StatelessWidget {
                   height: 1.4,
                 ),
               ),
-              const SizedBox(height: 28),
+              SizedBox(height: 28),
               Row(
                 children: [
                   Expanded(
@@ -333,13 +350,13 @@ class DriverProfilePage extends StatelessWidget {
                       onPressed: () => Navigator.pop(context, false),
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        side: const BorderSide(color: Color(0xFFE2E2E2)),
+                        side: BorderSide(color: Color(0xFFE2E2E2)),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      child: const Text(
-                        'Quay lại',
+                      child: Text(
+                        context.l10n.goBack,
                         style: TextStyle(
                           color: Color(0xFF6B6B6B),
                           fontWeight: FontWeight.w600,
@@ -348,7 +365,7 @@ class DriverProfilePage extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () => Navigator.pop(context, true),
@@ -361,8 +378,8 @@ class DriverProfilePage extends StatelessWidget {
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      child: const Text(
-                        'Xác nhận',
+                      child: Text(
+                        context.l10n.confirm,
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 15,
@@ -384,21 +401,21 @@ class DriverProfilePage extends StatelessWidget {
     if (token == null) return;
 
     final result = await context.read<BookingProvider>().rejectDriver(
-          token,
-          bookingId: booking!.bookingId,
-        );
+      token,
+      bookingId: booking!.bookingId,
+    );
 
     if (!context.mounted) return;
 
     if (result != null) {
       Navigator.pop(context); // Go back to searching screen
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đang tìm tài xế khác cho bạn...')),
+        SnackBar(content: Text(context.l10n.findingAnotherDriver)),
       );
     } else {
       final error = context.read<BookingProvider>().errorMessage;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error ?? 'Không thể từ chối tài xế.')),
+        SnackBar(content: Text(error ?? context.l10n.rejectDriverFailed)),
       );
     }
   }
@@ -417,16 +434,16 @@ class _DriverAvatar extends StatelessWidget {
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFFF5F5F5), width: 1.5),
+            border: Border.all(color: Color(0xFFF5F5F5), width: 1.5),
           ),
           child: CircleAvatar(
             radius: 65,
-            backgroundColor: const Color(0xFFF5F5F5),
+            backgroundColor: Color(0xFFF5F5F5),
             backgroundImage: avatarUrl != null
                 ? NetworkImage(avatarUrl!)
                 : null,
             child: avatarUrl == null
-                ? const Icon(Icons.person, size: 80, color: Color(0xFFBDBDBD))
+                ? Icon(Icons.person, size: 80, color: Color(0xFFBDBDBD))
                 : null,
           ),
         ),
@@ -436,11 +453,11 @@ class _DriverAvatar extends StatelessWidget {
             bottom: 4,
             child: Container(
               padding: const EdgeInsets.all(3),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: Colors.white,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.verified,
                 color: Color(0xFF007A87),
                 size: 28,
@@ -462,20 +479,20 @@ class _ExperienceCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       height: 120,
       decoration: BoxDecoration(
-        color: const Color(0xFFE0F2F1),
+        color: Color(0xFFE0F2F1),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
+          Icon(
             Icons.work_history_outlined,
             color: AppColors.primary,
             size: 28,
           ),
-          const Spacer(),
-          const Text(
-            'KINH NGHIỆM',
+          Spacer(),
+          Text(
+            context.l10n.experienceUpper,
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w800,
@@ -484,8 +501,8 @@ class _ExperienceCard extends StatelessWidget {
             ),
           ),
           Text(
-            '$years Năm',
-            style: const TextStyle(
+            context.l10n.yearsValueCapitalized(years),
+            style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w900,
               color: AppColors.primary,
@@ -506,10 +523,10 @@ class _AttributesCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       height: 120,
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F7F8),
+        color: Color(0xFFF5F7F8),
         borderRadius: BorderRadius.circular(16),
       ),
-      child: const Column(
+      child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Row(
@@ -518,7 +535,7 @@ class _AttributesCard extends StatelessWidget {
               SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Lái xe an toàn',
+                  context.l10n.safeDriving,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -539,7 +556,7 @@ class _AttributesCard extends StatelessWidget {
               SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Thân thiện',
+                  context.l10n.friendly,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -574,7 +591,6 @@ class _StatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final trailingWidget = trailing;
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -583,7 +599,7 @@ class _StatusCard extends StatelessWidget {
         border: Border.all(color: const Color(0xFFF0F0F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -624,7 +640,7 @@ class _StatusCard extends StatelessWidget {
               ],
             ),
           ),
-          if (trailingWidget != null) trailingWidget,
+          if (trailing != null) trailing!,
         ],
       ),
     );
@@ -638,16 +654,16 @@ class _VerifiedBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFE8F5E9),
+        color: Color(0xFFE8F5E9),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: const Row(
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.check_circle, size: 14, color: Color(0xFF4CAF50)),
           SizedBox(width: 6),
           Text(
-            'Đã xác minh',
+            context.l10n.verified,
             style: TextStyle(
               color: Color(0xFF2E7D32),
               fontSize: 12,

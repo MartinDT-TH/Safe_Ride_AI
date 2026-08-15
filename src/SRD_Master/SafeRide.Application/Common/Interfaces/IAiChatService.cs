@@ -15,6 +15,7 @@ public interface IAiChatService
         string mimeType,
         string? conversationId,
         AiCurrentLocationRequest? currentLocation,
+        string? languageCode,
         CancellationToken cancellationToken);
 
     Task<IReadOnlyList<AiConversationDto>> GetConversationsAsync(

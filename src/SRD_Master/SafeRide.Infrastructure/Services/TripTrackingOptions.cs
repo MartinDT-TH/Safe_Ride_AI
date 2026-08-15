@@ -27,4 +27,24 @@ public sealed class TripTrackingOptions
     public int MinFallbackPathPointCount { get; set; } = 2;
 
     public double MinTrustedDistanceMeters { get; set; } = 10;
+
+    public decimal MinimumEarlyEndFare { get; set; } = 2_000m;
+
+    public double RouteDeviationThresholdMeters { get; set; } = 100;
+
+    public int RouteDeviationRequiredSamples { get; set; } = 3;
+
+    public int RouteDeviationStateTtlMinutes { get; set; } = 2;
+
+    public int RouteRerouteCooldownSeconds { get; set; } = 15;
+
+    public int CustomerDeviationAlertCooldownMinutes { get; set; } = 5;
+
+    public int ActiveRouteTtlHours { get; set; } = 4;
+
+    public double ReverseProgressThresholdMeters { get; set; } = 150;
+
+    public int ReverseRequiredSamples { get; set; } = 2;
+
+    public double CustomerAlertDistanceIncreaseMeters { get; set; } = 500;
 }

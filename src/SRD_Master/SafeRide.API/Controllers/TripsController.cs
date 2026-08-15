@@ -7,7 +7,9 @@ using SafeRide.API.Authorization;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Features.Auth;
 using SafeRide.Application.Features.Ratings.Commands.SubmitTripRating;
+using SafeRide.Application.Features.Safety.Commands.TriggerSOS;
 using SafeRide.Application.Features.Trips.DTOs;
+using SafeRide.Application.Features.TripSharing;
 using SafeRide.Contracts.Requests.Trips;
 using SafeRide.Realtime;
 
@@ -22,17 +24,79 @@ public sealed class TripsController : ControllerBase
     private readonly ITripChatService _tripChatService;
     private readonly IHubContext<TripChatHub> _tripChatHubContext;
     private readonly ISender _sender;
+    private readonly ITripSharingService _tripSharingService;
 
     public TripsController(
         ITripStatusService tripStatusService,
+        ISender sender,
+        ITripSharingService tripSharingService,
         ITripChatService tripChatService,
-        IHubContext<TripChatHub> tripChatHubContext,
-        ISender sender)
+        IHubContext<TripChatHub> tripChatHubContext)
     {
         _tripStatusService = tripStatusService;
         _tripChatService = tripChatService;
         _tripChatHubContext = tripChatHubContext;
         _sender = sender;
+        _tripSharingService = tripSharingService;
+    }
+
+    [HttpPost("{tripId:long}/shares")]
+    [Authorize(Roles = "Customer")]
+    [ProducesResponseType<CreateTripShareResult>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<CreateTripShareResult>> CreateShare(
+        long tripId,
+        [FromBody] CreateTripShareRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var customerId))
+        {
+            return Unauthorized();
+        }
+
+        return Ok(await _tripSharingService.CreateAsync(
+            tripId,
+            customerId,
+            request.RecipientPhoneNumber,
+            cancellationToken));
+    }
+
+    [HttpGet("{tripId:long}/shares")]
+    [Authorize(Roles = "Customer")]
+    [ProducesResponseType<IReadOnlyList<TripShareListItemDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<TripShareListItemDto>>> ListShares(
+        long tripId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var customerId))
+        {
+            return Unauthorized();
+        }
+
+        return Ok(await _tripSharingService.ListAsync(
+            tripId,
+            customerId,
+            cancellationToken));
+    }
+
+    [HttpDelete("{tripId:long}/shares/{tripShareId:long}")]
+    [Authorize(Roles = "Customer")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> RevokeShare(
+        long tripId,
+        long tripShareId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var customerId))
+        {
+            return Unauthorized();
+        }
+
+        await _tripSharingService.RevokeAsync(
+            tripId,
+            tripShareId,
+            customerId,
+            cancellationToken);
+        return NoContent();
     }
 
     [HttpPatch("{tripId:long}/status")]
@@ -95,6 +159,37 @@ public sealed class TripsController : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("{tripId:long}/end-response")]
+    [Authorize(Roles = "Customer")]
+    [AllowTripContinuation(TripContinuationOperation.TripReturnConfirmation)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RespondToEndRequest(
+        long tripId,
+        [FromBody] RespondToEndTripRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var customerId))
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Unauthorized",
+                Detail = "Không xác định được tài khoản khách hàng."
+            });
+        }
+
+        await _tripStatusService.RespondToEndTripRequestAsync(
+            customerId,
+            tripId,
+            request.Accepted,
+            cancellationToken);
+
+        return NoContent();
+    }
+
     [HttpPost("{tripId:long}/return-confirmation/customer")]
     [Authorize(Roles = "Customer")]
     [AllowTripContinuation(TripContinuationOperation.TripReturnConfirmation)]
@@ -123,7 +218,9 @@ public sealed class TripsController : ControllerBase
             customerId,
             tripId,
             request.VehicleReturnedConfirmed,
-            cancellationToken);
+            cancellationToken,
+            request.RatingScore,
+            request.Comment);
 
         return NoContent();
     }
@@ -132,7 +229,7 @@ public sealed class TripsController : ControllerBase
     /// Driver confirms vehicle return on behalf of the customer.
     /// Requires 1–3 evidence photos (multipart/form-data, field name: evidence).
     /// Server captures GPS from Redis; the driver cannot supply source-of-truth location.
-    /// Moves trip WAITING_RETURN_CONFIRM to RETURN_CONFIRMED, then WAITING_PAYMENT.
+    /// Requires successful payment, then completes the trip after return confirmation.
     /// </summary>
     [HttpPost("{tripId:long}/return-confirmation/driver")]
     [Authorize(Roles = "Driver")]
@@ -264,6 +361,41 @@ public sealed class TripsController : ControllerBase
         return Ok(response);
     }
 
+    [HttpPost("{tripId:long}/sos")]
+    [Authorize(Roles = "Customer")]
+    [ProducesResponseType<TriggerSOSResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<TriggerSOSResponse>> TriggerSOS(
+        long tripId,
+        [FromBody] TriggerSOSRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var customerId))
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Unauthorized",
+                Detail = "Không xác định được tài khoản khách hàng."
+            });
+        }
+
+        var response = await _sender.Send(
+            new TriggerSOSCommand(
+                tripId,
+                customerId,
+                request.Latitude,
+                request.Longitude,
+                request.Message),
+            cancellationToken);
+
+        return Ok(response);
+    }
+
     [HttpGet("{tripId:long}/chat/messages")]
     [ProducesResponseType<IReadOnlyList<TripChatMessageDto>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -288,6 +420,52 @@ public sealed class TripsController : ControllerBase
             cancellationToken);
 
         return Ok(messages);
+    }
+
+    [HttpGet("chat/unread")]
+    [ProducesResponseType<TripChatUnreadSummaryDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<TripChatUnreadSummaryDto>> GetChatUnread(
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Unauthorized",
+                Detail = "Không xác định được tài khoản."
+            });
+        }
+
+        return Ok(await _tripChatService.GetUnreadSummaryAsync(
+            userId,
+            cancellationToken));
+    }
+
+    [HttpPost("{tripId:long}/chat/read")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> MarkChatRead(
+        long tripId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Unauthorized",
+                Detail = "Không xác định được tài khoản."
+            });
+        }
+
+        await _tripChatService.MarkReadAsync(
+            userId,
+            tripId,
+            cancellationToken);
+        return NoContent();
     }
 
     [HttpPost("{tripId:long}/chat/images")]

@@ -15,6 +15,7 @@ using Microsoft.Extensions.FileProviders;
 using SafeRide.Infrastructure.Simulator;
 using SafeRide.Realtime;
 using System.Text.Json.Serialization;
+using SafeRide.API.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,13 +36,35 @@ builder.Services
     .AddControllers()
     .AddJsonOptions(options =>
     {
+        // FIX: The specific converter must run before the general enum converter
+        // so route-mode aliases are accepted while numeric enum values remain invalid.
+        options.JsonSerializerOptions.Converters.Add(new UtcDateTimeJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new MapTravelModeJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     })
     .ConfigureApiBehaviorOptions(options =>
     {
         options.InvalidModelStateResponseFactory = context =>
         {
-            var problem = new ValidationProblemDetails(context.ModelState)
+            var hasPropertyError = context.ModelState.Any(entry =>
+                !string.Equals(entry.Key, "body", StringComparison.OrdinalIgnoreCase)
+                && entry.Value?.Errors.Count > 0);
+            var errors = context.ModelState
+                .Where(entry =>
+                    entry.Value?.Errors.Count > 0
+                    && !(hasPropertyError
+                        && string.Equals(entry.Key, "body", StringComparison.OrdinalIgnoreCase)))
+                .ToDictionary(
+                    entry => entry.Key,
+                    entry => entry.Value!.Errors
+                        .Select(error => string.IsNullOrWhiteSpace(error.ErrorMessage)
+                            ? "Giá trị không hợp lệ."
+                            : error.ErrorMessage)
+                        .ToArray());
+
+            // FIX: Suppress the synthetic "body is required" error when JSON parsing
+            // already identified the actual invalid property.
+            var problem = new ValidationProblemDetails(errors)
             {
                 Status = StatusCodes.Status400BadRequest,
                 Title = "Validation failed",
@@ -89,6 +112,17 @@ builder.Services.AddSwaggerGen(options =>
         }
     });
 });
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("VercelFrontend", policy =>
+    {
+        policy
+            .WithOrigins("https://saferidereact.vercel.app")
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
 
 var app = builder.Build();
 
@@ -96,6 +130,7 @@ await app.Services.ApplyDevelopmentMigrationsAsync(app.Environment);
 await app.Services.SeedAdminIdentityAsync();
 await app.Services.SeedIdentityAsync();
 await app.Services.SeedCustomerIdentityAsync();
+await app.Services.SeedStaffIdentityAsync();
 
 app.Use(async (context, next) =>
 {
@@ -157,6 +192,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseMiddleware<ApiExceptionMiddleware>();
+app.UseCors("VercelFrontend");
 if (!app.Environment.IsProduction())
 {
     app.UseHttpsRedirection();
@@ -170,6 +206,7 @@ app.UseStaticFiles(new StaticFileOptions
 });
 app.UseMiddleware<AuthRateLimitMiddleware>();
 app.UseAuthentication();
+app.UseMiddleware<AccountRestrictionMiddleware>();
 app.UseMiddleware<ProfileCompletionMiddleware>();
 app.UseAuthorization();
 

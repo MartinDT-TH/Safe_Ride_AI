@@ -13,9 +13,9 @@ public interface IBookingRepository
         Guid customerId,
         CancellationToken cancellationToken);
 
-    Task<Booking?> GetCustomerBookingWithDetailsAsync(
+    Task<Booking?> GetBookingWithDetailsForUserAsync(
         long bookingId,
-        Guid customerId,
+        Guid userId,
         CancellationToken cancellationToken);
 
     Task<IReadOnlyList<BookingHistoryItemDto>> GetCustomerBookingHistoryAsync(
@@ -27,6 +27,10 @@ public interface IBookingRepository
         CancellationToken cancellationToken);
 
     Task<Booking?> GetActiveNowBookingAsync(
+        Guid customerId,
+        CancellationToken cancellationToken);
+
+    Task<Booking?> GetActiveBookingAsync(
         Guid customerId,
         CancellationToken cancellationToken);
 

@@ -251,13 +251,13 @@ function NotificationsPage() {
         setIsMutating(true);
         try {
             await approveAdminNotification(approvingNotification.rawId);
-            setSuccessMessage('ThÃ´ng bÃ¡o Ä‘Ã£ Ä‘Æ°á»£c duyá»‡t vÃ  phÃ¡t hÃ nh tá»›i ngÆ°á»i dÃ¹ng phÃ¹ há»£p.');
+            setSuccessMessage('Thông báo đã được duyệt và phát hành tới người dùng phù hợp.');
             setApprovingNotification(null);
             listResult.refetch();
             reviewResult.refetch();
         }
         catch (caughtError) {
-            setMutationError(caughtError instanceof Error ? caughtError.message : 'KhÃ´ng thá»ƒ duyá»‡t thÃ´ng bÃ¡o.');
+            setMutationError(caughtError instanceof Error ? caughtError.message : 'Không thể duyệt thông báo.');
         }
         finally {
             setIsMutating(false);

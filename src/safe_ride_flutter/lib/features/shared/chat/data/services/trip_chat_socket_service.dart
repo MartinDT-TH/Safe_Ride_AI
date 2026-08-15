@@ -4,10 +4,13 @@ import 'package:safe_ride/core/constants/app_strings.dart';
 
 class TripChatSocketService {
   HubConnection? _connection;
+  final Set<int> _desiredTripIds = {};
+  final Set<int> _joinedTripIds = {};
 
   bool get isConnected => _connection?.state == HubConnectionState.Connected;
 
-  Future<void> connect(String token, {
+  Future<void> connect(
+    String token, {
     required Function(List<Object?>?) onMessageReceived,
   }) async {
     if (_connection?.state == HubConnectionState.Connected) return;
@@ -26,10 +29,22 @@ class TripChatSocketService {
         .build();
 
     _connection!.on('TripMessageReceived', onMessageReceived);
+    _connection!.onreconnected(({connectionId}) async {
+      _joinedTripIds.clear();
+      for (final tripId in _desiredTripIds) {
+        await _joinTripChat(tripId);
+      }
+    });
+    _connection!.onclose(({error}) {
+      _joinedTripIds.clear();
+    });
 
     try {
       debugPrint('CHAT_SOCKET: Connecting to $hubUrl');
       await _connection!.start();
+      for (final tripId in _desiredTripIds) {
+        await _joinTripChat(tripId);
+      }
       debugPrint('CHAT_SOCKET: Connected');
     } catch (e) {
       debugPrint('CHAT_SOCKET: Connection failed: $e');
@@ -38,11 +53,21 @@ class TripChatSocketService {
   }
 
   Future<void> joinTripChat(int tripId) async {
-    await _invoke('JoinTripChat', [tripId]);
+    _desiredTripIds.add(tripId);
+    await _joinTripChat(tripId);
   }
 
   Future<void> leaveTripChat(int tripId) async {
+    _desiredTripIds.remove(tripId);
+    _joinedTripIds.remove(tripId);
     await _invoke('LeaveTripChat', [tripId]);
+  }
+
+  Future<void> _joinTripChat(int tripId) async {
+    if (_joinedTripIds.contains(tripId)) return;
+    if (_connection?.state != HubConnectionState.Connected) return;
+    await _connection!.invoke('JoinTripChat', args: [tripId]);
+    _joinedTripIds.add(tripId);
   }
 
   Future<void> sendTripMessage(int tripId, String message) async {
@@ -66,6 +91,8 @@ class TripChatSocketService {
       await _connection!.stop();
       _connection = null;
     }
+    _desiredTripIds.clear();
+    _joinedTripIds.clear();
   }
 
   String _buildHubUrl() {

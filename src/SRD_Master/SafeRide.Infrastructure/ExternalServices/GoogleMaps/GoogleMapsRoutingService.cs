@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SafeRide.Application.Common.Exceptions;
@@ -16,6 +15,9 @@ public sealed class GoogleMapsRoutingService : IMapRoutingService
 {
     private const string FieldMask =
         "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline";
+    private const int MaxLoggedBodyLength = 3000;
+    private const string SafeRouteError =
+        "Không thể tính tuyến đường. Vui lòng kiểm tra lại điểm đón và điểm đến.";
 
     private readonly HttpClient _httpClient;
     private readonly GoogleMapsOptions _options;
@@ -47,27 +49,39 @@ public sealed class GoogleMapsRoutingService : IMapRoutingService
                 "Dịch vụ bản đồ chưa được cấu hình URL tuyến đường.");
         }
 
+        var travelMode = request.TravelMode switch
+        {
+            MapTravelMode.Car => "DRIVE",
+            MapTravelMode.Motorcycle => "TWO_WHEELER",
+            MapTravelMode.Bike => "BICYCLE",
+            MapTravelMode.Foot => "WALK",
+            _ => throw new MapServiceException("Phương thức di chuyển không được hỗ trợ.")
+        };
         var requestBody = new
         {
             origin = CreateWaypoint(request.Origin),
             destination = CreateWaypoint(request.Destination),
-            travelMode = "DRIVE",
-            routingPreference = "TRAFFIC_AWARE",
-            languageCode = request.Language ?? "vi-VN",
+            travelMode,
+            routingPreference = travelMode is "DRIVE" or "TWO_WHEELER"
+                ? "TRAFFIC_AWARE"
+                : null,
+            languageCode = NormalizeLanguageCode(request.Language),
             units = "METRIC"
         };
-
-        var requestUrl = QueryHelpers.AddQueryString(
-            _options.RoutesApiUrl,
-            "key",
-            _options.ApiKey);
-
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUrl)
+        // var requestUrl = $"{_options.RoutesApiUrl}?key={_options.ApiKey}";
+        // using var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUrl)
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, _options.RoutesApiUrl)
         {
-            Content = JsonContent.Create(requestBody)
+            Content = JsonContent.Create(
+                requestBody,
+                options: new JsonSerializerOptions(JsonSerializerDefaults.Web)
+                {
+                    DefaultIgnoreCondition =
+                        System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+                })
         };
+        httpRequest.Headers.Add("X-Goog-Api-Key", _options.ApiKey);
         httpRequest.Headers.Add("X-Goog-FieldMask", FieldMask);
-
         try
         {
             using var response = await _httpClient.SendAsync(
@@ -75,55 +89,68 @@ public sealed class GoogleMapsRoutingService : IMapRoutingService
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);
 
+            var rawBody = await response.Content.ReadAsStringAsync(cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
                 _logger.LogWarning(
                     "Google Routes API returned {StatusCode}: {ErrorBody}. Source={Source}",
                     (int)response.StatusCode,
-                    errorBody,
+                    TruncateForLog(rawBody),
                     request.RequestSource);
-                throw new MapServiceException(
-                    "Không thể tính tuyến đường. Vui lòng kiểm tra lại điểm đón và điểm đến.");
+                throw new MapServiceException(SafeRouteError);
             }
 
-            var result = await response.Content.ReadFromJsonAsync<GoogleRoutesResponse>(
-                cancellationToken: cancellationToken);
-            var route = result?.Routes.FirstOrDefault();
-
-            if (route is null
-                || route.DistanceMeters <= 0
-                || !TryParseDurationSeconds(route.Duration, out var durationSeconds)
-                || string.IsNullOrWhiteSpace(route.Polyline?.EncodedPolyline))
+            if (string.IsNullOrWhiteSpace(rawBody))
             {
-                throw new MapServiceException(
-                    "Không thể tính tuyến đường. Vui lòng kiểm tra lại điểm đón và điểm đến.");
+                throw InvalidResponse("empty response body", rawBody, request.RequestSource);
             }
+
+            GoogleRoutesResponse? result;
+            try
+            {
+                result = JsonSerializer.Deserialize<GoogleRoutesResponse>(
+                    rawBody,
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            }
+            catch (JsonException exception)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "Google Routes API returned invalid JSON. Body={ResponseBody}. Source={Source}",
+                    TruncateForLog(rawBody),
+                    request.RequestSource);
+                throw new MapServiceException(SafeRouteError, exception);
+            }
+
+            var route = result?.Routes?.FirstOrDefault()
+                ?? throw InvalidResponse("routes missing or empty", rawBody, request.RequestSource);
+            if (route.DistanceMeters <= 0)
+                throw InvalidResponse("distanceMeters must be greater than zero", rawBody, request.RequestSource);
+            if (!TryParseDurationSeconds(route.Duration, out var durationSeconds))
+                throw InvalidResponse("invalid duration", rawBody, request.RequestSource);
+            if (string.IsNullOrWhiteSpace(route.Polyline?.EncodedPolyline))
+                throw InvalidResponse("missing encodedPolyline", rawBody, request.RequestSource);
 
             return new RouteEstimateResult
             {
                 Provider = MapProvider.GoogleMaps,
                 DistanceMeters = route.DistanceMeters,
                 DurationSeconds = durationSeconds,
-                EncodedPolyline = route.Polyline.EncodedPolyline ?? "",
+                EncodedPolyline = route.Polyline.EncodedPolyline,
                 PolylineFormat = "polyline5"
             };
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
+            _logger.LogWarning(
+                "Google Routes API timed out. Source={Source}",
+                request.RequestSource);
             throw new MapServiceException(
                 "Dịch vụ bản đồ phản hồi quá thời gian. Vui lòng thử lại.");
         }
         catch (HttpRequestException exception)
         {
             _logger.LogError(exception, "Could not call Google Routes API. Source={Source}", request.RequestSource);
-            throw new MapServiceException(
-                "Không thể tính tuyến đường. Vui lòng kiểm tra lại điểm đón và điểm đến.",
-                exception);
-        }
-        catch (JsonException exception)
-        {
-            _logger.LogError(exception, "Google Routes API returned invalid JSON. Source={Source}", request.RequestSource);
             throw new MapServiceException(
                 "Không thể tính tuyến đường. Vui lòng kiểm tra lại điểm đón và điểm đến.",
                 exception);
@@ -146,7 +173,7 @@ public sealed class GoogleMapsRoutingService : IMapRoutingService
     }
 
     private static bool TryParseDurationSeconds(
-        string value,
+        string? value,
         out double durationSeconds)
     {
         durationSeconds = 0;
@@ -160,12 +187,46 @@ public sealed class GoogleMapsRoutingService : IMapRoutingService
                 NumberStyles.Float,
                 CultureInfo.InvariantCulture,
                 out var seconds)
-            || seconds <= 0)
+            || seconds <= 0
+            || double.IsNaN(seconds)
+            || double.IsInfinity(seconds))
         {
             return false;
         }
 
         durationSeconds = seconds;
         return true;
+    }
+
+    private MapServiceException InvalidResponse(
+        string reason,
+        string rawBody,
+        string? requestSource)
+    {
+        _logger.LogWarning(
+            "Google Routes API returned an invalid success response: {Reason}. Body={ResponseBody}. Source={Source}",
+            reason,
+            TruncateForLog(rawBody),
+            requestSource);
+        return new MapServiceException(SafeRouteError);
+    }
+
+    private static string NormalizeLanguageCode(string? language)
+    {
+        if (string.IsNullOrWhiteSpace(language))
+            return "vi-VN";
+
+        var normalized = language.Trim();
+        return string.Equals(normalized, "vi", StringComparison.OrdinalIgnoreCase)
+            ? "vi-VN"
+            : normalized;
+    }
+
+    private static string TruncateForLog(string value)
+    {
+        if (value.Length <= MaxLoggedBodyLength)
+            return value;
+
+        return string.Concat(value.AsSpan(0, MaxLoggedBodyLength), "…");
     }
 }

@@ -57,11 +57,13 @@ class SessionManager {
 
   String? _cachedAccessToken;
   DateTime? _cachedExpiry;
+  String? _lastSessionEndMessage;
   bool _isInitialized = false;
   Future<void>? _initFuture;
 
   Stream<void> get sessionExpiredStream => _sessionExpiredController.stream;
   Stream<SessionTokens> get tokenUpdatedStream => _tokenUpdatedController.stream;
+  String? get lastSessionEndMessage => _lastSessionEndMessage;
 
   Future<void> _ensureInitialized() {
     if (_isInitialized) return Future.value();
@@ -131,9 +133,10 @@ class SessionManager {
     return true;
   }
 
-  Future<void> clearSession({bool notify = true}) async {
+  Future<void> clearSession({bool notify = true, String? reasonMessage}) async {
     _cachedAccessToken = null;
     _cachedExpiry = null;
+    _lastSessionEndMessage = reasonMessage;
     _isInitialized = false;
     await _storage.clearTokens();
     if (notify) {
@@ -159,6 +162,8 @@ class SessionManager {
       'auth.refresh_token_reused' ||
       'auth.account_inactive' ||
       'auth.account_locked' ||
+      'auth.account_temporarily_banned' ||
+      'auth.account_permanently_banned' ||
       'auth.session_expired' ||
       'auth.trip_continuation_expired' => true,
       _ => false,

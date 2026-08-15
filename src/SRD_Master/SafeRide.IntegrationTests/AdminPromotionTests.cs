@@ -28,6 +28,8 @@ public sealed class AdminPromotionTests
         Assert.Equal("SAFE20", promotion.PromotionCode);
         Assert.Equal(0, promotion.CurrentUsageCount);
         Assert.True(response.Id > 0);
+        Assert.Equal(3, response.RequiredCompletedTrips);
+        Assert.Equal(3, fixture.UnlockRuleStore.Get("SAFE20"));
     }
 
     [Fact]
@@ -63,6 +65,38 @@ public sealed class AdminPromotionTests
         Assert.Equal(7, response.CurrentUsageCount);
         Assert.Equal(7, promotion.CurrentUsageCount);
         Assert.Equal(25m, promotion.DiscountValue);
+        Assert.Equal(3, fixture.UnlockRuleStore.Get("NEW20"));
+        Assert.Equal(0, fixture.UnlockRuleStore.Get("OLD20"));
+    }
+
+    [Fact]
+    public async Task UpdatePromotion_RequiredTripsZero_RemovesRule()
+    {
+        await using var fixture = CreateFixture();
+        var promotion = CreatePromotion("SAFE20");
+        fixture.DbContext.Promotions.Add(promotion);
+        await fixture.DbContext.SaveChangesAsync();
+        await fixture.UnlockRuleStore.SaveAsync("SAFE20", 4, CancellationToken.None);
+
+        var response = await fixture.UpdateHandler.Handle(
+            UpdateCommand(promotion.Id, "SAFE20") with { RequiredCompletedTrips = 0 },
+            CancellationToken.None);
+
+        Assert.Equal(0, response.RequiredCompletedTrips);
+        Assert.Equal(0, fixture.UnlockRuleStore.Get("SAFE20"));
+    }
+
+    [Fact]
+    public async Task CreatePromotion_NegativeRequiredTrips_ThrowsBadRequest()
+    {
+        await using var fixture = CreateFixture();
+
+        var exception = await Assert.ThrowsAsync<PromotionException>(() =>
+            fixture.CreateHandler.Handle(
+                CreateCommand("SAFE20") with { RequiredCompletedTrips = -1 },
+                CancellationToken.None));
+
+        Assert.Equal("admin_promotion.invalid_required_completed_trips", exception.Code);
     }
 
     [Fact]
@@ -163,11 +197,13 @@ public sealed class AdminPromotionTests
         var dbContext = new ApplicationDbContext(options);
         var repository = new PromotionRepository(dbContext);
         var unitOfWork = new UnitOfWork(dbContext);
+        var unlockRuleStore = new PromotionUnlockRuleStoreFake();
 
         return new AdminPromotionFixture(
             dbContext,
-            new CreateAdminPromotionCommandHandler(repository, unitOfWork),
-            new UpdateAdminPromotionCommandHandler(repository, unitOfWork));
+            unlockRuleStore,
+            new CreateAdminPromotionCommandHandler(repository, unitOfWork, unlockRuleStore),
+            new UpdateAdminPromotionCommandHandler(repository, unitOfWork, unlockRuleStore));
     }
 
     private static CreateAdminPromotionCommand CreateCommand(string code)
@@ -182,6 +218,7 @@ public sealed class AdminPromotionTests
             100_000m,
             50_000m,
             1,
+            3,
             true);
     }
 
@@ -200,6 +237,7 @@ public sealed class AdminPromotionTests
             120_000m,
             60_000m,
             2,
+            3,
             true);
     }
 
@@ -223,12 +261,48 @@ public sealed class AdminPromotionTests
 
     private sealed record AdminPromotionFixture(
         ApplicationDbContext DbContext,
+        PromotionUnlockRuleStoreFake UnlockRuleStore,
         CreateAdminPromotionCommandHandler CreateHandler,
         UpdateAdminPromotionCommandHandler UpdateHandler) : IAsyncDisposable
     {
         public ValueTask DisposeAsync()
         {
             return DbContext.DisposeAsync();
+        }
+    }
+
+    private sealed class PromotionUnlockRuleStoreFake : SafeRide.Application.Common.Interfaces.IPromotionUnlockRuleStore
+    {
+        private readonly Dictionary<string, int> _rules = new(StringComparer.Ordinal);
+
+        public int Get(string promotionCode) =>
+            _rules.GetValueOrDefault(promotionCode.Trim().ToUpperInvariant());
+
+        public Task<int> GetRequiredCompletedTripsAsync(
+            string promotionCode,
+            CancellationToken cancellationToken) => Task.FromResult(Get(promotionCode));
+
+        public Task<IReadOnlyDictionary<string, int>> GetRequiredCompletedTripsAsync(
+            IReadOnlyCollection<string> promotionCodes,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyDictionary<string, int>>(
+                promotionCodes.ToDictionary(code => code, Get));
+
+        public Task SaveAsync(
+            string promotionCode,
+            int requiredCompletedTrips,
+            CancellationToken cancellationToken)
+        {
+            _rules[promotionCode.Trim().ToUpperInvariant()] = requiredCompletedTrips;
+            return Task.CompletedTask;
+        }
+
+        public Task RemoveAsync(
+            string promotionCode,
+            CancellationToken cancellationToken)
+        {
+            _rules.Remove(promotionCode.Trim().ToUpperInvariant());
+            return Task.CompletedTask;
         }
     }
 }

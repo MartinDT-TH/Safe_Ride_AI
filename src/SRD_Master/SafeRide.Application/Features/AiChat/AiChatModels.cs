@@ -3,7 +3,8 @@ namespace SafeRide.Application.Features.AiChat;
 public sealed record SendAiChatMessageRequest(
     string Message,
     string? ConversationId,
-    AiCurrentLocationRequest? CurrentLocation = null);
+    AiCurrentLocationRequest? CurrentLocation = null,
+    string? LanguageCode = null);
 
 public sealed record AiCurrentLocationRequest(
     string? Address,
@@ -16,7 +17,10 @@ public sealed record AiBookingDraftDto(
     AiBookingLocationDto Pickup,
     AiBookingLocationDto Destination,
     string? VehicleQuery = null,
-    string? PromotionCode = null);
+    string? PromotionCode = null,
+    string? VehicleType = null,
+    bool UseBestPromotion = false,
+    bool AutoBook = false);
 
 public sealed record AiChatMessageDto(
     string Id,

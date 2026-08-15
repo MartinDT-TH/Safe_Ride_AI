@@ -3,13 +3,14 @@ import 'package:flutter/material.dart';
 import '../../application/services/document_image_cropper.dart';
 import '../../application/services/identity_ocr_scanner.dart';
 import '../../../../../core/constants/app_colors.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../../core/widgets/custom_button.dart';
 import '../../data/models/identity_verification_submission.dart';
 import 'document_camera_page.dart';
 import 'license_upload_page.dart';
 
 class UploadCccdPage extends StatefulWidget {
-  const UploadCccdPage({super.key, this.submission});
+  UploadCccdPage({super.key, this.submission});
 
   final IdentityVerificationSubmission? submission;
 
@@ -23,7 +24,11 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
   final TextEditingController _fullNameController = TextEditingController();
   final TextEditingController _documentNumberController =
       TextEditingController();
+  final TextEditingController _dateOfBirthController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
+  String? _gender;
   bool _isScanning = false;
+  bool _hasQrIdentityData = false;
   final IdentityOcrScanner _ocrScanner = IdentityOcrScanner();
   late final IdentityVerificationSubmission _submission;
 
@@ -32,6 +37,10 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
   bool get _hasFullName => _fullNameController.text.trim().isNotEmpty;
   bool get _hasDocumentNumber =>
       _documentNumberController.text.trim().isNotEmpty;
+  bool get _hasIdentityDetails =>
+      _parseDate(_dateOfBirthController.text) != null &&
+      _gender != null &&
+      _addressController.text.trim().isNotEmpty;
 
   @override
   void initState() {
@@ -41,20 +50,26 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
     _backImage = _submission.cccdBackImage;
     _fullNameController.text = _submission.cccdFullName ?? '';
     _documentNumberController.text = _submission.cccdNumber ?? '';
+    _dateOfBirthController.text = _submission.cccdDateOfBirth == null
+        ? ''
+        : _formatDisplayDate(_submission.cccdDateOfBirth!);
+    _gender = _submission.cccdGender;
+    _addressController.text = _submission.cccdAddress ?? '';
   }
 
   Future<void> _pickImage(bool isFront) async {
     try {
-      final image = await Navigator.of(context).push<File>(
+      final capture = await Navigator.of(context).push<DocumentCaptureResult>(
         MaterialPageRoute(
           builder: (_) => DocumentCameraPage(
-            title: isFront ? 'Mặt trước CCCD' : 'Mặt sau CCCD',
-            instruction: 'Đặt CCCD nằm gọn trong khung, đủ sáng và rõ nét.',
+            title: isFront ? context.l10n.idCardFront : context.l10n.idCardBack,
+            instruction: context.l10n.idCardCameraInstruction,
           ),
         ),
       );
 
-      if (image != null) {
+      if (capture != null) {
+        final image = capture.croppedImage;
         setState(() {
           if (isFront) {
             _frontImage = image;
@@ -62,15 +77,15 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
             _backImage = image;
           }
         });
-        await _scanImage(image);
+        await _scanImage(image, qrFallbackImage: capture.originalImage);
       }
     } catch (e) {
       debugPrint('Error picking image: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'Không thể mở camera. Vui lòng kiểm tra quyền truy cập.',
+              context.l10n.cameraOpenFailed,
             ),
           ),
         );
@@ -78,31 +93,79 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
     }
   }
 
-  Future<void> _scanImage(File image) async {
+  Future<void> _scanImage(File image, {File? qrFallbackImage}) async {
     setState(() => _isScanning = true);
     try {
       final result = await _ocrScanner.scanImage(
         image: image,
+        qrFallbackImage: qrFallbackImage,
         documentType: IdentityOcrDocumentType.idCard,
+        onQrNotDetected: () async {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.l10n.ocrScanningOnDevice)),
+          );
+        },
+        onQrDetectedButInvalid: () async {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Đã nhận diện QR CCCD nhưng không giải mã được dữ liệu. Đang chuyển sang OCR.',
+              ),
+            ),
+          );
+        },
       );
       if (!mounted) return;
       setState(() {
-        if (result.fullName != null) {
+        final isQrResult = result.scanMethod == IdentityScanMethod.qr;
+        if (isQrResult) _hasQrIdentityData = true;
+
+        if (result.fullName != null &&
+            (isQrResult ||
+                (!_hasQrIdentityData &&
+                    _fullNameController.text.trim().isEmpty))) {
           _fullNameController.text = result.fullName!;
         }
-        if (result.documentNumber != null) {
+        if (result.documentNumber != null &&
+            (isQrResult ||
+                (!_hasQrIdentityData &&
+                    _documentNumberController.text.trim().isEmpty))) {
           _documentNumberController.text = result.documentNumber!;
+        }
+        if (result.dateOfBirth != null &&
+            (isQrResult ||
+                (!_hasQrIdentityData &&
+                    _dateOfBirthController.text.trim().isEmpty))) {
+          _dateOfBirthController.text = _formatDisplayDate(result.dateOfBirth!);
+        }
+        if (result.gender != null &&
+            (isQrResult || (!_hasQrIdentityData && _gender == null))) {
+          _gender = result.gender;
+        }
+        if (result.address != null &&
+            (isQrResult ||
+                (!_hasQrIdentityData &&
+                    _addressController.text.trim().isEmpty))) {
+          _addressController.text = result.address!;
         }
       });
       if (result.documentNumber != null || result.fullName != null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã quét thông tin CCCD.')),
+          SnackBar(
+            content: Text(
+              result.scanMethod == IdentityScanMethod.qr
+                  ? 'Đã quét QR CCCD thành công.'
+                  : context.l10n.idCardScanned,
+            ),
+          ),
         );
       }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Không thể quét OCR từ ảnh này.')),
+        SnackBar(content: Text(context.l10n.ocrScanFailed)),
       );
     } finally {
       if (mounted) setState(() => _isScanning = false);
@@ -113,6 +176,8 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
   void dispose() {
     _fullNameController.dispose();
     _documentNumberController.dispose();
+    _dateOfBirthController.dispose();
+    _addressController.dispose();
     super.dispose();
   }
 
@@ -124,11 +189,11 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF263238)),
+          icon: Icon(Icons.arrow_back, color: Color(0xFF263238)),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          'Xác minh danh tính',
+        title: Text(
+          context.l10n.identityVerification,
           style: TextStyle(
             color: AppColors.primary,
             fontSize: 18,
@@ -139,21 +204,21 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
       ),
       body: Column(
         children: [
-          const Divider(height: 1, color: Color(0xFFF0F0F0)),
+          Divider(height: 1, color: Color(0xFFF0F0F0)),
           Expanded(
             child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
+              physics: BouncingScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 20),
+                  SizedBox(height: 20),
                   // Step Indicator
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: const [
+                    children: [
                       Text(
-                        'Bước 1/3',
+                        context.l10n.stepOneOfThree,
                         style: TextStyle(
                           color: AppColors.primary,
                           fontWeight: FontWeight.w800,
@@ -161,7 +226,7 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
                         ),
                       ),
                       Text(
-                        'Tải lên CCCD',
+                        context.l10n.uploadIdCard,
                         style: TextStyle(
                           color: Color(0xFF78909C),
                           fontWeight: FontWeight.w600,
@@ -170,10 +235,10 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(10),
-                    child: const LinearProgressIndicator(
+                    child: LinearProgressIndicator(
                       value: 0.33,
                       minHeight: 8,
                       backgroundColor: Color(0xFFF0F0F0),
@@ -182,9 +247,9 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 32),
-                  const Text(
-                    'Chụp ảnh CCCD',
+                  SizedBox(height: 32),
+                  Text(
+                    context.l10n.captureIdCard,
                     style: TextStyle(
                       fontSize: 26,
                       fontWeight: FontWeight.w800,
@@ -192,9 +257,9 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
                       letterSpacing: -0.5,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Vui lòng cung cấp hình ảnh mặt trước và mặt sau của Căn cước công dân. Đảm bảo ảnh rõ nét, không bị lóa sáng hay mất góc.',
+                  SizedBox(height: 12),
+                  Text(
+                    context.l10n.idCardUploadInstruction,
                     style: TextStyle(
                       fontSize: 16,
                       color: Color(0xFF607D8B),
@@ -202,38 +267,37 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  SizedBox(height: 24),
                   // Tip Box
                   _buildTipBox(),
                   if (_isScanning || _hasDocumentNumber || _hasFullName) ...[
-                    const SizedBox(height: 12),
+                    SizedBox(height: 12),
                     _buildOcrStatus(),
                   ],
-                  const SizedBox(height: 32),
+                  SizedBox(height: 32),
 
                   // Front Photo Box
                   _PhotoUploadBox(
-                    label: 'Mặt trước CCCD',
+                    label: context.l10n.idCardFront,
                     image: _frontImage,
                     onTap: () => _pickImage(true),
                   ),
-                  const SizedBox(height: 20),
+                  SizedBox(height: 20),
 
                   // Back Photo Box
                   _PhotoUploadBox(
-                    label: 'Mặt sau CCCD',
+                    label: context.l10n.idCardBack,
                     image: _backImage,
                     onTap: () => _pickImage(false),
                   ),
-                  const SizedBox(height: 24),
+                  SizedBox(height: 24),
                   _buildInputField(
-                    label: 'Họ và Tên',
+                    label: context.l10n.fullName,
                     child: TextField(
                       controller: _fullNameController,
-                      textCapitalization: TextCapitalization.words,
-                      onChanged: (_) => setState(() {}),
-                      decoration: const InputDecoration(
-                        hintText: 'Nhập họ và tên trên CCCD',
+                      readOnly: true,
+                      decoration: InputDecoration(
+                        hintText: context.l10n.idCardNameHint,
                         hintStyle: TextStyle(
                           color: Color(0xFF919191),
                           fontSize: 15,
@@ -254,15 +318,15 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  SizedBox(height: 20),
                   _buildInputField(
-                    label: 'Số CCCD',
+                    label: context.l10n.idCardNumber,
                     child: TextField(
                       controller: _documentNumberController,
                       keyboardType: TextInputType.number,
-                      onChanged: (_) => setState(() {}),
-                      decoration: const InputDecoration(
-                        hintText: 'Nhập số CCCD',
+                      readOnly: true,
+                      decoration: InputDecoration(
+                        hintText: context.l10n.idCardNumberHint,
                         hintStyle: TextStyle(
                           color: Color(0xFF919191),
                           fontSize: 15,
@@ -283,7 +347,44 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 40),
+                  SizedBox(height: 20),
+                  _buildInputField(
+                    label: 'Ngày sinh',
+                    child: TextField(
+                      controller: _dateOfBirthController,
+                      keyboardType: TextInputType.datetime,
+                      readOnly: true,
+                      decoration: _fieldDecoration('dd/MM/yyyy'),
+                    ),
+                  ),
+                  SizedBox(height: 20),
+                  _buildInputField(
+                    label: 'Giới tính',
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _gender,
+                      decoration: _fieldDecoration('Chọn giới tính'),
+                      items: const [
+                        DropdownMenuItem(value: 'Male', child: Text('Nam')),
+                        DropdownMenuItem(value: 'Female', child: Text('Nữ')),
+                        DropdownMenuItem(value: 'Other', child: Text('Khác')),
+                      ],
+                      onChanged: null,
+                    ),
+                  ),
+                  SizedBox(height: 20),
+                  _buildInputField(
+                    label: 'Địa chỉ thường trú',
+                    child: TextField(
+                      controller: _addressController,
+                      readOnly: true,
+                      minLines: 2,
+                      maxLines: 3,
+                      decoration: _fieldDecoration(
+                        'Nhập địa chỉ thường trú trên CCCD',
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 40),
                 ],
               ),
             ),
@@ -298,22 +399,26 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
-              offset: const Offset(0, -5),
+              offset: Offset(0, -5),
             ),
           ],
         ),
         child: CustomButton(
-          text: 'Tiếp tục',
+          text: context.l10n.continueAction,
           onPressed: () {
             if (_hasFrontImage &&
                 _hasBackImage &&
                 _hasFullName &&
-                _hasDocumentNumber) {
+                _hasDocumentNumber &&
+                _hasIdentityDetails) {
               _submission
                 ..cccdFrontImage = _frontImage
                 ..cccdBackImage = _backImage
                 ..cccdFullName = _fullNameController.text.trim()
-                ..cccdNumber = _documentNumberController.text.trim();
+                ..cccdNumber = _documentNumberController.text.trim()
+                ..cccdDateOfBirth = _parseDate(_dateOfBirthController.text)
+                ..cccdGender = _gender
+                ..cccdAddress = _addressController.text.trim();
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -322,9 +427,9 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
               );
             } else {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
+                SnackBar(
                   content: Text(
-                    'Vui lòng chụp đủ ảnh và kiểm tra Họ và Tên, Số CCCD.',
+                    context.l10n.idCardFieldsRequired,
                   ),
                 ),
               );
@@ -339,17 +444,17 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFE1EAEB),
+        color: Color(0xFFE1EAEB),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline, color: AppColors.primary, size: 24),
-          const SizedBox(width: 12),
-          const Expanded(
+          Icon(Icons.info_outline, color: AppColors.primary, size: 24),
+          SizedBox(width: 12),
+          Expanded(
             child: Text(
-              'Mẹo: Đặt CCCD trên mặt phẳng tối màu, đủ ánh sáng tự nhiên để đạt kết quả tốt nhất.',
+              context.l10n.idCardPhotoTip,
               style: TextStyle(
                 fontSize: 14,
                 color: Color(0xFF455A64),
@@ -369,26 +474,41 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w600,
             color: Color(0xFF455A64),
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         child,
       ],
     );
   }
+
+  InputDecoration _fieldDecoration(String hint) => InputDecoration(
+    hintText: hint,
+    hintStyle: TextStyle(color: Color(0xFF919191), fontSize: 15),
+    border: OutlineInputBorder(
+      borderSide: BorderSide(color: Color(0xFFCFD8DC)),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderSide: BorderSide(color: Color(0xFFCFD8DC)),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderSide: BorderSide(color: AppColors.primary),
+    ),
+    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+  );
 
   Widget _buildOcrStatus() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF8E1),
+        color: Color(0xFFFFF8E1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFFFE082)),
+        border: Border.all(color: Color(0xFFFFE082)),
       ),
       child: Row(
         children: [
@@ -397,13 +517,13 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
             color: AppColors.primary,
             size: 20,
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: 8),
           Expanded(
             child: Text(
               _isScanning
-                  ? 'Đang quét OCR trên thiết bị...'
-                  : 'OCR đã tự điền thông tin CCCD',
-              style: const TextStyle(
+                  ? context.l10n.ocrScanningOnDevice
+                  : context.l10n.idCardOcrFilled,
+              style: TextStyle(
                 color: Color(0xFF455A64),
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
@@ -416,12 +536,29 @@ class _UploadCccdPageState extends State<UploadCccdPage> {
   }
 }
 
+DateTime? _parseDate(String value) {
+  final match = RegExp(r'^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$')
+      .firstMatch(value.trim());
+  if (match == null) return null;
+  final day = int.parse(match.group(1)!);
+  final month = int.parse(match.group(2)!);
+  final year = int.parse(match.group(3)!);
+  final date = DateTime(year, month, day);
+  return date.year == year && date.month == month && date.day == day
+      ? date
+      : null;
+}
+
+String _formatDisplayDate(DateTime value) =>
+    '${value.day.toString().padLeft(2, '0')}/'
+    '${value.month.toString().padLeft(2, '0')}/${value.year}';
+
 class _PhotoUploadBox extends StatelessWidget {
   final String label;
   final File? image;
   final VoidCallback onTap;
 
-  const _PhotoUploadBox({required this.label, this.image, required this.onTap});
+  _PhotoUploadBox({required this.label, this.image, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -433,7 +570,7 @@ class _PhotoUploadBox extends StatelessWidget {
             painter: _DashedRectPainter(
               color: image != null
                   ? AppColors.primary
-                  : const Color(0xFFCFD8DC),
+                  : Color(0xFFCFD8DC),
             ),
             child: AspectRatio(
               aspectRatio: DocumentImageCropper.documentAspectRatio,
@@ -448,28 +585,28 @@ class _PhotoUploadBox extends StatelessWidget {
                         children: [
                           Container(
                             padding: const EdgeInsets.all(16),
-                            decoration: const BoxDecoration(
+                            decoration: BoxDecoration(
                               color: Color(0xFFF5F5F5),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(
+                            child: Icon(
                               Icons.add_photo_alternate_outlined,
                               color: Color(0xFF607D8B),
                               size: 32,
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          SizedBox(height: 16),
                           Text(
                             label,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
                               color: Color(0xFF263238),
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'Chạm để chụp hoặc tải lên',
+                          SizedBox(height: 4),
+                          Text(
+                            context.l10n.tapToCaptureOrUpload,
                             style: TextStyle(
                               fontSize: 14,
                               color: Color(0xFF78909C),
@@ -496,11 +633,11 @@ class _PhotoUploadBox extends StatelessWidget {
               top: 12,
               child: Container(
                 padding: const EdgeInsets.all(4),
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   color: AppColors.primary,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.check, color: Colors.white, size: 16),
+                child: Icon(Icons.check, color: Colors.white, size: 16),
               ),
             ),
         ],

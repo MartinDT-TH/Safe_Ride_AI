@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using System.Globalization;
+using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -125,6 +127,22 @@ public sealed class IdentityVerificationController : ControllerBase
         }
 
         kyc.DocumentNumber = NormalizeOptional(request.DocumentNumber) ?? kyc.DocumentNumber;
+        if (documentType == KycDocumentType.ID_CARD)
+        {
+            kyc.FullName = NormalizeFullName(request.FullName) ?? kyc.FullName;
+            kyc.DateOfBirth = request.DateOfBirth ?? kyc.DateOfBirth;
+            kyc.Gender = NormalizeGender(request.Gender) ?? kyc.Gender;
+            kyc.Address = NormalizeOptional(request.Address) ?? kyc.Address;
+
+            var user = await _dbContext.Users.FindAsync([driverId], cancellationToken);
+            if (user != null)
+            {
+                user.FullName = kyc.FullName ?? user.FullName;
+                user.DateOfBirth = kyc.DateOfBirth ?? user.DateOfBirth;
+                user.Gender = kyc.Gender ?? user.Gender;
+                user.UpdatedAt = DateTime.UtcNow;
+            }
+        }
         kyc.LicenseClass = request.LicenseClass ?? kyc.LicenseClass;
         kyc.IssueDate = request.IssueDate ?? kyc.IssueDate;
         kyc.ExpiryDate = request.ExpiryDate ?? kyc.ExpiryDate;
@@ -226,6 +244,16 @@ public sealed class IdentityVerificationController : ControllerBase
     {
         return documentType switch
         {
+            KycDocumentType.ID_CARD when NormalizeOptional(request.DocumentNumber) == null ||
+                                                 NormalizeOptional(request.FullName) == null ||
+                                                 request.DateOfBirth == null ||
+                                                 NormalizeGender(request.Gender) == null ||
+                                                 NormalizeOptional(request.Address) == null =>
+                BadRequest(new
+                {
+                    code = "identity_verification.id_card_metadata_required",
+                    message = "Vui lòng kiểm tra đủ số CCCD, họ tên, ngày sinh, giới tính và địa chỉ thường trú."
+                }),
             KycDocumentType.DRIVING_LICENSE when NormalizeOptional(request.DocumentNumber) == null =>
                 BadRequest(new
                 {
@@ -303,6 +331,33 @@ public sealed class IdentityVerificationController : ControllerBase
         return string.IsNullOrEmpty(normalized) ? null : normalized;
     }
 
+    private static string? NormalizeGender(string? value)
+    {
+        return value?.Trim().ToLowerInvariant() switch
+        {
+            "male" or "nam" => Gender.Male.ToString(),
+            "female" or "nữ" or "nu" => Gender.Female.ToString(),
+            "other" or "khác" or "khac" => Gender.Other.ToString(),
+            _ => null
+        };
+    }
+
+    private static string? NormalizeFullName(string? value)
+    {
+        var input = NormalizeOptional(value);
+        if (input == null) return null;
+        var decomposed = input.ToUpperInvariant().Normalize(NormalizationForm.FormD);
+        var builder = new StringBuilder(decomposed.Length);
+        foreach (var character in decomposed)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark)
+                builder.Append(character == 'Đ' ? 'D' : character);
+        }
+        return string.Join(' ', builder.ToString()
+            .Normalize(NormalizationForm.FormC)
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries));
+    }
+
     private static IdentityVerificationDocumentResponse ToResponse(
         DriverKyc document,
         IdentityOcrResult? ocrResult)
@@ -345,6 +400,10 @@ public sealed class UploadIdentityDocumentRequest
     public IFormFile? BackImage { get; set; }
     public IFormFile? File { get; set; }
     public string? DocumentNumber { get; set; }
+    public string? FullName { get; set; }
+    public DateOnly? DateOfBirth { get; set; }
+    public string? Gender { get; set; }
+    public string? Address { get; set; }
     public LicenseClass? LicenseClass { get; set; }
     public DateOnly? IssueDate { get; set; }
     public DateOnly? ExpiryDate { get; set; }

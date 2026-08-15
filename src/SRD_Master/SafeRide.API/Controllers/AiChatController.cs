@@ -66,6 +66,7 @@ public sealed class AiChatController(
         [FromForm] string? currentAddress,
         [FromForm] string? currentLatitude,
         [FromForm] string? currentLongitude,
+        [FromForm] string? languageCode,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId)) return UnauthorizedProblem();
@@ -105,6 +106,7 @@ public sealed class AiChatController(
                 audio.ContentType,
                 conversationId,
                 location,
+                languageCode,
                 cancellationToken));
         }
         catch (ArgumentException exception)

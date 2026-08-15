@@ -3,11 +3,16 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSearch, faStar, faBell, faThLarge, faUser } from '@fortawesome/free-solid-svg-icons';
 import { useAppDispatch, useAppSelector } from '../../../app/hooks';
 import { setHeaderSearchQuery } from '../../../features/ui/uiSlice';
+import { getCurrentManagementRole, MANAGEMENT_ROLES } from '../../../features/auth/managementRoles';
 import './TopHeader.css';
-function TopHeader() {
+function TopHeader({ sosAlertCount = 0, onSOSAlertsClick }) {
     const dispatch = useAppDispatch();
     const searchQuery = useAppSelector((state) => state.ui.headerSearchQuery);
     const searchPlaceholder = useAppSelector((state) => state.ui.headerSearchPlaceholder);
+    const authUser = useAppSelector((state) => state.auth.user);
+    const managementRole = getCurrentManagementRole(authUser);
+    const userRoleLabel = managementRole === MANAGEMENT_ROLES.staff ? 'Nhân viên' : 'Quản trị cao cấp';
+    const userNameLabel = managementRole === MANAGEMENT_ROLES.staff ? 'Staff' : 'Quản trị viên';
     useEffect(() => {
         const input = document.getElementById('header-search-input');
         if (!(input instanceof HTMLInputElement)) {
@@ -35,9 +40,10 @@ function TopHeader() {
       {/* Actions */}
       <div className="header-actions">
         {/* Emergency alert */}
-        <button className="header-alert-btn" id="header-alert-btn" type="button">
+        <button className="header-alert-btn" id="header-alert-btn" type="button" onClick={onSOSAlertsClick}>
           <FontAwesomeIcon icon={faStar}/>
           <span>Cảnh báo khẩn cấp</span>
+          {sosAlertCount > 0 && <span className="header-alert-count">{sosAlertCount}</span>}
         </button>
 
         {/* Notification */}
@@ -56,8 +62,8 @@ function TopHeader() {
         {/* User */}
         <div className="header-user" id="header-user">
           <div className="header-user-info">
-            <span className="header-user-name">Quản trị viên</span>
-            <span className="header-user-role">Quản trị cao cấp</span>
+            <span className="header-user-name">{authUser?.name ?? userNameLabel}</span>
+            <span className="header-user-role">{authUser?.role ?? userRoleLabel}</span>
           </div>
           <div className="header-user-avatar">
             <FontAwesomeIcon icon={faUser}/>

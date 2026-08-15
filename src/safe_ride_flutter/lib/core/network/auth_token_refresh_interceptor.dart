@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../constants/app_strings.dart';
 import '../session/session_manager.dart';
@@ -8,8 +9,8 @@ class AuthTokenRefreshInterceptor extends Interceptor {
   AuthTokenRefreshInterceptor({
     required Dio retryClient,
     required SessionManager sessionManager,
-  })  : _retryClient = retryClient,
-        _sessionManager = sessionManager;
+  }) : _retryClient = retryClient,
+       _sessionManager = sessionManager;
 
   static const _retriedKey = 'auth_refresh_retried';
 
@@ -22,11 +23,21 @@ class AuthTokenRefreshInterceptor extends Interceptor {
     RequestInterceptorHandler handler,
   ) async {
     try {
-      if (_hasAuthorization(options) && !_isAuthEndpoint(options.path)) {
+      final requiresAuth = _requiresAuth(options);
+      _debugLog('Auth request path=${options.path} requiresAuth=$requiresAuth');
+      if (requiresAuth && !_isAuthEndpoint(options.path)) {
         final accessToken = await _sessionManager.getValidAccessToken();
-        if (accessToken != null) {
-          options.headers[ApiKeys.authorization] = AuthHeader.bearer(
-            accessToken,
+        if (accessToken != null && accessToken.isNotEmpty) {
+          _setAuthorizationHeader(options.headers, accessToken);
+          _debugLog(
+            'Authorization attached for ${options.path} '
+            'token=${_fingerprint(accessToken)} '
+            'authorizationHeaderCount=${_authorizationHeaderCount(options.headers)}',
+          );
+        } else {
+          _debugLog(
+            'Authorization not attached for ${options.path}: '
+            'no valid access token',
           );
         }
       }
@@ -40,15 +51,29 @@ class AuthTokenRefreshInterceptor extends Interceptor {
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     final response = err.response;
     final request = err.requestOptions;
-
-    if (response?.statusCode != 401 ||
-        request.extra[_retriedKey] == true ||
-        _isAuthEndpoint(request.path)) {
+    final code = _extractErrorCode(response?.data);
+    if (_sessionManager.isTerminalAuthCode(code)) {
+      await _sessionManager.clearSession(
+        notify: true,
+        reasonMessage: _extractErrorMessage(response?.data),
+      );
       handler.next(err);
       return;
     }
 
-    final code = _extractErrorCode(response?.data);
+    if (response?.statusCode != 401 ||
+        request.extra[_retriedKey] == true ||
+        _isAuthEndpoint(request.path) ||
+        !_requiresAuth(request)) {
+      handler.next(err);
+      return;
+    }
+
+    final traceId = _extractTraceId(response?.data);
+    _debugLog(
+      'Auth 401 path=${request.path} code=${code ?? 'unknown'} '
+      'traceId=${traceId ?? 'unknown'}; refreshing token',
+    );
     if (_sessionManager.isTerminalAuthCode(code)) {
       await _sessionManager.clearSession(notify: true);
       handler.next(err);
@@ -59,22 +84,64 @@ class AuthTokenRefreshInterceptor extends Interceptor {
       final accessToken = await _sessionManager.getValidAccessToken(
         forceRefresh: true,
       );
-      if (accessToken == null) {
+      if (accessToken == null || accessToken.isEmpty) {
+        _debugLog('Refresh failed or session expired for ${request.path}');
         handler.next(err);
         return;
       }
 
+      _debugLog(
+        'Retrying ${request.path} once with refreshed '
+        'token=${_fingerprint(accessToken)}',
+      );
       final retryResponse = await _retryWithAccessToken(request, accessToken);
       handler.resolve(retryResponse);
-    } catch (_) {
+    } on DioException catch (error) {
+      _debugLog(
+        'Retry failed path=${request.path} '
+        'status=${error.response?.statusCode ?? 'none'} '
+        'code=${_extractErrorCode(error.response?.data) ?? 'unknown'} '
+        'traceId=${_extractTraceId(error.response?.data) ?? 'unknown'}',
+      );
+      handler.next(err);
+    } catch (error) {
+      _debugLog('Retry after refresh failed for ${request.path}: $error');
       handler.next(err);
     }
   }
 
+  bool _requiresAuth(RequestOptions options) {
+    return options.extra[ApiKeys.requiresAuth] == true ||
+        _hasAuthorization(options);
+  }
+
   bool _hasAuthorization(RequestOptions options) {
-    return options.headers.keys.any(
-      (key) => key.toLowerCase() == ApiKeys.authorization.toLowerCase(),
+    return _authorizationHeaderCount(options.headers) > 0;
+  }
+
+  int _authorizationHeaderCount(Map<String, dynamic> headers) {
+    return headers.keys
+        .where(
+          (key) => key.toLowerCase() == ApiKeys.authorization.toLowerCase(),
+        )
+        .length;
+  }
+
+  void _setAuthorizationHeader(
+    Map<String, dynamic> headers,
+    String accessToken,
+  ) {
+    headers.removeWhere(
+      (key, _) => key.toLowerCase() == ApiKeys.authorization.toLowerCase(),
     );
+    headers[ApiKeys.authorization] = AuthHeader.bearer(accessToken);
+  }
+
+  String _fingerprint(String? accessToken) {
+    if (accessToken == null || accessToken.length < 16) {
+      return 'none';
+    }
+    return '${accessToken.substring(0, 8)}...${accessToken.substring(accessToken.length - 8)}';
   }
 
   bool _isAuthEndpoint(String path) {
@@ -91,6 +158,9 @@ class AuthTokenRefreshInterceptor extends Interceptor {
     String accessToken,
   ) {
     final headers = Map<String, dynamic>.from(request.headers)
+      ..removeWhere(
+        (key, _) => key.toLowerCase() == ApiKeys.authorization.toLowerCase(),
+      )
       ..[ApiKeys.authorization] = AuthHeader.bearer(accessToken);
     final extra = Map<String, dynamic>.from(request.extra)
       ..[_retriedKey] = true;
@@ -120,5 +190,26 @@ class AuthTokenRefreshInterceptor extends Interceptor {
       return data[ApiKeys.code].toString();
     }
     return null;
+  }
+
+  String? _extractTraceId(Object? data) {
+    if (data is Map && data['traceId'] != null) {
+      return data['traceId'].toString();
+    }
+    return null;
+  }
+
+  String? _extractErrorMessage(Object? data) {
+    if (data is Map) {
+      final detail = data['detail'] ?? data['message'] ?? data['title'];
+      return detail?.toString();
+    }
+    return null;
+  }
+
+  void _debugLog(String message) {
+    if (kDebugMode) {
+      debugPrint(message);
+    }
   }
 }

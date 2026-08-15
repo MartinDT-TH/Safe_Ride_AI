@@ -79,6 +79,20 @@
   background: #c82333;
 }
 
+.header-alert-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 11px;
+  background: white;
+  color: #b51f2d;
+  font-size: 11px;
+  font-weight: 800;
+}
+
 /* ===== Icon Buttons ===== */
 .header-icon-btn {
   width: 38px;

@@ -15,4 +15,5 @@ public sealed record UpdateAdminPromotionCommand(
     decimal MinimumOrderValue,
     decimal MaximumDiscountValue,
     int UsageLimitPerUser,
+    int? RequiredCompletedTrips,
     bool IsActive) : IRequest<AdminPromotionResponse>;

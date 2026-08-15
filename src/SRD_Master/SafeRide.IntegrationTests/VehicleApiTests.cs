@@ -25,13 +25,15 @@ public sealed class VehicleApiTests
         var first = await CreateVehicleAsync(
             ownerClient,
             "Honda Vision",
-            "29A1-123.45",
+            "29A112345",
             VehicleType.Motorbike);
         var second = await CreateVehicleAsync(
             ownerClient,
             "Toyota Vios",
-            "30F-987.65",
+            "30F98765",
             VehicleType.Car);
+        Assert.Equal("29-A1 123.45", first.PlateNumber);
+        Assert.Equal("30F 987.65", second.PlateNumber);
         var updateResponse = await ownerClient.PutAsJsonAsync(
             $"/api/vehicles/{second.Id}",
             new SaveVehicleRequest

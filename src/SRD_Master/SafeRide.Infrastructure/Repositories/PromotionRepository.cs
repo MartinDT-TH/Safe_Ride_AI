@@ -162,6 +162,16 @@ public sealed class PromotionRepository : IPromotionRepository, IAdminPromotionR
             cancellationToken);
     }
 
+    public Task<int> CountCustomerCompletedTripsAsync(
+        Guid customerId,
+        CancellationToken cancellationToken)
+    {
+        return _dbContext.Trips.CountAsync(
+            trip => trip.Booking.CustomerId == customerId
+                && trip.TripStatus == TripStatus.COMPLETED,
+            cancellationToken);
+    }
+
     public async Task RemoveBookingPromotionsForBookingAsync(
         long bookingId,
         CancellationToken cancellationToken)

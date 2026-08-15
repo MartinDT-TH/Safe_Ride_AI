@@ -25,6 +25,23 @@ public sealed record TripStatusChangedEvent(
     DateTime UpdatedAt,
     BookingStatus? BookingStatus = null);
 
+public sealed record TripEndRequestedEvent(
+    long TripId,
+    long BookingId,
+    Guid CustomerId,
+    Guid DriverId,
+    DateTime RequestedAt,
+    string Message);
+
+public sealed record TripEndRequestRespondedEvent(
+    long TripId,
+    long BookingId,
+    Guid CustomerId,
+    Guid DriverId,
+    bool Accepted,
+    DateTime RespondedAt,
+    string Message);
+
 public sealed record TripPaymentPendingEvent(
     long TripId,
     long BookingId,
@@ -55,6 +72,46 @@ public sealed record TripPaymentSucceededEvent(
     string Message,
     BookingStatus? BookingStatus = null);
 
+public sealed record SOSTriggeredEvent(
+    long SosAlertId,
+    long TripId,
+    long BookingId,
+    Guid CustomerId,
+    string? CustomerName,
+    string? CustomerPhoneNumber,
+    Guid DriverId,
+    string? DriverName,
+    string? DriverPhoneNumber,
+    double Latitude,
+    double Longitude,
+    string? EmergencyMessage,
+    SOSStatus SOSStatus,
+    DateTime CreatedAt,
+    string Message);
+
+public sealed record ReportCreatedEvent(
+    long ReportId,
+    long TripId,
+    Guid ReporterUserId,
+    string Subject,
+    ReportStatus Status,
+    DateTime CreatedAt);
+
+public sealed record AdminSOSTriggeredEvent(
+    long SosAlertId,
+    long TripId,
+    long BookingId,
+    Guid CustomerId,
+    string? CustomerName,
+    string? CustomerPhoneNumber,
+    Guid DriverId,
+    string? DriverName,
+    string? DriverPhoneNumber,
+    double Latitude,
+    double Longitude,
+    string? Message,
+    DateTime CreatedAt);
+
 public sealed record TripCreatedEvent(
     long TripId,
     long BookingId,
@@ -82,6 +139,19 @@ public sealed record DriverLocationUpdatedEvent(
     double Latitude,
     double Longitude,
     DateTime UpdatedAt);
+
+public sealed record TripRouteRecalculatedEvent(
+    long TripId,
+    long BookingId,
+    Guid CustomerId,
+    Guid DriverId,
+    string EncodedPolyline,
+    double DistanceMeters,
+    double DurationSeconds,
+    double DeviationMeters,
+    DateTime UpdatedAt,
+    string Message,
+    bool ShouldAlertCustomer);
 
 public sealed record DriverOfferCreatedEvent(
     long BookingId,

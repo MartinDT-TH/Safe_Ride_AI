@@ -250,6 +250,7 @@ function PromotionsTable({ promotions, onEdit }) {
                                 <span className="admin-promotions-cell-details">
                                     <span>Tối thiểu <strong>{promotion.minimumOrderValueLabel}</strong></span>
                                     <span>Giảm tối đa <strong>{promotion.maximumDiscountValueLabel}</strong></span>
+                                    <span>{promotion.requiredCompletedTripsLabel}</span>
                                 </span>
                             </td>
                             <td>

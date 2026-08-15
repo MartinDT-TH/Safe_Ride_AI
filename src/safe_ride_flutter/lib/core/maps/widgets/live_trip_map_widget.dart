@@ -12,18 +12,20 @@ class LiveTripMapWidget extends StatefulWidget {
   final AppLatLng? destination;
   final List<AppLatLng> arrivalRoutePoints;
   final List<AppLatLng> tripRoutePoints;
+  final List<AppLatLng> actualPathPoints;
   final AppLatLng? driverPosition;
   final double driverHeading;
   final EdgeInsets padding;
   final void Function(AppMapController)? onMapCreated;
 
-  const LiveTripMapWidget({
+  LiveTripMapWidget({
     super.key,
     required this.trackingState,
     required this.pickup,
     this.destination,
     this.arrivalRoutePoints = const [],
     this.tripRoutePoints = const [],
+    this.actualPathPoints = const [],
     this.driverPosition,
     this.driverHeading = 0,
     this.padding = const EdgeInsets.all(24),
@@ -35,7 +37,7 @@ class LiveTripMapWidget extends StatefulWidget {
 }
 
 class _RouteProgress {
-  const _RouteProgress({
+  _RouteProgress({
     required this.point,
     required this.segmentIndex,
     required this.progress,
@@ -100,6 +102,9 @@ class _LiveTripMapWidgetState extends State<LiveTripMapWidget> {
     }
     if (widget.tripRoutePoints.isNotEmpty) {
       points.addAll(widget.tripRoutePoints);
+    }
+    if (widget.actualPathPoints.isNotEmpty) {
+      points.addAll(widget.actualPathPoints);
     }
     points.add(widget.pickup);
     if (widget.destination != null) points.add(widget.destination!);
@@ -175,6 +180,19 @@ class _LiveTripMapWidgetState extends State<LiveTripMapWidget> {
     final bool isArriving =
         widget.trackingState == LiveTripTrackingState.arriving;
 
+    if (widget.actualPathPoints.length >= 2) {
+      polylines.add(
+        AppPolyline(
+          id: 'trip-actual-path',
+          points: widget.actualPathPoints,
+          color: Colors.grey.withValues(alpha: 0.55),
+          width: 5,
+          zIndex: 2,
+          endCapRound: true,
+        ),
+      );
+    }
+
     // Very faded full-route background (whole route outline) — zIndex: 1
     if (widget.tripRoutePoints.length >= 2) {
       polylines.add(
@@ -193,7 +211,7 @@ class _LiveTripMapWidgetState extends State<LiveTripMapWidget> {
         AppPolyline(
           id: 'arrival-route-static',
           points: widget.arrivalRoutePoints,
-          color: const Color(0xFF2F80ED).withValues(alpha: 0.15),
+          color: Color(0xFF2F80ED).withValues(alpha: 0.15),
           width: 4,
           zIndex: 1,
         ),
@@ -255,7 +273,7 @@ class _LiveTripMapWidgetState extends State<LiveTripMapWidget> {
           AppPolyline(
             id: 'arrival-route-active',
             points: arrivalPoints,
-            color: const Color(0xFF2F80ED),
+            color: Color(0xFF2F80ED),
             width: 5,
             zIndex: 4,
             isDashed: true,
@@ -269,7 +287,7 @@ class _LiveTripMapWidgetState extends State<LiveTripMapWidget> {
   }
 
   List<AppLatLng> _getDynamicTripPoints() {
-    if (widget.tripRoutePoints.isEmpty) return const [];
+    if (widget.tripRoutePoints.isEmpty) return [];
     final progress = _routePositionAtProgress(
       widget.tripRoutePoints,
       _tripRouteProgress,
@@ -287,7 +305,7 @@ class _LiveTripMapWidgetState extends State<LiveTripMapWidget> {
 
   List<AppLatLng> _getDynamicArrivalPoints() {
     final driverPos = _resolveDriverDisplayPosition(widget.driverPosition);
-    if (driverPos == null) return const [];
+    if (driverPos == null) return [];
     if (widget.arrivalRoutePoints.isEmpty) {
       return [driverPos, widget.pickup];
     }
@@ -309,13 +327,13 @@ class _LiveTripMapWidgetState extends State<LiveTripMapWidget> {
 
   List<AppLatLng> _getPassedTripPoints() {
     if (widget.tripRoutePoints.isEmpty || _tripRouteProgress <= 0) {
-      return const [];
+      return [];
     }
     final progress = _routePositionAtProgress(
       widget.tripRoutePoints,
       _tripRouteProgress,
     );
-    if (progress == null) return const [];
+    if (progress == null) return [];
     return [
       ...widget.tripRoutePoints.take(progress.segmentIndex + 1),
       progress.point,
@@ -324,13 +342,13 @@ class _LiveTripMapWidgetState extends State<LiveTripMapWidget> {
 
   List<AppLatLng> _getPassedArrivalPoints() {
     if (widget.arrivalRoutePoints.isEmpty || _arrivalRouteProgress <= 0) {
-      return const [];
+      return [];
     }
     final progress = _routePositionAtProgress(
       widget.arrivalRoutePoints,
       _arrivalRouteProgress,
     );
-    if (progress == null) return const [];
+    if (progress == null) return [];
     return [
       ...widget.arrivalRoutePoints.take(progress.segmentIndex + 1),
       progress.point,

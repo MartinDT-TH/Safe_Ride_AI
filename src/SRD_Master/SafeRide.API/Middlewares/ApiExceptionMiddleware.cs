@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
+using SafeRide.Application.Common.Exceptions;
+using SafeRide.Application.Features.AccountBans;
 using SafeRide.Application.Features.AdminUserAccounts;
 using SafeRide.Application.Features.Auth;
 using SafeRide.Application.Features.Bookings;
@@ -7,7 +9,9 @@ using SafeRide.Application.Features.Notifications;
 using SafeRide.Application.Features.Pricing;
 using SafeRide.Application.Features.Promotions;
 using SafeRide.Application.Features.Ratings;
+using SafeRide.Application.Features.TripSharing;
 using SafeRide.Application.Features.Reports;
+using SafeRide.Application.Features.Safety;
 
 namespace SafeRide.API.Middlewares;
 
@@ -74,7 +78,39 @@ public sealed class ApiExceptionMiddleware
                 exception.Code,
                 exception.Message);
         }
+        catch (TripSharingException exception)
+        {
+            await WriteProblemAsync(
+                context,
+                exception.StatusCode,
+                exception.Code,
+                exception.Message);
+        }
+        catch (ReportException exception)
+        {
+            await WriteProblemAsync(
+                context,
+                exception.StatusCode,
+                exception.Code,
+                exception.Message);
+        }
+        catch (SafetyException exception)
+        {
+            await WriteProblemAsync(
+                context,
+                exception.StatusCode,
+                exception.Code,
+                exception.Message);
+        }
         catch (AdminUserAccountException exception)
+        {
+            await WriteProblemAsync(
+                context,
+                exception.StatusCode,
+                exception.Code,
+                exception.Message);
+        }
+        catch (AccountBanException exception)
         {
             await WriteProblemAsync(
                 context,
@@ -89,6 +125,28 @@ public sealed class ApiExceptionMiddleware
                 exception.StatusCode,
                 exception.Code,
                 exception.Message);
+        }
+        catch (MapServiceException exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Map provider error for {Method} {Path}.",
+                context.Request.Method,
+                context.Request.Path);
+
+            await WriteProblemAsync(
+                context,
+                StatusCodes.Status502BadGateway,
+                "map.provider_error",
+                exception.Message);
+        }
+        catch (OperationCanceledException)
+            when (context.RequestAborted.IsCancellationRequested)
+        {
+            _logger.LogInformation(
+                "Request was canceled by the client for {Method} {Path}.",
+                context.Request.Method,
+                context.Request.Path);
         }
         catch (Exception exception)
         {

@@ -7,10 +7,10 @@ const DOCUMENT_TABS = [
     { id: 'license', label: 'Bằng lái xe', icon: faIdBadge, documentType: 'DRIVING_LICENSE' },
     { id: 'record', label: 'Lý lịch tư pháp', icon: faFileAlt, documentType: 'CRIMINAL_RECORD' },
 ];
-function DriverVerificationDetail({ driver, onBack, onReviewKyc, actionDriverId, }) {
+function DriverVerificationDetail({ driver, onBack, onReviewKyc, actionDriverId, canReview = true, }) {
     const [activeDocumentTab, setActiveDocumentTab] = useState('citizen-id');
     const [rejectionReason, setRejectionReason] = useState('');
-    const canReviewKyc = driver.status === 'pending_kyc';
+    const canReviewKyc = canReview && driver.status === 'pending_kyc';
     const isActionBusy = actionDriverId === driver.id;
     const activeDocumentType = DOCUMENT_TABS.find((tab) => tab.id === activeDocumentTab)?.documentType ?? 'ID_CARD';
     const activeDocument = driver.documents.find((document) => document.documentType === activeDocumentType);
@@ -47,7 +47,7 @@ function DriverVerificationDetail({ driver, onBack, onReviewKyc, actionDriverId,
               </div>
               <div>
                 <dt>Email</dt>
-                <dd>{driver.email}</dd>
+                <dd title={driver.email}>{driver.email}</dd>
               </div>
               <div>
                 <dt>Ngày đăng ký</dt>
@@ -186,6 +186,7 @@ function formatDocumentDate(value) {
         return value;
     }
     return new Intl.DateTimeFormat('vi-VN', {
+        timeZone: 'Asia/Ho_Chi_Minh',
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../localization/locale_provider.dart';
+
 enum AppSnackBarType { success, error, warning, info, serverError }
 
 class AppSnackBar {
-  static void show(
+  static ScaffoldFeatureController<SnackBar, SnackBarClosedReason> show(
     BuildContext context, {
     required String message,
     required AppSnackBarType type,
@@ -13,7 +15,7 @@ class AppSnackBar {
     Duration duration = const Duration(seconds: 4),
   }) {
     final messenger = ScaffoldMessenger.of(context);
-    _showWithMessenger(
+    return _showWithMessenger(
       messenger,
       message: message,
       type: type,
@@ -24,7 +26,7 @@ class AppSnackBar {
     );
   }
 
-  static void showGlobal(
+  static ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? showGlobal(
     GlobalKey<ScaffoldMessengerState> messengerKey, {
     required String message,
     required AppSnackBarType type,
@@ -34,8 +36,8 @@ class AppSnackBar {
     Duration duration = const Duration(seconds: 4),
   }) {
     final messenger = messengerKey.currentState;
-    if (messenger == null) return;
-    _showWithMessenger(
+    if (messenger == null) return null;
+    return _showWithMessenger(
       messenger,
       message: message,
       type: type,
@@ -46,7 +48,8 @@ class AppSnackBar {
     );
   }
 
-  static void _showWithMessenger(
+  static ScaffoldFeatureController<SnackBar, SnackBarClosedReason>
+  _showWithMessenger(
     ScaffoldMessengerState messenger, {
     required String message,
     required AppSnackBarType type,
@@ -60,46 +63,44 @@ class AppSnackBar {
     final IconData icon;
     final String defaultTitle;
     final List<Color> gradientColors;
+    final l10n = LocaleProvider.currentLocalizations;
 
     switch (type) {
       case AppSnackBarType.success:
         icon = Icons.check_circle_outline_rounded;
-        defaultTitle = 'Thành công';
-        gradientColors = [const Color(0xFF007A87), const Color(0xFF00897B)];
+        defaultTitle = l10n.success;
+        gradientColors = [Color(0xFF007A87), Color(0xFF00897B)];
         break;
       case AppSnackBarType.error:
         icon = Icons.error_outline_rounded;
-        defaultTitle = 'Lỗi';
-        gradientColors = [const Color(0xFFC62828), const Color(0xFFE53935)];
+        defaultTitle = l10n.error;
+        gradientColors = [Color(0xFFC62828), Color(0xFFE53935)];
         break;
       case AppSnackBarType.warning:
         icon = Icons.warning_amber_rounded;
-        defaultTitle = 'Cảnh báo';
-        gradientColors = [const Color(0xFFEF6C00), const Color(0xFFFF9800)];
+        defaultTitle = l10n.warning;
+        gradientColors = [Color(0xFFEF6C00), Color(0xFFFF9800)];
         break;
       case AppSnackBarType.info:
         icon = Icons.info_outline_rounded;
-        defaultTitle = 'Thông báo';
-        gradientColors = [const Color(0xFF1565C0), const Color(0xFF1E88E5)];
+        defaultTitle = l10n.information;
+        gradientColors = [Color(0xFF1565C0), Color(0xFF1E88E5)];
         break;
       case AppSnackBarType.serverError:
         icon = Icons.cloud_off_rounded;
-        defaultTitle = 'Lỗi kết nối / Máy chủ';
-        gradientColors = [const Color(0xFF37474F), const Color(0xFF546E7A)];
+        defaultTitle = l10n.serverConnectionError;
+        gradientColors = [Color(0xFF37474F), Color(0xFF546E7A)];
         break;
     }
 
     final resolvedTitle = title ?? defaultTitle;
 
-    messenger.showSnackBar(
+    return messenger.showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
         backgroundColor: Colors.transparent,
         elevation: 0,
-        duration:
-            type == AppSnackBarType.serverError && onAction != null
-                ? const Duration(seconds: 8)
-                : duration,
+        duration: duration,
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         content: Container(
           decoration: BoxDecoration(
@@ -113,7 +114,7 @@ class AppSnackBar {
               BoxShadow(
                 color: Colors.black.withOpacity(0.18),
                 blurRadius: 12,
-                offset: const Offset(0, 6),
+                offset: Offset(0, 6),
               ),
             ],
             border: Border.all(color: Colors.white.withOpacity(0.12), width: 1),
@@ -129,7 +130,7 @@ class AppSnackBar {
                 ),
                 child: Icon(icon, color: Colors.white, size: 24),
               ),
-              const SizedBox(width: 16),
+              SizedBox(width: 16),
               Expanded(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -137,13 +138,13 @@ class AppSnackBar {
                   children: [
                     Text(
                       resolvedTitle,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    SizedBox(height: 2),
                     Text(
                       message,
                       style: TextStyle(
@@ -156,7 +157,7 @@ class AppSnackBar {
                 ),
               ),
               if (actionLabel != null && onAction != null) ...[
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 TextButton(
                   onPressed: () {
                     messenger.hideCurrentSnackBar();
@@ -175,10 +176,7 @@ class AppSnackBar {
                   ),
                   child: Text(
                     actionLabel,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                   ),
                 ),
               ],

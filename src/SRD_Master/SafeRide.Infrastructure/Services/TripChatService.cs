@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Features.Bookings;
 using SafeRide.Application.Features.Trips.DTOs;
@@ -26,17 +27,26 @@ public sealed class TripChatService : ITripChatService
     private readonly IRedisService _redisService;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly ICloudinaryImageService _cloudinaryImageService;
+    private readonly ITripChatTranslationService _translationService;
+    private readonly ITripChatContentFilter _contentFilter;
+    private readonly ILogger<TripChatService> _logger;
 
     public TripChatService(
         ApplicationDbContext dbContext,
         IRedisService redisService,
         IDateTimeProvider dateTimeProvider,
-        ICloudinaryImageService cloudinaryImageService)
+        ICloudinaryImageService cloudinaryImageService,
+        ITripChatTranslationService translationService,
+        ITripChatContentFilter contentFilter,
+        ILogger<TripChatService> logger)
     {
         _dbContext = dbContext;
         _redisService = redisService;
         _dateTimeProvider = dateTimeProvider;
         _cloudinaryImageService = cloudinaryImageService;
+        _translationService = translationService;
+        _contentFilter = contentFilter;
+        _logger = logger;
     }
 
     public async Task EnsureCanAccessTripChatAsync(
@@ -92,21 +102,32 @@ public sealed class TripChatService : ITripChatService
         var senderName = await ResolveSenderNameAsync(
             senderUserId,
             cancellationToken);
+        var translation = await TryTranslateAsync(
+            normalizedMessage,
+            cancellationToken);
+        var filteredMessage = _contentFilter.Filter(normalizedMessage);
+        var filteredTranslations = translation?.Translations.ToDictionary(
+            item => item.Key,
+            item => _contentFilter.Filter(item.Value));
         var payload = new TripChatMessageDto(
             Guid.NewGuid(),
             tripId,
             senderUserId,
             senderName,
             TextMessageType,
-            normalizedMessage,
+            filteredMessage,
             null,
-            _dateTimeProvider.UtcNow);
+            _dateTimeProvider.UtcNow,
+            filteredTranslations,
+            translation?.SourceLanguage)
+        {
+            BookingId = trip.BookingId
+        };
 
-        await _redisService.ListRightPushTrimAndExpireAsync(
-            RedisKeys.TripChatMessages(tripId),
-            JsonSerializer.Serialize(payload, JsonOptions),
-            MaxMessages,
-            MessageTtl,
+        await StoreMessageAndIncrementUnreadAsync(
+            trip,
+            senderUserId,
+            payload,
             cancellationToken);
 
         return payload;
@@ -143,9 +164,16 @@ public sealed class TripChatService : ITripChatService
             ImageMessageType,
             string.Empty,
             imageUrl,
-            _dateTimeProvider.UtcNow);
+            _dateTimeProvider.UtcNow)
+        {
+            BookingId = trip.BookingId
+        };
 
-        await StoreMessageAsync(trip.Id, payload, cancellationToken);
+        await StoreMessageAndIncrementUnreadAsync(
+            trip,
+            senderUserId,
+            payload,
+            cancellationToken);
 
         return payload;
     }
@@ -171,12 +199,114 @@ public sealed class TripChatService : ITripChatService
             .ToList();
     }
 
-    public Task ShortenMessageTtlAsync(
+    public async Task<TripChatUnreadSummaryDto> GetUnreadSummaryAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        var trips = await _dbContext.Trips
+            .AsNoTracking()
+            .Where(trip => trip.DriverId == userId
+                || trip.Booking.CustomerId == userId)
+            .Select(trip => new
+            {
+                TripId = trip.Id,
+                trip.BookingId
+            })
+            .ToListAsync(cancellationToken);
+        if (trips.Count == 0)
+        {
+            return new TripChatUnreadSummaryDto(0, []);
+        }
+
+        var unreadKeys = trips.ToDictionary(
+            trip => trip.TripId,
+            trip => RedisKeys.TripChatUnread(trip.TripId, userId));
+        var unreadValues = await _redisService.GetManyAsync(
+            unreadKeys.Values.ToList());
+        var unreadTrips = trips
+            .Select(trip => new
+            {
+                trip.TripId,
+                trip.BookingId,
+                UnreadCount = ParseUnreadCount(
+                    unreadValues.GetValueOrDefault(unreadKeys[trip.TripId]))
+            })
+            .Where(trip => trip.UnreadCount > 0)
+            .ToList();
+
+        var items = new List<TripChatUnreadItemDto>(unreadTrips.Count);
+        foreach (var trip in unreadTrips)
+        {
+            var values = await _redisService.ListRangeAsync(
+                RedisKeys.TripChatMessages(trip.TripId),
+                -1,
+                -1,
+                cancellationToken);
+            var lastMessage = values.Count == 0
+                ? null
+                : JsonSerializer.Deserialize<TripChatMessageDto>(
+                    values[0],
+                    JsonOptions);
+            if (lastMessage is null)
+            {
+                continue;
+            }
+
+            items.Add(new TripChatUnreadItemDto(
+                trip.TripId,
+                trip.BookingId,
+                trip.UnreadCount,
+                lastMessage.MessagePreview,
+                lastMessage.SentAt));
+        }
+
+        var orderedItems = items
+            .OrderByDescending(item => item.LastMessageAt)
+            .ToList();
+        return new TripChatUnreadSummaryDto(
+            orderedItems.Sum(item => item.UnreadCount),
+            orderedItems);
+    }
+
+    public async Task MarkReadAsync(
+        Guid userId,
         long tripId,
         CancellationToken cancellationToken = default)
     {
-        return _redisService.ExpireAsync(
+        await EnsureCanAccessTripChatAsync(userId, tripId, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        await _redisService.RemoveAsync(RedisKeys.TripChatUnread(tripId, userId));
+    }
+
+    public async Task ShortenMessageTtlAsync(
+        long tripId,
+        CancellationToken cancellationToken = default)
+    {
+        await _redisService.ExpireAsync(
             RedisKeys.TripChatMessages(tripId),
+            TerminalMessageTtl,
+            cancellationToken);
+
+        var participants = await _dbContext.Trips
+            .AsNoTracking()
+            .Where(trip => trip.Id == tripId)
+            .Select(trip => new
+            {
+                trip.DriverId,
+                CustomerId = trip.Booking.CustomerId
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (participants is null)
+        {
+            return;
+        }
+
+        await _redisService.ExpireAsync(
+            RedisKeys.TripChatUnread(tripId, participants.DriverId),
+            TerminalMessageTtl,
+            cancellationToken);
+        await _redisService.ExpireAsync(
+            RedisKeys.TripChatUnread(tripId, participants.CustomerId),
             TerminalMessageTtl,
             cancellationToken);
     }
@@ -235,18 +365,33 @@ public sealed class TripChatService : ITripChatService
         return trip;
     }
 
-    private async Task StoreMessageAsync(
-        long tripId,
+    private async Task StoreMessageAndIncrementUnreadAsync(
+        Domain.Entities.Trip trip,
+        Guid senderUserId,
         TripChatMessageDto payload,
         CancellationToken cancellationToken)
     {
+        var expiration = trip.TripStatus == TripStatus.COMPLETED
+            ? TerminalMessageTtl
+            : MessageTtl;
         await _redisService.ListRightPushTrimAndExpireAsync(
-            RedisKeys.TripChatMessages(tripId),
+            RedisKeys.TripChatMessages(trip.Id),
             JsonSerializer.Serialize(payload, JsonOptions),
             MaxMessages,
-            MessageTtl,
+            expiration,
             cancellationToken);
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var recipientUserId = senderUserId == trip.DriverId
+            ? trip.Booking.CustomerId
+            : trip.DriverId;
+        await _redisService.IncrementAsync(
+            RedisKeys.TripChatUnread(trip.Id, recipientUserId),
+            expiration);
     }
+
+    private static long ParseUnreadCount(string? value) =>
+        long.TryParse(value, out var count) && count > 0 ? count : 0;
 
     private static void ValidateImage(
         Stream image,
@@ -308,5 +453,27 @@ public sealed class TripChatService : ITripChatService
             ?? user?.UserName?.Trim()
             ?? user?.Email?.Trim()
             ?? senderUserId.ToString();
+    }
+
+    private async Task<TripChatTranslation?> TryTranslateAsync(
+        string message,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _translationService.TranslateAsync(message, cancellationToken);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning("Trip chat translation timed out; the original message will be delivered.");
+            return null;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Trip chat translation failed; the original message will be delivered.");
+            return null;
+        }
     }
 }

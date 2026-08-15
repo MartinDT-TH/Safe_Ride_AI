@@ -89,6 +89,7 @@ public sealed class AdminPromotionsController : ControllerBase
             request.MinimumOrderValue,
             request.MaximumDiscountValue,
             request.UsageLimitPerUser,
+            request.RequiredCompletedTrips,
             request.IsActive);
     }
 
@@ -107,6 +108,7 @@ public sealed class AdminPromotionsController : ControllerBase
             request.MinimumOrderValue,
             request.MaximumDiscountValue,
             request.UsageLimitPerUser,
+            request.RequiredCompletedTrips,
             request.IsActive);
     }
 }

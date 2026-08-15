@@ -18,8 +18,8 @@ export function mapTransactions(response) {
       amount: item.amount,
       method: item.method === 'CASH' ? 'Tiền mặt' : 'QR',
       methodValue: item.method,
-      date: new Intl.DateTimeFormat('vi-VN').format(new Date(item.performedAt)),
-      time: new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(new Date(item.performedAt)),
+      date: new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(item.performedAt)),
+      time: new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' }).format(new Date(item.performedAt)),
       status: item.status.toLowerCase(),
     })),
     page: response.page ?? 1,
@@ -48,8 +48,8 @@ export function mapWithdrawals(response) {
       ...item,
       initials: initialsOf(item.driverName),
       status: item.status.toLowerCase(),
-      requestedDate: new Intl.DateTimeFormat('vi-VN').format(new Date(item.createdAt)),
-      requestedTime: new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(new Date(item.createdAt)),
+      requestedDate: new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(item.createdAt)),
+      requestedTime: new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' }).format(new Date(item.createdAt)),
     })),
   };
 }

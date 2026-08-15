@@ -6,7 +6,6 @@ import 'auth_token_refresh_interceptor.dart';
 import '../../dependency_injection/injection.dart';
 import '../session/session_manager.dart';
 import '../services/connectivity_service.dart';
-import '../widgets/app_snackbar.dart';
 
 class DioClient {
   factory DioClient() => _instance;
@@ -60,37 +59,71 @@ class DioClient {
   }
 }
 
+abstract final class DioRequestExtras {
+  static const suppressGlobalErrorSnackBar = 'suppressGlobalErrorSnackBar';
+}
+
 class DioErrorInterceptor extends Interceptor {
+  DioErrorInterceptor({ConnectivityService? connectivityService})
+    : _injectedConnectivityService = connectivityService;
+
+  final ConnectivityService? _injectedConnectivityService;
+
+  ConnectivityService get _connectivityService =>
+      _injectedConnectivityService ?? getIt<ConnectivityService>();
+
   @override
-  void onError(DioException err, ErrorInterceptorHandler handler) {
-    _handleError(err);
-    super.onError(err, handler);
+  void onResponse(Response response, ResponseInterceptorHandler handler) {
+    final statusCode = response.statusCode;
+    final suppressNotice =
+        response.requestOptions.extra[DioRequestExtras
+            .suppressGlobalErrorSnackBar] ==
+        true;
+    if (statusCode != null && statusCode >= 500) {
+      if (!suppressNotice) {
+        _connectivityService.reportServerUnavailable(autoRetry: false);
+      }
+    } else {
+      _connectivityService.reportServerReachable();
+    }
+    handler.next(response);
   }
 
-  void _handleError(DioException err) {
-    final isServerError = err.type == DioExceptionType.connectionTimeout ||
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) async {
+    await handleError(err);
+    handler.next(err);
+  }
+
+  @visibleForTesting
+  Future<void> handleError(DioException err) async {
+    final statusCode = err.response?.statusCode;
+    if (statusCode != null && statusCode < 500) {
+      // A 4xx response is still proof that the API is reachable.
+      _connectivityService.reportServerReachable();
+      return;
+    }
+
+    final isTransportFailure =
+        err.type == DioExceptionType.connectionTimeout ||
         err.type == DioExceptionType.receiveTimeout ||
         err.type == DioExceptionType.sendTimeout ||
-        err.type == DioExceptionType.connectionError ||
-        (err.response != null && err.response!.statusCode != null && err.response!.statusCode! >= 500);
+        err.type == DioExceptionType.connectionError;
+    final isServerFailure = statusCode != null && statusCode >= 500;
 
-    if (isServerError) {
-      // Use getIt to get ConnectivityService and show the notification globally
-      try {
-        final connectivityService =
-            getIt<ConnectivityService>();
-        
-        AppSnackBar.showGlobal(
-          connectivityService.messengerKey,
-          message: 'Lỗi kết nối máy chủ. Vui lòng kiểm tra lại hoặc tải lại.',
-          type: AppSnackBarType.serverError,
-          title: 'Lỗi máy chủ',
-          actionLabel: 'Đã hiểu',
-          onAction: () {},
-        );
-      } catch (e) {
-        debugPrint('Cannot show global server error: $e');
-      }
+    if (!isTransportFailure && !isServerFailure) return;
+
+    if (isTransportFailure) {
+      final isOffline = await _connectivityService.refreshNetworkStatus();
+      if (isOffline) return;
     }
+
+    if (err.requestOptions.extra[DioRequestExtras
+            .suppressGlobalErrorSnackBar] ==
+        true) {
+      return;
+    }
+
+    _connectivityService.reportServerUnavailable(autoRetry: isTransportFailure);
   }
 }

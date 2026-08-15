@@ -469,11 +469,30 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
                 mockDriver.DriverId,
                 trip.Id,
                 cancellationToken);
+            await tripStatusService.RespondToEndTripRequestAsync(
+                booking.CustomerId,
+                trip.Id,
+                accepted: true,
+                cancellationToken);
 
             logger.LogInformation("Trip {TripId} reached WAITING_RETURN_CONFIRM for mock driver {DriverId}", trip.Id, mockDriver.DriverId);
 
-            // Wait for customer to confirm return on TripSummaryPage. The customer
-            // confirmation advances RETURN_CONFIRMED to WAITING_PAYMENT.
+            // 5. Mock payment happens before the final return confirmation/rating step.
+            try
+            {
+                await Task.Delay(5000, cancellationToken);
+                var paymentService = scope.ServiceProvider.GetRequiredService<SafeRide.Application.Common.Interfaces.IPaymentService>();
+                await paymentService.ConfirmCashPaymentAsync(mockDriver.DriverId, trip.Id, cancellationToken);
+                logger.LogInformation("Payment confirmed via cash for mock driver {DriverId} trip {TripId}; waiting for return confirmation", mockDriver.DriverId, trip.Id);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to auto-confirm cash payment for mock driver {DriverId} trip {TripId}", mockDriver.DriverId, trip.Id);
+                return;
+            }
+
+            // Customer rating + return confirmation, or driver confirmation with
+            // evidence, is now the final action that completes the trip.
             int waitCounter = 0;
             while (true)
             {
@@ -484,30 +503,16 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
                 trip = await dbContext.Trips.AsNoTracking().FirstOrDefaultAsync(t => t.Id == trip.Id, cancellationToken);
                 if (trip is null || trip.TripStatus == TripStatus.CANCELLED) return;
 
-                if (trip.TripStatus == TripStatus.WAITING_PAYMENT)
+                if (trip.TripStatus == TripStatus.COMPLETED)
                 {
                     break;
                 }
 
                 if (waitCounter > 150) // Wait 5 minutes
                 {
-                    logger.LogWarning("Mock driver {DriverId} gave up waiting for customer to confirm return for trip {TripId}", mockDriver.DriverId, trip.Id);
+                    logger.LogWarning("Mock driver {DriverId} gave up waiting for final return confirmation for trip {TripId}", mockDriver.DriverId, trip.Id);
                     return;
                 }
-            }
-
-            // 5. Mock Payment: Auto-confirm cash payment after a short delay.
-            // Payment success is responsible for moving WAITING_PAYMENT to COMPLETED.
-            try
-            {
-                await Task.Delay(5000, cancellationToken); // Wait 5s before confirming payment
-                var paymentService = scope.ServiceProvider.GetRequiredService<SafeRide.Application.Common.Interfaces.IPaymentService>();
-                await paymentService.ConfirmCashPaymentAsync(mockDriver.DriverId, trip.Id, cancellationToken);
-                logger.LogInformation("Payment confirmed via cash and trip completed for mock driver {DriverId} trip {TripId}", mockDriver.DriverId, trip.Id);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Failed to auto-confirm cash payment for mock driver {DriverId} trip {TripId}", mockDriver.DriverId, trip.Id);
             }
         }
         catch (Exception ex)

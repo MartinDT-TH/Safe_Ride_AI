@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/localization/locale_provider.dart';
 import '../../../../../core/network/auth_header.dart';
 import '../../../../../core/network/dio_client.dart';
 import '../../../../../core/session/session_manager.dart';
@@ -10,11 +11,14 @@ import '../models/ai_chat_models.dart';
 
 class AiChatService {
   AiChatService({Dio? dio, SessionManager? sessionManager})
-      : _dio = dio ?? DioClient().dio,
-        _sessionManager = sessionManager ?? getIt<SessionManager>();
+    : _dio = dio ?? DioClient().dio,
+      _sessionManager = sessionManager ?? getIt<SessionManager>();
 
   final Dio _dio;
   final SessionManager _sessionManager;
+
+  static const _messageReceiveTimeout = Duration(seconds: 90);
+  static const _audioReceiveTimeout = Duration(minutes: 3);
 
   Future<List<AiConversation>> getConversations() async {
     final response = await _dio.get<List<dynamic>>(
@@ -37,6 +41,7 @@ class AiChatService {
       data: {
         'message': message,
         'conversationId': conversationId,
+        'languageCode': LocaleProvider.currentLocale.languageCode,
         if (currentLocation != null)
           'currentLocation': {
             'address': currentLocation.address,
@@ -44,7 +49,9 @@ class AiChatService {
             'longitude': currentLocation.longitude,
           },
       },
-      options: await _authorizationOptions(),
+      options: await _authorizationOptions(
+        receiveTimeout: _messageReceiveTimeout,
+      ),
     );
     return AiChatReply.fromJson(response.data!);
   }
@@ -63,13 +70,16 @@ class AiChatService {
           contentType: DioMediaType.parse('audio/mp4'),
         ),
         if (conversationId != null) 'conversationId': conversationId,
+        'languageCode': LocaleProvider.currentLocale.languageCode,
         if (currentLocation != null) ...{
           'currentAddress': currentLocation.address,
           'currentLatitude': currentLocation.latitude.toString(),
           'currentLongitude': currentLocation.longitude.toString(),
         },
       }),
-      options: await _authorizationOptions(),
+      options: await _authorizationOptions(
+        receiveTimeout: _audioReceiveTimeout,
+      ),
     );
     return AiChatReply.fromJson(response.data!);
   }
@@ -92,16 +102,15 @@ class AiChatService {
     );
   }
 
-  Future<Options> _authorizationOptions() async {
+  Future<Options> _authorizationOptions({Duration? receiveTimeout}) async {
     final accessToken = await _sessionManager.getValidAccessToken();
     if (accessToken == null) {
-      throw StateError('Không tìm thấy phiên đăng nhập hợp lệ.');
+      throw StateError(LocaleProvider.currentLocalizations.sessionExpired);
     }
 
     return Options(
-      headers: {
-        ApiKeys.authorization: AuthHeader.bearer(accessToken),
-      },
+      headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+      receiveTimeout: receiveTimeout,
     );
   }
 }

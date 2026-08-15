@@ -9,6 +9,7 @@ import 'app.dart';
 import 'dependency_injection/injection.dart';
 
 import 'core/services/mobile_config_service.dart';
+import 'core/localization/locale_provider.dart';
 import 'features/auth/presentation/providers/auth_provider.dart';
 import 'features/shared/onboarding/presentation/providers/role_provider.dart';
 import 'features/customer/home/presentation/providers/home_provider.dart';
@@ -17,7 +18,9 @@ import 'features/shared/profile/presentation/providers/vehicle_provider.dart';
 import 'features/shared/history/presentation/providers/history_provider.dart';
 import 'features/shared/notifications/presentation/providers/notification_provider.dart';
 import 'features/driver/dashboard/presentation/providers/driver_dashboard_provider.dart';
+import 'features/trip_sharing/presentation/providers/trip_sharing_provider.dart';
 import 'features/shared/chat/presentation/providers/trip_chat_provider.dart';
+import 'features/shared/chat/presentation/providers/chat_unread_provider.dart';
 import 'features/driver/wallet/presentation/providers/driver_wallet_provider.dart';
 import 'features/shared/feedback/presentation/providers/feedback_provider.dart';
 
@@ -25,15 +28,31 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   WakelockPlus.enable();
 
-  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  await SystemChrome.setEnabledSystemUIMode(
+    SystemUiMode.manual,
+    overlays: const [SystemUiOverlay.top],
+  );
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+    ),
+  );
 
-  await initializeDateFormatting('vi_VN', null);
+  await Future.wait([
+    initializeDateFormatting('vi', null),
+    initializeDateFormatting('en', null),
+    initializeDateFormatting('ko', null),
+    initializeDateFormatting('ja', null),
+    initializeDateFormatting('zh', null),
+  ]);
   await setupDependencies();
   await getIt<MobileConfigService>().load();
 
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider.value(value: getIt<LocaleProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<AuthProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<RoleProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<HomeProvider>()),
@@ -42,7 +61,9 @@ void main() async {
         ChangeNotifierProvider(create: (_) => getIt<HistoryProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<NotificationProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<DriverDashboardProvider>()),
+        ChangeNotifierProvider(create: (_) => getIt<TripSharingProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<TripChatProvider>()),
+        ChangeNotifierProvider.value(value: getIt<ChatUnreadProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<DriverWalletProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<FeedbackProvider>()),
       ],

@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 
 import '../../../../../core/constants/app_colors.dart';
+import '../../../../../core/localization/localization_extensions.dart';
+import '../../../../../core/localization/locale_provider.dart';
 import '../../../../../core/maps/models/map_models.dart';
 import '../../../../../core/maps/widgets/map_renderer_widget.dart';
+import '../../../../../core/utils/currency_formatter.dart';
 import '../../../../../core/widgets/app_loading_screen.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/models/booking_catalog.dart';
@@ -16,7 +20,7 @@ import '../widgets/select_promo_sheet.dart';
 import 'searching_driver_page.dart';
 
 class RebookTripPage extends StatefulWidget {
-  const RebookTripPage({super.key, required this.oldBooking});
+  RebookTripPage({super.key, required this.oldBooking});
 
   final BookingResponse oldBooking;
 
@@ -102,15 +106,15 @@ class _RebookTripPageState extends State<RebookTripPage> {
     final estimate = provider.fareEstimate;
 
     if (pickup == null || destination == null || vehicle == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Dữ liệu chuyến đi cũ không hợp lệ.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.l10n.oldTripDataInvalid)));
       return;
     }
 
     if (!_isScheduled && estimate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đang tính toán giá, vui lòng đợi.')),
+        SnackBar(content: Text(context.l10n.calculatingFarePleaseWait)),
       );
       return;
     }
@@ -130,7 +134,7 @@ class _RebookTripPageState extends State<RebookTripPage> {
         serviceTypeId: service.id,
         bookingType: _isScheduled ? BookingType.scheduled : BookingType.now,
         scheduledAt: _isScheduled
-            ? DateTime.now().add(const Duration(minutes: 35))
+            ? DateTime.now().add(Duration(minutes: 35))
             : null,
         pickup: pickup,
         destination: destination,
@@ -141,7 +145,9 @@ class _RebookTripPageState extends State<RebookTripPage> {
 
     if (result == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(provider.errorMessage ?? 'Có lỗi xảy ra')),
+        SnackBar(
+          content: Text(provider.errorMessage ?? context.l10n.genericError),
+        ),
       );
     } else {
       if (result.bookingType == 'Now') {
@@ -160,9 +166,7 @@ class _RebookTripPageState extends State<RebookTripPage> {
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Đặt xe thành công. Tài xế sẽ đến đón bạn đúng giờ.'),
-          ),
+          SnackBar(content: Text(context.l10n.bookingSuccessful)),
         );
         Navigator.pop(context);
       }
@@ -197,7 +201,7 @@ class _RebookTripPageState extends State<RebookTripPage> {
     }
 
     // Determine center of map
-    AppCameraPosition cameraPos = const AppCameraPosition(
+    AppCameraPosition cameraPos = AppCameraPosition(
       target: AppLatLng(10.762622, 106.660172),
       zoom: 14,
     );
@@ -220,13 +224,13 @@ class _RebookTripPageState extends State<RebookTripPage> {
     final finalFare = (fare - discount).clamp(0, double.infinity);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
+      backgroundColor: Color(0xFFF9FAFB),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
-        title: const Text(
-          'Đặt lại chuyến đi',
+        title: Text(
+          context.l10n.rebookTrip,
           style: TextStyle(
             color: AppColors.textPrimary,
             fontSize: 18,
@@ -234,7 +238,7 @@ class _RebookTripPageState extends State<RebookTripPage> {
           ),
         ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+          icon: Icon(Icons.arrow_back, color: AppColors.textPrimary),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -244,16 +248,16 @@ class _RebookTripPageState extends State<RebookTripPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Xác nhận thông tin cũ',
+              Text(
+                context.l10n.confirmPreviousInformation,
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 4),
-              const Text(
-                'Vui lòng kiểm tra lại lộ trình và phương tiện cho chuyến đi sắp tới của bạn.',
+              SizedBox(height: 4),
+              Text(
+                context.l10n.reviewRouteAndVehicle,
                 style: TextStyle(color: Colors.grey, fontSize: 14),
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
 
               // Map & Route Card
               Container(
@@ -290,7 +294,7 @@ class _RebookTripPageState extends State<RebookTripPage> {
                             children: [
                               Column(
                                 children: [
-                                  const Icon(
+                                  Icon(
                                     Icons.circle,
                                     size: 12,
                                     color: AppColors.primary,
@@ -300,20 +304,20 @@ class _RebookTripPageState extends State<RebookTripPage> {
                                     width: 2,
                                     color: Colors.grey.shade300,
                                   ),
-                                  const Icon(
+                                  Icon(
                                     Icons.location_on,
                                     size: 14,
                                     color: Colors.red,
                                   ),
                                 ],
                               ),
-                              const SizedBox(width: 12),
+                              SizedBox(width: 12),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text(
-                                      'ĐIỂM ĐÓN',
+                                    Text(
+                                      context.l10n.pickupPoint.toUpperCase(),
                                       style: TextStyle(
                                         color: Colors.grey,
                                         fontSize: 12,
@@ -321,14 +325,15 @@ class _RebookTripPageState extends State<RebookTripPage> {
                                     ),
                                     Text(
                                       pickup?.address ?? 'N/A',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                       ),
                                       maxLines: 2,
                                     ),
-                                    const SizedBox(height: 8),
-                                    const Text(
-                                      'ĐIỂM ĐẾN',
+                                    SizedBox(height: 8),
+                                    Text(
+                                      context.l10n.destinationPoint
+                                          .toUpperCase(),
                                       style: TextStyle(
                                         color: Colors.grey,
                                         fontSize: 12,
@@ -336,7 +341,7 @@ class _RebookTripPageState extends State<RebookTripPage> {
                                     ),
                                     Text(
                                       destination?.address ?? 'N/A',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                       ),
                                       maxLines: 2,
@@ -345,12 +350,15 @@ class _RebookTripPageState extends State<RebookTripPage> {
                                 ),
                               ),
                               IconButton(
-                                icon: const Icon(Icons.swap_vert, color: AppColors.primary),
+                                icon: Icon(
+                                  Icons.swap_vert,
+                                  color: AppColors.primary,
+                                ),
                                 onPressed: _swapLocations,
                               ),
                             ],
                           ),
-                          const Padding(
+                          Padding(
                             padding: EdgeInsets.symmetric(vertical: 12),
                             child: Divider(),
                           ),
@@ -362,25 +370,25 @@ class _RebookTripPageState extends State<RebookTripPage> {
                                   color: Colors.grey.shade100,
                                   borderRadius: BorderRadius.circular(8),
                                 ),
-                                child: const Icon(
+                                child: Icon(
                                   Icons.directions_car,
                                   color: AppColors.primary,
                                 ),
                               ),
-                              const SizedBox(width: 12),
+                              SizedBox(width: 12),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       vehicle?.name ?? 'N/A',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
                                     Text(
                                       _vehicleSubtitle(vehicle),
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         color: Colors.grey,
                                         fontSize: 13,
                                       ),
@@ -396,14 +404,14 @@ class _RebookTripPageState extends State<RebookTripPage> {
                   ],
                 ),
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: 24),
 
               // Time Selection
-              const Text(
-                'Thời gian khởi hành',
+              Text(
+                context.l10n.departureTime,
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
@@ -432,9 +440,9 @@ class _RebookTripPageState extends State<RebookTripPage> {
                                   : Colors.grey,
                               size: 20,
                             ),
-                            const SizedBox(width: 8),
+                            SizedBox(width: 8),
                             Text(
-                              'Đi ngay',
+                              context.l10n.leaveNow,
                               style: TextStyle(
                                 color: !_isScheduled
                                     ? AppColors.primary
@@ -447,7 +455,7 @@ class _RebookTripPageState extends State<RebookTripPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: 12),
                   Expanded(
                     child: GestureDetector(
                       onTap: () => setState(() => _isScheduled = true),
@@ -474,9 +482,9 @@ class _RebookTripPageState extends State<RebookTripPage> {
                                   : Colors.grey,
                               size: 18,
                             ),
-                            const SizedBox(width: 8),
+                            SizedBox(width: 8),
                             Text(
-                              'Đặt trước',
+                              context.l10n.scheduleAhead,
                               style: TextStyle(
                                 color: _isScheduled
                                     ? AppColors.primary
@@ -491,20 +499,20 @@ class _RebookTripPageState extends State<RebookTripPage> {
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
-              const Text(
-                'Mã khuyến mãi',
+              SizedBox(height: 24),
+              Text(
+                context.l10n.promotionCode,
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               _RebookPromoTile(
                 selectedPromo: provider.selectedPromo,
                 onTap: _showPromoSheet,
                 onClear: provider.clearSelectedPromo,
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'Mã của chuyến cũ không được dùng lại. Bạn chỉ có thể chọn hoặc nhập mã mới cho chuyến này.',
+              SizedBox(height: 8),
+              Text(
+                context.l10n.oldPromoCannotBeReused,
                 style: TextStyle(color: Colors.grey, fontSize: 13),
               ),
             ],
@@ -519,7 +527,7 @@ class _RebookTripPageState extends State<RebookTripPage> {
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
-              offset: const Offset(0, -5),
+              offset: Offset(0, -5),
             ),
           ],
         ),
@@ -528,7 +536,7 @@ class _RebookTripPageState extends State<RebookTripPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (provider.isEstimating)
-                const LinearProgressIndicator()
+                LinearProgressIndicator()
               else ...[
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -537,14 +545,14 @@ class _RebookTripPageState extends State<RebookTripPage> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Tổng cộng',
+                        Text(
+                          context.l10n.grandTotal,
                           style: TextStyle(color: Colors.grey, fontSize: 14),
                         ),
-                        const SizedBox(height: 4),
+                        SizedBox(height: 4),
                         Text(
-                          '${finalFare.toStringAsFixed(0)} đ',
-                          style: const TextStyle(
+                          _formatCurrency(finalFare.toDouble()),
+                          style: TextStyle(
                             color: AppColors.primary,
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
@@ -557,23 +565,25 @@ class _RebookTripPageState extends State<RebookTripPage> {
                       children: [
                         if (discount > 0)
                           Text(
-                            '↓ Đã giảm ${discount.toStringAsFixed(0)} đ',
-                            style: const TextStyle(
+                            context.l10n.discountApplied(
+                              _formatCurrency(discount),
+                            ),
+                            style: TextStyle(
                               color: Colors.red,
                               fontSize: 13,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                        const SizedBox(height: 2),
-                        const Text(
-                          'Bao gồm thuế phí',
+                        SizedBox(height: 2),
+                        Text(
+                          context.l10n.taxesIncluded,
                           style: TextStyle(color: Colors.grey, fontSize: 12),
                         ),
                       ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
                   height: 50,
@@ -586,12 +596,12 @@ class _RebookTripPageState extends State<RebookTripPage> {
                       ),
                     ),
                     child: provider.isLoading
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Row(
+                        ? CircularProgressIndicator(color: Colors.white)
+                        : Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
-                                'Xác nhận & Tìm tài xế',
+                                context.l10n.confirmAndFindDriver,
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
@@ -638,13 +648,19 @@ class _RebookTripPageState extends State<RebookTripPage> {
     return discount.clamp(0, fare).toDouble();
   }
 
+  String _formatCurrency(double value) => NumberFormat.currency(
+    locale: LocaleProvider.currentLocale.toLanguageTag(),
+    symbol: 'VND',
+    decimalDigits: 0,
+  ).format(value);
+
   String _vehicleSubtitle(BookingVehicleOption? vehicle) {
     if (vehicle == null) return 'N/A';
 
     final parts = [
       if (vehicle.plateNumber.trim().isNotEmpty) vehicle.plateNumber.trim(),
       if (vehicle.color.trim().isNotEmpty) vehicle.color.trim(),
-      vehicle.isMotorbike ? 'Xe máy' : 'Ô tô',
+      vehicle.isMotorbike ? context.l10n.motorbike : context.l10n.car,
     ];
 
     return parts.join(' • ');
@@ -652,7 +668,7 @@ class _RebookTripPageState extends State<RebookTripPage> {
 }
 
 class _RebookPromoTile extends StatelessWidget {
-  const _RebookPromoTile({
+  _RebookPromoTile({
     required this.onTap,
     required this.onClear,
     this.selectedPromo,
@@ -672,7 +688,7 @@ class _RebookPromoTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: hasPromo ? const Color(0xFFEAF4F4) : Colors.white,
+          color: hasPromo ? Color(0xFFEAF4F4) : Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: hasPromo ? AppColors.primary : Colors.grey.shade300,
@@ -680,15 +696,16 @@ class _RebookPromoTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Icon(Icons.local_offer_outlined, color: AppColors.primary),
-            const SizedBox(width: 12),
+            Icon(Icons.local_offer_outlined, color: AppColors.primary),
+            SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    selectedPromo?.promotionCode ?? 'Thêm mã khuyến mãi mới',
-                    style: const TextStyle(
+                    selectedPromo?.promotionCode ??
+                        context.l10n.addNewPromoCode,
+                    style: TextStyle(
                       color: AppColors.primary,
                       fontWeight: FontWeight.w700,
                       fontSize: 15,
@@ -699,7 +716,7 @@ class _RebookPromoTile extends StatelessWidget {
                       selectedPromo!.shortDescription,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Color(0xFF626A6C),
                         fontSize: 13,
                       ),
@@ -710,12 +727,12 @@ class _RebookPromoTile extends StatelessWidget {
             if (hasPromo)
               IconButton(
                 onPressed: onClear,
-                icon: const Icon(Icons.cancel, color: Colors.grey, size: 20),
+                icon: Icon(Icons.cancel, color: Colors.grey, size: 20),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
+                constraints: BoxConstraints(),
               )
             else
-              const Icon(Icons.chevron_right, color: Colors.grey),
+              Icon(Icons.chevron_right, color: Colors.grey),
           ],
         ),
       ),

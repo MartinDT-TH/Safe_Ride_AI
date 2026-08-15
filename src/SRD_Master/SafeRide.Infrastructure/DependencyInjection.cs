@@ -28,14 +28,33 @@ using SafeRide.Infrastructure.Persistence;
 using SafeRide.Infrastructure.Redis;
 using SafeRide.Infrastructure.Repositories;
 using SafeRide.Infrastructure.Services;
+using SafeRide.Infrastructure.Services.AccountBans;
 using SafeRide.Infrastructure.Simulator;
 using System.Text;
 using SafeRide.Infrastructure.ExternalServices.Cloudinary;
+using SafeRide.Infrastructure.TripChat;
 
 namespace SafeRide.Infrastructure;
 
 public static class DependencyInjection
 {
+    private static bool IsValidTripSharingAppLink(string value, bool isDevelopment)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || string.IsNullOrWhiteSpace(uri.Host))
+        {
+            return false;
+        }
+
+        if (string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return isDevelopment
+            && !string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+    }
+
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
         IConfiguration configuration,
@@ -48,12 +67,33 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(AiChatOptions.SectionName))
             .PostConfigure(options =>
                 options.MongoConnectionString =
-                    configuration.GetConnectionString("MongoDB") ?? "");
+                    configuration.GetConnectionString("MongoDB") ?? "")
+            .Validate(
+                options => options.TripChatTranslationTimeoutSeconds > 0,
+                "AiChat:TripChatTranslationTimeoutSeconds must be greater than zero.")
+            .Validate(
+                options => options.TripChatTranslationMaxRetries is >= 0 and <= 3,
+                "AiChat:TripChatTranslationMaxRetries must be between zero and three.");
         services.AddHttpClient<IAiChatService, AiChatService>(client =>
         {
             client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
         });
+        services.AddHttpClient<ITextTranslationService, GeminiTextTranslationService>(client =>
+        {
+            client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
+        });
         services.AddHostedService<AiChatMongoInitializer>();
+
+        services.AddHttpClient<ITripChatTranslationService, GeminiTripChatTranslationService>(
+            (provider, client) =>
+            {
+                var options = provider
+                    .GetRequiredService<IOptions<AiChatOptions>>()
+                    .Value;
+                client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
+                client.Timeout = TimeSpan.FromSeconds(
+                    options.TripChatTranslationTimeoutSeconds);
+            });
 
         services.AddDbContext<ApplicationDbContext>(
             options => options.UseSqlServer(
@@ -93,13 +133,25 @@ public static class DependencyInjection
         services
             .AddOptions<PayOsOptions>()
             .Bind(configuration.GetSection(PayOsOptions.SectionName));
+        var googleMapsIsPrimaryProvider = string.Equals(
+            configuration["MapServices:PrimaryProvider"],
+            "GoogleMaps",
+            StringComparison.OrdinalIgnoreCase);
         services
             .AddOptions<GoogleMapsOptions>()
             .Bind(configuration.GetSection(GoogleMapsOptions.SectionName))
-            .ValidateDataAnnotations()
-            .Validate(options => options.TimeoutSeconds > 0, "MapServices:GoogleMaps:TimeoutSeconds must be greater than zero.");
-            // NOTE: ValidateOnStart removed — Google Maps is a fallback provider.
-            // URL validation is skipped when VietMap is the primary provider.
+            .Validate(
+                options => !googleMapsIsPrimaryProvider || !string.IsNullOrWhiteSpace(options.ApiKey),
+                "MapServices:GoogleMaps:ApiKey must be configured when GoogleMaps is the primary provider.")
+            .Validate(
+                options => !googleMapsIsPrimaryProvider
+                    || (Uri.TryCreate(options.RoutesApiUrl, UriKind.Absolute, out var uri)
+                        && uri.Scheme == Uri.UriSchemeHttps),
+                "MapServices:GoogleMaps:RoutesApiUrl must be an absolute HTTPS URI when GoogleMaps is the primary provider.")
+            .Validate(
+                options => !googleMapsIsPrimaryProvider || options.TimeoutSeconds > 0,
+                "MapServices:GoogleMaps:TimeoutSeconds must be greater than zero when GoogleMaps is the primary provider.")
+            .ValidateOnStart();
         services
             .AddOptions<OpenRouteServiceOptions>()
             .Bind(configuration.GetSection(OpenRouteServiceOptions.SectionName))
@@ -177,6 +229,28 @@ public static class DependencyInjection
             .Validate(options => options.MaxInferredSpeedKmh > 0, "TripTracking:MaxInferredSpeedKmh must be greater than zero.")
             .Validate(options => options.MaxAccuracyMeters > 0, "TripTracking:MaxAccuracyMeters must be greater than zero.")
             .Validate(options => options.FinalizeLockSeconds > 0, "TripTracking:FinalizeLockSeconds must be greater than zero.")
+            .Validate(options => options.MinimumEarlyEndFare > 0, "TripTracking:MinimumEarlyEndFare must be greater than zero.")
+            .Validate(options => options.RouteDeviationThresholdMeters > 0, "TripTracking:RouteDeviationThresholdMeters must be greater than zero.")
+            .Validate(options => options.RouteDeviationRequiredSamples > 0, "TripTracking:RouteDeviationRequiredSamples must be greater than zero.")
+            .Validate(options => options.RouteDeviationStateTtlMinutes > 0, "TripTracking:RouteDeviationStateTtlMinutes must be greater than zero.")
+            .Validate(options => options.RouteRerouteCooldownSeconds > 0, "TripTracking:RouteRerouteCooldownSeconds must be greater than zero.")
+            .Validate(options => options.CustomerDeviationAlertCooldownMinutes > 0, "TripTracking:CustomerDeviationAlertCooldownMinutes must be greater than zero.")
+            .Validate(options => options.ActiveRouteTtlHours > 0, "TripTracking:ActiveRouteTtlHours must be greater than zero.")
+            .Validate(options => options.ReverseProgressThresholdMeters > 0, "TripTracking:ReverseProgressThresholdMeters must be greater than zero.")
+            .Validate(options => options.ReverseRequiredSamples > 0, "TripTracking:ReverseRequiredSamples must be greater than zero.")
+            .Validate(options => options.CustomerAlertDistanceIncreaseMeters > 0, "TripTracking:CustomerAlertDistanceIncreaseMeters must be greater than zero.")
+            .ValidateOnStart();
+
+        services
+            .AddOptions<TripSharingOptions>()
+            .Bind(configuration.GetSection(TripSharingOptions.SectionName))
+            .Validate(options => IsValidTripSharingAppLink(
+                    options.AppLinkBaseUrl,
+                    environment.IsDevelopment()),
+                "TripSharing:AppLinkBaseUrl must be an absolute HTTPS URL in production, or an explicitly configured custom scheme in development.")
+            .Validate(options => options.DefaultExpirationHours > 0, "TripSharing:DefaultExpirationHours must be greater than zero.")
+            .Validate(options => options.CompletedGraceMinutes > 0, "TripSharing:CompletedGraceMinutes must be greater than zero.")
+            .Validate(options => options.CancelledGraceMinutes > 0, "TripSharing:CancelledGraceMinutes must be greater than zero.")
             .ValidateOnStart();
 
         // ── Hangfire ───────────────────────────────────────────────────────────────
@@ -198,10 +272,12 @@ public static class DependencyInjection
                     }));
             services.AddHangfireServer();
             services.AddScoped<IBookingLifecycleJobScheduler, HangfireBookingLifecycleJobScheduler>();
+            services.AddScoped<ITripShareExpiryScheduler, HangfireTripShareExpiryScheduler>();
         }
         else
         {
             services.AddScoped<IBookingLifecycleJobScheduler, NoOpBookingLifecycleJobScheduler>();
+            services.AddScoped<ITripShareExpiryScheduler, NoOpTripShareExpiryScheduler>();
         }
         // ──────────────────────────────────────────────────────────────────────────
 
@@ -225,13 +301,21 @@ public static class DependencyInjection
         services.AddScoped<IAdminPricingRuleRepository, AdminPricingRuleRepository>();
         services.AddScoped<IPromotionRepository, PromotionRepository>();
         services.AddScoped<IAdminPromotionRepository, PromotionRepository>();
+        services.AddScoped<IPromotionUnlockRuleStore, PromotionUnlockRuleStore>();
         services.AddScoped<IRatingRepository, RatingRepository>();
         services.AddScoped<IReportRepository, ReportRepository>();
+        services.AddScoped<ISOSAlertRepository, SOSAlertRepository>();
         services.AddScoped<IAdminCustomerAccountService, AdminCustomerAccountService>();
         services.AddScoped<IAdminDriverAccountService, AdminDriverAccountService>();
+        services.AddScoped<IAccountBanManagementService, AccountBanService>();
+        services.AddScoped<IAccountBanEvaluationService, AccountBanService>();
+        services.AddScoped<IAccountRestrictionService, AccountBanService>();
+        services.AddScoped<IUserSessionRevocationService, UserSessionRevocationService>();
         services.AddScoped<IAdminBookingManagementService, AdminBookingManagementService>();
         services.AddScoped<IAdminTripManagementService, AdminTripManagementService>();
         services.AddScoped<IAdminNotificationManagementService, AdminNotificationManagementService>();
+        services.AddScoped<IStaffPaymentStatusService, StaffPaymentStatusService>();
+        services.AddScoped<IStaffNotificationRequestService, StaffNotificationRequestService>();
         services.AddScoped<IUserNotificationService, UserNotificationService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddSingleton<IMatchingPolicyProvider, MatchingPolicyProvider>();
@@ -241,8 +325,11 @@ public static class DependencyInjection
         services.AddScoped<IDriverWalletService, DriverWalletService>();
         services.AddScoped<IDriverRealtimeService, DriverRealtimeService>();
         services.AddScoped<TripFareFinalizationService>();
+        services.AddScoped<TripPaymentSettlementService>();
         services.AddScoped<ITripStatusService, TripStatusService>();
+        services.AddScoped<ITripSharingService, TripSharingService>();
         services.AddScoped<ITripChatService, TripChatService>();
+        services.AddSingleton<ITripChatContentFilter, TripChatContentFilter>();
         services.AddHttpClient<ISpeedSmsService, InfobipSmsService>();
         services.AddHttpClient<IPaymentService, PayOsPaymentService>((provider, client) =>
         {
@@ -371,8 +458,11 @@ public static class DependencyInjection
                             .CreateLogger("JwtAuthentication");
                         logger.LogWarning(
                             context.Exception,
-                            "JWT authentication failed for {Path}.",
-                            context.Request.Path);
+                            "JWT authentication failed for {Method} {Path}. FailureType={FailureType} TraceId={TraceId}.",
+                            context.Request.Method,
+                            context.Request.Path,
+                            context.Exception.GetType().Name,
+                            context.HttpContext.TraceIdentifier);
                         return Task.CompletedTask;
                     },
                     OnMessageReceived = context =>
@@ -389,6 +479,21 @@ public static class DependencyInjection
                     },
                     OnChallenge = async context =>
                     {
+                        var authorizationHeaders = context.Request.Headers.Authorization;
+                        var hasBearerHeader = authorizationHeaders.Any(value =>
+                            value?.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) == true);
+                        var logger = context.HttpContext.RequestServices
+                            .GetRequiredService<ILoggerFactory>()
+                            .CreateLogger("JwtAuthentication");
+                        logger.LogWarning(
+                            "JWT challenge for {Method} {Path}. HasBearerHeader={HasBearerHeader} AuthorizationHeaderCount={AuthorizationHeaderCount} FailureType={FailureType} TraceId={TraceId}.",
+                            context.Request.Method,
+                            context.Request.Path,
+                            hasBearerHeader,
+                            authorizationHeaders.Count,
+                            context.AuthenticateFailure?.GetType().Name ?? "none",
+                            context.HttpContext.TraceIdentifier);
+
                         context.HandleResponse();
                         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                         context.Response.ContentType = "application/problem+json";

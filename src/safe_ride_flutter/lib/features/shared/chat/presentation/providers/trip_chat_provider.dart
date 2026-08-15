@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import '../../../../../core/localization/locale_provider.dart';
 import '../../data/datasources/trip_chat_remote_datasource.dart';
 import '../../data/models/trip_chat_message_model.dart';
 import '../../data/services/trip_chat_socket_service.dart';
@@ -45,14 +46,17 @@ class TripChatProvider extends ChangeNotifier {
       _sortMessages();
 
       // 2. Connect Socket
-      await _socketService.connect(token, onMessageReceived: (args) {
-        _handleIncomingMessage(args);
-      });
+      await _socketService.connect(
+        token,
+        onMessageReceived: (args) {
+          _handleIncomingMessage(args);
+        },
+      );
 
       // 3. Join Group
       await _socketService.joinTripChat(tripId);
     } catch (e) {
-      _errorMessage = 'Không thể kết nối trò chuyện.';
+      _errorMessage = LocaleProvider.currentLocalizations.chatConnectionFailed;
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -89,16 +93,18 @@ class TripChatProvider extends ChangeNotifier {
     try {
       await _socketService.sendTripMessage(_activeTripId!, cleanText);
     } catch (e) {
-      _errorMessage = 'Không thể gửi tin nhắn.';
+      _errorMessage = LocaleProvider.currentLocalizations.chatMessageSendFailed;
     } finally {
       _isSending = false;
       notifyListeners();
     }
   }
 
-  Future<void> sendImage(File imageFile) async {
-    if (_activeTripId == null || _accessToken == null || _currentUserId == null) {
-      return;
+  Future<bool> sendImage(File imageFile) async {
+    if (_activeTripId == null ||
+        _accessToken == null ||
+        _currentUserId == null) {
+      return false;
     }
 
     _isSending = true;
@@ -118,9 +124,11 @@ class TripChatProvider extends ChangeNotifier {
         _sortMessages();
         notifyListeners();
       }
+      return true;
     } catch (e) {
-      _errorMessage = 'Không thể gửi ảnh.';
+      _errorMessage = LocaleProvider.currentLocalizations.chatImageSendFailed;
       notifyListeners();
+      return false;
     } finally {
       _isSending = false;
       notifyListeners();

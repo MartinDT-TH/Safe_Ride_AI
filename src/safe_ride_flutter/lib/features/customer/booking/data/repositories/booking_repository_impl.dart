@@ -108,11 +108,50 @@ class BookingRepositoryImpl implements BookingRepository {
   }
 
   @override
-  Future<void> confirmCustomerReturn(
+  Future<void> respondToEndTripRequest(
     String accessToken, {
     required int tripId,
+    required bool accepted,
   }) {
-    return _remoteDatasource.confirmCustomerReturn(accessToken, tripId: tripId);
+    return _remoteDatasource.respondToEndTripRequest(
+      accessToken,
+      tripId: tripId,
+      accepted: accepted,
+    );
+  }
+
+  @override
+  Future<void> triggerSOS(
+    String accessToken, {
+    required int tripId,
+    required double latitude,
+    required double longitude,
+    required String message,
+  }) {
+    return _remoteDatasource.triggerSOS(
+      accessToken,
+      tripId: tripId,
+      latitude: latitude,
+      longitude: longitude,
+      message: message,
+    );
+  }
+
+  @override
+  Future<void> respondToDriverEndTrip(
+    String accessToken, {
+    required int tripId,
+    required bool accepted,
+    int? ratingScore,
+    String? comment,
+  }) {
+    return _remoteDatasource.respondToDriverEndTrip(
+      accessToken,
+      tripId: tripId,
+      accepted: accepted,
+      ratingScore: ratingScore,
+      comment: comment,
+    );
   }
 
   @override

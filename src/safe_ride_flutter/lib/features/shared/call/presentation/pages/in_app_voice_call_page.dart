@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../../../../../core/services/socket_service.dart';
@@ -9,7 +10,7 @@ import '../../../../../dependency_injection/injection.dart';
 import '../../services/call_tone_player.dart';
 
 class InAppVoiceCallPage extends StatefulWidget {
-  const InAppVoiceCallPage({
+  InAppVoiceCallPage({
     super.key,
     required this.tripId,
     required this.peerName,
@@ -88,7 +89,7 @@ class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
       if (!mounted) return;
       setState(() {
         _initializing = false;
-        _errorMessage = 'Không thể bắt đầu cuộc gọi. Vui lòng thử lại.';
+        _errorMessage = context.l10n.callStartFailed;
       });
     }
   }
@@ -205,11 +206,11 @@ class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
     }, key: '$key:ice');
     _socketService.onInAppCallRejected((signal) {
       if (!_matchesCall(signal)) return;
-      _closeWithMessage('Đối phương đã từ chối cuộc gọi.');
+      _closeWithMessage(context.l10n.callRejected);
     }, key: '$key:rejected');
     _socketService.onInAppCallEnded((signal) {
       if (!_matchesCall(signal)) return;
-      _closeWithMessage('Cuộc gọi đã kết thúc.');
+      _closeWithMessage(context.l10n.callEnded);
     }, key: '$key:ended');
   }
 
@@ -226,9 +227,9 @@ class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
   }
 
   void _startDurationTimer() {
-    _durationTimer ??= Timer.periodic(const Duration(seconds: 1), (_) {
+    _durationTimer ??= Timer.periodic(Duration(seconds: 1), (_) {
       if (mounted) {
-        setState(() => _duration += const Duration(seconds: 1));
+        setState(() => _duration += Duration(seconds: 1));
       }
     });
   }
@@ -293,7 +294,7 @@ class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF052C2F),
+      backgroundColor: Color(0xFF052C2F),
       body: SafeArea(
         child: Stack(
           children: [
@@ -302,46 +303,46 @@ class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
               padding: const EdgeInsets.all(24),
               child: Column(
                 children: [
-                  const Spacer(),
+                  Spacer(),
                   CircleAvatar(
                     radius: 48,
-                    backgroundColor: const Color(0xFF0E6B70),
+                    backgroundColor: Color(0xFF0E6B70),
                     child: Text(
                       widget.peerName.trim().isEmpty
                           ? 'SR'
                           : widget.peerName.trim()[0].toUpperCase(),
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white,
                         fontSize: 36,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  SizedBox(height: 20),
                   Text(
                     widget.peerName,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: Colors.white,
                       fontSize: 26,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   Text(
                     _errorMessage ??
                         (_initializing
-                            ? 'Đang kết nối...'
+                    ? context.l10n.callConnecting
                             : _connected
                             ? _formatDuration()
-                            : 'Đang đổ chuông...'),
-                    style: const TextStyle(
+                        : context.l10n.callRinging),
+                    style: TextStyle(
                       color: Color(0xFFCFE8E8),
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const Spacer(),
+                  Spacer(),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
@@ -349,13 +350,15 @@ class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
                         icon: _muted
                             ? Icons.mic_off_rounded
                             : Icons.mic_rounded,
-                        label: _muted ? 'Bật mic' : 'Tắt mic',
+              label: _muted
+                  ? context.l10n.microphoneOn
+                  : context.l10n.microphoneOff,
                         onPressed: _toggleMute,
                       ),
                       _CallControlButton(
                         icon: Icons.call_end_rounded,
-                        label: 'Kết thúc',
-                        backgroundColor: const Color(0xFFE53935),
+              label: context.l10n.endCall,
+                        backgroundColor: Color(0xFFE53935),
                         onPressed: () async {
                           await _hangUp(notifyPeer: true);
                           if (context.mounted) Navigator.of(context).pop();
@@ -365,12 +368,14 @@ class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
                         icon: _speakerOn
                             ? Icons.volume_up_rounded
                             : Icons.hearing_rounded,
-                        label: _speakerOn ? 'Loa ngoài' : 'Tai nghe',
+              label: _speakerOn
+                  ? context.l10n.speaker
+                  : context.l10n.earpiece,
                         onPressed: _toggleSpeaker,
                       ),
                     ],
                   ),
-                  const SizedBox(height: 32),
+                  SizedBox(height: 32),
                 ],
               ),
             ),
@@ -382,7 +387,7 @@ class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
 }
 
 class _CallControlButton extends StatelessWidget {
-  const _CallControlButton({
+  _CallControlButton({
     required this.icon,
     required this.label,
     required this.onPressed,
@@ -412,10 +417,10 @@ class _CallControlButton extends StatelessWidget {
             child: Icon(icon, color: Colors.white, size: 28),
           ),
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: 10),
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             color: Color(0xFFCFE8E8),
             fontSize: 12,
             fontWeight: FontWeight.w700,

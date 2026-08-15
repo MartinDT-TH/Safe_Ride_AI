@@ -1,3 +1,6 @@
+import '../localization/locale_provider.dart';
+import '../localization/trip_status_localizer.dart';
+
 class MobileConfig {
   const MobileConfig({
     required this.version,
@@ -8,6 +11,7 @@ class MobileConfig {
     required this.driver,
     required this.matching,
     required this.features,
+    required this.tripSharing,
   });
 
   final String version;
@@ -18,6 +22,7 @@ class MobileConfig {
   final MobileDriverConfig driver;
   final MobileMatchingConfig matching;
   final MobileFeatureConfig features;
+  final MobileTripSharingConfig tripSharing;
 
   factory MobileConfig.fromJson(Map<String, dynamic> json) {
     final booking = MobileStatusGroup.fromJson(_map(json['booking']));
@@ -34,6 +39,7 @@ class MobileConfig {
       driver: driver.statuses.isEmpty ? fallback.driver : driver,
       matching: MobileMatchingConfig.fromJson(_map(json['matching'])),
       features: MobileFeatureConfig.fromJson(_map(json['features'])),
+      tripSharing: MobileTripSharingConfig.fromJson(_map(json['tripSharing'])),
     );
   }
 
@@ -42,51 +48,51 @@ class MobileConfig {
     realtime: MobileRealtimeConfig.fallback,
     booking: MobileStatusGroup(
       statuses: [
-        MobileStatusOption(value: 'PendingSchedule', label: 'Đã đặt lịch'),
-        MobileStatusOption(value: 'Searching', label: 'Đang tìm tài xế'),
-        MobileStatusOption(value: 'DriverAssigned', label: 'Đã có tài xế'),
-        MobileStatusOption(value: 'Cancelled', label: 'Đã hủy'),
-        MobileStatusOption(value: 'Expired', label: 'Hết hạn'),
-        MobileStatusOption(value: 'Completed', label: 'Hoàn thành'),
+        MobileStatusOption(value: 'PendingSchedule', label: 'PendingSchedule'),
+        MobileStatusOption(value: 'Searching', label: 'Searching'),
+        MobileStatusOption(value: 'DriverAssigned', label: 'DriverAssigned'),
+        MobileStatusOption(value: 'Cancelled', label: 'Cancelled'),
+        MobileStatusOption(value: 'Expired', label: 'Expired'),
+        MobileStatusOption(value: 'Completed', label: 'Completed'),
       ],
     ),
     trip: MobileStatusGroup(
       statuses: [
-        MobileStatusOption(value: 'ACCEPTED', label: 'Tài xế đã nhận chuyến'),
-        MobileStatusOption(value: 'DRIVER_ARRIVING', label: 'Tài xế đang đến'),
-        MobileStatusOption(value: 'ARRIVED', label: 'Tài xế đã đến'),
-        MobileStatusOption(value: 'IN_PROGRESS', label: 'Đang di chuyển'),
+        MobileStatusOption(value: 'ACCEPTED', label: 'ACCEPTED'),
+        MobileStatusOption(value: 'DRIVER_ARRIVING', label: 'DRIVER_ARRIVING'),
+        MobileStatusOption(value: 'ARRIVED', label: 'ARRIVED'),
+        MobileStatusOption(value: 'IN_PROGRESS', label: 'IN_PROGRESS'),
         MobileStatusOption(
           value: 'WAITING_RETURN_CONFIRM',
-          label: 'Chờ xác nhận nhận lại xe',
+          label: 'WAITING_RETURN_CONFIRM',
         ),
         MobileStatusOption(
           value: 'RETURN_CONFIRMED',
-          label: 'Đã xác nhận nhận lại xe',
+          label: 'RETURN_CONFIRMED',
         ),
-        MobileStatusOption(value: 'WAITING_PAYMENT', label: 'Chờ thanh toán'),
-        MobileStatusOption(value: 'COMPLETED', label: 'Hoàn thành'),
-        MobileStatusOption(value: 'CANCELLED', label: 'Đã hủy'),
+        MobileStatusOption(value: 'WAITING_PAYMENT', label: 'WAITING_PAYMENT'),
+        MobileStatusOption(value: 'COMPLETED', label: 'COMPLETED'),
+        MobileStatusOption(value: 'CANCELLED', label: 'CANCELLED'),
       ],
     ),
     offer: MobileStatusGroup(
       statuses: [
-        MobileStatusOption(value: 'Sent', label: 'Đã gửi tài xế'),
-        MobileStatusOption(value: 'DriverAccepted', label: 'Tài xế đã nhận'),
+        MobileStatusOption(value: 'Sent', label: 'Sent'),
+        MobileStatusOption(value: 'DriverAccepted', label: 'DriverAccepted'),
         MobileStatusOption(
           value: 'CustomerConfirmed',
-          label: 'Khách đã xác nhận',
+          label: 'CustomerConfirmed',
         ),
-        MobileStatusOption(value: 'Rejected', label: 'Đã từ chối'),
-        MobileStatusOption(value: 'Expired', label: 'Hết hạn'),
-        MobileStatusOption(value: 'Cancelled', label: 'Đã hủy'),
+        MobileStatusOption(value: 'Rejected', label: 'Rejected'),
+        MobileStatusOption(value: 'Expired', label: 'Expired'),
+        MobileStatusOption(value: 'Cancelled', label: 'Cancelled'),
       ],
     ),
     driver: MobileDriverConfig(
       statuses: [
-        MobileStatusOption(value: 'Online', label: 'Đang hoạt động'),
-        MobileStatusOption(value: 'Offline', label: 'Ngoại tuyến'),
-        MobileStatusOption(value: 'Busy', label: 'Đang có chuyến'),
+        MobileStatusOption(value: 'Online', label: 'Online'),
+        MobileStatusOption(value: 'Offline', label: 'Offline'),
+        MobileStatusOption(value: 'Busy', label: 'Busy'),
       ],
       locationUpdateIntervalSeconds: 3,
     ),
@@ -101,11 +107,31 @@ class MobileConfig {
       enableGoogleMap: true,
       enableVietMap: true,
     ),
+    tripSharing: MobileTripSharingConfig.fallback,
   );
 
   static Map<String, dynamic> _map(Object? value) {
     return value is Map ? Map<String, dynamic>.from(value) : const {};
   }
+}
+
+class MobileTripSharingConfig {
+  const MobileTripSharingConfig({required this.appLinkBaseUrl});
+
+  final String appLinkBaseUrl;
+
+  factory MobileTripSharingConfig.fromJson(Map<String, dynamic> json) {
+    final appLinkBaseUrl = json['appLinkBaseUrl']?.toString().trim() ?? '';
+    return MobileTripSharingConfig(
+      appLinkBaseUrl: appLinkBaseUrl.isEmpty
+          ? fallback.appLinkBaseUrl
+          : appLinkBaseUrl,
+    );
+  }
+
+  static const fallback = MobileTripSharingConfig(
+    appLinkBaseUrl: String.fromEnvironment('TRIP_SHARE_APP_LINK_BASE_URL'),
+  );
 }
 
 class MobileRealtimeConfig {
@@ -146,6 +172,9 @@ class MobileRealtimeEvents {
     required this.customerConfirmedDriverOffer,
     required this.tripCreated,
     required this.tripStatusChanged,
+    required this.tripEndRequested,
+    required this.tripEndRequestResponded,
+    required this.sosTriggered,
     required this.tripPaymentPending,
     required this.tripPaymentSucceeded,
   });
@@ -167,6 +196,9 @@ class MobileRealtimeEvents {
   final String customerConfirmedDriverOffer;
   final String tripCreated;
   final String tripStatusChanged;
+  final String tripEndRequested;
+  final String tripEndRequestResponded;
+  final String sosTriggered;
   final String tripPaymentPending;
   final String tripPaymentSucceeded;
 
@@ -262,6 +294,17 @@ class MobileRealtimeEvents {
         'tripStatusChanged',
         fallback.tripStatusChanged,
       ),
+      tripEndRequested: _read(
+        json,
+        'tripEndRequested',
+        fallback.tripEndRequested,
+      ),
+      tripEndRequestResponded: _read(
+        json,
+        'tripEndRequestResponded',
+        fallback.tripEndRequestResponded,
+      ),
+      sosTriggered: _read(json, 'sosTriggered', fallback.sosTriggered),
       tripPaymentPending: _read(
         json,
         'tripPaymentPending',
@@ -293,6 +336,9 @@ class MobileRealtimeEvents {
     customerConfirmedDriverOffer: 'CustomerConfirmedDriverOffer',
     tripCreated: 'TripCreated',
     tripStatusChanged: 'TripStatusChanged',
+    tripEndRequested: 'TripEndRequested',
+    tripEndRequestResponded: 'TripEndRequestResponded',
+    sosTriggered: 'SOSTriggered',
     tripPaymentPending: 'TripPaymentPending',
     tripPaymentSucceeded: 'TripPaymentSucceeded',
   );
@@ -328,10 +374,20 @@ class MobileStatusGroup {
   }
 
   String labelFor(String value, {String? fallback}) {
-    for (final status in statuses) {
-      if (status.value == value) return status.label;
+    final translated = TripStatusLocalizer.translate(
+      LocaleProvider.currentLocalizations,
+      value,
+    );
+    if (translated != value) return translated;
+    if (LocaleProvider.currentLocale.languageCode == 'vi') {
+      for (final status in statuses) {
+        if (status.value == value && status.label.isNotEmpty) {
+          return status.label;
+        }
+      }
+      return fallback ?? value;
     }
-    return fallback ?? value;
+    return value;
   }
 }
 

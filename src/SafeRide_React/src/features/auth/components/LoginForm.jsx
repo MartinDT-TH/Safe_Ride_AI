@@ -29,11 +29,13 @@ function LoginForm() {
                 }),
             });
             saveAuthTokens(response.accessToken, response.refreshToken);
+            const isStaff = response.roles.includes('Staff');
             dispatch(loginSuccess({
                 user: {
                     name: response.fullName,
-                    role: response.roles.includes('Admin') ? 'Quản trị cao cấp' : response.roles[0] ?? 'Quản trị viên',
                     email: response.email ?? email ?? 'admin@saferide.com',
+                    roles: response.roles,
+                    role: isStaff ? 'Nhân viên' : 'Quản trị cao cấp',
                 },
                 rememberMe,
             }));
@@ -55,14 +57,14 @@ function LoginForm() {
       </div>
 
       {/* Heading */}
-      <h1 className="login-title" id="login-title">Đăng nhập Quản trị viên</h1>
+      <h1 className="login-title" id="login-title">Đăng nhập hệ thống quản lý</h1>
       <p className="login-subtitle" id="login-subtitle">
         Vui lòng đăng nhập để quản lý hệ thống SafeRide.
       </p>
 
       {/* Form */}
       <form className="login-form" id="login-form" onSubmit={handleSubmit}>
-        <FormInput label="Email quản trị" inputId="login-email" type="email" placeholder="admin@saferide.com" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" required leftIcon={<FontAwesomeIcon icon={faEnvelope}/>}/>
+        <FormInput label="Email" inputId="login-email" type="email" placeholder="staff@gmail.com" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" required leftIcon={<FontAwesomeIcon icon={faEnvelope}/>}/>
 
         <FormInput label="Mật khẩu" inputId="login-password" type={showPassword ? 'text' : 'password'} placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required leftIcon={<FontAwesomeIcon icon={faLock}/>} rightAction={passwordToggle}/>
 

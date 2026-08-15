@@ -2,19 +2,37 @@ import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart';
 
 import '../../../../../core/constants/app_colors.dart';
+import '../../../../../core/localization/localization_extensions.dart';
 import '../../application/services/document_image_cropper.dart';
 
+class DocumentCaptureResult {
+  const DocumentCaptureResult({
+    required this.croppedImage,
+    required this.originalImage,
+    this.qrPayload,
+  });
+
+  final File croppedImage;
+  final File originalImage;
+  final String? qrPayload;
+}
+
 class DocumentCameraPage extends StatefulWidget {
-  const DocumentCameraPage({
+  DocumentCameraPage({
     super.key,
     required this.title,
     required this.instruction,
+    this.focusPoint,
+    this.scanQrLive = false,
   });
 
   final String title;
   final String instruction;
+  final Offset? focusPoint;
+  final bool scanQrLive;
 
   @override
   State<DocumentCameraPage> createState() => _DocumentCameraPageState();
@@ -22,9 +40,14 @@ class DocumentCameraPage extends StatefulWidget {
 
 class _DocumentCameraPageState extends State<DocumentCameraPage> {
   final DocumentImageCropper _cropper = DocumentImageCropper();
+  final BarcodeScanner _barcodeScanner = BarcodeScanner(
+    formats: [BarcodeFormat.qrCode],
+  );
   CameraController? _controller;
   Future<void>? _initializeCameraFuture;
   bool _isCapturing = false;
+  bool _isProcessingQrFrame = false;
+  String? _qrPayload;
   String? _errorMessage;
 
   @override
@@ -35,6 +58,7 @@ class _DocumentCameraPageState extends State<DocumentCameraPage> {
 
   @override
   void dispose() {
+    _barcodeScanner.close();
     _controller?.dispose();
     super.dispose();
   }
@@ -50,18 +74,24 @@ class _DocumentCameraPageState extends State<DocumentCameraPage> {
         camera,
         ResolutionPreset.high,
         enableAudio: false,
-        imageFormatGroup: ImageFormatGroup.jpeg,
+        imageFormatGroup: widget.scanQrLive
+            ? Platform.isAndroid
+                  ? ImageFormatGroup.nv21
+                  : ImageFormatGroup.bgra8888
+            : ImageFormatGroup.jpeg,
       );
       await controller.initialize();
+      await _focusCamera(controller);
       if (!mounted) {
         await controller.dispose();
         return;
       }
       setState(() => _controller = controller);
+      if (widget.scanQrLive) await controller.startImageStream(_processQrFrame);
     } catch (_) {
       if (!mounted) return;
       setState(
-        () => _errorMessage = 'Không thể mở camera. Vui lòng kiểm tra quyền.',
+        () => _errorMessage = context.l10n.cameraOpenFailed,
       );
     }
   }
@@ -72,16 +102,90 @@ class _DocumentCameraPageState extends State<DocumentCameraPage> {
 
     setState(() => _isCapturing = true);
     try {
+      if (controller.value.isStreamingImages) {
+        await controller.stopImageStream();
+        while (_isProcessingQrFrame) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+      }
+      await _focusCamera(controller);
+      if (widget.focusPoint != null) {
+        await Future<void>.delayed(const Duration(milliseconds: 450));
+      }
       final image = await controller.takePicture();
-      final cropped = await _cropper.cropToDocument(File(image.path));
+      final original = File(image.path);
+      final cropped = await _cropper.cropToDocument(original);
       if (!mounted) return;
-      Navigator.of(context).pop(cropped);
+      Navigator.of(context).pop(
+        DocumentCaptureResult(
+          croppedImage: cropped,
+          originalImage: original,
+          qrPayload: _qrPayload,
+        ),
+      );
     } catch (_) {
       if (!mounted) return;
       setState(() => _isCapturing = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Không thể chụp ảnh. Vui lòng thử lại.')),
+        SnackBar(content: Text(context.l10n.photoCaptureFailed)),
       );
+    }
+  }
+
+  Future<void> _processQrFrame(CameraImage frame) async {
+    final controller = _controller;
+    if (controller == null ||
+        _isCapturing ||
+        _isProcessingQrFrame ||
+        _qrPayload != null ||
+        frame.planes.length != 1) {
+      return;
+    }
+
+    final rotation = InputImageRotationValue.fromRawValue(
+      controller.description.sensorOrientation,
+    );
+    final format = InputImageFormatValue.fromRawValue(frame.format.raw);
+    if (rotation == null || format == null) return;
+
+    _isProcessingQrFrame = true;
+    try {
+      final input = InputImage.fromBytes(
+        bytes: frame.planes.first.bytes,
+        metadata: InputImageMetadata(
+          size: Size(frame.width.toDouble(), frame.height.toDouble()),
+          rotation: rotation,
+          format: format,
+          bytesPerRow: frame.planes.first.bytesPerRow,
+        ),
+      );
+      final barcodes = await _barcodeScanner.processImage(input);
+      for (final barcode in barcodes) {
+        final payload = barcode.rawValue?.trim();
+        if (payload == null || payload.isEmpty) continue;
+        _qrPayload = payload;
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã nhận diện QR GPLX.')),
+        );
+        break;
+      }
+    } finally {
+      _isProcessingQrFrame = false;
+    }
+  }
+
+  Future<void> _focusCamera(CameraController controller) async {
+    final focusPoint = widget.focusPoint;
+    if (focusPoint == null) return;
+    try {
+      await controller.setFocusMode(FocusMode.auto);
+      await controller.setExposureMode(ExposureMode.auto);
+      await controller.setFocusPoint(focusPoint);
+      await controller.setExposurePoint(focusPoint);
+    } catch (_) {
+      // Some camera devices do not support metering points. Their default
+      // continuous autofocus remains available as a fallback.
     }
   }
 
@@ -100,7 +204,7 @@ class _DocumentCameraPageState extends State<DocumentCameraPage> {
             );
           }
           if (controller == null || !controller.value.isInitialized) {
-            return const Center(
+            return Center(
               child: CircularProgressIndicator(color: Colors.white),
             );
           }
@@ -128,7 +232,7 @@ class _DocumentCameraPageState extends State<DocumentCameraPage> {
                           onPressed: _isCapturing
                               ? null
                               : () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.close),
+                          icon: Icon(Icons.close),
                           style: IconButton.styleFrom(
                             backgroundColor: Colors.white,
                             foregroundColor: Colors.black87,
@@ -145,12 +249,12 @@ class _DocumentCameraPageState extends State<DocumentCameraPage> {
                               border: Border.all(color: Colors.white, width: 4),
                             ),
                             child: DecoratedBox(
-                              decoration: const BoxDecoration(
+                              decoration: BoxDecoration(
                                 color: Colors.white,
                                 shape: BoxShape.circle,
                               ),
                               child: _isCapturing
-                                  ? const Padding(
+                                  ? Padding(
                                       padding: EdgeInsets.all(18),
                                       child: CircularProgressIndicator(
                                         strokeWidth: 3,
@@ -161,7 +265,7 @@ class _DocumentCameraPageState extends State<DocumentCameraPage> {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 48),
+                        SizedBox(width: 48),
                       ],
                     ),
                   ),
@@ -176,7 +280,7 @@ class _DocumentCameraPageState extends State<DocumentCameraPage> {
 }
 
 class _CameraPreviewCover extends StatelessWidget {
-  const _CameraPreviewCover({required this.controller});
+  _CameraPreviewCover({required this.controller});
 
   final CameraController controller;
 
@@ -198,7 +302,7 @@ class _CameraPreviewCover extends StatelessWidget {
 }
 
 class _DocumentFrameOverlay extends StatelessWidget {
-  const _DocumentFrameOverlay({required this.title, required this.instruction});
+  _DocumentFrameOverlay({required this.title, required this.instruction});
 
   final String title;
   final String instruction;
@@ -225,17 +329,17 @@ class _DocumentFrameOverlay extends StatelessWidget {
                     Text(
                       title,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white,
                         fontSize: 22,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: 8),
                     Text(
                       instruction,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white70,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -249,8 +353,8 @@ class _DocumentFrameOverlay extends StatelessWidget {
               left: frame.left,
               right: constraints.maxWidth - frame.right,
               top: frame.bottom + 18,
-              child: const Text(
-                'Canh 4 góc giấy tờ sát trong khung',
+              child: Text(
+                context.l10n.alignDocumentCorners,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white,
@@ -282,7 +386,7 @@ class _DocumentFrameOverlay extends StatelessWidget {
 }
 
 class _DocumentFramePainter extends CustomPainter {
-  const _DocumentFramePainter(this.frame);
+  _DocumentFramePainter(this.frame);
 
   final Rect frame;
 
@@ -343,7 +447,7 @@ class _DocumentFramePainter extends CustomPainter {
 }
 
 class _CameraError extends StatelessWidget {
-  const _CameraError({required this.message, required this.onBack});
+  _CameraError({required this.message, required this.onBack});
 
   final String message;
   final VoidCallback onBack;
@@ -356,21 +460,21 @@ class _CameraError extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.no_photography, color: Colors.white, size: 54),
-            const SizedBox(height: 18),
+            Icon(Icons.no_photography, color: Colors.white, size: 54),
+            SizedBox(height: 18),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white, fontSize: 16),
+              style: TextStyle(color: Colors.white, fontSize: 16),
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: 24),
             FilledButton(
               onPressed: onBack,
               style: FilledButton.styleFrom(
                 backgroundColor: Colors.white,
                 foregroundColor: Colors.black87,
               ),
-              child: const Text('Quay lại'),
+              child: Text(context.l10n.goBack),
             ),
           ],
         ),

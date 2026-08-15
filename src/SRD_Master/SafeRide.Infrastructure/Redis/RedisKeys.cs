@@ -61,6 +61,9 @@ public static class RedisKeys
     public static string TripLive(long tripId) =>
         $"sr:trip:live:{tripId}";
 
+    public static string TripEndRequest(long tripId) =>
+        $"sr:trip:end-request:{tripId}";
+
     public static string TripTrackingPath(long tripId) =>
         $"sr:trip:path:{tripId}";
 
@@ -79,8 +82,29 @@ public static class RedisKeys
     public static string TripTrackingFinalizeLock(long tripId) =>
         $"sr:trip:finalize-lock:{tripId}";
 
+    public static string TripActiveRoute(long tripId) =>
+        $"sr:trip:active-route:{tripId}";
+
+    public static string TripRouteDeviationSamples(long tripId) =>
+        $"sr:trip:route-deviation-samples:{tripId}";
+
+    public static string TripRouteRerouteCooldown(long tripId) =>
+        $"sr:trip:route-reroute-cooldown:{tripId}";
+
+    public static string TripRouteDeviationAlertCooldown(long tripId) =>
+        $"sr:trip:route-deviation-alert-cooldown:{tripId}";
+
+    public static string TripRouteProgress(long tripId) =>
+        $"sr:trip:route-progress:{tripId}";
+
+    public static string TripRouteReverseSamples(long tripId) =>
+        $"sr:trip:route-reverse-samples:{tripId}";
+
     public static string TripChatMessages(long tripId) =>
         $"sr:tripchat:messages:{tripId}";
+
+    public static string TripChatUnread(long tripId, Guid userId) =>
+        $"sr:trip-chat:unread:{tripId}:{userId}";
 
     public static IReadOnlyList<string> TripTrackingKeys(long tripId) =>
     [
@@ -88,7 +112,13 @@ public static class RedisKeys
         TripTrackingLastAcceptedPoint(tripId),
         TripTrackingLastPathPoint(tripId),
         TripTrackingDistanceMeters(tripId),
-        TripTrackingMetadata(tripId)
+        TripTrackingMetadata(tripId),
+        TripActiveRoute(tripId),
+        TripRouteDeviationSamples(tripId),
+        TripRouteRerouteCooldown(tripId),
+        TripRouteDeviationAlertCooldown(tripId),
+        TripRouteProgress(tripId),
+        TripRouteReverseSamples(tripId)
     ];
 
     public const string ActivePricingRules = "sr:pricing:rules:active";

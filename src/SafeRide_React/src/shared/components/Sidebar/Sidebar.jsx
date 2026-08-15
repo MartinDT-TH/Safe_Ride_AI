@@ -1,7 +1,12 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCar } from '@fortawesome/free-solid-svg-icons';
+import { filterManagementSidebarItems, getCurrentManagementRole, MANAGEMENT_ROLES } from '../../../features/auth/managementRoles';
 import './Sidebar.css';
 function Sidebar({ items, footerItems = [] }) {
+    items = filterManagementSidebarItems(items);
+    const consoleLabel = getCurrentManagementRole() === MANAGEMENT_ROLES.staff
+        ? 'Staff Console'
+        : 'Admin Console';
     return (<aside className="sidebar" id="sidebar">
       {/* Logo */}
       <div className="sidebar-logo" id="sidebar-logo">
@@ -10,7 +15,7 @@ function Sidebar({ items, footerItems = [] }) {
         </div>
         <div className="sidebar-logo-text">
           <span className="sidebar-logo-title">SafeRide</span>
-          <span className="sidebar-logo-sub">Admin Console</span>
+          <span className="sidebar-logo-sub">{consoleLabel}</span>
         </div>
       </div>
 

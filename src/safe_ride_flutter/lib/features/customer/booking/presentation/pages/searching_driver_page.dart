@@ -2,8 +2,12 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../../../../../core/maps/models/map_models.dart';
 import '../../../../../core/maps/widgets/map_renderer_widget.dart';
+import '../../../../../core/localization/localization_extensions.dart';
+import '../../../../../core/localization/locale_provider.dart';
+import '../../../../../core/localization/trip_status_localizer.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
 import '../../../../../core/services/mobile_config_service.dart';
@@ -52,12 +56,12 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
   final SocketService _socketService = getIt<SocketService>();
   int? _joinedBookingId;
 
-  List<AppLatLng> _cachedPoints = const [];
+  List<AppLatLng> _cachedPoints = [];
   String? _lastEncodedPolyline;
 
   List<AppLatLng> get _routePoints {
     final encoded = widget.fareEstimate?.encodedPolyline;
-    if (encoded == null || encoded.isEmpty) return const [];
+    if (encoded == null || encoded.isEmpty) return [];
 
     if (encoded == _lastEncodedPolyline) {
       return _cachedPoints;
@@ -68,7 +72,7 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
       _cachedPoints = decodePolyline(encoded);
       return _cachedPoints;
     } on FormatException {
-      return const [];
+      return [];
     }
   }
 
@@ -102,7 +106,7 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
     _fitRoute();
     // Delay slightly to ensure map is fully rendered before getting coordinates
     Future.delayed(
-      const Duration(milliseconds: 300),
+      Duration(milliseconds: 300),
       () => _updateMarkerOffset(force: true),
     );
     _fetchNearbyDrivers();
@@ -160,7 +164,7 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Chuyến #${booking.bookingId} đã kết thúc.'),
+                content: Text(context.l10n.tripEndedWithId(booking.bookingId)),
               ),
             );
             // Safety check: ensure we land on Home, not Login
@@ -422,7 +426,7 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
                   AppPolyline(
                     id: 'direct_route',
                     points: [pickupPos, destPos],
-                    color: _tealColor.withOpacity(0.5),
+                    color: _tealColor.withValues(alpha: 0.5),
                     width: 4,
                   ),
               },
@@ -435,7 +439,7 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
                 // Offset calculation: screen coordinate - (radar size / 2)
                 left: _markerScreenOffset!.dx - 100,
                 top: _markerScreenOffset!.dy - 100,
-                child: const IgnorePointer(child: _RadarScanner(size: 200)),
+                child: IgnorePointer(child: _RadarScanner(size: 200)),
               ),
 
             // Navigation and Info Panel
@@ -451,7 +455,7 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
                           CircleAvatar(
                             backgroundColor: Colors.white,
                             child: IconButton(
-                              icon: const Icon(
+                              icon: Icon(
                                 Icons.arrow_back,
                                 color: Colors.black,
                               ),
@@ -464,7 +468,7 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
                         ],
                       ),
                     ),
-                    const Spacer(),
+                    Spacer(),
                     _SearchingPanel(
                       booking: currentBooking,
                       vehicle: widget.vehicle ?? currentBooking?.vehicle,
@@ -505,7 +509,8 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
                       onCancelTap: () =>
                           handleBookingBack(context, booking: currentBooking),
                       destinationAddress:
-                          widget.destination?.address ?? 'Thuê theo giờ',
+                          widget.destination?.address ??
+                          context.l10n.hourlyHire,
                     ),
                   ],
                 ),
@@ -519,6 +524,8 @@ class _SearchingDriverPageState extends State<SearchingDriverPage> {
 
   bool _shouldShowDriverCard(BookingResponse? booking) {
     return booking?.driverOffer != null &&
+        booking?.bookingType == AppValues.bookingNow &&
+        booking?.bookingStatus == 'Searching' &&
         booking?.driverOffer?.offerStatus == 'DriverAccepted';
   }
 }
@@ -556,14 +563,14 @@ class _SearchingPanel extends StatelessWidget {
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 20,
-            offset: const Offset(0, 4),
+            offset: Offset(0, 4),
           ),
         ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           Container(
             width: 40,
             height: 4,
@@ -572,22 +579,22 @@ class _SearchingPanel extends StatelessWidget {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          const SizedBox(height: 22),
-          const Text(
-            BookingStrings.searchingDriver,
+          SizedBox(height: 22),
+          Text(
+            context.l10n.searchingDriver,
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
               color: Color(0xFF1A1A1A),
             ),
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: 4),
           Text(
             _statusText,
-            style: const TextStyle(fontSize: 14, color: Color(0xFF666666)),
+            style: TextStyle(fontSize: 14, color: Color(0xFF666666)),
           ),
 
-          const SizedBox(height: 18),
+          SizedBox(height: 18),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: _BookingSummary(
@@ -596,7 +603,7 @@ class _SearchingPanel extends StatelessWidget {
               fareEstimate: fareEstimate,
             ),
           ),
-          const SizedBox(height: 14),
+          SizedBox(height: 14),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: _CompactRouteInfo(
@@ -605,7 +612,7 @@ class _SearchingPanel extends StatelessWidget {
             ),
           ),
           if (onDriverPreviewTap != null) ...[
-            const SizedBox(height: 14),
+            SizedBox(height: 14),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: _DriverFoundCard(
@@ -615,7 +622,7 @@ class _SearchingPanel extends StatelessWidget {
               ),
             ),
           ],
-          const SizedBox(height: 24),
+          SizedBox(height: 24),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: SizedBox(
@@ -628,15 +635,15 @@ class _SearchingPanel extends StatelessWidget {
                     ? null
                     : onCancelTap,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFF2F2F2),
-                  foregroundColor: const Color(0xFFC62828),
+                  backgroundColor: Color(0xFFF2F2F2),
+                  foregroundColor: Color(0xFFC62828),
                   elevation: 0,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
                 icon: context.watch<BookingProvider>().isLoading
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(
@@ -644,12 +651,12 @@ class _SearchingPanel extends StatelessWidget {
                           color: Color(0xFFC62828),
                         ),
                       )
-                    : const Icon(Icons.close, size: 20),
+                    : Icon(Icons.close, size: 20),
                 label: Text(
                   context.watch<BookingProvider>().isLoading
-                      ? 'Đang hủy...'
-                      : BookingStrings.cancelBooking,
-                  style: const TextStyle(
+                      ? context.l10n.cancelling
+                      : context.l10n.cancelBooking,
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                   ),
@@ -657,13 +664,14 @@ class _SearchingPanel extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: 24),
         ],
       ),
     );
   }
 
   String get _statusText {
+    final l10n = LocaleProvider.currentLocalizations;
     if (booking?.matchingMessage != null &&
         booking!.matchingMessage!.trim().isNotEmpty) {
       final remaining = booking!.estimatedRemainingSeconds;
@@ -676,15 +684,19 @@ class _SearchingPanel extends StatelessWidget {
         final seconds = remaining % 60;
         final countdown =
             '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-        return '$cleanMessage - Còn $countdown';
+        return l10n.remainingCountdown(cleanMessage, countdown);
       }
 
       return booking!.matchingMessage!;
     }
 
     final bookingId = booking?.bookingId;
-    if (bookingId == null) return BookingStrings.estimatedWaitTime;
-    return 'Mã chuyến #$bookingId • ${booking?.bookingStatus ?? 'Searching'}';
+    if (bookingId == null) return l10n.estimatedWaitTime;
+    final status = TripStatusLocalizer.translate(
+      l10n,
+      booking?.bookingStatus ?? 'Searching',
+    );
+    return l10n.tripCodeWithStatus(bookingId, status);
   }
 }
 
@@ -703,37 +715,37 @@ class _DriverFoundCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final remaining = booking?.driverOffer?.customerConfirmRemainingSeconds;
     final countdownText = remaining != null && remaining > 0
-        ? ' • Còn $remaining giây'
+        ? ' • ${context.l10n.secondsRemaining(remaining)}'
         : '';
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF8E1),
+        color: Color(0xFFFFF8E1),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFFFECB3)),
+        border: Border.all(color: Color(0xFFFFECB3)),
       ),
       child: Column(
         children: [
           Row(
             children: [
-              const CircleAvatar(
+              CircleAvatar(
                 backgroundColor: Color(0xFFFFB300),
                 child: Icon(Icons.person_search_rounded, color: Colors.white),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Tài xế phù hợp đã sẵn sàng',
-                      style: const TextStyle(fontWeight: FontWeight.w800),
+                      context.l10n.suitableDriverReady,
+                      style: TextStyle(fontWeight: FontWeight.w800),
                     ),
-                    const SizedBox(height: 2),
+                    SizedBox(height: 2),
                     Text(
-                      'Xem hồ sơ và xác nhận thuê$countdownText.',
-                      style: const TextStyle(
+                      context.l10n.reviewProfileAndConfirm(countdownText),
+                      style: TextStyle(
                         fontSize: 12,
                         color: Color(0xFF666666),
                       ),
@@ -741,23 +753,23 @@ class _DriverFoundCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right_rounded, color: Color(0xFF006B70)),
+              Icon(Icons.chevron_right_rounded, color: Color(0xFF006B70)),
             ],
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           Row(
             children: [
               Expanded(
                 child: OutlinedButton(
                   onPressed: onTap,
-                  child: const Text('Xem hồ sơ'),
+                  child: Text(context.l10n.viewProfile),
                 ),
               ),
-              const SizedBox(width: 10),
+              SizedBox(width: 10),
               Expanded(
                 child: FilledButton(
                   onPressed: onConfirmTap,
-                  child: const Text('Xác nhận thuê'),
+                  child: Text(context.l10n.confirmHire),
                 ),
               ),
             ],
@@ -786,12 +798,12 @@ class _RadarScannerState extends State<_RadarScanner>
     super.initState();
     _pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 2),
+      duration: Duration(seconds: 2),
     )..repeat();
 
     _driverController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 4),
+      duration: Duration(seconds: 4),
     )..repeat();
   }
 
@@ -889,12 +901,12 @@ class _RadarScannerState extends State<_RadarScanner>
             opacity: opacity.clamp(0.0, 1.0),
             child: Container(
               padding: const EdgeInsets.all(4),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: Colors.white,
                 shape: BoxShape.circle,
                 boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.directions_car_rounded,
                 size: 14,
                 color: Color(0xFF006B70),
@@ -937,7 +949,7 @@ class _BookingSummary extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFEAF4F4),
+        color: Color(0xFFEAF4F4),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
@@ -948,23 +960,23 @@ class _BookingSummary extends StatelessWidget {
                 vehicle?.isMotorbike == true
                     ? Icons.directions_bike_rounded
                     : Icons.directions_car_rounded,
-                color: const Color(0xFF006B70),
+                color: Color(0xFF006B70),
               ),
-              const SizedBox(width: 10),
+              SizedBox(width: 10),
               Expanded(
                 child: Text(
                   vehicle == null
-                      ? 'Đang chờ tài xế nhận chuyến'
+                      ? context.l10n.waitingDriverAccept
                       : '${vehicle!.name} • ${vehicle!.plateNumber}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
+                  style: TextStyle(fontWeight: FontWeight.w700),
                 ),
               ),
               if (finalFare != null)
                 Text(
                   _formatCurrency(finalFare),
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Color(0xFF006B70),
                     fontWeight: FontWeight.w800,
                   ),
@@ -972,18 +984,18 @@ class _BookingSummary extends StatelessWidget {
             ],
           ),
           if (discount > 0 || promoCode != null) ...[
-            const Divider(height: 20),
+            Divider(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Giá gốc:',
+                Text(
+                  '${context.l10n.baseFare}:',
                   style: TextStyle(fontSize: 13, color: Color(0xFF666666)),
                 ),
                 if (originalFare != null)
                   Text(
                     _formatCurrency(originalFare),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       decoration: TextDecoration.lineThrough,
                     ),
@@ -994,15 +1006,17 @@ class _BookingSummary extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Khuyến mãi (${promoCode ?? 'Mã đã áp dụng'}):',
-                  style: const TextStyle(
+                  context.l10n.promotionWithCode(
+                    promoCode ?? context.l10n.appliedCode,
+                  ),
+                  style: TextStyle(
                     fontSize: 13,
                     color: Color(0xFF666666),
                   ),
                 ),
                 Text(
                   '-${_formatCurrency(discount)}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     color: Color(0xFFC62828),
                     fontWeight: FontWeight.bold,
@@ -1017,11 +1031,11 @@ class _BookingSummary extends StatelessWidget {
   }
 
   String _formatCurrency(double value) {
-    final formatter = value.round().toString().replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-      (Match m) => '${m[1]}.',
-    );
-    return '$formatterđ';
+    return NumberFormat.currency(
+      locale: LocaleProvider.currentLocale.toLanguageTag(),
+      symbol: 'VND',
+      decimalDigits: 0,
+    ).format(value);
   }
 }
 
@@ -1036,15 +1050,15 @@ class _CompactRouteInfo extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F9FA),
+        color: Color(0xFFF8F9FA),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
         children: [
           _LocationRow(
             icon: Icons.circle,
-            iconColor: const Color(0xFF006B70),
-            label: 'ĐIỂM ĐÓN',
+            iconColor: Color(0xFF006B70),
+            label: context.l10n.pickupPoint.toUpperCase(),
             address: pickup,
           ),
           Padding(
@@ -1056,8 +1070,8 @@ class _CompactRouteInfo extends StatelessWidget {
           ),
           _LocationRow(
             icon: Icons.location_on,
-            iconColor: const Color(0xFFC62828),
-            label: 'ĐIỂM ĐẾN',
+            iconColor: Color(0xFFC62828),
+            label: context.l10n.destinationPoint.toUpperCase(),
             address: destination,
           ),
         ],
@@ -1084,7 +1098,7 @@ class _LocationRow extends StatelessWidget {
     return Row(
       children: [
         Icon(icon, color: iconColor, size: 22),
-        const SizedBox(width: 12),
+        SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1099,7 +1113,7 @@ class _LocationRow extends StatelessWidget {
               ),
               Text(
                 address,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                   color: Color(0xFF1A1A1A),

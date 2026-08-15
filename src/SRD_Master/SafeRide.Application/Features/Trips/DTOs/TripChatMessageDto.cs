@@ -8,4 +8,17 @@ public sealed record TripChatMessageDto(
     string MessageType,
     string Message,
     string? ImageUrl,
-    DateTime SentAt);
+    DateTime SentAt,
+    IReadOnlyDictionary<string, string>? Translations = null,
+    string? SourceLanguage = null)
+{
+    public long BookingId { get; init; }
+
+    public Guid SenderId => SenderUserId;
+
+    public string MessagePreview => MessageType == "Image"
+        ? "Hình ảnh"
+        : Message;
+
+    public DateTime CreatedAt => SentAt;
+}

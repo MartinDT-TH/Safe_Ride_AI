@@ -1,3 +1,6 @@
+import '../../../../../core/localization/locale_provider.dart';
+import '../../../../../core/utils/api_date_time.dart';
+
 class DriverWalletModel {
   const DriverWalletModel({
     required this.availableBalance,
@@ -18,9 +21,11 @@ class DriverWalletModel {
         Map<String, dynamic>.from(json['income'] as Map),
       ),
       recentTransactions: (json['recentTransactions'] as List? ?? const [])
-          .map((item) => WalletTransactionModel.fromJson(
-                Map<String, dynamic>.from(item as Map),
-              ))
+          .map(
+            (item) => WalletTransactionModel.fromJson(
+              Map<String, dynamic>.from(item as Map),
+            ),
+          )
           .toList(growable: false),
       savedBankAccount: json['savedBankAccount'] is Map
           ? SavedBankAccountModel.fromJson(
@@ -49,9 +54,11 @@ class WalletIncomeModel {
       total: json['total'] as num? ?? 0,
       changePercentage: json['changePercentage'] as num?,
       chart: (json['chart'] as List? ?? const [])
-          .map((item) => WalletChartPointModel.fromJson(
-                Map<String, dynamic>.from(item as Map),
-              ))
+          .map(
+            (item) => WalletChartPointModel.fromJson(
+              Map<String, dynamic>.from(item as Map),
+            ),
+          )
           .toList(growable: false),
     );
   }
@@ -91,10 +98,12 @@ class WalletTransactionModel {
         type: json['type']?.toString() ?? '',
         amount: json['amount'] as num? ?? 0,
         isCredit: json['isCredit'] == true,
-        title: json['title']?.toString() ?? 'Giao dịch Ví',
-        createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '')
-                ?.toLocal() ??
-            DateTime.now(),
+        title:
+            json['title']?.toString() ??
+            LocaleProvider.currentLocalizations.wallet,
+        createdAt:
+            parseApiUtcDateTimeToUtc7(json['createdAt']) ??
+            toVietnamTime(DateTime.now()),
       );
 }
 
