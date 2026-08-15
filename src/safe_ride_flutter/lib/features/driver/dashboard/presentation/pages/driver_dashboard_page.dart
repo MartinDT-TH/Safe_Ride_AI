@@ -89,6 +89,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
   AppLatLng? _lastArrivalRouteRefreshOrigin;
   int? _renderedRouteTripId;
   int? _callSignalTripId;
+  int? _routeSignalTripId;
   bool _arrivalRouteRefreshInProgress = false;
   bool _incomingCallDialogOpen = false;
   bool _connectionReloadInProgress = false;
@@ -205,10 +206,12 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
 
     if (activeTrip != null) {
       _ensureTripCallHandler(activeTrip);
+      _ensureTripRouteHandler(activeTrip);
     }
 
     if (activeTrip == null) {
       _removeTripCallHandler();
+      _removeTripRouteHandler();
       if (_arrivalRoutePoints.isNotEmpty ||
           _tripRoutePoints.isNotEmpty ||
           _renderedRouteTripId != null) {
@@ -328,6 +331,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     _connectionReloadSubscription = null;
     _provider.removeListener(_onProviderUpdated);
     _removeTripCallHandler();
+    _removeTripRouteHandler();
     _stopLocationUpdates();
     super.dispose();
   }
@@ -351,6 +355,41 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
     if (tripId == null) return;
     _socketService.removeInAppCallOfferHandler(_callOfferHandlerKey(tripId));
     _callSignalTripId = null;
+  }
+
+  void _ensureTripRouteHandler(ActiveDriverTrip activeTrip) {
+    if (_routeSignalTripId == activeTrip.tripId) return;
+    _removeTripRouteHandler();
+    _routeSignalTripId = activeTrip.tripId;
+    _socketService.onTripRouteRecalculated((update) {
+      if (!mounted ||
+          update.tripId != activeTrip.tripId ||
+          _provider.activeTrip?.tripId != activeTrip.tripId) {
+        return;
+      }
+
+      try {
+        final points = decodePolyline(update.encodedPolyline);
+        if (points.length < 2) return;
+
+        setState(() {
+          _tripRoutePoints
+            ..clear()
+            ..addAll(points);
+        });
+      } on FormatException {
+        debugPrint('DriverDashboard: Invalid recalculated trip polyline.');
+      }
+    }, key: _tripRouteHandlerKey(activeTrip.tripId));
+  }
+
+  void _removeTripRouteHandler() {
+    final tripId = _routeSignalTripId;
+    if (tripId == null) return;
+    _socketService.removeTripRouteRecalculatedHandler(
+      _tripRouteHandlerKey(tripId),
+    );
+    _routeSignalTripId = null;
   }
 
   Future<void> _startInAppCall(ActiveDriverTrip trip) async {
@@ -455,6 +494,9 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
 
   static String _callOfferHandlerKey(int tripId) =>
       'driverDashboardCall:$tripId';
+
+  static String _tripRouteHandlerKey(int tripId) =>
+      'driverDashboardRoute:$tripId';
 
   void _startLocationUpdates() {
     _stopLocationUpdates();
