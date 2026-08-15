@@ -2459,4 +2459,29 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get offerCustomerConfirmed => 'Customer confirmed';
+
+  @override
+  String get driverEndTripRequestTitle => 'End trip request';
+
+  @override
+  String get driverEndTripRequestMessage =>
+      'The driver wants to end the trip now. If you agree, the fare will be based on the actual distance travelled, with a minimum charge of VND 2,000.';
+
+  @override
+  String get continueTrip => 'Continue trip';
+
+  @override
+  String get endTripRequestSent =>
+      'End trip request sent. Waiting for the customer to respond.';
+
+  @override
+  String get endTripRequestAccepted => 'The customer agreed to end the trip.';
+
+  @override
+  String get endTripRequestRejected =>
+      'The customer declined. The trip will continue.';
+
+  @override
+  String get endTripResponseFailed =>
+      'Could not respond to the end trip request. Please try again.';
 }

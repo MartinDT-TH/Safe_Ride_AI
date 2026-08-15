@@ -297,6 +297,8 @@ abstract final class ApiEndpoints {
   static const identityVerificationDocuments =
       '/identity-verification/documents';
   static String endTrip(int tripId) => '/trips/$tripId/end';
+  static String respondToEndTripRequest(int tripId) =>
+      '/trips/$tripId/end-response';
   static String customerReturnConfirmation(int tripId) =>
       '/trips/$tripId/return-confirmation/customer';
   static String driverReturnConfirmation(int tripId) =>

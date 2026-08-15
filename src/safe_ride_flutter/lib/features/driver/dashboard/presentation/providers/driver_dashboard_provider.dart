@@ -341,6 +341,14 @@ class DriverDashboardProvider extends ChangeNotifier {
       }
     }, key: 'driverDashboard');
 
+    _socketService.onTripEndRequestResponded((update) {
+      if (_activeTrip?.tripId != update.tripId) return;
+      _snackbarMessage = update.accepted == true
+          ? LocaleProvider.currentLocalizations.endTripRequestAccepted
+          : LocaleProvider.currentLocalizations.endTripRequestRejected;
+      notifyListeners();
+    }, key: 'driverDashboardEndRequest');
+
     _socketService.onTripPaymentUpdated((update) {
       if (_activeTrip?.tripId != update.tripId) {
         return;
@@ -449,6 +457,9 @@ class DriverDashboardProvider extends ChangeNotifier {
       }
     }
     _socketService.removeTripStatusChangedHandler('driverDashboard');
+    _socketService.removeTripEndRequestRespondedHandler(
+      'driverDashboardEndRequest',
+    );
     _socketService.removeTripPaymentUpdatedHandler('driverDashboardPayment');
     _socketService.removeDriverLocationUpdatedHandler('driverDashboardDemo');
     _socketService.removeBookingUpdatedHandler('driverDashboardBooking');
@@ -775,8 +786,7 @@ class DriverDashboardProvider extends ChangeNotifier {
     }
   }
 
-  /// Ends an IN_PROGRESS trip — moves it to WAITING_RETURN_CONFIRM.
-  /// Returns true on success. Does NOT set COMPLETED.
+  /// Requests customer approval before ending an IN_PROGRESS trip.
   Future<bool> endTripAsync() async {
     final trip = _activeTrip;
     final token = _accessToken;
@@ -796,7 +806,7 @@ class DriverDashboardProvider extends ChangeNotifier {
           headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
         ),
       );
-      _activeTrip = trip.copyWith(tripStatus: 'WAITING_RETURN_CONFIRM');
+      _snackbarMessage = LocaleProvider.currentLocalizations.endTripRequestSent;
       return true;
     } catch (e) {
       debugPrint('Failed to end trip: $e');

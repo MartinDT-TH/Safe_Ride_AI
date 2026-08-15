@@ -469,6 +469,11 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
                 mockDriver.DriverId,
                 trip.Id,
                 cancellationToken);
+            await tripStatusService.RespondToEndTripRequestAsync(
+                booking.CustomerId,
+                trip.Id,
+                accepted: true,
+                cancellationToken);
 
             logger.LogInformation("Trip {TripId} reached WAITING_RETURN_CONFIRM for mock driver {DriverId}", trip.Id, mockDriver.DriverId);
 

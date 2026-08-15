@@ -142,11 +142,6 @@ public sealed class TripStatusService : ITripStatusService
     {
         var trip = await _dbContext.Trips
             .Include(x => x.Booking)
-                .ThenInclude(x => x.BookingPromotions)
-            .Include(x => x.Booking)
-                .ThenInclude(x => x.PricingRule)
-            .Include(x => x.Booking)
-                .ThenInclude(x => x.SurgePricingRule)
             .FirstOrDefaultAsync(
                 x => x.Id == tripId && x.DriverId == driverId,
                 cancellationToken);
@@ -160,29 +155,97 @@ public sealed class TripStatusService : ITripStatusService
 
         if (trip.TripStatus != TripStatus.IN_PROGRESS)
         {
-            if (trip.TripStatus is TripStatus.WAITING_RETURN_CONFIRM
-                    or TripStatus.RETURN_CONFIRMED
-                    or TripStatus.WAITING_PAYMENT
-                    or TripStatus.COMPLETED)
-            {
-                return;
-            }
-
             throw new BookingException(
                 "trip.invalid_status_transition",
                 "Chi co the ket thuc chuyen khi chuyen dang di chuyen.",
                 409);
         }
 
-        await FinalizeTripAfterCustomerApprovalAsync(
-            trip,
-            driverId,
-            cancellationToken);
+        var requestKey = RedisKeys.TripEndRequest(trip.Id);
+        if (!string.IsNullOrWhiteSpace(await _redisService.GetAsync(requestKey)))
+        {
+            return;
+        }
 
-        await ApplyTripStatusAsync(
-            trip,
-            TripStatus.WAITING_RETURN_CONFIRM,
-            driverId,
+        var requestedAt = _dateTimeProvider.UtcNow;
+        await _redisService.SetAsync(
+            requestKey,
+            requestedAt.ToString("O"),
+            TimeSpan.FromHours(_options.CurrentValue.TripLiveTtlHours));
+
+        await _realtimeNotificationService.PublishTripEndRequestedAsync(
+            new TripEndRequestedEvent(
+                trip.Id,
+                trip.BookingId,
+                trip.Booking.CustomerId,
+                trip.DriverId,
+                requestedAt,
+                "Tài xế muốn kết thúc chuyến đi. Bạn có đồng ý không?"),
+            cancellationToken);
+    }
+
+    public async Task RespondToEndTripRequestAsync(
+        Guid customerId,
+        long tripId,
+        bool accepted,
+        CancellationToken cancellationToken)
+    {
+        var trip = await _dbContext.Trips
+            .Include(x => x.Booking)
+                .ThenInclude(x => x.BookingPromotions)
+            .Include(x => x.Booking)
+                .ThenInclude(x => x.PricingRule)
+            .Include(x => x.Booking)
+                .ThenInclude(x => x.SurgePricingRule)
+            .FirstOrDefaultAsync(
+                x => x.Id == tripId && x.Booking.CustomerId == customerId,
+                cancellationToken);
+        if (trip is null)
+        {
+            throw new BookingException(
+                "trip.not_found",
+                "Không tìm thấy chuyến đi của khách hàng.",
+                404);
+        }
+
+        var requestKey = RedisKeys.TripEndRequest(trip.Id);
+        if (trip.TripStatus != TripStatus.IN_PROGRESS
+            || string.IsNullOrWhiteSpace(await _redisService.GetAsync(requestKey)))
+        {
+            throw new BookingException(
+                "trip.end_request_not_pending",
+                "Không có yêu cầu kết thúc chuyến đang chờ xác nhận.",
+                409);
+        }
+
+        var respondedAt = _dateTimeProvider.UtcNow;
+        if (accepted)
+        {
+            await FinalizeTripAfterCustomerApprovalAsync(
+                trip,
+                customerId,
+                cancellationToken,
+                _options.CurrentValue.MinimumEarlyEndFare);
+
+            await ApplyTripStatusAsync(
+                trip,
+                TripStatus.WAITING_RETURN_CONFIRM,
+                customerId,
+                cancellationToken);
+        }
+        await _redisService.RemoveAsync(requestKey);
+
+        await _realtimeNotificationService.PublishTripEndRequestRespondedAsync(
+            new TripEndRequestRespondedEvent(
+                trip.Id,
+                trip.BookingId,
+                trip.Booking.CustomerId,
+                trip.DriverId,
+                accepted,
+                respondedAt,
+                accepted
+                    ? "Khách hàng đã đồng ý kết thúc chuyến đi."
+                    : "Khách hàng đã từ chối. Chuyến đi sẽ tiếp tục."),
             cancellationToken);
     }
 
@@ -701,7 +764,8 @@ public sealed class TripStatusService : ITripStatusService
     private async Task FinalizeActualTripAsync(
         Domain.Entities.Trip trip,
         DateTime endedAtUtc,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        decimal minimumFare)
     {
         if (trip.EndedAt.HasValue
             && trip.ActualDistanceKm.HasValue
@@ -732,7 +796,8 @@ public sealed class TripStatusService : ITripStatusService
         var fare = _tripFareFinalizationService.Calculate(
             trip,
             trip.ActualDistanceKm.Value,
-            trip.ActualDurationMinutes.Value);
+            trip.ActualDurationMinutes.Value,
+            minimumFare);
         trip.ActualFare = fare.ActualFare;
         trip.FinalFare = fare.FinalFare;
     }
@@ -740,7 +805,8 @@ public sealed class TripStatusService : ITripStatusService
     private async Task FinalizeTripAfterCustomerApprovalAsync(
         Domain.Entities.Trip trip,
         Guid actorId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        decimal minimumFare = 0m)
     {
         var lockAcquired = await _redisService.TryAcquireDistributedLockAsync(
             RedisKeys.TripTrackingFinalizeLock(trip.Id),
@@ -759,7 +825,11 @@ public sealed class TripStatusService : ITripStatusService
             trip,
             utcNow,
             cancellationToken);
-        await FinalizeActualTripAsync(trip, utcNow, cancellationToken);
+        await FinalizeActualTripAsync(
+            trip,
+            utcNow,
+            cancellationToken,
+            minimumFare);
     }
 
     private async Task<RouteEstimateResult?> TryGetFallbackRouteEstimateAsync(

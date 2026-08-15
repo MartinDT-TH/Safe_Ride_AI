@@ -249,4 +249,5 @@
   ,"ratingStars":"星{count}個","demoGpsMode":"GPSシミュレーションモード"
   ,"serviceDisabled":"端末の位置情報サービスを有効にしてください。","permissionRequired":"乗車地点を特定するため、SafeRideに位置情報の許可が必要です。","locationNotFound":"一致する場所が見つかりません。","destinationRequired":"目的地を入力してください。","statusLabel":"ステータス","selectPromotion":"プロモーションを選択","enterPromoCode":"プロモーションコードを入力","apply":"適用","expired":"期限切れ"
   ,"statusOnline":"オンライン","statusOffline":"オフライン","statusBusy":"配車中","offerSent":"ドライバーに送信済み","offerRejected":"拒否済み","offerCustomerConfirmed":"お客様が確認済み"
+  ,"driverEndTripRequestTitle":"乗車終了リクエスト","driverEndTripRequestMessage":"ドライバーが今すぐ乗車を終了したいと申し出ています。同意すると、実際の走行距離に基づいて最低2,000 VNDの料金が計算されます。","continueTrip":"乗車を続ける","endTripRequestSent":"終了リクエストを送信しました。お客様の確認を待っています。","endTripRequestAccepted":"お客様が乗車終了に同意しました。","endTripRequestRejected":"お客様が拒否しました。乗車を続けます。","endTripResponseFailed":"終了リクエストに応答できませんでした。もう一度お試しください。"
 }

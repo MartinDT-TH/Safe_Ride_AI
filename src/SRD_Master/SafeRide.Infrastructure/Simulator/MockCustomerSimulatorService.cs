@@ -320,6 +320,11 @@ public sealed class MockCustomerSimulatorService : BackgroundService
                 if (trip is null || trip.TripStatus == TripStatus.CANCELLED) return;
 
                 await tripStatusService.EndTripAsync(driverId, trip.Id, cancellationToken);
+                await tripStatusService.RespondToEndTripRequestAsync(
+                    booking.CustomerId,
+                    trip.Id,
+                    accepted: true,
+                    cancellationToken);
                 _logger.LogInformation("DemoFlow ended trip {TripId} for real driver {DriverId}; waiting for return confirmation", trip.Id, driverId);
 
                 if (_simulatorOptionsMonitor.CurrentValue.MockCustomerAutoConfirmDriver)

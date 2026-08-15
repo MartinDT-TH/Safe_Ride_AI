@@ -72,6 +72,51 @@ public sealed class SignalRRealtimeNotificationServiceTests
     }
 
     [Fact]
+    public async Task PublishTripEndRequestedAsync_SendsToCustomer()
+    {
+        var clients = new RecordingHubClients();
+        var service = new SignalRRealtimeNotificationService(
+            new HubContextFake(clients));
+        var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+
+        await service.PublishTripEndRequestedAsync(
+            new TripEndRequestedEvent(
+                42,
+                24,
+                customerId,
+                Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+                DateTime.UtcNow,
+                "Yêu cầu kết thúc chuyến"));
+
+        var send = Assert.Single(clients.Sends);
+        Assert.Equal(RealtimeGroups.User(customerId), send.GroupName);
+        Assert.Equal("TripEndRequested", send.Method);
+    }
+
+    [Fact]
+    public async Task PublishTripEndRequestRespondedAsync_SendsToDriver()
+    {
+        var clients = new RecordingHubClients();
+        var service = new SignalRRealtimeNotificationService(
+            new HubContextFake(clients));
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+
+        await service.PublishTripEndRequestRespondedAsync(
+            new TripEndRequestRespondedEvent(
+                42,
+                24,
+                Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                driverId,
+                Accepted: false,
+                DateTime.UtcNow,
+                "Chuyến đi tiếp tục"));
+
+        var send = Assert.Single(clients.Sends);
+        Assert.Equal(RealtimeGroups.Driver(driverId), send.GroupName);
+        Assert.Equal("TripEndRequestResponded", send.Method);
+    }
+
+    [Fact]
     public async Task PublishDriverLocationUpdatedAsync_WithActiveTrip_SendsOnlyToTripGroup()
     {
         var clients = new RecordingHubClients();
