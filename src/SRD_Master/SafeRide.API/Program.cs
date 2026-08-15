@@ -53,6 +53,11 @@ builder.Services
             return new BadRequestObjectResult(problem);
         };
     });
+builder.Services.AddScoped<AdminStaffUseCaseDenyFilter>();
+builder.Services.Configure<MvcOptions>(options =>
+{
+    options.Filters.Add<AdminStaffUseCaseDenyFilter>();
+});
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
@@ -94,6 +99,7 @@ var app = builder.Build();
 
 await app.Services.ApplyDevelopmentMigrationsAsync(app.Environment);
 await app.Services.SeedAdminIdentityAsync();
+await app.Services.SeedStaffIdentityAsync();
 await app.Services.SeedIdentityAsync();
 await app.Services.SeedCustomerIdentityAsync();
 
