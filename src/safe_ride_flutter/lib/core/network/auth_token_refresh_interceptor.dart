@@ -51,6 +51,15 @@ class AuthTokenRefreshInterceptor extends Interceptor {
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     final response = err.response;
     final request = err.requestOptions;
+    final code = _extractErrorCode(response?.data);
+    if (_sessionManager.isTerminalAuthCode(code)) {
+      await _sessionManager.clearSession(
+        notify: true,
+        reasonMessage: _extractErrorMessage(response?.data),
+      );
+      handler.next(err);
+      return;
+    }
 
     if (response?.statusCode != 401 ||
         request.extra[_retriedKey] == true ||
@@ -60,7 +69,6 @@ class AuthTokenRefreshInterceptor extends Interceptor {
       return;
     }
 
-    final code = _extractErrorCode(response?.data);
     final traceId = _extractTraceId(response?.data);
     _debugLog(
       'Auth 401 path=${request.path} code=${code ?? 'unknown'} '
@@ -187,6 +195,14 @@ class AuthTokenRefreshInterceptor extends Interceptor {
   String? _extractTraceId(Object? data) {
     if (data is Map && data['traceId'] != null) {
       return data['traceId'].toString();
+    }
+    return null;
+  }
+
+  String? _extractErrorMessage(Object? data) {
+    if (data is Map) {
+      final detail = data['detail'] ?? data['message'] ?? data['title'];
+      return detail?.toString();
     }
     return null;
   }

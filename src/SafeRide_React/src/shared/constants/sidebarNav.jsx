@@ -1,5 +1,5 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faIdCardAlt, faUsers, faClipboardList, faRoute, faExchangeAlt, faTags, faDollarSign, faChartBar, faBell, faChartPie, faQuestionCircle, faSignOutAlt, } from '@fortawesome/free-solid-svg-icons';
+import { faIdCardAlt, faUsers, faClipboardList, faRoute, faExchangeAlt, faTags, faDollarSign, faChartBar, faBell, faChartPie, faQuestionCircle, faSignOutAlt, faBan, } from '@fortawesome/free-solid-svg-icons';
 import { faClipboardCheck, faCreditCard, faStar, faPaperPlane } from '@fortawesome/free-solid-svg-icons';
 /** Raw sidebar nav definitions (without active state — that comes from Redux) */
 export const SIDEBAR_NAV_ITEMS = [
@@ -10,6 +10,7 @@ export const SIDEBAR_NAV_ITEMS = [
     { id: 'transactions', label: 'Giao dịch', icon: <FontAwesomeIcon icon={faExchangeAlt}/> },
     { id: 'promotions', label: 'Khuyến mãi', icon: <FontAwesomeIcon icon={faTags}/> },
     { id: 'pricing', label: 'Cấu hình Giá', icon: <FontAwesomeIcon icon={faDollarSign}/> },
+    { id: 'account-bans', label: 'Khóa tự động', icon: <FontAwesomeIcon icon={faBan}/> },
     { id: 'revenue', label: 'Doanh thu', icon: <FontAwesomeIcon icon={faChartBar}/> },
     { id: 'notifications', label: 'Thông báo', icon: <FontAwesomeIcon icon={faBell}/> },
     { id: 'reports', label: 'Báo cáo', icon: <FontAwesomeIcon icon={faChartPie}/> },

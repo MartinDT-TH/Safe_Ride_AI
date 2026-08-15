@@ -418,6 +418,63 @@ class SystemNotificationUpdate {
   }
 }
 
+class AccountRestrictionUpdate {
+  const AccountRestrictionUpdate({
+    required this.userId,
+    required this.banType,
+    required this.reason,
+    required this.message,
+    this.startedAt,
+    this.endsAt,
+    this.retryAfterSeconds,
+  });
+
+  final String userId;
+  final String banType;
+  final String reason;
+  final String message;
+  final DateTime? startedAt;
+  final DateTime? endsAt;
+  final int? retryAfterSeconds;
+
+  static AccountRestrictionUpdate? fromSignalRArguments(
+    List<Object?>? arguments,
+  ) {
+    if (arguments == null || arguments.isEmpty || arguments.first is! Map) {
+      return null;
+    }
+
+    final data = Map<String, dynamic>.from(arguments.first as Map);
+    final userId = _value(data, 'userId')?.toString();
+    final message = _value(data, 'message')?.toString();
+    if (userId == null || userId.isEmpty || message == null || message.isEmpty) {
+      return null;
+    }
+
+    return AccountRestrictionUpdate(
+      userId: userId,
+      banType: _value(data, 'banType')?.toString() ?? 'Restricted',
+      reason: _value(data, 'reason')?.toString() ?? message,
+      message: message,
+      startedAt: _parseDate(_value(data, 'startedAt')),
+      endsAt: _parseDate(_value(data, 'endsAt')),
+      retryAfterSeconds:
+          (_value(data, 'retryAfterSeconds') as num?)?.toInt(),
+    );
+  }
+
+  static Object? _value(Map<String, dynamic> data, String key) {
+    final pascalKey = key.isEmpty
+        ? key
+        : '${key[0].toUpperCase()}${key.substring(1)}';
+    return data[key] ?? data[pascalKey];
+  }
+
+  static DateTime? _parseDate(Object? value) {
+    return value == null ? null : DateTime.tryParse(value.toString());
+  }
+}
+
 class BookingUpdate {
   const BookingUpdate({
     required this.bookingId,
@@ -659,6 +716,7 @@ class SocketService {
   bool _bookingListenerAttached = false;
   bool _sharedTripListenersAttached = false;
   bool _systemNotificationListenerAttached = false;
+  bool _accountRestrictionListenerAttached = false;
   bool _inAppCallListenerAttached = false;
   final List<void Function()> _connectionLostHandlers = [];
   bool _intentionalDisconnect = false;
@@ -788,6 +846,7 @@ class SocketService {
       _bookingListenerAttached = false;
       _sharedTripListenersAttached = false;
       _systemNotificationListenerAttached = false;
+      _accountRestrictionListenerAttached = false;
       _inAppCallListenerAttached = false;
       _joinedTripGroups.clear();
       _joinedBookingGroups.clear();
@@ -811,6 +870,7 @@ class SocketService {
       }
     }
 
+    _attachAccountRestrictionListener();
     if (_driverLocationHandlers.isNotEmpty &&
         !_driverLocationListenerAttached) {
       _attachDriverLocationListener();
@@ -1212,6 +1272,28 @@ class SocketService {
     _systemNotificationHandlers.remove(key);
   }
 
+  void _attachAccountRestrictionListener() {
+    if (_connection == null || _accountRestrictionListenerAttached) {
+      return;
+    }
+
+    _accountRestrictionListenerAttached = true;
+    _connection!.on('AccountRestrictionApplied', (arguments) {
+      final update = AccountRestrictionUpdate.fromSignalRArguments(arguments);
+      final message =
+          update?.message ?? LocaleProvider.currentLocalizations.sessionExpired;
+      final sessionManager = _sessionManager;
+      if (sessionManager != null) {
+        unawaited(
+          sessionManager.clearSession(
+            notify: true,
+            reasonMessage: message,
+          ),
+        );
+      }
+    });
+  }
+
   void onInAppCallOffer(
     void Function(InAppCallSignal signal) handler, {
     String key = 'default',
@@ -1492,6 +1574,7 @@ class SocketService {
     _bookingListenerAttached = false;
     _sharedTripListenersAttached = false;
     _systemNotificationListenerAttached = false;
+    _accountRestrictionListenerAttached = false;
     _inAppCallListenerAttached = false;
     _driverLocationHandlers.clear();
     _tripRouteRecalculatedHandlers.clear();

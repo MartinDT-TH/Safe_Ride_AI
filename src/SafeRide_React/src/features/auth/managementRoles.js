@@ -13,6 +13,7 @@ export const ADMIN_SIDEBAR_IDS = [
   'transactions',
   'promotions',
   'pricing',
+  'account-bans',
   'revenue',
   'notifications',
   'reports',
