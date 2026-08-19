@@ -13,6 +13,7 @@ import useFetch from '../shared/hooks/useFetch';
 import ActionFeedback from '../shared/components/ActionFeedback/ActionFeedback';
 import Pagination from '../shared/components/Pagination/Pagination';
 import StatusBadge from '../shared/components/StatusBadge/StatusBadge';
+import { Select } from '../shared/components/Select';
 import NotificationApproveDialog from '../features/notifications/components/NotificationApproveDialog';
 import NotificationRejectDialog from '../features/notifications/components/NotificationRejectDialog';
 import {
@@ -358,28 +359,28 @@ function NotificationsPage() {
                             <div className="notifications-filters">
                                 <label className="notifications-field">
                                     <span>Trạng thái</span>
-                                    <select value={filters.status} onChange={(event) => handleFilterChange('status', event.target.value)}>
+                                    <Select value={filters.status} onChange={(event) => handleFilterChange('status', event.target.value)}>
                                         <option value="all">Tất cả</option>
                                         <option value="Pending">Đang chờ</option>
                                         <option value="Approved">Đã duyệt</option>
                                         <option value="Rejected">Đã từ chối</option>
-                                    </select>
+                                    </Select>
                                 </label>
                                 <label className="notifications-field">
                                     <span>Loại thông báo</span>
-                                    <select value={filters.type} onChange={(event) => handleFilterChange('type', event.target.value)}>
+                                    <Select value={filters.type} onChange={(event) => handleFilterChange('type', event.target.value)}>
                                         {TYPE_OPTIONS.map((option) => (
                                             <option key={option.value} value={option.value}>{option.label}</option>
                                         ))}
-                                    </select>
+                                    </Select>
                                 </label>
                                 <label className="notifications-field">
                                     <span>Đối tượng nhận</span>
-                                    <select value={filters.audience} onChange={(event) => handleFilterChange('audience', event.target.value)}>
+                                    <Select value={filters.audience} onChange={(event) => handleFilterChange('audience', event.target.value)}>
                                         {AUDIENCE_FILTER_OPTIONS.map((option) => (
                                             <option key={option.value} value={option.value}>{option.label}</option>
                                         ))}
-                                    </select>
+                                    </Select>
                                 </label>
                             </div>
 
@@ -520,7 +521,7 @@ function NotificationsPage() {
                                     <label className="notification-send__label" htmlFor="notification-type">
                                         Loại thông báo
                                     </label>
-                                    <select
+                                    <Select
                                         id="notification-type"
                                         className="notification-send__select"
                                         value={sendForm.notificationType}
@@ -529,7 +530,7 @@ function NotificationsPage() {
                                         {SEND_TYPE_OPTIONS.map((option) => (
                                             <option key={option.value} value={option.value}>{option.label}</option>
                                         ))}
-                                    </select>
+                                    </Select>
                                 </section>
 
                                 <section className="notification-send__fields">

@@ -1,13 +1,10 @@
 import { forwardRef } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faArrowUpRightFromSquare, faBuildingColumns, faCalendarDays, faChevronDown, faEllipsisVertical, faFilter, faMoneyBill } from '@fortawesome/free-solid-svg-icons';
-import DatePicker, { registerLocale } from 'react-datepicker';
-import { vi } from 'date-fns/locale/vi';
 import { Pagination, StatusBadge } from '../../../shared/components';
+import { DatePicker } from '../../../shared/components/DatePicker';
+import { Select } from '../../../shared/components/Select';
 import { STATUS_META } from '../transactionConstants';
-import 'react-datepicker/dist/react-datepicker.css';
-
-registerLocale('vi', vi);
 
 const moneyFormatter = new Intl.NumberFormat('vi-VN');
 
@@ -26,12 +23,12 @@ function TransactionTable({ transactions, filters, onFilterChange, currentPage, 
       <div className="transaction-filters">
         <label className="transaction-field">
           <span>Trạng thái</span>
-          <select value={filters.status} onChange={(event) => onFilterChange('status', event.target.value)}>
+          <Select value={filters.status} onChange={(event) => onFilterChange('status', event.target.value)}>
             <option value="all">Tất cả trạng thái</option>
             <option value="success">Thành công</option>
             <option value="pending">Đang xử lý</option>
             <option value="failed">Thất bại</option>
-          </select>
+          </Select>
         </label>
         <label className="transaction-field">
           <span>Khoảng ngày</span>
@@ -57,11 +54,11 @@ function TransactionTable({ transactions, filters, onFilterChange, currentPage, 
         </label>
         <label className="transaction-field">
           <span>Phương thức</span>
-          <select value={filters.method} onChange={(event) => onFilterChange('method', event.target.value)}>
+          <Select value={filters.method} onChange={(event) => onFilterChange('method', event.target.value)}>
             <option value="all">Tất cả phương thức</option>
             <option value="QR">QR / PayOS</option>
             <option value="CASH">Tiền mặt</option>
-          </select>
+          </Select>
         </label>
         <button type="button" className="advanced-filter-btn">
           <FontAwesomeIcon icon={faFilter} />

@@ -15,6 +15,7 @@ import {
 import { AdminLayout } from '../../../shared/layouts/AdminLayout';
 import useAdminSearch from '../../../shared/hooks/useAdminSearch';
 import useFetch from '../../../shared/hooks/useFetch';
+import { Select } from '../../../shared/components/Select';
 import {
     createAdminPricingRule,
     formatPricingMoney,
@@ -264,11 +265,11 @@ function AdminPricingRulesPage() {
                         <div className="admin-pricing-panel-actions">
                             <label className="admin-pricing-status-filter">
                                 <FontAwesomeIcon icon={faFilter} />
-                                <select value={status} onChange={handleStatusChange}>
+                                <Select value={status} onChange={handleStatusChange}>
                                     <option value="all">Tất cả trạng thái</option>
                                     <option value="active">Đang hoạt động</option>
                                     <option value="inactive">Tạm tắt</option>
-                                </select>
+                                </Select>
                             </label>
                             <button type="button" onClick={exportCsv} disabled={items.length === 0}>
                                 <FontAwesomeIcon icon={faDownload} />
@@ -454,24 +455,24 @@ function PricingRulePanel({
                     <div className="admin-pricing-form-section">
                         <label>
                             <span>Hạng xe</span>
-                            <select name="vehicleClass" value={values.vehicleClass} onChange={handleInputChange}>
+                            <Select name="vehicleClass" value={values.vehicleClass} onChange={handleInputChange}>
                                 <option value="A1">Hạng A1</option>
                                 <option value="A">Hạng A</option>
                                 <option value="B">Hạng B</option>
-                            </select>
+                            </Select>
                             {errors.vehicleClass && <small>{errors.vehicleClass}</small>}
                         </label>
 
                         <label>
                             <span>Dịch vụ</span>
-                            <select name="serviceTypeId" value={values.serviceTypeId} onChange={handleInputChange}>
+                            <Select name="serviceTypeId" value={values.serviceTypeId} onChange={handleInputChange}>
                                 <option value="">Chọn dịch vụ</option>
                                 {serviceTypes.map((serviceType) => (
                                     <option key={serviceType.id} value={serviceType.id}>
                                         {serviceType.serviceLabel}
                                     </option>
                                 ))}
-                            </select>
+                            </Select>
                             {errors.serviceTypeId && <small>{errors.serviceTypeId}</small>}
                         </label>
                     </div>

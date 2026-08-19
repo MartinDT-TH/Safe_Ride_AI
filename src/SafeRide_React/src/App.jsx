@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react';
 import { useEffect } from 'react';
 import { useAppSelector } from './app/hooks';
 import { useAppDispatch } from './app/hooks';
-import { setActiveSidebar } from './features/ui/uiSlice';
+import { setActiveSidebar } from './slices/uiSlice';
 import {
     getCurrentManagementRole,
     getDefaultManagementSidebarId,

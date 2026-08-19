@@ -1,7 +1,17 @@
-import './Button.css';
-function Button({ variant = 'primary', children, className = '', ...buttonProps }) {
-    return (<button className={`btn btn--${variant} ${className}`.trim()} {...buttonProps}>
+import "./Button.css";
+function Button({
+  variant = "primary",
+  children,
+  className = "",
+  ...buttonProps
+}) {
+  return (
+    <button
+      className={`btn btn--${variant} ${className}`.trim()}
+      {...buttonProps}
+    >
       {children}
-    </button>);
+    </button>
+  );
 }
 export default Button;

@@ -1,17 +1,23 @@
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faCar } from '@fortawesome/free-solid-svg-icons';
-import { filterManagementSidebarItems, getCurrentManagementRole, MANAGEMENT_ROLES } from '../../../features/auth/managementRoles';
-import './Sidebar.css';
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faCar } from "@fortawesome/free-solid-svg-icons";
+import {
+  filterManagementSidebarItems,
+  getCurrentManagementRole,
+  MANAGEMENT_ROLES,
+} from "../../../features/auth/managementRoles";
+import "./Sidebar.css";
 function Sidebar({ items, footerItems = [] }) {
-    items = filterManagementSidebarItems(items);
-    const consoleLabel = getCurrentManagementRole() === MANAGEMENT_ROLES.staff
-        ? 'Staff Console'
-        : 'Admin Console';
-    return (<aside className="sidebar" id="sidebar">
+  items = filterManagementSidebarItems(items);
+  const consoleLabel =
+    getCurrentManagementRole() === MANAGEMENT_ROLES.staff
+      ? "Staff Console"
+      : "Admin Console";
+  return (
+    <aside className="sidebar" id="sidebar">
       {/* Logo */}
       <div className="sidebar-logo" id="sidebar-logo">
         <div className="sidebar-logo-icon">
-          <FontAwesomeIcon icon={faCar} size="lg"/>
+          <FontAwesomeIcon icon={faCar} size="lg" />
         </div>
         <div className="sidebar-logo-text">
           <span className="sidebar-logo-title">SafeRide</span>
@@ -22,22 +28,40 @@ function Sidebar({ items, footerItems = [] }) {
       {/* Main nav */}
       <nav className="sidebar-nav" id="sidebar-nav">
         <ul className="sidebar-menu">
-          {items.map((item) => (<li key={item.id}>
-              <button id={`nav-${item.id}`} className={`sidebar-item${item.active ? ' sidebar-item--active' : ''}`} onClick={item.onClick} type="button">
+          {items.map((item) => (
+            <li key={item.id}>
+              <button
+                id={`nav-${item.id}`}
+                className={`sidebar-item${item.active ? " sidebar-item--active" : ""}`}
+                onClick={item.onClick}
+                type="button"
+              >
                 <span className="sidebar-item-icon">{item.icon}</span>
                 <span className="sidebar-item-label">{item.label}</span>
               </button>
-            </li>))}
+            </li>
+          ))}
         </ul>
       </nav>
 
       {/* Footer */}
-      {footerItems.length > 0 && (<div className="sidebar-footer" id="sidebar-footer">
-          {footerItems.map((item) => (<button key={item.id} id={`nav-${item.id}`} className={`sidebar-item sidebar-item--footer${item.variant === 'danger' ? ' sidebar-item--danger' : ''}`} onClick={item.onClick} type="button">
+      {footerItems.length > 0 && (
+        <div className="sidebar-footer" id="sidebar-footer">
+          {footerItems.map((item) => (
+            <button
+              key={item.id}
+              id={`nav-${item.id}`}
+              className={`sidebar-item sidebar-item--footer${item.variant === "danger" ? " sidebar-item--danger" : ""}`}
+              onClick={item.onClick}
+              type="button"
+            >
               <span className="sidebar-item-icon">{item.icon}</span>
               <span className="sidebar-item-label">{item.label}</span>
-            </button>))}
-        </div>)}
-    </aside>);
+            </button>
+          ))}
+        </div>
+      )}
+    </aside>
+  );
 }
 export default Sidebar;

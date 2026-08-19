@@ -1,0 +1,122 @@
+.shared-select {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  color: #263638;
+  font: inherit;
+}
+
+.shared-select__trigger {
+  display: flex;
+  width: 100%;
+  min-height: 42px;
+  padding: 0 14px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #cbd7d9;
+  border-radius: 10px;
+  color: #263638;
+  background: #fff;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
+}
+
+.shared-select__trigger:hover:not(:disabled) {
+  border-color: #65aeb3;
+  background: #fbfefe;
+}
+
+.shared-select__trigger:focus-visible,
+.shared-select--open .shared-select__trigger {
+  border-color: #008995;
+  outline: 0;
+  box-shadow: 0 0 0 4px rgba(0, 137, 149, .12);
+}
+
+.shared-select__trigger[aria-invalid='true'] {
+  border-color: #c43b3b;
+}
+
+.shared-select__trigger > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shared-select__trigger > svg {
+  flex: 0 0 auto;
+  color: #607678;
+  font-size: 12px;
+  transition: transform .18s ease;
+}
+
+.shared-select--open .shared-select__trigger > svg {
+  transform: rotate(180deg);
+}
+
+.shared-select__trigger:disabled {
+  color: #94a1a2;
+  background: #f1f4f4;
+  cursor: not-allowed;
+}
+
+.shared-select__menu {
+  position: fixed;
+  z-index: 1000;
+  overflow-y: auto;
+  max-height: 280px;
+  padding: 6px;
+  border: 1px solid #d4dfe0;
+  border-radius: 12px;
+  background: #fff;
+  color: #263638;
+  font-family: var(--sr-font, inherit);
+  font-size: 14px;
+  box-shadow: 0 16px 38px rgba(19, 55, 59, .18);
+}
+
+.shared-select__option {
+  display: flex;
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 11px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: 8px;
+  color: #2f3c3e;
+  background: transparent;
+  font: inherit;
+  font-weight: 550;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.shared-select__option > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shared-select__option--active,
+.shared-select__option:hover {
+  color: #006f78;
+  background: #e8f4f4;
+}
+
+.shared-select__option[aria-selected='true'] {
+  color: #006f78;
+  font-weight: 750;
+}
+
+.shared-select__option > svg {
+  color: #008995;
+  font-size: 12px;
+}
+
+.shared-select__option:disabled {
+  color: #a6b0b1;
+  cursor: not-allowed;
+}

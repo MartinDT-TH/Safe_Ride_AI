@@ -73,7 +73,10 @@ public sealed class JwtTokenService : IJwtTokenService
 
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
 
-        var accessTokenLifetime = roles.Contains("Admin", StringComparer.OrdinalIgnoreCase)
+        var hasManagementRole = roles.Any(role =>
+            string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(role, "Staff", StringComparison.OrdinalIgnoreCase));
+        var accessTokenLifetime = hasManagementRole
             ? TimeSpan.FromDays(_options.AdminAccessTokenDays)
             : TimeSpan.FromMinutes(_options.AccessTokenMinutes);
 
