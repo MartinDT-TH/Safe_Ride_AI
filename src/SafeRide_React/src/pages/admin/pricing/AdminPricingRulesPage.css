@@ -213,7 +213,7 @@
     font-weight: 800;
 }
 
-.admin-pricing-status-filter select {
+.admin-pricing-status-filter .shared-select__trigger {
     border: 0;
     color: #31383a;
     background: transparent;
@@ -460,7 +460,7 @@
 }
 
 .admin-pricing-form input,
-.admin-pricing-form select {
+.admin-pricing-form .shared-select__trigger {
     width: 100%;
     height: 46px;
     padding: 0 12px;
@@ -472,7 +472,7 @@
 }
 
 .admin-pricing-form input:focus,
-.admin-pricing-form select:focus {
+.admin-pricing-form .shared-select__trigger:focus {
     border-color: #69aeb4;
     outline: 3px solid rgba(0, 118, 130, 0.1);
 }

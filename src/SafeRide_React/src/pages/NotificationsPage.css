@@ -181,8 +181,8 @@
   color: var(--sr-gray-600);
 }
 
-.notifications-field select,
-.notification-send__select,
+.notifications-field .shared-select__trigger,
+.notification-send__select .shared-select__trigger,
 .notification-send__input,
 .notification-send__textarea,
 .notification-dialog__field textarea {
@@ -195,8 +195,8 @@
   outline: none;
 }
 
-.notifications-field select,
-.notification-send__select,
+.notifications-field .shared-select__trigger,
+.notification-send__select .shared-select__trigger,
 .notification-send__input {
   min-height: 48px;
   padding: 0 14px;
@@ -208,8 +208,8 @@
   resize: vertical;
 }
 
-.notifications-field select:focus,
-.notification-send__select:focus,
+.notifications-field .shared-select__trigger:focus,
+.notification-send__select .shared-select__trigger:focus,
 .notification-send__input:focus,
 .notification-send__textarea:focus,
 .notification-dialog__field textarea:focus {

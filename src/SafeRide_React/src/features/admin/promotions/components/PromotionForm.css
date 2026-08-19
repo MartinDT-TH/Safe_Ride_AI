@@ -67,7 +67,7 @@
 }
 
 .promotion-form-page-field input,
-.promotion-form-page-field select {
+.promotion-form-page-field .shared-select__trigger {
     width: 100%;
     min-width: 0;
     height: 42px;
@@ -81,13 +81,13 @@
 }
 
 .promotion-form-page-field input:focus,
-.promotion-form-page-field select:focus {
+.promotion-form-page-field .shared-select__trigger:focus {
     border-color: #4d9da5;
     outline: 3px solid rgba(0, 118, 130, 0.1);
 }
 
 .promotion-form-page-field input[aria-invalid='true'],
-.promotion-form-page-field select[aria-invalid='true'] {
+.promotion-form-page-field .shared-select__trigger[aria-invalid='true'] {
     border-color: #c54b4b;
 }
 
