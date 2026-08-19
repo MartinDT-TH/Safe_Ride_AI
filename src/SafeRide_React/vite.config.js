@@ -12,10 +12,17 @@ export default defineConfig({
     ],
     server: {
         proxy: {
-            '/api': apiTarget,
-            '/uploads': apiTarget,
+            '/api': {
+                target: apiTarget,
+                changeOrigin: true,
+            },
+            '/uploads': {
+                target: apiTarget,
+                changeOrigin: true,
+            },
             '/hubs': {
                 target: apiTarget,
+                changeOrigin: true,
                 ws: true,
             },
         },

@@ -15,7 +15,7 @@ These instructions apply to every coding agent working in this repository, inclu
 
 ## 2. Architecture Overview
 
-SafeRide is a modular monolith deployed as one ASP.NET Core host, with a Flutter mobile client.
+SafeRide is a modular monolith deployed as one ASP.NET Core host, with a Flutter mobile client and a React administration web client.
 
 Production features follow Clean Architecture boundaries. Development simulators may use explicitly isolated orchestration shortcuts and must not be treated as production architecture patterns.
 
@@ -45,6 +45,13 @@ Flutter:
 
 - App root: `src/safe_ride_flutter`
 - Uses Provider, GetIt, Dio, SignalR client, Google Maps/VietMap services, and feature-based folders.
+
+React administration web client:
+
+- App root: `src/SafeRide_React`
+- Uses React, Vite, Redux Toolkit, React Router, SignalR, Chart.js, and `react-datepicker`.
+- Uses Redux Toolkit for shared application state and async request state, while retaining feature-based folders for domain UI.
+- Main structure: `src/app`, `src/slices`, `src/thunks`, `src/services`, `src/features`, `src/pages`, and `src/shared`.
 
 Before editing, locate the existing execution path and reuse established project patterns.
 
@@ -427,7 +434,9 @@ Rules:
 - Preserve existing data compatibility whenever practical.
 - Use explicit transactions for multi-record durable state changes when partial completion is unsafe.
 
-## 17. Flutter Conventions
+## 17. Frontend Conventions
+
+### Flutter
 
 - Follow existing Provider, GetIt, Dio, routing, theme, localization, and feature-folder patterns.
 - Do not call backend services directly from widgets when an existing service or provider layer owns that responsibility.
@@ -441,6 +450,66 @@ Rules:
 - Do not embed secrets or production-only endpoints directly in Dart source.
 - Preserve existing responsive behavior and Android compatibility unless the task says otherwise.
 - For cross-cutting API changes, verify backend serialization and Flutter consumption together.
+
+### React Administration Web Client
+
+The current React organization is **Redux Toolkit plus feature-based UI**. Redux Toolkit is the state-management implementation; feature folders are the UI organization. Do not describe these as mutually exclusive or reorganize the whole application merely to make every file Redux-owned.
+
+Follow this async data flow unless an existing path has a documented reason to differ:
+
+```text
+Page or component
+  -> dispatch(createAsyncThunk)
+  -> service/API client
+  -> backend
+  -> fulfilled/rejected action
+  -> slice extraReducers
+  -> Redux store
+  -> selector
+  -> component re-render
+```
+
+Responsibilities:
+
+- `src/app`: store configuration, typed/shared Redux hooks, providers, and application-level composition.
+- `src/slices`: centralized Redux state and reducers. Keep `authSlice`, `apiSlice`, and `uiSlice` responsibilities distinct.
+- `src/thunks`: async Redux orchestration with `createAsyncThunk`; normalize rejected values for user-safe error handling.
+- `src/services`: HTTP operations and cross-feature service adapters. Keep token transport and low-level request behavior in the established API client.
+- `src/features`: domain-specific UI, feature components, and feature-local API adapters when they are not genuinely reusable.
+- `src/pages`: route-level composition; pages may connect features and Redux but should not duplicate service or reducer logic.
+- `src/shared`: components, layouts, hooks, API utilities, and styles reused by multiple domains. Do not move one-feature code here pre-emptively.
+
+State rules:
+
+- Put authentication, shared server-request state, reusable API cache state, and truly cross-page UI state in Redux.
+- Keep transient component state such as an open modal, draft input, hover state, and one-component display toggles local unless multiple distant consumers need it.
+- Components should use the hooks from `src/app/hooks.js` instead of importing raw Redux store access patterns repeatedly.
+- Preserve the public contract of shared hooks such as `useFetch` when moving their implementation to Redux; migrate all consumers together if the contract must change.
+- On logout, clear authentication state, persisted tokens, and user-specific cached API resources through the established auth flow.
+
+Shared UI controls:
+
+- Use `src/shared/components/Select/Select.jsx` for application selects instead of introducing new raw `<select>` elements, unless native select behavior is an explicit requirement.
+- Preserve the shared Select event contract (`event.target.name` and `event.target.value`), keyboard navigation, click-outside handling, portal positioning, responsive width, and overflow protection.
+- Use `src/shared/components/DatePicker/DatePicker.jsx` for reusable date selection instead of creating page-specific date pickers.
+- Import heavier shared controls directly from their component path when doing so preserves route-level code splitting; do not add them to a broad barrel export without checking bundle impact.
+- Add visual variants through props or scoped modifier classes instead of copying a shared component into a feature.
+
+Realtime and development proxy rules:
+
+- Admin realtime uses the authenticated SignalR endpoint `/hubs/saferide`; prevent duplicate handlers and dispose connections/listeners on unmount or logout.
+- SignalR notifications are refresh triggers, not the durable source of admin data. Recover current state through the API after reconnecting.
+- Keep Vite proxy handling for `/api`, `/uploads`, and `/hubs` aligned with the backend target. The hub proxy requires WebSocket support, and cross-origin proxying may require origin rewriting.
+- Restart the Vite development server after changing `vite.config.js`; hot reload does not reliably apply proxy configuration changes.
+- Do not lengthen or weaken JWT behavior in React to avoid login friction. Admin and Staff token lifetime and authorization remain backend-owned security policy.
+
+General React rules:
+
+- Keep admin/staff-facing messages in Vietnamese and do not expose raw backend errors.
+- Handle loading, success, empty, unauthorized, offline, validation, and failure states where relevant.
+- Preserve responsive layouts, keyboard accessibility, and focus visibility when changing shared controls.
+- Do not place secrets or production-only credentials in Vite source or committed environment files.
+- For cross-cutting API changes, verify backend serialization, authorization, React services/thunks/slices, and consuming pages together.
 
 ## 18. Agent and Git Safety
 
@@ -559,6 +628,18 @@ For Flutter changes, inspect together where relevant:
 - realtime listener lifecycle
 - tests
 
+For React changes, inspect together where relevant:
+
+- route-level page and feature component
+- shared component or hook reuse
+- service and API client
+- thunk and rejected-value handling
+- slice, selector, and store registration
+- authentication and authorization behavior
+- SignalR connection and listener lifecycle
+- responsive, keyboard, focus, portal, and overflow behavior
+- lint and production build output
+
 For simulator changes, inspect together where relevant:
 
 - environment and configuration guards;
@@ -588,6 +669,15 @@ flutter analyze
 flutter test
 ```
 
+React commands from `src/SafeRide_React`:
+
+```bash
+npm run lint
+npm run build
+```
+
+On Windows PowerShell, use `npm.cmd run lint` and `npm.cmd run build` if the execution policy blocks `npm.ps1`.
+
 Use this order:
 
 - Backend single-project change: build the affected project and run related tests.
@@ -597,6 +687,10 @@ Use this order:
 - Simulator change: verify environment guards, safe cleanup, and absence of real external side effects.
 - Flutter logic, model, provider, or widget change: run targeted tests and `flutter analyze`.
 - Flutter dependency change: run `flutter pub get`, `flutter analyze`, and relevant tests.
+- React component, hook, Redux, or service change: run targeted lint where practical, then `npm run lint` and `npm run build`.
+- React dependency change: install only when explicitly required, inspect the lockfile diff, then run lint and a production build.
+- React shared control change: verify every consumer class or usage pattern affected, including narrow viewports, keyboard operation, portals, and overflow containers.
+- React SignalR or Vite proxy change: verify REST and hub paths separately, reconnection behavior, listener cleanup, and restart the development server before browser validation.
 - Configuration change: validate binding, startup, and environment-variable naming.
 - Markdown-only change: manual diff review is sufficient.
 
