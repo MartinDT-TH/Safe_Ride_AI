@@ -1,6 +1,6 @@
 import { forwardRef, useMemo, useState } from 'react';
-import DatePicker, { registerLocale } from 'react-datepicker';
-import { vi } from 'date-fns/locale/vi';
+import { DatePicker } from '../shared/components/DatePicker';
+import { Select } from '../shared/components/Select';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
     faCalendarDays,
@@ -27,10 +27,7 @@ import {
     mapAdminBookingsPage,
 } from '../features/bookings/bookingsApi';
 import AdminTripDetailsPage from './AdminTripDetailsPage';
-import 'react-datepicker/dist/react-datepicker.css';
 import './BookingsPage.css';
-
-registerLocale('vi', vi);
 
 const PAGE_SIZE = 10;
 const EMPTY_COUNTS = {
@@ -190,7 +187,7 @@ function BookingsPage() {
 
                     <label className="bookings-filter__field">
                         <span>Trạng thái</span>
-                        <select
+                        <Select
                             value={draftFilters.status}
                             onChange={(event) => handleStatusChange(event.target.value)}
                         >
@@ -201,7 +198,7 @@ function BookingsPage() {
                             <option value="Cancelled">Đã hủy</option>
                             <option value="Expired">Hết hạn</option>
                             <option value="Completed">Hoàn thành</option>
-                        </select>
+                        </Select>
                     </label>
 
                     <label className="bookings-filter__field">

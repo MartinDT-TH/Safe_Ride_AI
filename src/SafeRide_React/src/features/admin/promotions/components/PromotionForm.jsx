@@ -1,3 +1,4 @@
+import { Select } from '../../../../shared/components/Select';
 import './PromotionForm.css';
 
 const currencyFormatter = new Intl.NumberFormat('vi-VN', {
@@ -61,14 +62,14 @@ function PromotionForm({
 
                         <label className="promotion-form-page-field">
                             <span>Loại giảm giá</span>
-                            <select
+                            <Select
                                 name="discountType"
                                 value={values.discountType}
                                 onChange={handleChange}
                             >
                                 <option value="Percentage">Phần trăm (%)</option>
                                 <option value="Fixed">Số tiền cố định</option>
-                            </select>
+                            </Select>
                             {errors.discountType && <small>{errors.discountType}</small>}
                         </label>
 

@@ -15,6 +15,7 @@ import {
 } from '../../../features/admin/promotions/adminPromotionsApi';
 import { AdminLayout } from '../../../shared/layouts/AdminLayout';
 import useFetch from '../../../shared/hooks/useFetch';
+import { Select } from '../../../shared/components/Select';
 import AdminPromotionCreatePage from './AdminPromotionCreatePage';
 import AdminPromotionUpdatePage from './AdminPromotionUpdatePage';
 import './AdminPromotionsPage.css';
@@ -152,7 +153,7 @@ function AdminPromotionsPage() {
                                 aria-label="Tìm kiếm mã khuyến mãi"
                             />
                         </label>
-                        <select
+                        <Select
                             value={statusInput}
                             onChange={(event) => setStatusInput(event.target.value)}
                             aria-label="Lọc theo trạng thái"
@@ -162,8 +163,8 @@ function AdminPromotionsPage() {
                             <option value="inactive">Tạm tắt</option>
                             <option value="expired">Hết hạn</option>
                             <option value="upcoming">Sắp diễn ra</option>
-                        </select>
-                        <select
+                        </Select>
+                        <Select
                             value={discountTypeInput}
                             onChange={(event) => setDiscountTypeInput(event.target.value)}
                             aria-label="Lọc theo loại giảm"
@@ -171,7 +172,7 @@ function AdminPromotionsPage() {
                             <option value="all">Tất cả loại giảm</option>
                             <option value="Percentage">Phần trăm</option>
                             <option value="Fixed">Số tiền cố định</option>
-                        </select>
+                        </Select>
                         <button type="submit">Tìm kiếm</button>
                     </form>
 

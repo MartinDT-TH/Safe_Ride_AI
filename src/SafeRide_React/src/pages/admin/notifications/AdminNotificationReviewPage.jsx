@@ -7,6 +7,7 @@ import useFetch from '../../../shared/hooks/useFetch';
 import ActionFeedback from '../../../shared/components/ActionFeedback/ActionFeedback';
 import Pagination from '../../../shared/components/Pagination/Pagination';
 import StatusBadge from '../../../shared/components/StatusBadge/StatusBadge';
+import { Select } from '../../../shared/components/Select';
 import NotificationApproveDialog from '../../../features/notifications/components/NotificationApproveDialog';
 import NotificationRejectDialog from '../../../features/notifications/components/NotificationRejectDialog';
 import {
@@ -185,30 +186,30 @@ function AdminNotificationReviewPage() {
                     <div className="notifications-filters">
                         <label className="notifications-field">
                             <span>Trạng thái</span>
-                            <select value={filters.status} onChange={(event) => handleFilterChange('status', event.target.value)}>
+                            <Select value={filters.status} onChange={(event) => handleFilterChange('status', event.target.value)}>
                                 <option value="all">Tất cả</option>
                                 <option value="Pending">Đang chờ</option>
                                 <option value="Approved">Đã duyệt</option>
                                 <option value="Rejected">Đã từ chối</option>
-                            </select>
+                            </Select>
                         </label>
                         <label className="notifications-field">
                             <span>Loại thông báo</span>
-                            <select value={filters.type} onChange={(event) => handleFilterChange('type', event.target.value)}>
+                            <Select value={filters.type} onChange={(event) => handleFilterChange('type', event.target.value)}>
                                 <option value="all">Tất cả loại</option>
                                 <option value="Promotion">Khuyến mãi</option>
                                 <option value="System Update">Cập nhật hệ thống</option>
                                 <option value="Warning">Cảnh báo</option>
-                            </select>
+                            </Select>
                         </label>
                         <label className="notifications-field">
                             <span>Đối tượng nhận</span>
-                            <select value={filters.audience} onChange={(event) => handleFilterChange('audience', event.target.value)}>
+                            <Select value={filters.audience} onChange={(event) => handleFilterChange('audience', event.target.value)}>
                                 <option value="all">Tất cả đối tượng</option>
                                 <option value="Both">Tất cả người dùng</option>
                                 <option value="Driver">Tài xế</option>
                                 <option value="Customer">Khách hàng</option>
-                            </select>
+                            </Select>
                         </label>
                     </div>
 
