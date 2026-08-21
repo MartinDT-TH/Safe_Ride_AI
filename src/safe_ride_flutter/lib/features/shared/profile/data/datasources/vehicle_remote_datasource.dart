@@ -54,6 +54,55 @@ class VehicleRemoteDatasource {
     return _dio.delete('/vehicles/$id', options: _authorized(accessToken));
   }
 
+  Future<List<VehicleInsurancePolicyModel>> getInsurancePolicies(
+    String accessToken,
+    int vehicleId,
+  ) async {
+    final response = await _dio.get(
+      '/vehicles/$vehicleId/insurance-policies',
+      options: _authorized(accessToken),
+    );
+    return (response.data as List<dynamic>)
+        .map(
+          (item) => VehicleInsurancePolicyModel.fromJson(
+            Map<String, dynamic>.from(item as Map),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<VehicleInsurancePolicyModel> saveInsurancePolicy(
+    String accessToken,
+    VehicleInsurancePolicyModel policy,
+  ) async {
+    final path =
+        '/vehicles/${policy.vehicleId}/insurance-policies'
+        '${policy.id == 0 ? '' : '/${policy.id}'}';
+    final response = policy.id == 0
+        ? await _dio.post(
+            path,
+            data: policy.toRequestJson(),
+            options: _authorized(accessToken),
+          )
+        : await _dio.put(
+            path,
+            data: policy.toRequestJson(),
+            options: _authorized(accessToken),
+          );
+    return VehicleInsurancePolicyModel.fromJson(
+      Map<String, dynamic>.from(response.data as Map),
+    );
+  }
+
+  Future<void> deleteInsurancePolicy(
+    String accessToken,
+    int vehicleId,
+    int policyId,
+  ) => _dio.delete(
+    '/vehicles/$vehicleId/insurance-policies/$policyId',
+    options: _authorized(accessToken),
+  );
+
   Options _authorized(String accessToken) {
     return Options(headers: {'Authorization': 'Bearer $accessToken'});
   }

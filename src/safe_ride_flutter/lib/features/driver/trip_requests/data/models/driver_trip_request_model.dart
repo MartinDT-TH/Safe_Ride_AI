@@ -27,10 +27,20 @@ class DriverTripRequestModel {
   bool get isDriverAccepted => offerStatus == 'DriverAccepted';
 
   factory DriverTripRequestModel.fromJson(Map<String, dynamic> json) {
+    final offerId = _requiredPositiveInt(_value(json, 'offerId'), 'offerId');
+    final bookingId = _requiredPositiveInt(
+      _value(json, 'bookingId'),
+      'bookingId',
+    );
+    final offerStatus = _normalizeOfferStatus(_value(json, 'offerStatus'));
+    if (offerStatus == null) {
+      throw const FormatException('Invalid driver offer status.');
+    }
+
     return DriverTripRequestModel(
-      offerId: (_value(json, 'offerId') as num?)?.toInt() ?? 0,
-      bookingId: (_value(json, 'bookingId') as num?)?.toInt() ?? 0,
-      offerStatus: _normalizeOfferStatus(_value(json, 'offerStatus')) ?? 'Sent',
+      offerId: offerId,
+      bookingId: bookingId,
+      offerStatus: offerStatus,
       expiresAt: _value(json, 'expiresAt') == null
           ? null
           : DateTime.tryParse(_value(json, 'expiresAt').toString()),
@@ -52,29 +62,41 @@ class DriverTripRequestModel {
     return data[key] ?? data[pascalKey];
   }
 
+  static int _requiredPositiveInt(Object? value, String fieldName) {
+    final parsed = value is num
+        ? value.toInt()
+        : int.tryParse(value?.toString().trim() ?? '');
+    if (parsed == null || parsed <= 0) {
+      throw FormatException('Invalid $fieldName.');
+    }
+    return parsed;
+  }
+
   static String? _normalizeOfferStatus(Object? value) {
     if (value == null) return null;
-    if (value is num) {
-      return switch (value.toInt()) {
+    final numericValue = value is num
+        ? value.toInt()
+        : int.tryParse(value.toString().trim());
+    if (numericValue != null) {
+      return switch (numericValue) {
         0 => 'Sent',
         1 => 'DriverAccepted',
         2 => 'CustomerConfirmed',
         3 => 'Rejected',
         4 => 'Expired',
         5 => 'Cancelled',
-        _ => value.toString(),
+        _ => null,
       };
     }
 
-    final text = value.toString();
-    return switch (text) {
-      '0' => 'Sent',
-      '1' => 'DriverAccepted',
-      '2' => 'CustomerConfirmed',
-      '3' => 'Rejected',
-      '4' => 'Expired',
-      '5' => 'Cancelled',
-      _ => text,
+    return switch (value.toString().trim().toLowerCase()) {
+      'sent' => 'Sent',
+      'driveraccepted' => 'DriverAccepted',
+      'customerconfirmed' => 'CustomerConfirmed',
+      'rejected' => 'Rejected',
+      'expired' => 'Expired',
+      'cancelled' || 'canceled' => 'Cancelled',
+      _ => null,
     };
   }
 }

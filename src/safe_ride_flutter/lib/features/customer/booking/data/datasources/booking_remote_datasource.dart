@@ -427,6 +427,47 @@ class BookingRemoteDatasource {
     }
   }
 
+  Future<int> reportAccident(
+    String accessToken, {
+    required int tripId,
+    required String description,
+  }) async {
+    try {
+      final response = await _dio.post(
+        ApiEndpoints.tripAccidents(tripId),
+        data: {
+          'category': 'MULTIPLE',
+          'occurredAtUtc': DateTime.now().toUtc().toIso8601String(),
+          'description': description.trim(),
+        },
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+        ),
+      );
+      final data = response.data;
+      final id = data is Map ? (data['id'] as num?)?.toInt() : null;
+      if (id == null || id <= 0) {
+        throw BookingApiException(
+          LocaleProvider.currentLocalizations.genericError,
+        );
+      }
+      return id;
+    } on DioException catch (exception) {
+      final data = exception.response?.data;
+      if (data is Map && data[ApiKeys.detail] != null) {
+        throw BookingApiException(
+          data[ApiKeys.detail].toString(),
+          code: data[ApiKeys.code]?.toString(),
+          statusCode: exception.response?.statusCode,
+        );
+      }
+      throw BookingApiException(
+        LocaleProvider.currentLocalizations.genericError,
+        statusCode: exception.response?.statusCode,
+      );
+    }
+  }
+
   Future<void> respondToDriverEndTrip(
     String accessToken, {
     required int tripId,

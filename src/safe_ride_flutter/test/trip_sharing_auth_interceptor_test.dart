@@ -129,6 +129,55 @@ void main() {
     );
     expect(retryAdapter.requests.single.extra['auth_refresh_retried'], isTrue);
   });
+
+  test(
+    'session refreshes before access-token expiry and persists booking grace',
+    () async {
+      final expiringToken = _jwt(
+        expiresAt: DateTime.now().toUtc().add(const Duration(seconds: 10)),
+        marker: 'expiring',
+      );
+      final refreshedToken = _jwt(
+        expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 15)),
+        marker: 'booking-grace',
+      );
+      FlutterSecureStorage.setMockInitialValues({
+        StorageKeys.accessToken: expiringToken,
+        StorageKeys.refreshToken: 'refresh-token',
+        StorageKeys.deviceId: 'device-id',
+      });
+      final refreshAdapter = _RecordingAdapter(
+        (_) => ResponseBody.fromString(
+          jsonEncode({
+            ApiKeys.accessToken: refreshedToken,
+            ApiKeys.refreshToken: 'tc.rotated-refresh-token',
+            ApiKeys.sessionMode: SessionModes.tripContinuation,
+            ApiKeys.reloginRequiredAfterTrip: true,
+            ApiKeys.continuationBookingId: 77,
+          }),
+          200,
+          headers: _jsonHeaders,
+        ),
+      );
+      final refreshDio = Dio(BaseOptions(baseUrl: 'https://example.test/api/'))
+        ..httpClientAdapter = refreshAdapter;
+      final storage = SecureStorageService();
+      final sessionManager = SessionManager(
+        storage: storage,
+        refreshClient: refreshDio,
+      );
+
+      final accessToken = await sessionManager.getValidAccessToken();
+
+      expect(accessToken, refreshedToken);
+      expect(refreshAdapter.requests, hasLength(1));
+      expect(refreshAdapter.requests.single.path, ApiEndpoints.refreshToken);
+      expect(await storage.readAccessToken(), refreshedToken);
+      expect(await storage.readRefreshToken(), 'tc.rotated-refresh-token');
+      expect(await storage.readSessionMode(), SessionModes.tripContinuation);
+      expect(await storage.readContinuationBookingId(), 77);
+    },
+  );
 }
 
 const _jsonHeaders = <String, List<String>>{

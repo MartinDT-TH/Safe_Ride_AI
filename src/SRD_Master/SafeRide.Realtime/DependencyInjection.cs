@@ -17,6 +17,7 @@ public static class DependencyInjection
             });
         services.AddSingleton<IRealtimeNotificationService, SignalRRealtimeNotificationService>();
         services.AddSingleton<IAdminReportRealtimeService, SignalRAdminReportRealtimeService>();
+        services.AddSingleton<IAccidentRealtimeService, SignalRAccidentRealtimeService>();
         services.AddSingleton<ISystemNotificationDeliveryService, SignalRSystemNotificationDeliveryService>();
         services.AddSingleton<IAccountRestrictionRealtimeService, SignalRAccountRestrictionRealtimeService>();
 

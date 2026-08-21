@@ -97,6 +97,15 @@ public sealed record ReportCreatedEvent(
     ReportStatus Status,
     DateTime CreatedAt);
 
+public sealed record AccidentCreatedEvent(
+    long AccidentId,
+    long TripId,
+    Guid ReporterUserId,
+    AccidentCategory Category,
+    AccidentStatus Status,
+    DateTime OccurredAtUtc,
+    DateTime CreatedAtUtc);
+
 public sealed record AdminSOSTriggeredEvent(
     long SosAlertId,
     long TripId,

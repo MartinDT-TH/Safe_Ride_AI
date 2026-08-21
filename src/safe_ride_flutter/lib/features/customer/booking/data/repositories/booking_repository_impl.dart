@@ -138,6 +138,19 @@ class BookingRepositoryImpl implements BookingRepository {
   }
 
   @override
+  Future<int> reportAccident(
+    String accessToken, {
+    required int tripId,
+    required String description,
+  }) {
+    return _remoteDatasource.reportAccident(
+      accessToken,
+      tripId: tripId,
+      description: description,
+    );
+  }
+
+  @override
   Future<void> respondToDriverEndTrip(
     String accessToken, {
     required int tripId,

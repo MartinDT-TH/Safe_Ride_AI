@@ -14,12 +14,14 @@ export const SIDEBAR_NAV_ITEMS = [
     { id: 'revenue', label: 'Doanh thu', icon: <FontAwesomeIcon icon={faChartBar}/> },
     { id: 'notifications', label: 'Thông báo', icon: <FontAwesomeIcon icon={faBell}/> },
     { id: 'reports', label: 'Báo cáo', icon: <FontAwesomeIcon icon={faChartPie}/> },
+    { id: 'risk-fund', label: 'Risk Fund', icon: <FontAwesomeIcon icon={faDollarSign}/> },
 ];
 SIDEBAR_NAV_ITEMS.push(
     { id: 'staff-driver-verification', label: 'Xác minh Tài xế', icon: <FontAwesomeIcon icon={faClipboardCheck}/> },
     { id: 'staff-payments', label: 'Trạng thái Thanh toán', icon: <FontAwesomeIcon icon={faCreditCard}/> },
     { id: 'staff-driver-ratings', label: 'Đánh giá Tài xế', icon: <FontAwesomeIcon icon={faStar}/> },
     { id: 'staff-notifications', label: 'Yêu cầu Thông báo', icon: <FontAwesomeIcon icon={faPaperPlane}/> },
+    { id: 'staff-accidents', label: 'Tai nạn & Trách nhiệm', icon: <FontAwesomeIcon icon={faClipboardList}/> },
 );
 export const SIDEBAR_FOOTER_DEFS = [
     { id: 'support', label: 'Hỗ trợ', icon: <FontAwesomeIcon icon={faQuestionCircle}/> },

@@ -18,6 +18,7 @@ import '../../../../driver/dashboard/presentation/providers/driver_dashboard_pro
 import '../../../../shared/feedback/presentation/pages/driver_reviews_page.dart';
 import '../widgets/language_picker_sheet.dart';
 import '../widgets/driver_reviews_profile_menu_tile.dart';
+import '../../../risk_protection/presentation/pages/driver_liabilities_page.dart';
 
 class ProfilePage extends StatefulWidget {
   ProfilePage({super.key});
@@ -187,6 +188,16 @@ class _ProfilePageState extends State<ProfilePage> {
                 isDriver: roleProvider.isDriver,
                 onTap: () => _navigateToDriverReviews(auth),
               ),
+              if (roleProvider.isDriver)
+                ProfileMenuTile(
+                  icon: Icons.gavel_outlined,
+                  title: l10n.driverLiabilities,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const DriverLiabilitiesPage(),
+                    ),
+                  ),
+                ),
               _buildLinkedAccountItem(auth),
               ProfileMenuTile(
                 icon: Icons.badge_outlined,
@@ -321,10 +332,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 padding: const EdgeInsets.all(3),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Color(0xFF007A87),
-                    width: 1.5,
-                  ),
+                  border: Border.all(color: Color(0xFF007A87), width: 1.5),
                 ),
                 child: CircleAvatar(
                   radius: 40,
@@ -333,11 +341,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       ? NetworkImage(auth.avatarUrl!)
                       : null,
                   child: auth.avatarUrl == null
-                      ? Icon(
-                          Icons.person,
-                          size: 40,
-                          color: Color(0xFFBDBDBD),
-                        )
+                      ? Icon(Icons.person, size: 40, color: Color(0xFFBDBDBD))
                       : null,
                 ),
               ),
@@ -425,9 +429,7 @@ class _ProfilePageState extends State<ProfilePage> {
     final status = auth.googleLinked
         ? auth.googleEmail ?? context.l10n.linked
         : context.l10n.notLinked;
-    final color = auth.googleLinked
-        ? Color(0xFF006B70)
-        : Color(0xFFF59E0B);
+    final color = auth.googleLinked ? Color(0xFF006B70) : Color(0xFFF59E0B);
 
     return InkWell(
       onTap: auth.isLoading ? null : () => _handleLinkedAccounts(auth),

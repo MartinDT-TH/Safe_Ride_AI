@@ -22,6 +22,7 @@ class SecureStorageService {
     required String sessionMode,
     required bool reloginRequired,
     int? continuationTripId,
+    int? continuationBookingId,
     DateTime? continuationAbsoluteExpiresAt,
   }) async {
     await Future.wait([
@@ -36,6 +37,13 @@ class SecureStorageService {
         _storage.write(
           key: StorageKeys.continuationTripId,
           value: continuationTripId.toString(),
+        ),
+      if (continuationBookingId == null)
+        _storage.delete(key: StorageKeys.continuationBookingId)
+      else
+        _storage.write(
+          key: StorageKeys.continuationBookingId,
+          value: continuationBookingId.toString(),
         ),
       if (continuationAbsoluteExpiresAt == null)
         _storage.delete(key: StorageKeys.continuationAbsoluteExpiresAt)
@@ -57,6 +65,11 @@ class SecureStorageService {
 
   Future<int?> readContinuationTripId() async {
     final raw = await _storage.read(key: StorageKeys.continuationTripId);
+    return int.tryParse(raw ?? '');
+  }
+
+  Future<int?> readContinuationBookingId() async {
+    final raw = await _storage.read(key: StorageKeys.continuationBookingId);
     return int.tryParse(raw ?? '');
   }
 
@@ -115,6 +128,7 @@ class SecureStorageService {
       _storage.delete(key: StorageKeys.sessionMode),
       _storage.delete(key: StorageKeys.reloginRequired),
       _storage.delete(key: StorageKeys.continuationTripId),
+      _storage.delete(key: StorageKeys.continuationBookingId),
       _storage.delete(key: StorageKeys.continuationAbsoluteExpiresAt),
     ]);
   }

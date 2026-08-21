@@ -10,6 +10,7 @@ using SafeRide.Domain.Enums;
 
 namespace SafeRide.IntegrationTests;
 
+[Trait(SqlServerTestDatabase.ProviderTraitName, SqlServerTestDatabase.SqliteProvider)]
 public sealed class VehicleApiTests
 {
     [Fact]

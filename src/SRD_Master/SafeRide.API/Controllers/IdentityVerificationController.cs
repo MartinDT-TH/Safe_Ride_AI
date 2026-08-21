@@ -29,13 +29,19 @@ public sealed class IdentityVerificationController : ControllerBase
 
     private readonly ApplicationDbContext _dbContext;
     private readonly IIdentityDocumentStorage _documentStorage;
+    private readonly IEvidenceFileValidator _evidenceFileValidator;
+    private readonly ILogger<IdentityVerificationController> _logger;
 
     public IdentityVerificationController(
         ApplicationDbContext dbContext,
-        IIdentityDocumentStorage documentStorage)
+        IIdentityDocumentStorage documentStorage,
+        IEvidenceFileValidator evidenceFileValidator,
+        ILogger<IdentityVerificationController> logger)
     {
         _dbContext = dbContext;
         _documentStorage = documentStorage;
+        _evidenceFileValidator = evidenceFileValidator;
+        _logger = logger;
     }
 
     [HttpGet("documents")]
@@ -82,6 +88,10 @@ public sealed class IdentityVerificationController : ControllerBase
             return metadataError;
         }
 
+        var kyc = await _dbContext.DriverKycs.FirstOrDefaultAsync(
+            x => x.DriverId == driverId && x.DocumentType == documentType,
+            cancellationToken);
+
         var scanRequest = new ScanIdentityDocumentRequest
         {
             DocumentType = documentType,
@@ -96,10 +106,6 @@ public sealed class IdentityVerificationController : ControllerBase
         }
 
         var files = filesResult.Value!;
-        var kyc = await _dbContext.DriverKycs.FirstOrDefaultAsync(
-            x => x.DriverId == driverId && x.DocumentType == documentType,
-            cancellationToken);
-
         if (kyc == null)
         {
             kyc = new DriverKyc
@@ -111,46 +117,70 @@ public sealed class IdentityVerificationController : ControllerBase
             _dbContext.DriverKycs.Add(kyc);
         }
 
-        foreach (var file in files)
+        var storedFiles = new List<StoredIdentityDocumentFile>();
+        try
         {
-            await using var stream = new MemoryStream(file.Content);
-            var storedFile = await _documentStorage.SaveAsync(
-                driverId,
-                documentType,
-                file.Slot,
-                file.FileName,
-                file.ContentType,
-                stream,
-                cancellationToken);
-
-            ApplyStoredFile(kyc, file.Slot, storedFile.Url);
-        }
-
-        kyc.DocumentNumber = NormalizeOptional(request.DocumentNumber) ?? kyc.DocumentNumber;
-        if (documentType == KycDocumentType.ID_CARD)
-        {
-            kyc.FullName = NormalizeFullName(request.FullName) ?? kyc.FullName;
-            kyc.DateOfBirth = request.DateOfBirth ?? kyc.DateOfBirth;
-            kyc.Gender = NormalizeGender(request.Gender) ?? kyc.Gender;
-            kyc.Address = NormalizeOptional(request.Address) ?? kyc.Address;
-
-            var user = await _dbContext.Users.FindAsync([driverId], cancellationToken);
-            if (user != null)
+            foreach (var file in files)
             {
-                user.FullName = kyc.FullName ?? user.FullName;
-                user.DateOfBirth = kyc.DateOfBirth ?? user.DateOfBirth;
-                user.Gender = kyc.Gender ?? user.Gender;
-                user.UpdatedAt = DateTime.UtcNow;
+                await using var stream = new MemoryStream(file.Content);
+                var storedFile = await _documentStorage.SaveAsync(
+                    driverId,
+                    documentType,
+                    file.Slot,
+                    file.FileName,
+                    file.ContentType,
+                    stream,
+                    cancellationToken);
+                storedFiles.Add(storedFile);
+                ApplyStoredFile(kyc, file.Slot, storedFile.Url);
             }
-        }
-        kyc.LicenseClass = request.LicenseClass ?? kyc.LicenseClass;
-        kyc.IssueDate = request.IssueDate ?? kyc.IssueDate;
-        kyc.ExpiryDate = request.ExpiryDate ?? kyc.ExpiryDate;
-        kyc.KycStatus = KycStatus.Pending;
-        kyc.VerifiedAt = null;
-        kyc.RejectionReason = null;
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+            kyc.DocumentNumber = NormalizeOptional(request.DocumentNumber) ?? kyc.DocumentNumber;
+            if (documentType == KycDocumentType.ID_CARD)
+            {
+                kyc.FullName = NormalizeFullName(request.FullName) ?? kyc.FullName;
+                kyc.DateOfBirth = request.DateOfBirth ?? kyc.DateOfBirth;
+                kyc.Gender = NormalizeGender(request.Gender) ?? kyc.Gender;
+                kyc.Address = NormalizeOptional(request.Address) ?? kyc.Address;
+
+                var user = await _dbContext.Users.FindAsync([driverId], cancellationToken);
+                if (user != null)
+                {
+                    user.FullName = kyc.FullName ?? user.FullName;
+                    user.DateOfBirth = kyc.DateOfBirth ?? user.DateOfBirth;
+                    user.Gender = kyc.Gender ?? user.Gender;
+                    user.UpdatedAt = DateTime.UtcNow;
+                }
+            }
+            kyc.LicenseClass = request.LicenseClass ?? kyc.LicenseClass;
+            kyc.IssueDate = request.IssueDate ?? kyc.IssueDate;
+            kyc.ExpiryDate = request.ExpiryDate ?? kyc.ExpiryDate;
+            kyc.KycStatus = KycStatus.Pending;
+            kyc.VerifiedAt = null;
+            kyc.RejectionReason = null;
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            foreach (var stored in storedFiles.Where(x => !string.IsNullOrWhiteSpace(x.StorageKey)))
+            {
+                try
+                {
+                    await _documentStorage.DeleteAsync(
+                        stored.StorageKey!, stored.ContentType, CancellationToken.None);
+                }
+                catch (Exception cleanupException)
+                {
+                    _logger.LogWarning(
+                        cleanupException,
+                        "Could not delete orphaned identity document {StorageKey} for driver {DriverId}.",
+                        stored.StorageKey,
+                        driverId);
+                }
+            }
+            throw;
+        }
 
         return Ok(ToResponse(kyc, null));
     }
@@ -170,12 +200,24 @@ public sealed class IdentityVerificationController : ControllerBase
             }
 
             await using var stream = formFile.OpenReadStream();
-            using var memory = new MemoryStream();
-            await stream.CopyToAsync(memory, cancellationToken);
+            var validated = await _evidenceFileValidator.ValidateAsync(
+                new EvidenceFileValidationRequest(
+                    formFile.FileName,
+                    formFile.ContentType,
+                    formFile.Length,
+                    stream,
+                    AllowedContentTypes,
+                    MaxFileSizeBytes,
+                    new EvidenceFileValidationErrorCodes(
+                        "identity_verification.file_invalid",
+                        "identity_verification.malware_detected",
+                        "identity_verification.scanner_unavailable")),
+                cancellationToken);
+            await using var memory = validated.Content;
             files.Add(new IdentityUploadInputFile(
                 slot,
-                formFile.FileName,
-                formFile.ContentType,
+                validated.FileName,
+                validated.ContentType,
                 memory.ToArray()));
         }
 

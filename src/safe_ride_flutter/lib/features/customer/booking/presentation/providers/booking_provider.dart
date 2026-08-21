@@ -555,6 +555,20 @@ class BookingProvider extends ChangeNotifier {
     return ok == true;
   }
 
+  Future<int?> reportAccident(
+    String accessToken, {
+    required int tripId,
+    required String description,
+  }) async {
+    return _run(() async {
+      return _repository.reportAccident(
+        accessToken,
+        tripId: tripId,
+        description: description,
+      );
+    });
+  }
+
   void markSOSActivated(int tripId) {
     _setSOSActivated(tripId);
     notifyListeners();

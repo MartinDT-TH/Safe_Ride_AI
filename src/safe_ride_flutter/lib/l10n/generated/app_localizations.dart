@@ -1619,7 +1619,7 @@ abstract class AppLocalizations {
   /// No description provided for @expiryDate.
   ///
   /// In vi, this message translates to:
-  /// **'Ngày hết hạn'**
+  /// **'Hết hạn'**
   String get expiryDate;
 
   /// No description provided for @documents.
@@ -4603,6 +4603,450 @@ abstract class AppLocalizations {
   /// In vi, this message translates to:
   /// **'Không thể phản hồi yêu cầu kết thúc chuyến. Vui lòng thử lại.'**
   String get endTripResponseFailed;
+
+  /// No description provided for @preTripSafetyTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Kiểm tra an toàn trước chuyến'**
+  String get preTripSafetyTitle;
+
+  /// No description provided for @preTripSafetyDescription.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xác nhận từng hạng mục trước khi bắt đầu. Các lần kiểm tra không đạt vẫn được lưu để kiểm toán.'**
+  String get preTripSafetyDescription;
+
+  /// No description provided for @brakeResponse.
+  ///
+  /// In vi, this message translates to:
+  /// **'Phản hồi phanh'**
+  String get brakeResponse;
+
+  /// No description provided for @frontRearLights.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đèn trước và sau'**
+  String get frontRearLights;
+
+  /// No description provided for @turnSignals.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đèn xi-nhan'**
+  String get turnSignals;
+
+  /// No description provided for @visibleTires.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tình trạng lốp quan sát được'**
+  String get visibleTires;
+
+  /// No description provided for @dashboardWarning.
+  ///
+  /// In vi, this message translates to:
+  /// **'Không có cảnh báo bảng điều khiển'**
+  String get dashboardWarning;
+
+  /// No description provided for @windshieldVisibility.
+  ///
+  /// In vi, this message translates to:
+  /// **'Kính và gương quan sát rõ'**
+  String get windshieldVisibility;
+
+  /// No description provided for @noMajorVisibleIssue.
+  ///
+  /// In vi, this message translates to:
+  /// **'Không có lỗi nghiêm trọng dễ thấy'**
+  String get noMajorVisibleIssue;
+
+  /// No description provided for @confirmSafetyCheck.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xác nhận kiểm tra'**
+  String get confirmSafetyCheck;
+
+  /// No description provided for @allChecksRequired.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tất cả hạng mục phải đạt trước khi bắt đầu chuyến.'**
+  String get allChecksRequired;
+
+  /// No description provided for @safetyTermination.
+  ///
+  /// In vi, this message translates to:
+  /// **'Kết thúc vì an toàn'**
+  String get safetyTermination;
+
+  /// No description provided for @safetyTerminationDescription.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chuyến vẫn ở trạng thái đã hủy. Khuyến mãi không được dùng và có thể tính cước một phần nếu chuyến đã bắt đầu.'**
+  String get safetyTerminationDescription;
+
+  /// No description provided for @safetyTerminationReasonHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mô tả rủi ro an toàn'**
+  String get safetyTerminationReasonHint;
+
+  /// No description provided for @reportAccident.
+  ///
+  /// In vi, this message translates to:
+  /// **'Báo cáo tai nạn'**
+  String get reportAccident;
+
+  /// No description provided for @accidentDescriptionHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mô tả diễn biến và thiệt hại ban đầu'**
+  String get accidentDescriptionHint;
+
+  /// No description provided for @accidentReported.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đã gửi báo cáo tai nạn.'**
+  String get accidentReported;
+
+  /// No description provided for @safetyTerminationFailed.
+  ///
+  /// In vi, this message translates to:
+  /// **'Không thể kết thúc chuyến vì an toàn.'**
+  String get safetyTerminationFailed;
+
+  /// No description provided for @preTripCheckFailed.
+  ///
+  /// In vi, this message translates to:
+  /// **'Không thể gửi kiểm tra an toàn.'**
+  String get preTripCheckFailed;
+
+  /// No description provided for @riskProtectionCaseTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hồ sơ bảo vệ tai nạn'**
+  String get riskProtectionCaseTitle;
+
+  /// No description provided for @riskProtectionClaim.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hồ sơ yêu cầu bảo vệ'**
+  String get riskProtectionClaim;
+
+  /// No description provided for @riskProtectionEvidence.
+  ///
+  /// In vi, this message translates to:
+  /// **'Bằng chứng'**
+  String get riskProtectionEvidence;
+
+  /// No description provided for @riskProtectionAssessment.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đánh giá trách nhiệm'**
+  String get riskProtectionAssessment;
+
+  /// No description provided for @uploadAccidentEvidence.
+  ///
+  /// In vi, this message translates to:
+  /// **'Thêm ảnh bằng chứng'**
+  String get uploadAccidentEvidence;
+
+  /// No description provided for @disputeLiability.
+  ///
+  /// In vi, this message translates to:
+  /// **'Yêu cầu xem xét trách nhiệm'**
+  String get disputeLiability;
+
+  /// No description provided for @disputeReasonHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nêu rõ lý do cần xem xét lại kết quả đánh giá'**
+  String get disputeReasonHint;
+
+  /// No description provided for @liabilityDisputed.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đã gửi yêu cầu xem xét lại.'**
+  String get liabilityDisputed;
+
+  /// No description provided for @accidentEvidenceUploaded.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đã tải lên bằng chứng.'**
+  String get accidentEvidenceUploaded;
+
+  /// No description provided for @noAccidentEvidence.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chưa có bằng chứng nào.'**
+  String get noAccidentEvidence;
+
+  /// No description provided for @noProtectionClaim.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hồ sơ yêu cầu bảo vệ chưa được tạo.'**
+  String get noProtectionClaim;
+
+  /// No description provided for @driverLiabilities.
+  ///
+  /// In vi, this message translates to:
+  /// **'Trách nhiệm của tôi'**
+  String get driverLiabilities;
+
+  /// No description provided for @noDriverLiabilities.
+  ///
+  /// In vi, this message translates to:
+  /// **'Bạn chưa có trách nhiệm tài xế nào được xác nhận.'**
+  String get noDriverLiabilities;
+
+  /// No description provided for @confirmedAmount.
+  ///
+  /// In vi, this message translates to:
+  /// **'Số tiền xác nhận'**
+  String get confirmedAmount;
+
+  /// No description provided for @paidAmount.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đã thanh toán'**
+  String get paidAmount;
+
+  /// No description provided for @outstandingAmount.
+  ///
+  /// In vi, this message translates to:
+  /// **'Còn phải thanh toán'**
+  String get outstandingAmount;
+
+  /// No description provided for @attributableDamage.
+  ///
+  /// In vi, this message translates to:
+  /// **'Thiệt hại đủ điều kiện do tài xế chịu trách nhiệm'**
+  String get attributableDamage;
+
+  /// No description provided for @recoveryHistory.
+  ///
+  /// In vi, this message translates to:
+  /// **'Lịch sử thu hồi'**
+  String get recoveryHistory;
+
+  /// No description provided for @claimStatus.
+  ///
+  /// In vi, this message translates to:
+  /// **'Trạng thái claim'**
+  String get claimStatus;
+
+  /// No description provided for @insuranceCoverage.
+  ///
+  /// In vi, this message translates to:
+  /// **'Bảo hiểm chi trả'**
+  String get insuranceCoverage;
+
+  /// No description provided for @riskFundCoverage.
+  ///
+  /// In vi, this message translates to:
+  /// **'Risk Fund chi trả'**
+  String get riskFundCoverage;
+
+  /// No description provided for @participantLiabilities.
+  ///
+  /// In vi, this message translates to:
+  /// **'Trách nhiệm các bên'**
+  String get participantLiabilities;
+
+  /// No description provided for @accidentStatus.
+  ///
+  /// In vi, this message translates to:
+  /// **'Trạng thái tai nạn'**
+  String get accidentStatus;
+
+  /// No description provided for @accidentCategory.
+  ///
+  /// In vi, this message translates to:
+  /// **'Loại tai nạn'**
+  String get accidentCategory;
+
+  /// No description provided for @accidentOccurredAt.
+  ///
+  /// In vi, this message translates to:
+  /// **'Thời điểm xảy ra'**
+  String get accidentOccurredAt;
+
+  /// No description provided for @safetyReportTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Báo cáo an toàn'**
+  String get safetyReportTitle;
+
+  /// No description provided for @unsafeCustomer.
+  ///
+  /// In vi, this message translates to:
+  /// **'Khách hàng không an toàn'**
+  String get unsafeCustomer;
+
+  /// No description provided for @vehicleIssue.
+  ///
+  /// In vi, this message translates to:
+  /// **'Sự cố phương tiện'**
+  String get vehicleIssue;
+
+  /// No description provided for @safetyReasonCode.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mã lý do'**
+  String get safetyReasonCode;
+
+  /// No description provided for @safetyReportDescription.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mô tả sự việc'**
+  String get safetyReportDescription;
+
+  /// No description provided for @requestSosEscalation.
+  ///
+  /// In vi, this message translates to:
+  /// **'Yêu cầu SOS / chuyển cấp'**
+  String get requestSosEscalation;
+
+  /// No description provided for @requestSosEscalationHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Gửi vị trí hiện tại và tạo cảnh báo SOS bền vững'**
+  String get requestSosEscalationHint;
+
+  /// No description provided for @safetyReportSubmitted.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đã gửi báo cáo an toàn.'**
+  String get safetyReportSubmitted;
+
+  /// No description provided for @safetyReportFailed.
+  ///
+  /// In vi, this message translates to:
+  /// **'Không thể gửi báo cáo an toàn. Vui lòng thử lại.'**
+  String get safetyReportFailed;
+
+  /// No description provided for @vehicleFaultType.
+  ///
+  /// In vi, this message translates to:
+  /// **'Loại lỗi phương tiện'**
+  String get vehicleFaultType;
+
+  /// No description provided for @otherVehicleFault.
+  ///
+  /// In vi, this message translates to:
+  /// **'Lỗi phương tiện khác'**
+  String get otherVehicleFault;
+
+  /// No description provided for @optionalEvidence.
+  ///
+  /// In vi, this message translates to:
+  /// **'Bằng chứng (tùy chọn)'**
+  String get optionalEvidence;
+
+  /// No description provided for @vehicleInsurance.
+  ///
+  /// In vi, this message translates to:
+  /// **'Bảo hiểm'**
+  String get vehicleInsurance;
+
+  /// No description provided for @addInsurance.
+  ///
+  /// In vi, this message translates to:
+  /// **'Thêm bảo hiểm'**
+  String get addInsurance;
+
+  /// No description provided for @insuranceLoadFailed.
+  ///
+  /// In vi, this message translates to:
+  /// **'Không thể tải thông tin bảo hiểm. Vui lòng thử lại.'**
+  String get insuranceLoadFailed;
+
+  /// No description provided for @insuranceUpdateFailed.
+  ///
+  /// In vi, this message translates to:
+  /// **'Không thể cập nhật bảo hiểm.'**
+  String get insuranceUpdateFailed;
+
+  /// No description provided for @deleteInsuranceQuestion.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xóa hợp đồng bảo hiểm?'**
+  String get deleteInsuranceQuestion;
+
+  /// No description provided for @policyNumber.
+  ///
+  /// In vi, this message translates to:
+  /// **'Số hợp đồng'**
+  String get policyNumber;
+
+  /// No description provided for @optionalInsuranceEmpty.
+  ///
+  /// In vi, this message translates to:
+  /// **'Bảo hiểm là tùy chọn. Phương tiện chưa có hợp đồng nào.'**
+  String get optionalInsuranceEmpty;
+
+  /// No description provided for @addInsurancePolicy.
+  ///
+  /// In vi, this message translates to:
+  /// **'Thêm hợp đồng bảo hiểm'**
+  String get addInsurancePolicy;
+
+  /// No description provided for @editInsurancePolicy.
+  ///
+  /// In vi, this message translates to:
+  /// **'Sửa hợp đồng bảo hiểm'**
+  String get editInsurancePolicy;
+
+  /// No description provided for @insuranceType.
+  ///
+  /// In vi, this message translates to:
+  /// **'Loại bảo hiểm'**
+  String get insuranceType;
+
+  /// No description provided for @mandatoryTplInsurance.
+  ///
+  /// In vi, this message translates to:
+  /// **'Trách nhiệm dân sự bắt buộc'**
+  String get mandatoryTplInsurance;
+
+  /// No description provided for @physicalDamageInsurance.
+  ///
+  /// In vi, this message translates to:
+  /// **'Thiệt hại vật chất'**
+  String get physicalDamageInsurance;
+
+  /// No description provided for @insuranceProvider.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nhà cung cấp'**
+  String get insuranceProvider;
+
+  /// No description provided for @effectiveDate.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hiệu lực'**
+  String get effectiveDate;
+
+  /// No description provided for @insuranceCoverageLimit.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hạn mức bảo hiểm'**
+  String get insuranceCoverageLimit;
+
+  /// No description provided for @insuranceDeductible.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mức khấu trừ'**
+  String get insuranceDeductible;
+
+  /// No description provided for @optionalDocumentUrl.
+  ///
+  /// In vi, this message translates to:
+  /// **'URL tài liệu (tùy chọn)'**
+  String get optionalDocumentUrl;
+
+  /// No description provided for @optionalInsuranceHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Bảo hiểm không bắt buộc. Tạo hoặc sửa hợp đồng sẽ chuyển trạng thái về PENDING để Staff xác minh.'**
+  String get optionalInsuranceHint;
 }
 
 class _AppLocalizationsDelegate

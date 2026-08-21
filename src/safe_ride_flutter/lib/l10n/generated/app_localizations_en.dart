@@ -2484,4 +2484,236 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get endTripResponseFailed =>
       'Could not respond to the end trip request. Please try again.';
+
+  @override
+  String get preTripSafetyTitle => 'Pre-trip vehicle safety check';
+
+  @override
+  String get preTripSafetyDescription =>
+      'Confirm every item before starting. Failed attempts remain in the audit history.';
+
+  @override
+  String get brakeResponse => 'Brake response';
+
+  @override
+  String get frontRearLights => 'Front and rear lights';
+
+  @override
+  String get turnSignals => 'Turn signals';
+
+  @override
+  String get visibleTires => 'Visible tire condition';
+
+  @override
+  String get dashboardWarning => 'No dashboard warning';
+
+  @override
+  String get windshieldVisibility => 'Clear windshield and mirrors';
+
+  @override
+  String get noMajorVisibleIssue => 'No major visible issue';
+
+  @override
+  String get confirmSafetyCheck => 'Confirm safety check';
+
+  @override
+  String get allChecksRequired =>
+      'All safety items must pass before starting the trip.';
+
+  @override
+  String get safetyTermination => 'End for safety';
+
+  @override
+  String get safetyTerminationDescription =>
+      'The trip remains cancelled. Promotion will not be used and partial fare may apply after the trip starts.';
+
+  @override
+  String get safetyTerminationReasonHint => 'Describe the safety risk';
+
+  @override
+  String get reportAccident => 'Report accident';
+
+  @override
+  String get accidentDescriptionHint =>
+      'Describe what happened and any immediate damage';
+
+  @override
+  String get accidentReported => 'Accident report submitted.';
+
+  @override
+  String get safetyTerminationFailed => 'Could not end the trip for safety.';
+
+  @override
+  String get preTripCheckFailed => 'Could not submit the safety check.';
+
+  @override
+  String get riskProtectionCaseTitle => 'Accident protection case';
+
+  @override
+  String get riskProtectionClaim => 'Protection claim';
+
+  @override
+  String get riskProtectionEvidence => 'Evidence';
+
+  @override
+  String get riskProtectionAssessment => 'Liability assessment';
+
+  @override
+  String get uploadAccidentEvidence => 'Add evidence photo';
+
+  @override
+  String get disputeLiability => 'Request liability review';
+
+  @override
+  String get disputeReasonHint =>
+      'Explain why the assessment should be reviewed';
+
+  @override
+  String get liabilityDisputed => 'Your review request was submitted.';
+
+  @override
+  String get accidentEvidenceUploaded => 'Evidence was uploaded.';
+
+  @override
+  String get noAccidentEvidence => 'No evidence has been uploaded.';
+
+  @override
+  String get noProtectionClaim => 'The protection claim has not been created.';
+
+  @override
+  String get driverLiabilities => 'My liabilities';
+
+  @override
+  String get noDriverLiabilities => 'You have no confirmed driver liability.';
+
+  @override
+  String get confirmedAmount => 'Confirmed amount';
+
+  @override
+  String get paidAmount => 'Paid amount';
+
+  @override
+  String get outstandingAmount => 'Outstanding amount';
+
+  @override
+  String get attributableDamage => 'Driver-attributable eligible damage';
+
+  @override
+  String get recoveryHistory => 'Recovery history';
+
+  @override
+  String get claimStatus => 'Claim status';
+
+  @override
+  String get insuranceCoverage => 'Insurance coverage';
+
+  @override
+  String get riskFundCoverage => 'Risk Fund coverage';
+
+  @override
+  String get participantLiabilities => 'Participant liabilities';
+
+  @override
+  String get accidentStatus => 'Accident status';
+
+  @override
+  String get accidentCategory => 'Accident category';
+
+  @override
+  String get accidentOccurredAt => 'Occurred at';
+
+  @override
+  String get safetyReportTitle => 'Safety report';
+
+  @override
+  String get unsafeCustomer => 'Unsafe customer';
+
+  @override
+  String get vehicleIssue => 'Vehicle issue';
+
+  @override
+  String get safetyReasonCode => 'Reason code';
+
+  @override
+  String get safetyReportDescription => 'Describe the incident';
+
+  @override
+  String get requestSosEscalation => 'Request SOS escalation';
+
+  @override
+  String get requestSosEscalationHint =>
+      'Send the current location and create a durable SOS alert';
+
+  @override
+  String get safetyReportSubmitted => 'Safety report submitted.';
+
+  @override
+  String get safetyReportFailed =>
+      'Could not submit the safety report. Please try again.';
+
+  @override
+  String get vehicleFaultType => 'Vehicle fault type';
+
+  @override
+  String get otherVehicleFault => 'Other vehicle fault';
+
+  @override
+  String get optionalEvidence => 'Evidence (optional)';
+
+  @override
+  String get vehicleInsurance => 'Insurance';
+
+  @override
+  String get addInsurance => 'Add insurance';
+
+  @override
+  String get insuranceLoadFailed =>
+      'Could not load insurance information. Please try again.';
+
+  @override
+  String get insuranceUpdateFailed => 'Could not update insurance.';
+
+  @override
+  String get deleteInsuranceQuestion => 'Delete insurance policy?';
+
+  @override
+  String get policyNumber => 'Policy number';
+
+  @override
+  String get optionalInsuranceEmpty =>
+      'Insurance is optional. This vehicle has no policies.';
+
+  @override
+  String get addInsurancePolicy => 'Add insurance policy';
+
+  @override
+  String get editInsurancePolicy => 'Edit insurance policy';
+
+  @override
+  String get insuranceType => 'Insurance type';
+
+  @override
+  String get mandatoryTplInsurance => 'Mandatory third-party liability';
+
+  @override
+  String get physicalDamageInsurance => 'Physical damage';
+
+  @override
+  String get insuranceProvider => 'Provider';
+
+  @override
+  String get effectiveDate => 'Effective date';
+
+  @override
+  String get insuranceCoverageLimit => 'Coverage limit';
+
+  @override
+  String get insuranceDeductible => 'Deductible';
+
+  @override
+  String get optionalDocumentUrl => 'Document URL (optional)';
+
+  @override
+  String get optionalInsuranceHint =>
+      'Insurance is optional. Creating or editing a policy resets it to PENDING for Staff verification.';
 }

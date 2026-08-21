@@ -287,12 +287,19 @@ public sealed class TripsController : ControllerBase
                 f.Length))
             .ToList();
 
-        await _tripStatusService.ConfirmReturnByDriverAsync(
-            driverId,
-            tripId,
-            evidenceItems,
-            note,
-            cancellationToken);
+        try
+        {
+            await _tripStatusService.ConfirmReturnByDriverAsync(
+                driverId,
+                tripId,
+                evidenceItems,
+                note,
+                cancellationToken);
+        }
+        finally
+        {
+            foreach (var item in evidenceItems) await item.Content.DisposeAsync();
+        }
 
         return NoContent();
     }

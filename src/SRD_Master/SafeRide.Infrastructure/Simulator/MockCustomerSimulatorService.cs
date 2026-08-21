@@ -320,12 +320,7 @@ public sealed class MockCustomerSimulatorService : BackgroundService
                 if (trip is null || trip.TripStatus == TripStatus.CANCELLED) return;
 
                 await tripStatusService.EndTripAsync(driverId, trip.Id, cancellationToken);
-                await tripStatusService.RespondToEndTripRequestAsync(
-                    booking.CustomerId,
-                    trip.Id,
-                    accepted: true,
-                    cancellationToken);
-                _logger.LogInformation("DemoFlow ended trip {TripId} for real driver {DriverId}; waiting for return confirmation", trip.Id, driverId);
+                _logger.LogInformation("DemoFlow ended trip {TripId} for real driver {DriverId}; waiting for payment", trip.Id, driverId);
 
                 if (_simulatorOptionsMonitor.CurrentValue.MockCustomerAutoConfirmDriver)
                 {
@@ -339,6 +334,13 @@ public sealed class MockCustomerSimulatorService : BackgroundService
                             .AnyAsync(
                                 payment => payment.TripId == trip.Id
                                     && payment.PaymentStatus == PaymentStatus.Success,
+                                cancellationToken);
+                        paymentSucceeded = paymentSucceeded || await dbContext.TripFinancialSettlements
+                            .AsNoTracking()
+                            .AnyAsync(
+                                settlement => settlement.TripId == trip.Id
+                                    && settlement.CustomerPayableAmount == 0m
+                                    && settlement.SettledAtUtc != null,
                                 cancellationToken);
                         if (paymentSucceeded) break;
                         await Task.Delay(2000, cancellationToken);

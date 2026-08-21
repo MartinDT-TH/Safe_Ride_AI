@@ -56,6 +56,13 @@ public sealed class JwtTokenService : IJwtTokenService
                     context.ContinuationTripId.Value.ToString()));
             }
 
+            if (context.ContinuationBookingId.HasValue)
+            {
+                claims.Add(new Claim(
+                    AuthClaimTypes.ContinuationBookingId,
+                    context.ContinuationBookingId.Value.ToString()));
+            }
+
             claims.Add(new Claim(
                 AuthClaimTypes.ReloginRequiredAfterTrip,
                 context.ReloginRequiredAfterTrip ? "true" : "false"));
@@ -73,13 +80,14 @@ public sealed class JwtTokenService : IJwtTokenService
 
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
 
-        var accessTokenLifetime = roles.Contains("Admin", StringComparer.OrdinalIgnoreCase)
-            ? TimeSpan.FromDays(_options.AdminAccessTokenDays)
-            : TimeSpan.FromMinutes(_options.AccessTokenMinutes);
+        var accessTokenLifetime = context.AccessTokenMinutes.HasValue
+            ? TimeSpan.FromMinutes(context.AccessTokenMinutes.Value)
+            : roles.Contains("Admin", StringComparer.OrdinalIgnoreCase)
+                ? TimeSpan.FromDays(_options.AdminAccessTokenDays)
+                : TimeSpan.FromMinutes(_options.AccessTokenMinutes);
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.SecretKey));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-        var accessTokenMinutes = context.AccessTokenMinutes ?? _options.AccessTokenMinutes;
         var token = new JwtSecurityToken(
             issuer: _options.Issuer,
             audience: _options.Audience,

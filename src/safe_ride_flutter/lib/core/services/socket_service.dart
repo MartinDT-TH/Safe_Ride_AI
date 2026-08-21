@@ -137,8 +137,8 @@ class DriverOfferUpdate {
     }
 
     final driverOffer = Map<String, dynamic>.from(driverOfferRaw);
-    final bookingId = (_value(data, ApiKeys.bookingId) as num?)?.toInt();
-    final offerId = (_value(driverOffer, ApiKeys.offerId) as num?)?.toInt();
+    final bookingId = _positiveInt(_value(data, ApiKeys.bookingId));
+    final offerId = _positiveInt(_value(driverOffer, ApiKeys.offerId));
     if (bookingId == null || offerId == null) {
       return null;
     }
@@ -162,6 +162,13 @@ class DriverOfferUpdate {
         ? key
         : '${key[0].toUpperCase()}${key.substring(1)}';
     return data[key] ?? data[pascalKey];
+  }
+
+  static int? _positiveInt(Object? value) {
+    final parsed = value is num
+        ? value.toInt()
+        : int.tryParse(value?.toString().trim() ?? '');
+    return parsed != null && parsed > 0 ? parsed : null;
   }
 }
 

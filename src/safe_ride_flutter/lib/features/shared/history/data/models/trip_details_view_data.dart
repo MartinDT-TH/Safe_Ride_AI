@@ -235,6 +235,10 @@ class TripDetailsViewData {
       normalizedStatus == '4' ||
       normalizedStatus == '8';
 
+  bool get isSafetyTerminated =>
+      isCancelled &&
+      booking?.terminationCategory?.trim().toUpperCase() == 'SAFETY';
+
   bool get hasDriverInfo => driverName != null;
 
   bool get hasPaymentInfo => payment != null || totalFare > 0;

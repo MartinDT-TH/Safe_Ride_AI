@@ -6,9 +6,10 @@ import '../../data/models/vehicle_model.dart';
 import '../providers/vehicle_provider.dart';
 import '../widgets/vehicle_card.dart';
 import '../widgets/vehicle_form_sheet.dart';
+import 'vehicle_insurance_page.dart';
 
 class MyVehiclesPage extends StatefulWidget {
-  MyVehiclesPage({super.key});
+  const MyVehiclesPage({super.key});
 
   @override
   State<MyVehiclesPage> createState() => _MyVehiclesPageState();
@@ -49,6 +50,16 @@ class _MyVehiclesPageState extends State<MyVehiclesPage> {
       },
     );
   }
+
+  Future<void> _openInsurance(VehicleModel vehicle) =>
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChangeNotifierProvider.value(
+            value: context.read<VehicleProvider>(),
+            child: VehicleInsurancePage(vehicle: vehicle),
+          ),
+        ),
+      );
 
   void _handleDelete(VehicleModel vehicle) {
     AppDialog.show(
@@ -191,10 +202,7 @@ class _MyVehiclesPageState extends State<MyVehiclesPage> {
                         Text(
                           provider.errorMessage!,
                           textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 15,
-                            color: Colors.black54,
-                          ),
+                          style: TextStyle(fontSize: 15, color: Colors.black54),
                         ),
                         SizedBox(height: 32),
                         ElevatedButton.icon(
@@ -270,6 +278,7 @@ class _MyVehiclesPageState extends State<MyVehiclesPage> {
               vehicle: vehicle,
               onEdit: () => _onEditVehicle(vehicle),
               onDelete: () => _handleDelete(vehicle),
+              onInsurance: () => _openInsurance(vehicle),
             ),
           ),
         ],

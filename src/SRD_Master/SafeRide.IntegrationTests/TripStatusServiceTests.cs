@@ -8,6 +8,7 @@ using SafeRide.Application.Common.Realtime;
 using SafeRide.Application.Features.Bookings;
 using SafeRide.Application.Features.Bookings.Services;
 using SafeRide.Application.Features.Ratings;
+using SafeRide.Application.Features.RiskProtection;
 using SafeRide.Application.Features.Trips.DTOs;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
@@ -18,27 +19,19 @@ using SafeRide.Infrastructure.Services;
 
 namespace SafeRide.IntegrationTests;
 
+[Trait(SqlServerTestDatabase.ProviderTraitName, SqlServerTestDatabase.InMemoryProvider)]
 public sealed class TripStatusServiceTests
 {
     private static readonly DateTime UtcNow =
         new(2026, 6, 15, 8, 0, 0, DateTimeKind.Utc);
     [Fact]
-    public async Task EndTrip_AfterCustomerAccepts_MovesTripToWaitingReturnConfirmation()
+    public async Task EndTrip_MovesDirectlyToWaitingPaymentWithoutCustomerResponse()
     {
         using var fixture = await TripStatusFixture.CreateAsync(TripStatus.IN_PROGRESS);
         fixture.Redis.SetTripTrackingSnapshot(CreateTripTrackingSnapshot(fixture.TripId, 5_200));
         await fixture.Service.EndTripAsync(
             fixture.DriverId,
             fixture.TripId,
-            CancellationToken.None);
-        var pendingTrip = await fixture.DbContext.Trips
-            .SingleAsync(x => x.Id == fixture.TripId);
-        Assert.Equal(TripStatus.IN_PROGRESS, pendingTrip.TripStatus);
-
-        await fixture.Service.RespondToEndTripRequestAsync(
-            fixture.CustomerId,
-            fixture.TripId,
-            accepted: true,
             CancellationToken.None);
 
         var trip = await fixture.DbContext.Trips
@@ -49,7 +42,7 @@ public sealed class TripStatusServiceTests
         var driver = await fixture.DbContext.DriverProfiles
             .SingleAsync(x => x.DriverId == fixture.DriverId);
 
-        Assert.Equal(TripStatus.WAITING_RETURN_CONFIRM, trip.TripStatus);
+        Assert.Equal(TripStatus.WAITING_PAYMENT, trip.TripStatus);
         Assert.Equal(BookingStatus.DriverAssigned, trip.Booking.BookingStatus);
         Assert.Null(trip.CompletedAt);
         Assert.Equal(UtcNow, trip.EndedAt);
@@ -69,35 +62,36 @@ public sealed class TripStatusServiceTests
         Assert.Equal(trip.BookingId, notification.BookingId);
         Assert.Equal(fixture.CustomerId, notification.CustomerId);
         Assert.Equal(fixture.DriverId, notification.DriverId);
-        Assert.Equal(TripStatus.WAITING_RETURN_CONFIRM, notification.TripStatus);
+        Assert.Equal(TripStatus.WAITING_PAYMENT, notification.TripStatus);
         Assert.Equal(BookingStatus.DriverAssigned, notification.BookingStatus);
         Assert.Empty(fixture.Realtime.BookingStatusNotifications);
+        Assert.Single(fixture.Realtime.TripPaymentPendingNotifications);
     }
 
     [Fact]
-    public async Task EndTrip_WhenCustomerRejects_KeepsTripInProgress()
+    public async Task EndTrip_DoesNotCreateCustomerApprovalRequest()
     {
         using var fixture = await TripStatusFixture.CreateAsync(TripStatus.IN_PROGRESS);
 
         await fixture.Service.EndTripAsync(
             fixture.DriverId,
             fixture.TripId,
-            CancellationToken.None);
-        await fixture.Service.RespondToEndTripRequestAsync(
-            fixture.CustomerId,
-            fixture.TripId,
-            accepted: false,
             CancellationToken.None);
 
         var trip = await fixture.DbContext.Trips
             .SingleAsync(x => x.Id == fixture.TripId);
-        Assert.Equal(TripStatus.IN_PROGRESS, trip.TripStatus);
-        Assert.Null(trip.EndedAt);
-        Assert.Null(trip.FinalFare);
+        Assert.Equal(TripStatus.WAITING_PAYMENT, trip.TripStatus);
+        Assert.Equal(UtcNow, trip.EndedAt);
+        Assert.DoesNotContain(
+            RedisKeys.TripEndRequest(fixture.TripId),
+            fixture.Redis.SetKeys);
+        Assert.Contains(
+            RedisKeys.TripEndRequest(fixture.TripId),
+            fixture.Redis.RemovedKeys);
     }
 
     [Fact]
-    public async Task EndTrip_WhenDistanceIsZero_UsesMinimumEarlyEndFare()
+    public async Task EndTrip_WhenDistanceIsZero_ChargesZeroAndDoesNotPersistPayment()
     {
         using var fixture = await TripStatusFixture.CreateAsync(TripStatus.IN_PROGRESS);
 
@@ -105,12 +99,10 @@ public sealed class TripStatusServiceTests
             fixture.DriverId,
             fixture.TripId,
             CancellationToken.None);
-        await fixture.Service.RespondToEndTripRequestAsync(
-            fixture.CustomerId,
+        var paymentResult = await fixture.CreatePaymentService().ConfirmCashPaymentAsync(
+            fixture.DriverId,
             fixture.TripId,
-            accepted: true,
             CancellationToken.None);
-        await fixture.AddSuccessfulPaymentAsync(2_000m);
         await fixture.Service.ConfirmReturnByCustomerAsync(
             fixture.CustomerId,
             fixture.TripId,
@@ -121,16 +113,17 @@ public sealed class TripStatusServiceTests
             .Include(x => x.Booking)
             .Include(x => x.Payments)
             .SingleAsync(x => x.Id == fixture.TripId);
-        var payment = Assert.Single(trip.Payments);
-
         Assert.Equal(0m, trip.ActualDistanceKm);
-        Assert.Equal(2_000m, trip.ActualFare);
-        Assert.Equal(2_000m, trip.FinalFare);
-        Assert.Equal(2_000m, payment.Amount);
-        Assert.Equal(PaymentStatus.Success, payment.PaymentStatus);
+        Assert.Equal(0m, trip.ActualFare);
+        Assert.Equal(0m, trip.FinalFare);
+        Assert.Equal(PaymentStatus.Success, paymentResult.PaymentStatus);
+        Assert.Equal(0m, paymentResult.Amount);
+        Assert.Null(paymentResult.PaymentId);
+        Assert.Empty(trip.Payments);
+        Assert.Empty(await fixture.DbContext.WalletTransactions.ToListAsync());
         Assert.Equal(TripStatus.COMPLETED, trip.TripStatus);
         Assert.NotEqual(trip.Booking.EstimatedDistanceKm, trip.ActualDistanceKm);
-        Assert.NotEqual(trip.Booking.EstimatedFare, payment.Amount);
+        Assert.NotEqual(trip.Booking.EstimatedFare, trip.FinalFare);
     }
 
     [Fact]
@@ -143,12 +136,11 @@ public sealed class TripStatusServiceTests
             fixture.DriverId,
             fixture.TripId,
             CancellationToken.None);
-        await fixture.Service.RespondToEndTripRequestAsync(
-            fixture.CustomerId,
+        await fixture.AddSuccessfulPaymentAsync(30_000m);
+        await fixture.Service.AdvanceAfterSuccessfulPaymentAsync(
+            fixture.DriverId,
             fixture.TripId,
-            accepted: true,
             CancellationToken.None);
-        await fixture.AddSuccessfulPaymentAsync(23_846m);
         await fixture.Service.ConfirmReturnByCustomerAsync(
             fixture.CustomerId,
             fixture.TripId,
@@ -161,8 +153,8 @@ public sealed class TripStatusServiceTests
             .SingleAsync(x => x.Id == fixture.TripId);
 
         Assert.Equal(2m, trip.ActualDistanceKm);
-        Assert.Equal(27_692m, trip.ActualFare);
-        Assert.Equal(23_846m, trip.FinalFare);
+        Assert.Equal(40_000m, trip.ActualFare);
+        Assert.Equal(30_000m, trip.FinalFare);
         Assert.Equal(TripStatus.COMPLETED, trip.TripStatus);
         Assert.NotEqual(trip.Booking.EstimatedFare, trip.FinalFare);
     }
@@ -189,6 +181,202 @@ public sealed class TripStatusServiceTests
         Assert.Equal(fixture.TripId, point.TripId);
         Assert.Equal(10.762622, point.Latitude);
         Assert.Equal(106.660172, point.Longitude);
+    }
+
+    [Fact]
+    public async Task StartTrip_AfterRiskProtectionRolloutWithoutPass_IsRejected()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(
+            TripStatus.ARRIVED,
+            riskProtectionEnabled: true);
+
+        var exception = await Assert.ThrowsAsync<BookingException>(() =>
+            fixture.Service.UpdateDriverTripStatusAsync(
+                fixture.DriverId,
+                fixture.TripId,
+                TripStatus.IN_PROGRESS,
+                CancellationToken.None));
+
+        Assert.Equal("pretrip.pass_required", exception.Code);
+        var trip = await fixture.DbContext.Trips.SingleAsync(x => x.Id == fixture.TripId);
+        Assert.Equal(TripStatus.ARRIVED, trip.TripStatus);
+        Assert.Null(trip.StartedAt);
+        Assert.Empty(await fixture.DbContext.TripProtectionCoverages.ToListAsync());
+    }
+
+    [Fact]
+    public async Task StartTrip_WhenLatestAttemptIsFail_IsRejected()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(
+            TripStatus.ARRIVED,
+            riskProtectionEnabled: true);
+        var checkService = new PreTripVehicleCheckService(
+            fixture.DbContext,
+            fixture.RiskProtectionPolicyProvider,
+            new DateTimeProviderFake(UtcNow));
+        await checkService.CreateAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            PassedPreTripCheck(),
+            null,
+            CancellationToken.None);
+        await checkService.CreateAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            FailedPreTripCheck(),
+            null,
+            CancellationToken.None);
+
+        var exception = await Assert.ThrowsAsync<BookingException>(() =>
+            fixture.Service.UpdateDriverTripStatusAsync(
+                fixture.DriverId,
+                fixture.TripId,
+                TripStatus.IN_PROGRESS,
+                CancellationToken.None));
+
+        Assert.Equal("pretrip.pass_required", exception.Code);
+        Assert.Empty(await fixture.DbContext.TripProtectionCoverages.ToListAsync());
+    }
+
+    [Fact]
+    public async Task StartTrip_AfterFailThenPass_ActivatesCoverageWithoutRequiringInsurance()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(
+            TripStatus.ARRIVED,
+            riskProtectionEnabled: true);
+        var checkService = new PreTripVehicleCheckService(
+            fixture.DbContext,
+            fixture.RiskProtectionPolicyProvider,
+            new DateTimeProviderFake(UtcNow));
+        await checkService.CreateAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            FailedPreTripCheck(),
+            null,
+            CancellationToken.None);
+        var pass = await checkService.CreateAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            PassedPreTripCheck(),
+            null,
+            CancellationToken.None);
+
+        await fixture.Service.UpdateDriverTripStatusAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            TripStatus.IN_PROGRESS,
+            CancellationToken.None);
+
+        var trip = await fixture.DbContext.Trips.SingleAsync(x => x.Id == fixture.TripId);
+        var coverage = await fixture.DbContext.TripProtectionCoverages.SingleAsync();
+        Assert.Equal(TripStatus.IN_PROGRESS, trip.TripStatus);
+        Assert.Equal(UtcNow, trip.StartedAt);
+        Assert.Equal(pass.Id, coverage.PreTripVehicleCheckId);
+        Assert.Equal(20_000_000m, coverage.ProtectionLimit);
+        Assert.Equal(UtcNow, coverage.ActivatedAtUtc);
+        Assert.Null(coverage.VehicleInsurancePolicyId);
+    }
+
+    [Fact]
+    public async Task StartTrip_WithVerifiedVehicleInsurance_SnapshotsPolicyValues()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(
+            TripStatus.ARRIVED,
+            riskProtectionEnabled: true);
+        var vehicleId = await fixture.DbContext.Trips
+            .Where(x => x.Id == fixture.TripId)
+            .Select(x => x.Booking.VehicleId)
+            .SingleAsync();
+        var insurance = new VehicleInsurancePolicy
+        {
+            VehicleId = vehicleId,
+            InsuranceType = VehicleInsuranceType.PHYSICAL_DAMAGE,
+            Provider = "Safe Insurer",
+            PolicyNumber = "POLICY-001",
+            EffectiveFromUtc = UtcNow.AddDays(-1),
+            ExpiresAtUtc = UtcNow.AddDays(30),
+            CoverageAmount = 15_000_000m,
+            Deductible = 500_000m,
+            VerificationStatus = InsuranceVerificationStatus.VERIFIED,
+            CreatedAtUtc = UtcNow
+        };
+        fixture.DbContext.VehicleInsurancePolicies.Add(insurance);
+        await fixture.DbContext.SaveChangesAsync();
+        var checkService = new PreTripVehicleCheckService(
+            fixture.DbContext,
+            fixture.RiskProtectionPolicyProvider,
+            new DateTimeProviderFake(UtcNow));
+        await checkService.CreateAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            PassedPreTripCheck(),
+            null,
+            CancellationToken.None);
+
+        await fixture.Service.UpdateDriverTripStatusAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            TripStatus.IN_PROGRESS,
+            CancellationToken.None);
+
+        var coverage = await fixture.DbContext.TripProtectionCoverages.SingleAsync();
+        Assert.Equal(insurance.Id, coverage.VehicleInsurancePolicyId);
+        Assert.Equal("Safe Insurer", coverage.InsuranceProviderSnapshot);
+        Assert.Equal("POLICY-001", coverage.PolicyNumberSnapshot);
+        Assert.Equal(15_000_000m, coverage.InsuranceCoverageSnapshot);
+        Assert.Equal(500_000m, coverage.InsuranceDeductibleSnapshot);
+
+        insurance.Provider = "Changed Insurer";
+        insurance.PolicyNumber = "CHANGED-POLICY";
+        insurance.CoverageAmount = 1m;
+        insurance.Deductible = 0m;
+        await fixture.DbContext.SaveChangesAsync();
+        fixture.DbContext.ChangeTracker.Clear();
+
+        var persistedSnapshot = await fixture.DbContext.TripProtectionCoverages
+            .AsNoTracking()
+            .SingleAsync(x => x.TripId == fixture.TripId);
+        Assert.Equal("Safe Insurer", persistedSnapshot.InsuranceProviderSnapshot);
+        Assert.Equal("POLICY-001", persistedSnapshot.PolicyNumberSnapshot);
+        Assert.Equal(15_000_000m, persistedSnapshot.InsuranceCoverageSnapshot);
+        Assert.Equal(500_000m, persistedSnapshot.InsuranceDeductibleSnapshot);
+    }
+
+    [Fact]
+    public async Task InProgressStatusRetry_DoesNotBackfillHistoricalCoverage()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(
+            TripStatus.IN_PROGRESS,
+            riskProtectionEnabled: true);
+
+        await fixture.Service.UpdateDriverTripStatusAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            TripStatus.IN_PROGRESS,
+            CancellationToken.None);
+
+        Assert.Empty(await fixture.DbContext.TripProtectionCoverages.ToListAsync());
+    }
+
+    [Fact]
+    public async Task ConcurrentStart_WhenCoverageWinnerAlreadyCommitted_IsIdempotent()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(
+            TripStatus.ARRIVED,
+            riskProtectionEnabled: true,
+            simulateConcurrentStartWinner: true);
+
+        await fixture.Service.UpdateDriverTripStatusAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            TripStatus.IN_PROGRESS,
+            CancellationToken.None);
+
+        var trip = await fixture.DbContext.Trips.AsNoTracking()
+            .SingleAsync(x => x.Id == fixture.TripId);
+        Assert.Equal(TripStatus.IN_PROGRESS, trip.TripStatus);
+        Assert.Equal(UtcNow, trip.StartedAt);
+        Assert.Single(await fixture.DbContext.TripProtectionCoverages.AsNoTracking().ToListAsync());
     }
 
     [Fact]
@@ -242,15 +430,6 @@ public sealed class TripStatusServiceTests
                 Assert.Equal(fixture.CustomerId, notification.CustomerId);
                 Assert.Equal(fixture.DriverId, notification.DriverId);
                 Assert.Equal(TripStatus.RETURN_CONFIRMED, notification.TripStatus);
-                Assert.Equal(BookingStatus.DriverAssigned, notification.BookingStatus);
-            },
-            notification =>
-            {
-                Assert.Equal(fixture.TripId, notification.TripId);
-                Assert.Equal(trip.BookingId, notification.BookingId);
-                Assert.Equal(fixture.CustomerId, notification.CustomerId);
-                Assert.Equal(fixture.DriverId, notification.DriverId);
-                Assert.Equal(TripStatus.WAITING_PAYMENT, notification.TripStatus);
                 Assert.Equal(BookingStatus.DriverAssigned, notification.BookingStatus);
             },
             notification =>
@@ -315,7 +494,7 @@ public sealed class TripStatusServiceTests
     {
         using var fixture = await TripStatusFixture.CreateAsync(TripStatus.WAITING_RETURN_CONFIRM);
         await fixture.AddSuccessfulPaymentAsync(62_000m);
-        await using var evidenceStream = new MemoryStream([1, 2, 3]);
+        await using var evidenceStream = new MemoryStream([0xFF, 0xD8, 0xFF]);
 
         await fixture.Service.ConfirmReturnByDriverAsync(
             fixture.DriverId,
@@ -337,33 +516,94 @@ public sealed class TripStatusServiceTests
         Assert.Null(trip.Rating);
     }
 
+    [Theory]
+    [InlineData(FileSafetyScanStatus.ThreatDetected, "trip.return_evidence_malware_detected", 400)]
+    [InlineData(FileSafetyScanStatus.ScannerUnavailable, "trip.return_evidence_scanner_unavailable", 503)]
+    public async Task ConfirmReturnByDriver_UnsafeScannerOutcome_DoesNotUploadOrPersist(
+        FileSafetyScanStatus status,
+        string expectedCode,
+        int expectedStatus)
+    {
+        var storage = new TrackingTripReturnEvidenceStorage();
+        using var fixture = await TripStatusFixture.CreateAsync(
+            TripStatus.WAITING_RETURN_CONFIRM,
+            evidenceFileValidator: TestEvidenceValidation.Create(new TestFileSafetyScanner(status)),
+            returnEvidenceStorage: storage);
+        await fixture.AddSuccessfulPaymentAsync(62_000m);
+        await using var evidenceStream = new MemoryStream([0xFF, 0xD8, 0xFF]);
+
+        var exception = await Assert.ThrowsAsync<BookingException>(() =>
+            fixture.Service.ConfirmReturnByDriverAsync(
+                fixture.DriverId,
+                fixture.TripId,
+                [new ReturnEvidenceItem(evidenceStream, "return.jpg", "image/jpeg", 3)],
+                null,
+                CancellationToken.None));
+
+        Assert.Equal(expectedCode, exception.Code);
+        Assert.Equal(expectedStatus, exception.StatusCode);
+        Assert.Equal(0, storage.SaveCalls);
+        Assert.Empty(fixture.DbContext.TripReturnConfirmations);
+    }
 
     [Fact]
-    public async Task ConfirmCashPayment_WhenWalletIsMissingOrInsufficient_StillCompletesTrip()
+    public async Task ConfirmReturnByDriver_WhenSecondUploadFails_CleansFirstUpload()
+    {
+        var storage = new TrackingTripReturnEvidenceStorage { FailOnSaveCall = 2 };
+        using var fixture = await TripStatusFixture.CreateAsync(
+            TripStatus.WAITING_RETURN_CONFIRM,
+            returnEvidenceStorage: storage);
+        await fixture.AddSuccessfulPaymentAsync(62_000m);
+        await using var first = new MemoryStream([0xFF, 0xD8, 0xFF, 1]);
+        await using var second = new MemoryStream([0xFF, 0xD8, 0xFF, 2]);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            fixture.Service.ConfirmReturnByDriverAsync(
+                fixture.DriverId,
+                fixture.TripId,
+                [
+                    new ReturnEvidenceItem(first, "first.jpg", "image/jpeg", 4),
+                    new ReturnEvidenceItem(second, "second.jpg", "image/jpeg", 4)
+                ],
+                null,
+                CancellationToken.None));
+
+        Assert.Equal(2, storage.SaveCalls);
+        Assert.Equal(["return-1"], storage.DeletedPublicIds);
+        Assert.Empty(fixture.DbContext.TripReturnConfirmations);
+    }
+
+
+    [Fact]
+    public async Task ConfirmCashPayment_WhenWalletIsMissingOrInsufficient_IsRejected()
     {
         using var fixture = await TripStatusFixture.CreateAsync(TripStatus.WAITING_PAYMENT);
         var paymentService = fixture.CreatePaymentService();
 
-        var result = await paymentService.ConfirmCashPaymentAsync(
-            fixture.DriverId,
-            fixture.TripId,
-            CancellationToken.None);
+        var exception = await Assert.ThrowsAsync<BookingException>(() =>
+            paymentService.ConfirmCashPaymentAsync(
+                fixture.DriverId,
+                fixture.TripId,
+                CancellationToken.None));
 
         var trip = await fixture.DbContext.Trips
             .Include(x => x.Payments)
             .SingleAsync(x => x.Id == fixture.TripId);
 
-        Assert.Equal(TripStatus.COMPLETED, trip.TripStatus);
-        Assert.Equal(PaymentStatus.Success, result.PaymentStatus);
-        Assert.Equal(PaymentMethod.CASH, result.PaymentMethod);
-        Assert.Equal(62_000m, result.Amount);
-        Assert.Single(trip.Payments);
+        Assert.Equal("payment.insufficient_driver_wallet", exception.Code);
+        Assert.Equal(TripStatus.WAITING_PAYMENT, trip.TripStatus);
+        Assert.Empty(trip.Payments);
     }
 
     [Fact]
-    public async Task CompleteTrip_WhenPaymentSucceeded_CompletesAndIncrementsPromotionUsage()
+    public async Task CompleteTrip_AfterReturnConfirmed_CompletesAndIncrementsPromotionUsage()
     {
-        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.WAITING_PAYMENT);
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.RETURN_CONFIRMED);
+        fixture.DbContext.DriverWallets.Add(new DriverWallet
+        {
+            DriverId = fixture.DriverId,
+            CurrentBalance = 100_000m
+        });
         fixture.DbContext.Payments.Add(new Payment
         {
             TripId = fixture.TripId,
@@ -375,6 +615,11 @@ public sealed class TripStatusServiceTests
             CreatedAt = UtcNow
         });
         await fixture.DbContext.SaveChangesAsync();
+
+        await fixture.Service.CompleteTripAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            CancellationToken.None);
 
         await fixture.Service.CompleteTripAsync(
             fixture.DriverId,
@@ -397,6 +642,215 @@ public sealed class TripStatusServiceTests
         Assert.Empty(fixture.Realtime.TripPaymentPendingNotifications);
         Assert.Empty(fixture.Realtime.TripPaymentSucceededNotifications);
         Assert.Single(fixture.Realtime.BookingStatusNotifications);
+        Assert.NotNull((await fixture.DbContext.TripFinancialSettlements.SingleAsync()).SettledAtUtc);
+        Assert.Single(await fixture.DbContext.WalletTransactions.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CompleteTrip_AfterReturnConfirmedWithZeroPay_UsesSettledSnapshotWithoutPaymentRow()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.RETURN_CONFIRMED);
+        var policyId = await fixture.DbContext.RiskProtectionPolicyVersions
+            .Select(x => x.Id)
+            .SingleAsync();
+        fixture.DbContext.TripFinancialSettlements.Add(new TripFinancialSettlement
+        {
+            TripId = fixture.TripId,
+            PolicyVersionId = policyId,
+            CommissionBase = 10_000m,
+            PromotionExpense = 10_000m,
+            CustomerPayableAmount = 0m,
+            PlatformCommissionRate = .30m,
+            GrossPlatformCommission = 3_000m,
+            DriverEarning = 7_000m,
+            NetPlatformCommission = -7_000m,
+            RiskReserveRate = 0m,
+            RiskContribution = 0m,
+            NetOperatingRevenue = -7_000m,
+            SettledAtUtc = UtcNow,
+            CreatedAtUtc = UtcNow
+        });
+        await fixture.DbContext.SaveChangesAsync();
+
+        await fixture.Service.CompleteTripAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            CancellationToken.None);
+
+        Assert.Equal(
+            TripStatus.COMPLETED,
+            (await fixture.DbContext.Trips.SingleAsync(x => x.Id == fixture.TripId)).TripStatus);
+        Assert.Empty(await fixture.DbContext.Payments.ToListAsync());
+    }
+
+    [Fact]
+    public async Task ConfirmCashPayment_WhenPromotionCoversFare_CreditsSubsidyWithoutZeroPaymentRow()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.WAITING_PAYMENT);
+        var policyId = await fixture.DbContext.RiskProtectionPolicyVersions
+            .Select(x => x.Id)
+            .SingleAsync();
+        fixture.DbContext.TripFinancialSettlements.Add(new TripFinancialSettlement
+        {
+            TripId = fixture.TripId,
+            PolicyVersionId = policyId,
+            CommissionBase = 10_000m,
+            PromotionExpense = 10_000m,
+            CustomerPayableAmount = 0m,
+            PlatformCommissionRate = .30m,
+            GrossPlatformCommission = 3_000m,
+            DriverEarning = 7_000m,
+            NetPlatformCommission = -7_000m,
+            RiskReserveRate = 0m,
+            RiskContribution = 0m,
+            NetOperatingRevenue = -7_000m,
+            CreatedAtUtc = UtcNow
+        });
+        await fixture.DbContext.SaveChangesAsync();
+
+        var result = await fixture.CreatePaymentService().ConfirmCashPaymentAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            CancellationToken.None);
+
+        Assert.Equal(PaymentStatus.Success, result.PaymentStatus);
+        Assert.Equal(TripStatus.WAITING_RETURN_CONFIRM, result.TripStatus);
+        Assert.Empty(await fixture.DbContext.Payments.ToListAsync());
+        Assert.Equal(7_000m, (await fixture.DbContext.DriverWallets.SingleAsync()).CurrentBalance);
+        var subsidy = await fixture.DbContext.WalletTransactions.SingleAsync();
+        Assert.Equal(WalletTransactionType.Bonus, subsidy.TransactionType);
+        Assert.Equal(7_000m, subsidy.Amount);
+    }
+
+    [Fact]
+    public async Task CashPayment_WhenPromotionExceedsCommission_DriverIncomeDoesNotDoubleCountSubsidy()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.WAITING_PAYMENT);
+        var trip = await fixture.DbContext.Trips
+            .Include(x => x.Booking)
+                .ThenInclude(x => x.BookingPromotions)
+            .SingleAsync(x => x.Id == fixture.TripId);
+        trip.ActualFare = 100_000m;
+        trip.FinalFare = 60_000m;
+        trip.Booking.BookingPromotions.Single().DiscountAmount = 40_000m;
+        await fixture.DbContext.SaveChangesAsync();
+
+        var result = await fixture.CreatePaymentService().ConfirmCashPaymentAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            CancellationToken.None);
+
+        var wallet = await new DriverQueryService(
+                fixture.DbContext,
+                null!,
+                null!,
+                fixture.CommissionCalculator)
+            .GetWalletAsync(
+                fixture.DriverId,
+                SafeRide.Application.Features.Drivers.DTOs.WalletPeriod.Week,
+                0,
+                10,
+                CancellationToken.None);
+
+        Assert.Equal(70_000m, result.DriverShare);
+        Assert.Equal(-10_000m, result.PlatformShare);
+        Assert.Equal(70_000m, wallet.Income.Total);
+        Assert.Equal(10_000m, (await fixture.DbContext.DriverWallets.SingleAsync()).CurrentBalance);
+        var subsidy = await fixture.DbContext.WalletTransactions.SingleAsync();
+        Assert.Equal(WalletTransactionType.Bonus, subsidy.TransactionType);
+        Assert.Equal(10_000m, subsidy.Amount);
+    }
+
+    [Fact]
+    public async Task CashZeroPay_WhenPromotionExceedsActualFare_PreservesFullExpenseAndDriverEarning()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.WAITING_PAYMENT);
+        var trip = await fixture.DbContext.Trips
+            .Include(x => x.Booking)
+                .ThenInclude(x => x.BookingPromotions)
+            .SingleAsync(x => x.Id == fixture.TripId);
+        trip.ActualFare = 100_000m;
+        trip.FinalFare = 0m;
+        trip.Booking.BookingPromotions.Single().DiscountAmount = 120_000m;
+        await fixture.DbContext.SaveChangesAsync();
+
+        var result = await fixture.CreatePaymentService().ConfirmCashPaymentAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            CancellationToken.None);
+
+        var settlement = await fixture.DbContext.TripFinancialSettlements.SingleAsync();
+        var wallet = await new DriverQueryService(
+                fixture.DbContext,
+                null!,
+                null!,
+                fixture.CommissionCalculator)
+            .GetWalletAsync(
+                fixture.DriverId,
+                SafeRide.Application.Features.Drivers.DTOs.WalletPeriod.Week,
+                0,
+                10,
+                CancellationToken.None);
+
+        Assert.Equal(PaymentStatus.Success, result.PaymentStatus);
+        Assert.Equal(0m, settlement.CustomerPayableAmount);
+        Assert.Equal(120_000m, settlement.PromotionExpense);
+        Assert.Equal(70_000m, settlement.DriverEarning);
+        Assert.Equal(-90_000m, settlement.NetPlatformCommission);
+        Assert.Equal(0m, settlement.RiskContribution);
+        Assert.Equal(70_000m, wallet.Income.Total);
+        Assert.Equal(70_000m, (await fixture.DbContext.DriverWallets.SingleAsync()).CurrentBalance);
+        var subsidy = await fixture.DbContext.WalletTransactions.SingleAsync();
+        Assert.Equal(WalletSettlementEffect.CashPromotionSubsidy, subsidy.SettlementEffect);
+        Assert.Equal(70_000m, subsidy.Amount);
+        Assert.Empty(await fixture.DbContext.Payments.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CustomerZeroPrepayment_DefersSnapshotAndDriverPayoutUntilTripEnds()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.DRIVER_ARRIVING);
+        var trip = await fixture.DbContext.Trips
+            .Include(x => x.Booking)
+                .ThenInclude(x => x.BookingPromotions)
+            .SingleAsync(x => x.Id == fixture.TripId);
+        trip.Booking.EstimatedFare = 10_000m;
+        await fixture.DbContext.SaveChangesAsync();
+
+        var paymentService = fixture.CreatePaymentService();
+        var prepayment = await paymentService.CreateQrPaymentAsync(
+            fixture.CustomerId,
+            fixture.TripId,
+            returnUrl: null,
+            cancelUrl: null,
+            CancellationToken.None);
+
+        Assert.Equal(PaymentStatus.Pending, prepayment.PaymentStatus);
+        Assert.Equal("PAYMENT_AFTER_TRIP", prepayment.OrderCode);
+        Assert.Empty(await fixture.DbContext.Payments.ToListAsync());
+        Assert.Empty(await fixture.DbContext.TripFinancialSettlements.ToListAsync());
+        Assert.Empty(await fixture.DbContext.DriverWallets.ToListAsync());
+
+        trip.TripStatus = TripStatus.WAITING_PAYMENT;
+        trip.ActualFare = 10_000m;
+        trip.FinalFare = 0m;
+        trip.EndedAt = UtcNow;
+        await fixture.DbContext.SaveChangesAsync();
+
+        var completed = await paymentService.CreateDriverQrPaymentAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            returnUrl: null,
+            cancelUrl: null,
+            CancellationToken.None);
+
+        Assert.Equal(PaymentStatus.Success, completed.PaymentStatus);
+        Assert.Equal(TripStatus.WAITING_RETURN_CONFIRM, completed.TripStatus);
+        Assert.Empty(await fixture.DbContext.Payments.ToListAsync());
+        var settlement = await fixture.DbContext.TripFinancialSettlements.SingleAsync();
+        Assert.Equal(7_000m, settlement.DriverEarning);
+        Assert.NotNull(settlement.SettledAtUtc);
+        Assert.Equal(7_000m, (await fixture.DbContext.DriverWallets.SingleAsync()).CurrentBalance);
     }
 
     [Fact]
@@ -567,12 +1021,12 @@ public sealed class TripStatusServiceTests
             fixture.TripId,
             CancellationToken.None);
 
-        Assert.Equal(TripStatus.COMPLETED, result.TripStatus);
+        Assert.Equal(TripStatus.WAITING_RETURN_CONFIRM, result.TripStatus);
         var wallet = await fixture.DbContext.DriverWallets.SingleAsync();
         var payout = await fixture.DbContext.WalletTransactions.SingleAsync();
         Assert.Equal(WalletTransactionType.Income, payout.TransactionType);
         Assert.Equal(wallet.Id, payout.WalletId);
-        Assert.True(wallet.CurrentBalance > 0m);
+        Assert.Equal(50_400m, wallet.CurrentBalance);
 
         await paymentService.GetDriverTripPaymentStatusAsync(
             fixture.DriverId,
@@ -583,7 +1037,7 @@ public sealed class TripStatusServiceTests
     }
 
     [Fact]
-    public async Task ConfirmCashPayment_CompletesTripPublishesPaymentSucceededAndIncrementsPromotionUsage()
+    public async Task ConfirmCashPayment_WaitsForReturnAndPublishesPaymentSucceeded()
     {
         using var fixture = await TripStatusFixture.CreateAsync(TripStatus.WAITING_PAYMENT);
         fixture.DbContext.Payments.Add(new Payment
@@ -607,6 +1061,10 @@ public sealed class TripStatusServiceTests
             fixture.DriverId,
             fixture.TripId,
             CancellationToken.None);
+        var replay = await paymentService.ConfirmCashPaymentAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            CancellationToken.None);
 
         var trip = await fixture.DbContext.Trips
             .Include(x => x.Booking)
@@ -617,10 +1075,11 @@ public sealed class TripStatusServiceTests
         var payment = Assert.Single(trip.Payments);
 
         Assert.Equal(PaymentStatus.Success, result.PaymentStatus);
-        Assert.Equal(TripStatus.COMPLETED, result.TripStatus);
-        Assert.Equal(TripStatus.COMPLETED, trip.TripStatus);
-        Assert.Equal(BookingStatus.Completed, trip.Booking.BookingStatus);
-        Assert.Equal(3, fixture.Promotion.CurrentUsageCount);
+        Assert.Equal(PaymentStatus.Success, replay.PaymentStatus);
+        Assert.Equal(TripStatus.WAITING_RETURN_CONFIRM, result.TripStatus);
+        Assert.Equal(TripStatus.WAITING_RETURN_CONFIRM, trip.TripStatus);
+        Assert.Equal(BookingStatus.DriverAssigned, trip.Booking.BookingStatus);
+        Assert.Equal(2, fixture.Promotion.CurrentUsageCount);
         Assert.Equal(PaymentStatus.Success, payment.PaymentStatus);
         Assert.Equal(PaymentMethod.CASH, payment.PaymentMethod);
 
@@ -634,14 +1093,15 @@ public sealed class TripStatusServiceTests
         Assert.Equal(PaymentStatus.Success, succeeded.PaymentStatus);
         Assert.Equal(62_000m, succeeded.Amount);
         Assert.Equal("VND", succeeded.Currency);
-        Assert.Equal(TripStatus.COMPLETED, succeeded.TripStatus);
-        Assert.Equal(BookingStatus.Completed, succeeded.BookingStatus);
+        Assert.Equal(TripStatus.WAITING_RETURN_CONFIRM, succeeded.TripStatus);
+        Assert.Equal(BookingStatus.DriverAssigned, succeeded.BookingStatus);
         Assert.Equal("Thanh toán đã hoàn tất.", succeeded.Message);
 
         var wallet = await new DriverQueryService(
                 fixture.DbContext,
                 null!,
-                null!)
+                null!,
+                fixture.CommissionCalculator)
             .GetWalletAsync(
                 fixture.DriverId,
                 SafeRide.Application.Features.Drivers.DTOs.WalletPeriod.Week,
@@ -662,6 +1122,287 @@ public sealed class TripStatusServiceTests
             && x.Type == WalletTransactionType.Penalty);
         Assert.Equal(result.PlatformShare, platformFee.Amount);
         Assert.False(platformFee.IsCredit);
+        Assert.Single(await fixture.DbContext.TripFinancialSettlements.ToListAsync());
+        Assert.Single(await fixture.DbContext.WalletTransactions.ToListAsync());
+    }
+
+    [Fact]
+    public async Task SafetyTerminate_BeforeTripStarts_CancelsWithoutFareOrPromotionUsage()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.ARRIVED);
+
+        await fixture.Service.SafetyTerminateAsync(
+            fixture.DriverId,
+            isStaff: false,
+            fixture.TripId,
+            "Phanh không đảm bảo an toàn",
+            CancellationToken.None);
+
+        var trip = await fixture.DbContext.Trips
+            .Include(x => x.Booking)
+                .ThenInclude(x => x.BookingPromotions)
+            .SingleAsync(x => x.Id == fixture.TripId);
+        var driver = await fixture.DbContext.DriverProfiles
+            .SingleAsync(x => x.DriverId == fixture.DriverId);
+
+        Assert.Equal(TripStatus.CANCELLED, trip.TripStatus);
+        Assert.Equal(TripTerminationCategory.SAFETY, trip.TerminationCategory);
+        Assert.Equal("Phanh không đảm bảo an toàn", trip.SafetyTerminationReason);
+        Assert.Equal(UtcNow, trip.SafetyTerminatedAt);
+        Assert.Null(trip.ActualDistanceKm);
+        Assert.Null(trip.ActualDurationMinutes);
+        Assert.Null(trip.ActualFare);
+        Assert.Null(trip.FinalFare);
+        Assert.Empty(trip.Booking.BookingPromotions);
+        Assert.Equal(2, fixture.Promotion.CurrentUsageCount);
+        Assert.Equal(DriverWorkStatus.Online, driver.WorkStatus);
+        Assert.Empty(await fixture.DbContext.Payments.ToListAsync());
+        Assert.Empty(await fixture.DbContext.TripFinancialSettlements.ToListAsync());
+        Assert.Empty(await fixture.DbContext.RiskFundTransactions.ToListAsync());
+        Assert.Contains(RedisKeys.TripTrackingPath(fixture.TripId), fixture.Redis.RemovedKeys);
+    }
+
+    [Fact]
+    public async Task SafetyTerminate_AfterTripStarts_FinalizesPartialFareWithoutPromotionOrContribution()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(
+            TripStatus.IN_PROGRESS,
+            riskProtectionEnabled: true);
+        fixture.Redis.SetTripTrackingSnapshot(CreateTripTrackingSnapshot(fixture.TripId, 5_200));
+
+        await fixture.Service.SafetyTerminateAsync(
+            fixture.DriverId,
+            isStaff: false,
+            fixture.TripId,
+            "Khách hàng có hành vi không an toàn",
+            CancellationToken.None);
+
+        var trip = await fixture.DbContext.Trips
+            .Include(x => x.Booking)
+                .ThenInclude(x => x.BookingPromotions)
+            .SingleAsync(x => x.Id == fixture.TripId);
+
+        Assert.Equal(TripStatus.CANCELLED, trip.TripStatus);
+        Assert.Equal(TripTerminationCategory.SAFETY, trip.TerminationCategory);
+        Assert.Equal(5.2m, trip.ActualDistanceKm);
+        Assert.Equal(72_000m, trip.ActualFare);
+        Assert.Equal(72_000m, trip.FinalFare);
+        Assert.Equal(UtcNow, trip.EndedAt);
+        Assert.Empty(trip.Booking.BookingPromotions);
+        Assert.Equal(2, fixture.Promotion.CurrentUsageCount);
+        var settlement = await fixture.DbContext.TripFinancialSettlements.SingleAsync();
+        Assert.Equal(72_000m, settlement.CustomerPayableAmount);
+        Assert.Equal(0m, settlement.PromotionExpense);
+        Assert.Equal(0m, settlement.RiskContribution);
+        Assert.False(settlement.IsRiskContributionEligible);
+        Assert.Empty(await fixture.DbContext.RiskFundTransactions.ToListAsync());
+    }
+
+    [Fact]
+    public async Task SafetyTerminatedTrip_CashPaymentSettlesPartialFareAndKeepsTripCancelled()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(
+            TripStatus.IN_PROGRESS,
+            riskProtectionEnabled: true);
+        fixture.Redis.SetTripTrackingSnapshot(CreateTripTrackingSnapshot(fixture.TripId, 5_200));
+        fixture.DbContext.DriverWallets.Add(new DriverWallet
+        {
+            DriverId = fixture.DriverId,
+            CurrentBalance = 100_000m
+        });
+        await fixture.DbContext.SaveChangesAsync();
+        await fixture.Service.SafetyTerminateAsync(
+            fixture.DriverId,
+            isStaff: false,
+            fixture.TripId,
+            "Kết thúc chuyến do rủi ro an toàn",
+            CancellationToken.None);
+
+        var result = await fixture.CreatePaymentService().ConfirmCashPaymentAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            CancellationToken.None);
+
+        var trip = await fixture.DbContext.Trips.SingleAsync(x => x.Id == fixture.TripId);
+        var settlement = await fixture.DbContext.TripFinancialSettlements.SingleAsync();
+        var payment = await fixture.DbContext.Payments.SingleAsync();
+        var walletTransaction = await fixture.DbContext.WalletTransactions.SingleAsync();
+
+        Assert.Equal(PaymentStatus.Success, result.PaymentStatus);
+        Assert.Equal(TripStatus.CANCELLED, result.TripStatus);
+        Assert.Equal(TripStatus.CANCELLED, trip.TripStatus);
+        Assert.Equal(72_000m, payment.Amount);
+        Assert.Equal(PaymentMethod.CASH, payment.PaymentMethod);
+        Assert.Equal(0m, settlement.PromotionExpense);
+        Assert.Equal(72_000m, settlement.CustomerPayableAmount);
+        Assert.Equal(50_400m, settlement.DriverEarning);
+        Assert.Equal(21_600m, settlement.NetPlatformCommission);
+        Assert.Equal(0m, settlement.RiskContribution);
+        Assert.False(settlement.IsRiskContributionEligible);
+        Assert.NotNull(settlement.SettledAtUtc);
+        Assert.Equal(78_400m, (await fixture.DbContext.DriverWallets.SingleAsync()).CurrentBalance);
+        Assert.Equal(WalletTransactionType.Penalty, walletTransaction.TransactionType);
+        Assert.Equal(21_600m, walletTransaction.Amount);
+        Assert.Empty(await fixture.DbContext.RiskFundTransactions.ToListAsync());
+    }
+
+    [Fact]
+    public async Task SafetyTerminatedTrip_QrPaymentCreditsDriverAndKeepsTripCancelled()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(
+            TripStatus.IN_PROGRESS,
+            riskProtectionEnabled: true);
+        fixture.Redis.SetTripTrackingSnapshot(CreateTripTrackingSnapshot(fixture.TripId, 5_200));
+        await fixture.Service.SafetyTerminateAsync(
+            fixture.DriverId,
+            isStaff: false,
+            fixture.TripId,
+            "Kết thúc chuyến do rủi ro an toàn",
+            CancellationToken.None);
+
+        var result = await fixture.CreatePaymentService().ConfirmDemoQrPaymentAsync(
+            new DemoQrPaymentWebhookRequest(
+                fixture.TripId,
+                OrderCode: null,
+                Amount: 72_000m),
+            CancellationToken.None);
+
+        var trip = await fixture.DbContext.Trips.SingleAsync(x => x.Id == fixture.TripId);
+        var settlement = await fixture.DbContext.TripFinancialSettlements.SingleAsync();
+
+        Assert.Equal(PaymentStatus.Success, result.PaymentStatus);
+        Assert.Equal(TripStatus.CANCELLED, result.TripStatus);
+        Assert.Equal(TripStatus.CANCELLED, trip.TripStatus);
+        Assert.Equal(0m, settlement.PromotionExpense);
+        Assert.Equal(50_400m, settlement.DriverEarning);
+        Assert.Equal(0m, settlement.RiskContribution);
+        Assert.NotNull(settlement.SettledAtUtc);
+        Assert.Equal(50_400m, (await fixture.DbContext.DriverWallets.SingleAsync()).CurrentBalance);
+        Assert.Equal(
+            WalletTransactionType.Income,
+            (await fixture.DbContext.WalletTransactions.SingleAsync()).TransactionType);
+        Assert.Empty(await fixture.DbContext.RiskFundTransactions.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData(20_000, 52_000, 0, SafetyPaymentReconciliationStatus.PAYMENT_PENDING, 20_000)]
+    [InlineData(72_000, 0, 0, SafetyPaymentReconciliationStatus.PAID, 50_400)]
+    [InlineData(90_000, 0, 18_000, SafetyPaymentReconciliationStatus.REFUND_PENDING, 50_400)]
+    public async Task SafetyTerminate_ReconcilesSuccessfulPrepaymentAgainstPartialPayable(
+        decimal prepaid,
+        decimal expectedRemaining,
+        decimal expectedRefund,
+        SafetyPaymentReconciliationStatus expectedStatus,
+        decimal expectedDriverCredit)
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(
+            TripStatus.IN_PROGRESS,
+            riskProtectionEnabled: true);
+        fixture.Redis.SetTripTrackingSnapshot(CreateTripTrackingSnapshot(fixture.TripId, 5_200));
+        await fixture.AddSuccessfulPaymentAsync(prepaid);
+
+        await fixture.Service.SafetyTerminateAsync(
+            fixture.DriverId, false, fixture.TripId,
+            "Nguy cơ an toàn cần dừng chuyến", CancellationToken.None);
+
+        var trip = await fixture.DbContext.Trips.SingleAsync(x => x.Id == fixture.TripId);
+        var reconciliation = await fixture.DbContext.SafetyPaymentReconciliations
+            .Include(x => x.Refund)
+            .SingleAsync(x => x.TripId == fixture.TripId);
+        var settlement = await fixture.DbContext.TripFinancialSettlements.SingleAsync();
+
+        Assert.Equal(TripStatus.CANCELLED, trip.TripStatus);
+        Assert.Equal(72_000m, reconciliation.CustomerPayableAmount);
+        Assert.Equal(prepaid, reconciliation.SuccessfulPaymentAmount);
+        Assert.Equal(expectedRemaining, reconciliation.RemainingPayableAmount);
+        Assert.Equal(expectedRefund, reconciliation.RefundObligationAmount);
+        Assert.Equal(expectedStatus, reconciliation.Status);
+        Assert.Equal(expectedDriverCredit, reconciliation.DriverCreditedAmount);
+        Assert.True(reconciliation.DriverCreditedAmount <= settlement.DriverEarning);
+        Assert.Equal(expectedRefund > 0, reconciliation.Refund is not null);
+        Assert.Empty(await fixture.DbContext.RiskFundTransactions.ToListAsync());
+    }
+
+    [Fact]
+    public async Task SafetyTerminate_BeforeStart_WithSuccessfulQr_CreatesRefundPendingWithoutSettlement()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.ARRIVED);
+        await fixture.AddSuccessfulPaymentAsync(100_000m);
+
+        await fixture.Service.SafetyTerminateAsync(
+            fixture.DriverId, false, fixture.TripId,
+            "Xe không còn bảo đảm an toàn", CancellationToken.None);
+
+        var reconciliation = await fixture.DbContext.SafetyPaymentReconciliations
+            .Include(x => x.Refund)
+            .SingleAsync();
+        Assert.Equal(SafetyPaymentReconciliationStatus.REFUND_PENDING, reconciliation.Status);
+        Assert.Equal(0m, reconciliation.CustomerPayableAmount);
+        Assert.Equal(100_000m, reconciliation.RefundObligationAmount);
+        Assert.Equal(ManualRefundStatus.REFUND_PENDING, reconciliation.Refund!.Status);
+        Assert.Empty(await fixture.DbContext.TripFinancialSettlements.ToListAsync());
+        Assert.Empty(await fixture.DbContext.WalletTransactions.ToListAsync());
+    }
+
+    [Fact]
+    public async Task SafetyTerminate_CancelsPendingQr_AndKeepsFullPartialPayable()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.IN_PROGRESS);
+        fixture.Redis.SetTripTrackingSnapshot(CreateTripTrackingSnapshot(fixture.TripId, 5_200));
+        fixture.DbContext.Payments.Add(new Payment
+        {
+            TripId = fixture.TripId,
+            PaymentMethod = PaymentMethod.QR,
+            TransactionReference = $"{fixture.TripId}999",
+            Amount = 100_000m,
+            PaymentStatus = PaymentStatus.Pending,
+            CreatedAt = UtcNow
+        });
+        await fixture.DbContext.SaveChangesAsync();
+
+        await fixture.Service.SafetyTerminateAsync(
+            fixture.DriverId, false, fixture.TripId,
+            "Dừng chuyến vì an toàn", CancellationToken.None);
+
+        Assert.Equal(
+            PaymentStatus.Cancelled,
+            (await fixture.DbContext.Payments.SingleAsync()).PaymentStatus);
+        var reconciliation = await fixture.DbContext.SafetyPaymentReconciliations.SingleAsync();
+        Assert.Equal(72_000m, reconciliation.RemainingPayableAmount);
+        Assert.Equal(SafetyPaymentReconciliationStatus.PAYMENT_PENDING, reconciliation.Status);
+    }
+
+    [Fact]
+    public async Task ManualRefund_RequiresEvidence_AndSameCallbackIsIdempotent()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.ARRIVED);
+        await fixture.AddSuccessfulPaymentAsync(100_000m);
+        await fixture.Service.SafetyTerminateAsync(
+            fixture.DriverId, false, fixture.TripId,
+            "Dừng chuyến vì an toàn", CancellationToken.None);
+        var refund = await fixture.DbContext.ManualPaymentRefunds.SingleAsync();
+        var service = new SafetyPaymentReconciliationService(
+            fixture.DbContext,
+            fixture.FinancialSettlementService,
+            new DateTimeProviderFake(UtcNow));
+        var request = new ManualRefundConfirmationRequest(
+            "STAFF-REFUND-001",
+            "https://evidence.test/refund-001.pdf",
+            "refund-callback-001",
+            Convert.ToBase64String(refund.RowVersion));
+
+        var first = await service.ConfirmManualRefundAsync(
+            Guid.NewGuid(), refund.Id, request, CancellationToken.None);
+        var replay = await service.ConfirmManualRefundAsync(
+            Guid.NewGuid(), refund.Id, request, CancellationToken.None);
+
+        Assert.Equal(SafetyPaymentReconciliationStatus.REFUNDED, first.Status);
+        Assert.Equal(ManualRefundStatus.REFUNDED, first.RefundStatus);
+        Assert.Equal(first, replay);
+        var stored = await fixture.DbContext.ManualPaymentRefunds.SingleAsync();
+        Assert.NotNull(stored.RefundedByUserId);
+        Assert.Equal("STAFF-REFUND-001", stored.PaymentReference);
+        Assert.Equal("https://evidence.test/refund-001.pdf", stored.EvidenceUrl);
     }
 
     [Fact]
@@ -717,6 +1458,30 @@ public sealed class TripStatusServiceTests
         Assert.Empty(fixture.Redis.RemovedKeys);
     }
 
+    private static PreTripVehicleCheckRequest PassedPreTripCheck() => new(
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        null,
+        "Đã kiểm tra đầy đủ",
+        null);
+
+    private static PreTripVehicleCheckRequest FailedPreTripCheck() => new(
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        VehicleFaultType.BRAKE_FAILURE,
+        "Phanh không đạt",
+        null);
+
     private static TripTrackingSnapshot CreateTripTrackingSnapshot(
         long tripId,
         double distanceMeters)
@@ -752,6 +1517,9 @@ public sealed class TripStatusServiceTests
             TrackingRedisService redis,
             RealtimeNotificationServiceFake realtime,
             TripStatusService service,
+            ITripFinancialSettlementService financialSettlementService,
+            IRiskProtectionPolicyProvider riskProtectionPolicyProvider,
+            ITripCommissionCalculator commissionCalculator,
             Guid customerId,
             Guid driverId,
             long tripId,
@@ -761,6 +1529,9 @@ public sealed class TripStatusServiceTests
             Redis = redis;
             Realtime = realtime;
             Service = service;
+            FinancialSettlementService = financialSettlementService;
+            RiskProtectionPolicyProvider = riskProtectionPolicyProvider;
+            CommissionCalculator = commissionCalculator;
             CustomerId = customerId;
             DriverId = driverId;
             TripId = tripId;
@@ -771,6 +1542,9 @@ public sealed class TripStatusServiceTests
         public TrackingRedisService Redis { get; }
         public RealtimeNotificationServiceFake Realtime { get; }
         public TripStatusService Service { get; }
+        public ITripFinancialSettlementService FinancialSettlementService { get; }
+        public IRiskProtectionPolicyProvider RiskProtectionPolicyProvider { get; }
+        public ITripCommissionCalculator CommissionCalculator { get; }
         public Guid CustomerId { get; }
         public Guid DriverId { get; }
         public long TripId { get; }
@@ -785,7 +1559,10 @@ public sealed class TripStatusServiceTests
                 DbContext,
                 Service,
                 Realtime,
-                new TripPaymentSettlementService(DbContext),
+                new TripPaymentSettlementService(FinancialSettlementService),
+                FinancialSettlementService,
+                RiskProtectionPolicyProvider,
+                CommissionCalculator,
                 Options.Create(new PayOsOptions()));
         }
 
@@ -806,7 +1583,11 @@ public sealed class TripStatusServiceTests
         }
 
         public static async Task<TripStatusFixture> CreateAsync(
-            TripStatus initialTripStatus)
+            TripStatus initialTripStatus,
+            bool riskProtectionEnabled = false,
+            bool simulateConcurrentStartWinner = false,
+            IEvidenceFileValidator? evidenceFileValidator = null,
+            ITripReturnEvidenceStorage? returnEvidenceStorage = null)
         {
             var options = new DbContextOptionsBuilder<ApplicationDbContext>()
                 .UseInMemoryDatabase($"trip-status-{Guid.NewGuid():N}")
@@ -815,22 +1596,73 @@ public sealed class TripStatusServiceTests
 
             var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
             var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
-            var booking = SeedTripGraph(dbContext, customerId, driverId, initialTripStatus);
+            var booking = SeedTripGraph(
+                dbContext,
+                customerId,
+                driverId,
+                initialTripStatus,
+                riskProtectionEnabled);
             await dbContext.SaveChangesAsync();
 
             var redis = new TrackingRedisService();
             var realtime = new RealtimeNotificationServiceFake();
+            var commissionCalculator = new TripCommissionCalculator();
+            var policyProvider = new RiskProtectionPolicyProvider(dbContext);
+            var riskFundLedger = new RiskFundLedgerService(dbContext);
+            var financialSettlementService = new TripFinancialSettlementService(
+                dbContext,
+                commissionCalculator,
+                policyProvider,
+                riskFundLedger);
+            var tripPaymentSettlementService = new TripPaymentSettlementService(financialSettlementService);
+            IPreTripVehicleCheckService preTripVehicleCheckService;
+            if (simulateConcurrentStartWinner)
+            {
+                var check = new PreTripVehicleCheck
+                {
+                    TripId = booking.Trip!.Id,
+                    DriverId = driverId,
+                    BrakeResponsePassed = true,
+                    FrontRearLightsPassed = true,
+                    TurnSignalsPassed = true,
+                    VisibleTiresPassed = true,
+                    DashboardWarningPassed = true,
+                    WindshieldVisibilityPassed = true,
+                    NoMajorVisibleIssue = true,
+                    Result = PreTripCheckResult.PASS,
+                    CheckedAtUtc = UtcNow
+                };
+                dbContext.PreTripVehicleChecks.Add(check);
+                await dbContext.SaveChangesAsync();
+                var policyId = await dbContext.RiskProtectionPolicyVersions
+                    .Select(x => x.Id)
+                    .SingleAsync();
+                preTripVehicleCheckService = new ConcurrentStartWinningPreTripService(
+                    dbContext,
+                    policyId,
+                    check.Id);
+            }
+            else
+            {
+                preTripVehicleCheckService = new PreTripVehicleCheckService(
+                    dbContext,
+                    policyProvider,
+                    new DateTimeProviderFake(UtcNow));
+            }
             var service = new TripStatusService(
                 dbContext,
                 new DateTimeProviderFake(UtcNow),
                 redis,
                 realtime,
-                new NoOpTripReturnEvidenceStorage(),
+                returnEvidenceStorage ?? new NoOpTripReturnEvidenceStorage(),
+                evidenceFileValidator ?? TestEvidenceValidation.Create(),
                 new TripSharingServiceFake(),
                 new OptionsMonitorFake<TripTrackingOptions>(new TripTrackingOptions()),
                 new NoOpMapRoutingService(),
                 new TripFareFinalizationService(new FareEstimationService()),
-                new TripPaymentSettlementService(dbContext),
+                tripPaymentSettlementService,
+                preTripVehicleCheckService,
+                financialSettlementService,
                 new AccountBanEvaluationServiceFake(),
                 NullLogger<TripStatusService>.Instance);
 
@@ -839,6 +1671,9 @@ public sealed class TripStatusServiceTests
                 redis,
                 realtime,
                 service,
+                financialSettlementService,
+                policyProvider,
+                commissionCalculator,
                 customerId,
                 driverId,
                 booking.Trip!.Id,
@@ -854,7 +1689,8 @@ public sealed class TripStatusServiceTests
             ApplicationDbContext dbContext,
             Guid customerId,
             Guid driverId,
-            TripStatus initialTripStatus)
+            TripStatus initialTripStatus,
+            bool riskProtectionEnabled)
         {
             var customer = new AspNetUser
             {
@@ -965,8 +1801,71 @@ public sealed class TripStatusServiceTests
             dbContext.AspNetUsers.AddRange(customer, driverUser);
             dbContext.DriverProfiles.Add(driver);
             dbContext.Bookings.Add(booking);
+            dbContext.RiskProtectionPolicyVersions.Add(new RiskProtectionPolicyVersion
+            {
+                EffectiveFromUtc = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                BasePlatformCommissionRate = 0.30m,
+                RiskReserveRate = riskProtectionEnabled ? 0.10m : 0m,
+                DefaultProtectionLimit = riskProtectionEnabled ? 20_000_000m : 0m,
+                DriverOrdinaryNegligenceRate = 0m,
+                DriverOrdinaryNegligenceCap = 0m,
+                DriverGrossNegligenceRate = 0m,
+                DriverGrossNegligenceCap = 0m,
+                MockInsuranceCoverageLimit = 0m,
+                ClaimAutoApprovalThreshold = 0m,
+                RiskFundEnabled = riskProtectionEnabled,
+                ChangeReason = riskProtectionEnabled
+                    ? "Integration test risk protection rollout"
+                    : "Integration test legacy policy",
+                CreatedAtUtc = UtcNow
+            });
 
             return booking;
+        }
+    }
+
+    private sealed class ConcurrentStartWinningPreTripService(
+        ApplicationDbContext dbContext,
+        long policyVersionId,
+        long checkId) : IPreTripVehicleCheckService
+    {
+        public Task EnsureCanCreateAsync(
+            Guid driverId,
+            long tripId,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<PreTripVehicleCheckResponse> CreateAsync(
+            Guid driverId,
+            long tripId,
+            PreTripVehicleCheckRequest request,
+            StoredPreTripVehicleCheckEvidence? evidence,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<PreTripVehicleCheckResponse>> GetAsync(
+            Guid userId,
+            bool isManagement,
+            long tripId,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public async Task EnsureCanStartAndActivateCoverageAsync(
+            Guid driverId,
+            Trip trip,
+            DateTime startedAtUtc,
+            CancellationToken cancellationToken)
+        {
+            trip.TripStatus = TripStatus.IN_PROGRESS;
+            trip.StartedAt = startedAtUtc;
+            dbContext.TripProtectionCoverages.Add(new TripProtectionCoverage
+            {
+                TripId = trip.Id,
+                PolicyVersionId = policyVersionId,
+                PreTripVehicleCheckId = checkId,
+                ProtectionLimit = 20_000_000m,
+                ActivatedAtUtc = startedAtUtc
+            });
+            await dbContext.SaveChangesAsync(cancellationToken);
+            throw new DbUpdateException(
+                "Violation of UNIQUE KEY constraint 'IX_TripProtectionCoverages_TripId'.");
         }
     }
 
@@ -999,6 +1898,7 @@ public sealed class TripStatusServiceTests
         private readonly Dictionary<string, string> _values = [];
 
         public List<string> RemovedKeys { get; } = [];
+        public List<string> SetKeys { get; } = [];
         public List<TripTrackingPoint> RecordedTrackingPoints { get; } = [];
         public string? DriverStatusValue { get; private set; }
 
@@ -1019,6 +1919,7 @@ public sealed class TripStatusServiceTests
             TimeSpan expiration)
         {
             _values[key] = value;
+            SetKeys.Add(key);
             if (key.StartsWith("sr:driver:status:", StringComparison.Ordinal))
             {
                 DriverStatusValue = value;
@@ -1273,6 +2174,38 @@ public sealed class TripStatusServiceTests
                 originalFileName,
                 contentType,
                 0L));
+        }
+    }
+
+    private sealed class TrackingTripReturnEvidenceStorage : ITripReturnEvidenceStorage
+    {
+        public int SaveCalls { get; private set; }
+        public int? FailOnSaveCall { get; init; }
+        public List<string> DeletedPublicIds { get; } = [];
+
+        public Task<StoredReturnEvidenceFile> SaveAsync(
+            long tripId,
+            int displayOrder,
+            string originalFileName,
+            string contentType,
+            Stream content,
+            CancellationToken cancellationToken)
+        {
+            SaveCalls++;
+            if (SaveCalls == FailOnSaveCall)
+                throw new InvalidOperationException("Simulated storage failure.");
+            return Task.FromResult(new StoredReturnEvidenceFile(
+                $"https://storage.test/return-{displayOrder}.jpg",
+                $"return-{displayOrder}",
+                originalFileName,
+                contentType,
+                content.Length));
+        }
+
+        public Task DeleteAsync(string publicId, CancellationToken cancellationToken)
+        {
+            DeletedPublicIds.Add(publicId);
+            return Task.CompletedTask;
         }
     }
 

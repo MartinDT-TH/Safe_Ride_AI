@@ -26,5 +26,7 @@
   <ItemGroup>
     <Compile Include="..\SafeRide.IntegrationTests\BookingAssignmentServiceTests.cs"
              Link="BookingAssignmentServiceTests.cs" />
+    <Compile Include="..\SafeRide.IntegrationTests\SqlServerTestDatabase.cs"
+             Link="SqlServerTestDatabase.cs" />
   </ItemGroup>
 </Project>

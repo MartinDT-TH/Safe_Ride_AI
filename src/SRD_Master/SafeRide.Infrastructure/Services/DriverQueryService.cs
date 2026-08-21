@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Features.Drivers.DTOs;
+using SafeRide.Application.Features.RiskProtection;
 using SafeRide.Application.Features.Trips.DTOs;
 using SafeRide.Contracts.Responses.Drivers;
 using SafeRide.Domain.Enums;
@@ -13,20 +14,21 @@ namespace SafeRide.Infrastructure.Services;
 
 public sealed class DriverQueryService : IDriverQueryService
 {
-    private const decimal DriverShareRate = 0.70m;
-
     private readonly ApplicationDbContext _dbContext;
     private readonly IRedisService _redisService;
     private readonly IMapRoutingService _mapRoutingService;
+    private readonly ITripCommissionCalculator _commissionCalculator;
 
     public DriverQueryService(
         ApplicationDbContext dbContext,
         IRedisService redisService,
-        IMapRoutingService mapRoutingService)
+        IMapRoutingService mapRoutingService,
+        ITripCommissionCalculator commissionCalculator)
     {
         _dbContext = dbContext;
         _redisService = redisService;
         _mapRoutingService = mapRoutingService;
+        _commissionCalculator = commissionCalculator;
     }
 
     public async Task<IReadOnlyList<NearbyDriverResponse>> GetNearbyDriversAsync(
@@ -157,7 +159,8 @@ public sealed class DriverQueryService : IDriverQueryService
                             evidence.DisplayOrder))
                         .ToList()),
             arrivalPolyline,
-            trip.Payments.Any(payment => payment.PaymentStatus == PaymentStatus.Success));
+            trip.FinalFare is <= 0m
+                || trip.Payments.Any(payment => payment.PaymentStatus == PaymentStatus.Success));
     }
 
     public async Task<IReadOnlyList<DriverTripRequestDto>> GetOpenTripRequestsAsync(
@@ -309,6 +312,7 @@ public sealed class DriverQueryService : IDriverQueryService
             .Where(x => x.WalletId == wallet.Id
                 && (x.TransactionType == WalletTransactionType.Income
                     || x.TransactionType == WalletTransactionType.Bonus)
+                && x.SettlementEffect != WalletSettlementEffect.CashPromotionSubsidy
                 && x.CreatedAt >= queryStartUtc
                 && x.CreatedAt < queryEndUtc)
             .Select(x => new WalletIncomeRow(x.Amount, x.CreatedAt))
@@ -324,17 +328,49 @@ public sealed class DriverQueryService : IDriverQueryService
                 && x.PaidAt < queryEndUtc)
             .Select(x => new
             {
+                x.TripId,
                 Fare = x.Trip.ActualFare ?? x.Trip.Booking.EstimatedFare,
                 PaidAt = x.PaidAt!.Value
             })
             .ToListAsync(cancellationToken);
 
-        incomeTransactions.AddRange(cashIncome.Select(x => new WalletIncomeRow(
-            decimal.Round(
-                x.Fare * DriverShareRate,
-                0,
-                MidpointRounding.AwayFromZero),
-            x.PaidAt)));
+        var cashTripIds = cashIncome.Select(x => x.TripId).ToArray();
+        var settlementEarnings = await _dbContext.TripFinancialSettlements
+            .AsNoTracking()
+            .Where(x => cashTripIds.Contains(x.TripId))
+            .ToDictionaryAsync(x => x.TripId, x => x.DriverEarning, cancellationToken);
+        var legacyCommissionRate = await _dbContext.RiskProtectionPolicyVersions
+            .AsNoTracking()
+            .OrderBy(x => x.EffectiveFromUtc)
+            .Select(x => x.BasePlatformCommissionRate)
+            .FirstAsync(cancellationToken);
+
+        incomeTransactions.AddRange(cashIncome.Select(x =>
+        {
+            var driverEarning = settlementEarnings.TryGetValue(x.TripId, out var snapshotEarning)
+                ? snapshotEarning
+                : _commissionCalculator.Calculate(new CommissionCalculationInput(
+                    x.Fare,
+                    PromotionExpense: 0m,
+                    legacyCommissionRate,
+                    RiskReserveRate: 0m,
+                    IsRiskContributionEligible: false)).DriverEarning;
+            return new WalletIncomeRow(driverEarning, x.PaidAt);
+        }));
+
+        var zeroPayCashIncome = await _dbContext.TripFinancialSettlements
+            .AsNoTracking()
+            .Where(x => x.Trip.DriverId == driverId
+                && x.SettledAtUtc >= queryStartUtc
+                && x.SettledAtUtc < queryEndUtc
+                && x.Trip.WalletTransactions.Any(transaction =>
+                    transaction.SettlementEffect == WalletSettlementEffect.CashPromotionSubsidy)
+                && !x.Trip.Payments.Any(payment =>
+                    payment.PaymentMethod == PaymentMethod.CASH
+                    && payment.PaymentStatus == PaymentStatus.Success))
+            .Select(x => new WalletIncomeRow(x.DriverEarning, x.SettledAtUtc!.Value))
+            .ToListAsync(cancellationToken);
+        incomeTransactions.AddRange(zeroPayCashIncome);
 
         var recentTransactions = await _dbContext.WalletTransactions
             .AsNoTracking()

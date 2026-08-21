@@ -74,4 +74,23 @@ public sealed class CloudinaryTripReturnEvidenceStorage : ITripReturnEvidenceSto
             contentType,
             sizeBytes);
     }
+
+    public async Task DeleteAsync(string publicId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(publicId)) return;
+        if (string.IsNullOrWhiteSpace(_options.CloudName)
+            || string.IsNullOrWhiteSpace(_options.ApiKey)
+            || string.IsNullOrWhiteSpace(_options.ApiSecret))
+            return;
+        var cloudinary = new global::CloudinaryDotNet.Cloudinary(new Account(
+            _options.CloudName,
+            _options.ApiKey,
+            _options.ApiSecret));
+        await cloudinary.DestroyAsync(
+            new DeletionParams(publicId)
+            {
+                ResourceType = ResourceType.Image,
+                Invalidate = true
+            });
+    }
 }

@@ -59,6 +59,57 @@ void main() {
       provider.dispose();
     },
   );
+
+  test('active trip reload cannot downgrade completed payment', () async {
+    var returnActiveTrip = false;
+    final socket = _FakeSocketService();
+    final dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            if (returnActiveTrip &&
+                options.path.endsWith('/drivers/trips/active')) {
+              handler.resolve(
+                Response<dynamic>(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: const <String, dynamic>{
+                    'bookingId': 101,
+                    'tripId': 202,
+                    'tripStatus': 'WAITING_RETURN_CONFIRM',
+                    'paymentCompleted': false,
+                  },
+                ),
+              );
+              return;
+            }
+
+            handler.resolve(
+              Response<dynamic>(requestOptions: options, statusCode: 204),
+            );
+          },
+        ),
+      );
+    final provider = DriverDashboardProvider(socketService: socket, dio: dio);
+    await provider.initializeRealtime('header.payload.signature');
+
+    socket.emitBooking(
+      const BookingUpdate(
+        bookingId: 101,
+        status: 'DriverAssigned',
+        tripId: 202,
+        tripStatus: 'WAITING_RETURN_CONFIRM',
+      ),
+    );
+    provider.markTripPaymentCompleted(202);
+    expect(provider.activeTrip?.paymentCompleted, isTrue);
+
+    returnActiveTrip = true;
+    await provider.loadActiveTrip();
+
+    expect(provider.activeTrip?.paymentCompleted, isTrue);
+    provider.dispose();
+  });
 }
 
 class _FakeSocketService extends SocketService {

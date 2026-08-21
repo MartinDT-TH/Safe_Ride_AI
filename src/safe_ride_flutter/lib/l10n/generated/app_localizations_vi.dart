@@ -829,7 +829,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get issueDate => 'Ngày cấp';
 
   @override
-  String get expiryDate => 'Ngày hết hạn';
+  String get expiryDate => 'Hết hạn';
 
   @override
   String get documents => 'Tài liệu';
@@ -2473,4 +2473,237 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get endTripResponseFailed =>
       'Không thể phản hồi yêu cầu kết thúc chuyến. Vui lòng thử lại.';
+
+  @override
+  String get preTripSafetyTitle => 'Kiểm tra an toàn trước chuyến';
+
+  @override
+  String get preTripSafetyDescription =>
+      'Xác nhận từng hạng mục trước khi bắt đầu. Các lần kiểm tra không đạt vẫn được lưu để kiểm toán.';
+
+  @override
+  String get brakeResponse => 'Phản hồi phanh';
+
+  @override
+  String get frontRearLights => 'Đèn trước và sau';
+
+  @override
+  String get turnSignals => 'Đèn xi-nhan';
+
+  @override
+  String get visibleTires => 'Tình trạng lốp quan sát được';
+
+  @override
+  String get dashboardWarning => 'Không có cảnh báo bảng điều khiển';
+
+  @override
+  String get windshieldVisibility => 'Kính và gương quan sát rõ';
+
+  @override
+  String get noMajorVisibleIssue => 'Không có lỗi nghiêm trọng dễ thấy';
+
+  @override
+  String get confirmSafetyCheck => 'Xác nhận kiểm tra';
+
+  @override
+  String get allChecksRequired =>
+      'Tất cả hạng mục phải đạt trước khi bắt đầu chuyến.';
+
+  @override
+  String get safetyTermination => 'Kết thúc vì an toàn';
+
+  @override
+  String get safetyTerminationDescription =>
+      'Chuyến vẫn ở trạng thái đã hủy. Khuyến mãi không được dùng và có thể tính cước một phần nếu chuyến đã bắt đầu.';
+
+  @override
+  String get safetyTerminationReasonHint => 'Mô tả rủi ro an toàn';
+
+  @override
+  String get reportAccident => 'Báo cáo tai nạn';
+
+  @override
+  String get accidentDescriptionHint => 'Mô tả diễn biến và thiệt hại ban đầu';
+
+  @override
+  String get accidentReported => 'Đã gửi báo cáo tai nạn.';
+
+  @override
+  String get safetyTerminationFailed => 'Không thể kết thúc chuyến vì an toàn.';
+
+  @override
+  String get preTripCheckFailed => 'Không thể gửi kiểm tra an toàn.';
+
+  @override
+  String get riskProtectionCaseTitle => 'Hồ sơ bảo vệ tai nạn';
+
+  @override
+  String get riskProtectionClaim => 'Hồ sơ yêu cầu bảo vệ';
+
+  @override
+  String get riskProtectionEvidence => 'Bằng chứng';
+
+  @override
+  String get riskProtectionAssessment => 'Đánh giá trách nhiệm';
+
+  @override
+  String get uploadAccidentEvidence => 'Thêm ảnh bằng chứng';
+
+  @override
+  String get disputeLiability => 'Yêu cầu xem xét trách nhiệm';
+
+  @override
+  String get disputeReasonHint =>
+      'Nêu rõ lý do cần xem xét lại kết quả đánh giá';
+
+  @override
+  String get liabilityDisputed => 'Đã gửi yêu cầu xem xét lại.';
+
+  @override
+  String get accidentEvidenceUploaded => 'Đã tải lên bằng chứng.';
+
+  @override
+  String get noAccidentEvidence => 'Chưa có bằng chứng nào.';
+
+  @override
+  String get noProtectionClaim => 'Hồ sơ yêu cầu bảo vệ chưa được tạo.';
+
+  @override
+  String get driverLiabilities => 'Trách nhiệm của tôi';
+
+  @override
+  String get noDriverLiabilities =>
+      'Bạn chưa có trách nhiệm tài xế nào được xác nhận.';
+
+  @override
+  String get confirmedAmount => 'Số tiền xác nhận';
+
+  @override
+  String get paidAmount => 'Đã thanh toán';
+
+  @override
+  String get outstandingAmount => 'Còn phải thanh toán';
+
+  @override
+  String get attributableDamage =>
+      'Thiệt hại đủ điều kiện do tài xế chịu trách nhiệm';
+
+  @override
+  String get recoveryHistory => 'Lịch sử thu hồi';
+
+  @override
+  String get claimStatus => 'Trạng thái claim';
+
+  @override
+  String get insuranceCoverage => 'Bảo hiểm chi trả';
+
+  @override
+  String get riskFundCoverage => 'Risk Fund chi trả';
+
+  @override
+  String get participantLiabilities => 'Trách nhiệm các bên';
+
+  @override
+  String get accidentStatus => 'Trạng thái tai nạn';
+
+  @override
+  String get accidentCategory => 'Loại tai nạn';
+
+  @override
+  String get accidentOccurredAt => 'Thời điểm xảy ra';
+
+  @override
+  String get safetyReportTitle => 'Báo cáo an toàn';
+
+  @override
+  String get unsafeCustomer => 'Khách hàng không an toàn';
+
+  @override
+  String get vehicleIssue => 'Sự cố phương tiện';
+
+  @override
+  String get safetyReasonCode => 'Mã lý do';
+
+  @override
+  String get safetyReportDescription => 'Mô tả sự việc';
+
+  @override
+  String get requestSosEscalation => 'Yêu cầu SOS / chuyển cấp';
+
+  @override
+  String get requestSosEscalationHint =>
+      'Gửi vị trí hiện tại và tạo cảnh báo SOS bền vững';
+
+  @override
+  String get safetyReportSubmitted => 'Đã gửi báo cáo an toàn.';
+
+  @override
+  String get safetyReportFailed =>
+      'Không thể gửi báo cáo an toàn. Vui lòng thử lại.';
+
+  @override
+  String get vehicleFaultType => 'Loại lỗi phương tiện';
+
+  @override
+  String get otherVehicleFault => 'Lỗi phương tiện khác';
+
+  @override
+  String get optionalEvidence => 'Bằng chứng (tùy chọn)';
+
+  @override
+  String get vehicleInsurance => 'Bảo hiểm';
+
+  @override
+  String get addInsurance => 'Thêm bảo hiểm';
+
+  @override
+  String get insuranceLoadFailed =>
+      'Không thể tải thông tin bảo hiểm. Vui lòng thử lại.';
+
+  @override
+  String get insuranceUpdateFailed => 'Không thể cập nhật bảo hiểm.';
+
+  @override
+  String get deleteInsuranceQuestion => 'Xóa hợp đồng bảo hiểm?';
+
+  @override
+  String get policyNumber => 'Số hợp đồng';
+
+  @override
+  String get optionalInsuranceEmpty =>
+      'Bảo hiểm là tùy chọn. Phương tiện chưa có hợp đồng nào.';
+
+  @override
+  String get addInsurancePolicy => 'Thêm hợp đồng bảo hiểm';
+
+  @override
+  String get editInsurancePolicy => 'Sửa hợp đồng bảo hiểm';
+
+  @override
+  String get insuranceType => 'Loại bảo hiểm';
+
+  @override
+  String get mandatoryTplInsurance => 'Trách nhiệm dân sự bắt buộc';
+
+  @override
+  String get physicalDamageInsurance => 'Thiệt hại vật chất';
+
+  @override
+  String get insuranceProvider => 'Nhà cung cấp';
+
+  @override
+  String get effectiveDate => 'Hiệu lực';
+
+  @override
+  String get insuranceCoverageLimit => 'Hạn mức bảo hiểm';
+
+  @override
+  String get insuranceDeductible => 'Mức khấu trừ';
+
+  @override
+  String get optionalDocumentUrl => 'URL tài liệu (tùy chọn)';
+
+  @override
+  String get optionalInsuranceHint =>
+      'Bảo hiểm không bắt buộc. Tạo hoặc sửa hợp đồng sẽ chuyển trạng thái về PENDING để Staff xác minh.';
 }

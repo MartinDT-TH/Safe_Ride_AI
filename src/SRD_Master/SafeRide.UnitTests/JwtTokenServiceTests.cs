@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using SafeRide.Application.Features.Auth;
 using SafeRide.Domain.Entities;
 using SafeRide.Infrastructure.Authentication;
 using System.IdentityModel.Tokens.Jwt;
@@ -44,6 +45,49 @@ public sealed class JwtTokenServiceTests
             claim.Type == ClaimTypes.Email
             && claim.Value == user.Email);
         Assert.Equal(Options.AccessTokenMinutes * 60, result.ExpiresIn);
+    }
+
+    [Fact]
+    public async Task TripContinuationAccessToken_UsesRestrictedLifetime()
+    {
+        var user = new AspNetUser
+        {
+            Id = Guid.NewGuid(),
+            UserName = "customer@example.test",
+            IsActive = true
+        };
+        var service = new JwtTokenService(
+            Microsoft.Extensions.Options.Options.Create(Options),
+            null!);
+        var beforeIssue = DateTime.UtcNow;
+
+        var result = await service.GenerateAccessTokenAsync(
+            user,
+            new[] { "Customer" },
+            new AccessTokenContext
+            {
+                SessionMode = AuthSessionModes.TripContinuation,
+                ContinuationTripId = 42,
+                ContinuationBookingId = 41,
+                ReloginRequiredAfterTrip = true,
+                AccessTokenMinutes = 2
+            });
+        var token = new JwtSecurityTokenHandler().ReadJwtToken(result.Token);
+
+        Assert.Equal(120, result.ExpiresIn);
+        Assert.InRange(
+            token.ValidTo,
+            beforeIssue.AddMinutes(2).AddSeconds(-1),
+            DateTime.UtcNow.AddMinutes(2).AddSeconds(1));
+        Assert.Contains(token.Claims, claim =>
+            claim.Type == AuthClaimTypes.SessionMode
+            && claim.Value == AuthSessionModes.TripContinuation);
+        Assert.Contains(token.Claims, claim =>
+            claim.Type == AuthClaimTypes.ContinuationTripId
+            && claim.Value == "42");
+        Assert.Contains(token.Claims, claim =>
+            claim.Type == AuthClaimTypes.ContinuationBookingId
+            && claim.Value == "41");
     }
 
     [Fact]

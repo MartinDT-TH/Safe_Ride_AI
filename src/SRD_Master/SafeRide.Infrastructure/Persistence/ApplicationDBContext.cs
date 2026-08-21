@@ -690,6 +690,12 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
         {
             entity.HasKey(e => e.Id).HasName("PK__WalletTr__3214EC0740D81F8C");
 
+            entity.HasIndex(e => e.TripId);
+            entity.HasIndex(e => new { e.TripId, e.WalletId })
+                .IsUnique()
+                .HasFilter("[TripId] IS NOT NULL AND [SettlementEffect] IS NOT NULL")
+                .HasDatabaseName("UX_WalletTransactions_Trip_Wallet_SettlementEffect");
+
             entity.ToTable(tb =>
             {
                 tb.HasCheckConstraint("CK_WalletTransactions_TransactionType", "[TransactionType] IN ('Income', 'Withdrawal', 'Penalty', 'Bonus')");
@@ -702,6 +708,9 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
             entity.Property(e => e.TransactionType)
                 .HasConversion<string>()
                 .HasMaxLength(20);
+            entity.Property(e => e.SettlementEffect)
+                .HasConversion<string>()
+                .HasMaxLength(40);
 
             entity.HasOne(d => d.Trip).WithMany(p => p.WalletTransactions)
                 .HasForeignKey(d => d.TripId)

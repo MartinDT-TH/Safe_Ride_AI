@@ -1,4 +1,5 @@
 using SafeRide.Application.Features.Trips.DTOs;
+using SafeRide.Application.Features.RiskProtection;
 using SafeRide.Domain.Enums;
 
 namespace SafeRide.Application.Common.Interfaces;
@@ -46,5 +47,31 @@ public interface ITripStatusService
     Task CompleteTripAsync(
         Guid userId,
         long tripId,
+        CancellationToken cancellationToken);
+
+    Task AdvanceAfterSuccessfulPaymentAsync(
+        Guid userId,
+        long tripId,
+        CancellationToken cancellationToken);
+
+    Task SafetyTerminateAsync(
+        Guid userId,
+        bool isStaff,
+        long tripId,
+        string reason,
+        CancellationToken cancellationToken);
+    Task EnsureCanSafetyTerminateAsync(
+        Guid userId,
+        bool isStaff,
+        long tripId,
+        string reason,
+        CancellationToken cancellationToken) => Task.CompletedTask;
+
+    Task SafetyTerminateAsync(
+        Guid userId,
+        bool isStaff,
+        long tripId,
+        string reason,
+        StoredSafetyTerminationEvidence? evidence,
         CancellationToken cancellationToken);
 }

@@ -73,7 +73,12 @@ public sealed record PaymentStatusResult(
     string Currency,
     DateTime? PaidAt,
     TripStatus TripStatus,
-    string Message);
+    string Message,
+    decimal SuccessfulPaymentAmount = 0m,
+    decimal RemainingPayableAmount = 0m,
+    decimal RefundObligationAmount = 0m,
+    SafetyPaymentReconciliationStatus? ReconciliationStatus = null,
+    ManualRefundStatus? RefundStatus = null);
 
 public sealed record DemoQrPaymentWebhookRequest(
     long TripId,

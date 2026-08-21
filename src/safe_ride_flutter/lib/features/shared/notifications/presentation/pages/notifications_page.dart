@@ -7,6 +7,8 @@ import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../../core/utils/api_date_time.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../trip_sharing/presentation/pages/shared_trip_tracking_page.dart';
+import '../../../risk_protection/presentation/pages/accident_details_page.dart';
+import '../../../history/presentation/pages/history_page.dart';
 import '../providers/notification_provider.dart';
 
 class NotificationsPage extends StatefulWidget {
@@ -114,16 +116,25 @@ class _NotificationsPageState extends State<NotificationsPage> {
                   item: item,
                   onTap: () async {
                     await provider.markAsRead(item.id);
-                    if (!context.mounted ||
-                        item.notificationType != 'TripShared' ||
-                        item.referenceId == null) {
+                    if (!context.mounted || item.referenceId == null) {
+                      return;
+                    }
+                    if (item.notificationType != 'TripShared' &&
+                        !_isRiskProtectionNotification(item.notificationType) &&
+                        !_isRefundNotification(item.notificationType)) {
                       return;
                     }
                     await Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => SharedTripTrackingPage(
-                          tripShareId: item.referenceId!,
-                        ),
+                        builder: (_) => item.notificationType == 'TripShared'
+                            ? SharedTripTrackingPage(
+                                tripShareId: item.referenceId!,
+                              )
+                            : _isRefundNotification(item.notificationType)
+                            ? HistoryPage()
+                            : AccidentDetailsPage(
+                                accidentId: item.referenceId!,
+                              ),
                       ),
                     );
                   },
@@ -136,6 +147,11 @@ class _NotificationsPageState extends State<NotificationsPage> {
     );
   }
 }
+
+bool _isRiskProtectionNotification(String type) =>
+    type.startsWith('Accident') || type.startsWith('ProtectionClaim');
+
+bool _isRefundNotification(String type) => type.startsWith('SafetyRefund');
 
 class _NotificationCard extends StatelessWidget {
   _NotificationCard({required this.item, required this.onTap});
@@ -162,9 +178,7 @@ class _NotificationCard extends StatelessWidget {
             color: item.isRead ? Colors.white : Color(0xFFEFF9F8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: item.isRead
-                  ? Color(0xFFD8E4E4)
-                  : Color(0xFF8FD3CB),
+              color: item.isRead ? Color(0xFFD8E4E4) : Color(0xFF8FD3CB),
             ),
             boxShadow: [
               BoxShadow(
@@ -218,10 +232,7 @@ class _NotificationCard extends StatelessWidget {
                   children: [
                     Text(
                       sentAtLabel,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF7A8A8B),
-                      ),
+                      style: TextStyle(fontSize: 12, color: Color(0xFF7A8A8B)),
                     ),
                     Spacer(),
                     Text(

@@ -7,6 +7,7 @@ using SafeRide.Infrastructure.Persistence;
 
 namespace SafeRide.IntegrationTests;
 
+[Trait(SqlServerTestDatabase.ProviderTraitName, SqlServerTestDatabase.SqliteProvider)]
 public sealed class TripReturnConfirmationModelTests
 {
     [Fact]

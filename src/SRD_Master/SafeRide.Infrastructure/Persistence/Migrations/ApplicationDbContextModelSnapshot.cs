@@ -9,7 +9,7 @@ using SafeRide.Infrastructure.Persistence;
 
 #nullable disable
 
-namespace SafeRide.Infrastructure.Migrations
+namespace SafeRide.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
     partial class ApplicationDbContextModelSnapshot : ModelSnapshot
@@ -126,6 +126,245 @@ namespace SafeRide.Infrastructure.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("SafeRide.Domain.Entities.AccidentEvidence", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("AccidentReportId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("CapturedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("EvidenceType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<long?>("FileSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("FileUrl")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<decimal?>("Latitude")
+                        .HasColumnType("decimal(9,6)");
+
+                    b.Property<decimal?>("Longitude")
+                        .HasColumnType("decimal(9,6)");
+
+                    b.Property<string>("OriginalFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<int>("SequenceNumber")
+                        .HasColumnType("int");
+
+                    b.Property<string>("StoragePublicId")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("UploadedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccidentReportId", "SequenceNumber")
+                        .IsUnique();
+
+                    b.ToTable("AccidentEvidence", t =>
+                        {
+                            t.HasCheckConstraint("CK_AccidentEvidence_FileSize", "[FileSizeBytes] IS NULL OR ([FileSizeBytes] > 0 AND [FileSizeBytes] <= 10000000)");
+
+                            t.HasCheckConstraint("CK_AccidentEvidence_SequenceNumber", "[SequenceNumber] BETWEEN 1 AND 20");
+                        });
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.AccidentLiabilityAssessment", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("AccidentReportId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("ConfirmedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("ConfirmedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("CustomerFaultPercentage")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<string>("DisputeReason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("DriverFaultLevel")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<decimal>("DriverFaultPercentage")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("ObjectiveCausePercentage")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<decimal>("ThirdPartyFaultPercentage")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("VehicleDefectAwareness")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<decimal>("VehicleFailurePercentage")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccidentReportId")
+                        .IsUnique();
+
+                    b.ToTable("AccidentLiabilityAssessments", t =>
+                        {
+                            t.HasCheckConstraint("CK_AccidentLiabilityAssessment_Total", "[DriverFaultPercentage] + [CustomerFaultPercentage] + [ThirdPartyFaultPercentage] + [VehicleFailurePercentage] + [ObjectiveCausePercentage] = 100");
+                        });
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.AccidentLiabilityCause", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("AssessmentId")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("Percentage")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<string>("ResponsibleParty")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("RootCause")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssessmentId", "RootCause", "ResponsibleParty")
+                        .IsUnique();
+
+                    b.ToTable("AccidentLiabilityCauses");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.AccidentReport", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<decimal?>("Latitude")
+                        .HasColumnType("decimal(9,6)");
+
+                    b.Property<decimal?>("Longitude")
+                        .HasColumnType("decimal(9,6)");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PoliceReportReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<Guid>("ReportedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<long>("TripId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TripId", "Status", "CreatedAtUtc");
+
+                    b.ToTable("AccidentReports");
+                });
+
             modelBuilder.Entity("SafeRide.Domain.Entities.AccountBanConfiguration", b =>
                 {
                     b.Property<long>("Id")
@@ -166,7 +405,7 @@ namespace SafeRide.Infrastructure.Migrations
 
                     b.HasIndex("UpdatedByUserId");
 
-                    b.ToTable("AccountBanConfigurations", (string)null, t =>
+                    b.ToTable("AccountBanConfigurations", null, t =>
                         {
                             t.HasCheckConstraint("CK_AccountBanConfigurations_MaximumTemporaryBans", "[MaximumTemporaryBans] > 0");
 
@@ -183,12 +422,12 @@ namespace SafeRide.Infrastructure.Migrations
                         new
                         {
                             Id = 1L,
+                            CreatedAt = new DateTime(2026, 8, 15, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsEnabled = true,
+                            MaximumTemporaryBans = 3,
                             NegativeFeedbackThreshold = 5,
                             NegativeRatingMaxScore = 2,
                             TemporaryBanDurationDays = 15,
-                            MaximumTemporaryBans = 3,
-                            IsEnabled = true,
-                            CreatedAt = new DateTime(2026, 8, 15, 0, 0, 0, 0, DateTimeKind.Utc),
                             UpdatedAt = new DateTime(2026, 8, 15, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
                 });
@@ -225,15 +464,15 @@ namespace SafeRide.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<string>("ReleaseReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
                     b.Property<DateTime?>("ReleasedAt")
                         .HasColumnType("datetime2");
 
                     b.Property<Guid?>("ReleasedByUserId")
                         .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("ReleaseReason")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
 
                     b.Property<string>("Source")
                         .IsRequired()
@@ -276,7 +515,7 @@ namespace SafeRide.Infrastructure.Migrations
 
                     b.HasIndex("UserId", "Source", "BanType", "CreatedAt");
 
-                    b.ToTable("AccountBanHistories", (string)null, t =>
+                    b.ToTable("AccountBanHistories", null, t =>
                         {
                             t.HasCheckConstraint("CK_AccountBanHistories_EndAfterStart", "[EndsAt] IS NULL OR [EndsAt] > [StartedAt]");
 
@@ -284,53 +523,6 @@ namespace SafeRide.Infrastructure.Migrations
 
                             t.HasCheckConstraint("CK_AccountBanHistories_TemporaryBanSequence", "[TemporaryBanSequence] IS NULL OR [TemporaryBanSequence] > 0");
                         });
-                });
-
-            modelBuilder.Entity("SafeRide.Domain.Entities.AccountBanConfiguration", b =>
-                {
-                    b.HasOne("SafeRide.Domain.Entities.AspNetUser", "UpdatedByUser")
-                        .WithMany()
-                        .HasForeignKey("UpdatedByUserId")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .HasConstraintName("FK_AccountBanConfigurations_UpdatedByUser");
-
-                    b.Navigation("UpdatedByUser");
-                });
-
-            modelBuilder.Entity("SafeRide.Domain.Entities.AccountBanHistory", b =>
-                {
-                    b.HasOne("SafeRide.Domain.Entities.AspNetUser", "CreatedByUser")
-                        .WithMany()
-                        .HasForeignKey("CreatedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("FK_AccountBanHistories_CreatedByUser");
-
-                    b.HasOne("SafeRide.Domain.Entities.AspNetUser", "ReleasedByUser")
-                        .WithMany()
-                        .HasForeignKey("ReleasedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("FK_AccountBanHistories_ReleasedByUser");
-
-                    b.HasOne("SafeRide.Domain.Entities.Rating", "TriggeringRating")
-                        .WithMany()
-                        .HasForeignKey("TriggeringRatingId")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .HasConstraintName("FK_AccountBanHistories_TriggeringRating");
-
-                    b.HasOne("SafeRide.Domain.Entities.AspNetUser", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("FK_AccountBanHistories_User");
-
-                    b.Navigation("CreatedByUser");
-
-                    b.Navigation("ReleasedByUser");
-
-                    b.Navigation("TriggeringRating");
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("SafeRide.Domain.Entities.AdminNotification", b =>
@@ -755,6 +947,157 @@ namespace SafeRide.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("SafeRide.Domain.Entities.ClaimReconciliationRecord", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("EvidenceContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<long>("EvidenceFileSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("EvidenceOriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("EvidenceStoragePublicId")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("EvidenceUrl")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<long>("ProtectionClaimId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("ReconciliationType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<DateTime>("RecordedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("RecordedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique();
+
+                    b.HasIndex("ProtectionClaimId", "RecordedAtUtc");
+
+                    b.ToTable("ClaimReconciliationRecords", t =>
+                        {
+                            t.HasCheckConstraint("CK_ClaimReconciliationRecords_Amount", "[Amount] > 0");
+
+                            t.HasCheckConstraint("CK_ClaimReconciliationRecords_Audit", "[Reason] <> '' AND [EvidenceUrl] <> '' AND [EvidenceStoragePublicId] <> '' AND [EvidenceOriginalFileName] <> '' AND [EvidenceContentType] <> '' AND [EvidenceFileSizeBytes] > 0 AND [RecordedByUserId] <> '00000000-0000-0000-0000-000000000000' AND [IdempotencyKey] <> ''");
+                        });
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.ClaimRecovery", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("EvidenceContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<long>("EvidenceFileSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("EvidenceOriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("EvidenceStoragePublicId")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("EvidenceUrl")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("PayerReference")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("PaymentReference")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<long>("ProtectionClaimId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("RecordedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("RecordedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("SourceType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique();
+
+                    b.HasIndex("ProtectionClaimId");
+
+                    b.ToTable("ClaimRecoveries", t =>
+                        {
+                            t.HasCheckConstraint("CK_ClaimRecoveries_Amount", "[Amount] > 0");
+
+                            t.HasCheckConstraint("CK_ClaimRecoveries_Audit", "[PayerReference] <> '' AND [PaymentReference] <> '' AND [EvidenceUrl] <> '' AND [EvidenceStoragePublicId] <> '' AND [EvidenceOriginalFileName] <> '' AND [EvidenceContentType] <> '' AND [EvidenceFileSizeBytes] > 0 AND [RecordedByUserId] <> '00000000-0000-0000-0000-000000000000' AND [IdempotencyKey] <> ''");
+                        });
+                });
+
             modelBuilder.Entity("SafeRide.Domain.Entities.DriverKyc", b =>
                 {
                     b.Property<long>("Id")
@@ -849,6 +1192,72 @@ namespace SafeRide.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("SafeRide.Domain.Entities.DriverLiability", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal?>("AppliedCap")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("AppliedRate")
+                        .HasColumnType("decimal(7,6)");
+
+                    b.Property<decimal>("ConfirmedAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DisputeReason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<decimal>("DriverAttributableEligibleDamage")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("DriverId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("FaultLevel")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<decimal>("OutstandingAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("PaidAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<long>("ProtectionClaimId")
+                        .HasColumnType("bigint");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProtectionClaimId", "DriverId")
+                        .IsUnique();
+
+                    b.ToTable("DriverLiabilities");
+                });
+
             modelBuilder.Entity("SafeRide.Domain.Entities.DriverProfile", b =>
                 {
                     b.Property<Guid>("DriverId")
@@ -920,6 +1329,180 @@ namespace SafeRide.Infrastructure.Migrations
                     b.ToTable("DriverWallets", t =>
                         {
                             t.HasCheckConstraint("CK_DriverWallets_CurrentBalance", "[CurrentBalance] >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.InsuranceClaimProviderAudit", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("ApprovedAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Operation")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<Guid?>("PerformedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<long>("ProtectionClaimId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ProviderReference")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("RequestPayload")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<decimal>("RequestedAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("ResponsePayload")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<string>("ResultStatus")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProtectionClaimId", "CreatedAtUtc");
+
+                    b.ToTable("InsuranceClaimProviderAudits", t =>
+                        {
+                            t.HasCheckConstraint("CK_InsuranceClaimProviderAudits_Amounts", "[RequestedAmount] >= 0 AND [ApprovedAmount] >= 0 AND [ApprovedAmount] <= [RequestedAmount]");
+                        });
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.LiabilityDisputeAudit", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("AssessmentId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("DisputedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("DisputedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssessmentId", "DisputedAtUtc");
+
+                    b.ToTable("LiabilityDisputeAudits");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.LiabilityDisputeEvidence", b =>
+                {
+                    b.Property<long>("LiabilityDisputeAuditId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("AccidentEvidenceId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("LiabilityDisputeAuditId", "AccidentEvidenceId");
+
+                    b.HasIndex("AccidentEvidenceId");
+
+                    b.ToTable("LiabilityDisputeEvidence");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.ManualPaymentRefund", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("ConfirmationIdempotencyKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("EvidenceUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<long>("PaymentId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("PaymentReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime?>("RefundedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("RefundedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<long>("SafetyPaymentReconciliationId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConfirmationIdempotencyKey")
+                        .IsUnique()
+                        .HasFilter("[ConfirmationIdempotencyKey] IS NOT NULL");
+
+                    b.HasIndex("PaymentId");
+
+                    b.HasIndex("RefundedByUserId");
+
+                    b.HasIndex("SafetyPaymentReconciliationId")
+                        .IsUnique();
+
+                    b.ToTable("ManualPaymentRefunds", t =>
+                        {
+                            t.HasCheckConstraint("CK_ManualPaymentRefunds_Amount", "[Amount] > 0");
+
+                            t.HasCheckConstraint("CK_ManualPaymentRefunds_EvidenceOnRefund", "[Status] = 'REFUND_PENDING' OR ([PaymentReference] IS NOT NULL AND LTRIM(RTRIM([PaymentReference])) <> '' AND [EvidenceUrl] IS NOT NULL AND LTRIM(RTRIM([EvidenceUrl])) <> '' AND [RefundedByUserId] IS NOT NULL AND [RefundedByUserId] <> '00000000-0000-0000-0000-000000000000' AND [RefundedAtUtc] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_ManualPaymentRefunds_Status", "[Status] IN ('REFUND_PENDING','REFUNDED')");
                         });
                 });
 
@@ -1036,6 +1619,87 @@ namespace SafeRide.Infrastructure.Migrations
                             t.HasCheckConstraint("CK_Payments_PaymentStatus", "[PaymentStatus] IN ('Pending', 'Success', 'Failed', 'Cancelled')");
 
                             t.HasCheckConstraint("CK_Payments_TransactionReference", "([PaymentMethod] = 'QR' AND [TransactionReference] IS NOT NULL) OR ([PaymentMethod] = 'CASH' AND [TransactionReference] IS NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.PreTripVehicleCheck", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("BrakeResponsePassed")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("CheckedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("DashboardWarningPassed")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("DriverId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("EvidenceContentType")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<long?>("EvidenceFileSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("EvidenceOriginalFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("EvidenceStoragePublicId")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("EvidenceUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("FaultType")
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<bool>("FrontRearLightsPassed")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("NoMajorVisibleIssue")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("Result")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<long>("TripId")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("TurnSignalsPassed")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("VisibleTiresPassed")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("WindshieldVisibilityPassed")
+                        .HasColumnType("bit");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TripId", "CheckedAtUtc")
+                        .IsDescending(false, true);
+
+                    b.ToTable("PreTripVehicleChecks", t =>
+                        {
+                            t.HasCheckConstraint("CK_PreTripVehicleChecks_EvidenceFileSize", "[EvidenceFileSizeBytes] IS NULL OR ([EvidenceFileSizeBytes] > 0 AND [EvidenceFileSizeBytes] <= 10000000)");
                         });
                 });
 
@@ -1165,6 +1829,110 @@ namespace SafeRide.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("SafeRide.Domain.Entities.ProtectionClaim", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("AccidentReportId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("ClosedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("ClosedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("CustomerLiabilityAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("DriverLiabilityAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("EligibleDamageAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("InsuranceApprovedAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("InsurancePaidDirectToClaimant")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("InsurancePaymentDestination")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("InsuranceReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<decimal>("InsuranceReimbursedToRiskFund")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("InsuranceRequestedAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("InsuranceStatus")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<decimal>("OutstandingRecoveryAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("RecoveredAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("RiskFundAdvanceAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("RiskFundPermanentLossAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<decimal>("ThirdPartyLiabilityAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("TotalDamageAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("TotalPaidToClaimant")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("WrittenOffAdvanceAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccidentReportId")
+                        .IsUnique();
+
+                    b.ToTable("ProtectionClaims", t =>
+                        {
+                            t.HasCheckConstraint("CK_ProtectionClaims_Amounts", "[TotalDamageAmount] >= 0 AND [EligibleDamageAmount] >= 0 AND [EligibleDamageAmount] <= [TotalDamageAmount] AND [InsuranceRequestedAmount] >= 0 AND [InsuranceApprovedAmount] >= 0 AND [InsuranceApprovedAmount] <= [InsuranceRequestedAmount] AND [InsurancePaidDirectToClaimant] >= 0 AND [InsuranceReimbursedToRiskFund] >= 0 AND [InsurancePaidDirectToClaimant] + [InsuranceReimbursedToRiskFund] <= [InsuranceApprovedAmount] AND ([InsurancePaidDirectToClaimant] = 0 OR [InsuranceReimbursedToRiskFund] = 0) AND (([InsurancePaymentDestination] = 'DIRECT_TO_CLAIMANT' AND [InsuranceReimbursedToRiskFund] = 0) OR ([InsurancePaymentDestination] = 'REIMBURSE_RISK_FUND' AND [InsurancePaidDirectToClaimant] = 0)) AND [RiskFundAdvanceAmount] >= 0 AND [RiskFundPermanentLossAmount] >= 0 AND [DriverLiabilityAmount] >= 0 AND [CustomerLiabilityAmount] >= 0 AND [ThirdPartyLiabilityAmount] >= 0 AND [TotalPaidToClaimant] >= 0 AND [TotalPaidToClaimant] <= [EligibleDamageAmount] AND [RecoveredAmount] >= 0 AND [OutstandingRecoveryAmount] >= 0 AND [WrittenOffAdvanceAmount] >= 0 AND [RecoveredAmount] + [OutstandingRecoveryAmount] + [WrittenOffAdvanceAmount] <= [RiskFundAdvanceAmount]");
+                        });
+                });
+
             modelBuilder.Entity("SafeRide.Domain.Entities.Rating", b =>
                 {
                     b.Property<long>("Id")
@@ -1285,6 +2053,32 @@ namespace SafeRide.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<bool>("EscalationRequested")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal?>("Latitude")
+                        .HasColumnType("decimal(9,6)");
+
+                    b.Property<decimal?>("Longitude")
+                        .HasColumnType("decimal(9,6)");
+
+                    b.Property<DateTime?>("OccurredAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<long?>("PreTripVehicleCheckId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ReasonCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("ReportType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)")
+                        .HasDefaultValue("GENERAL");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -1306,6 +2100,8 @@ namespace SafeRide.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("PK__Reports__3214EC07D235B6F9");
 
+                    b.HasIndex("PreTripVehicleCheckId");
+
                     b.HasIndex("TripId");
 
                     b.HasIndex("UserId");
@@ -1313,6 +2109,241 @@ namespace SafeRide.Infrastructure.Migrations
                     b.ToTable("Reports", t =>
                         {
                             t.HasCheckConstraint("CK_Reports_Status", "[Status] IN ('Pending', 'Resolved', 'Rejected')");
+                        });
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.RiskFundAccount", b =>
+                {
+                    b.Property<long>("Id")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("CurrentBalance")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("RiskFundAccounts", t =>
+                        {
+                            t.HasCheckConstraint("CK_RiskFundAccounts_Balance", "[CurrentBalance] >= 0");
+
+                            t.HasCheckConstraint("CK_RiskFundAccounts_Singleton", "[Id] = 1");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1L,
+                            CurrentBalance = 0m,
+                            RowVersion = new byte[0],
+                            UpdatedAtUtc = new DateTime(2000, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        });
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.RiskFundTransaction", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("BalanceAfter")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("BalanceBefore")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<long?>("ClaimRecoveryId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<string>("EvidenceUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("ExternalReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid?>("PerformedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<long?>("ProtectionClaimId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<long>("RiskFundAccountId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("TransactionType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<long?>("TripId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClaimRecoveryId");
+
+                    b.HasIndex("CreatedAtUtc");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique();
+
+                    b.HasIndex("ProtectionClaimId");
+
+                    b.HasIndex("RiskFundAccountId", "TransactionType")
+                        .IsUnique()
+                        .HasFilter("[TransactionType] = 'OPENING_BALANCE'");
+
+                    b.HasIndex("TripId", "TransactionType")
+                        .IsUnique()
+                        .HasFilter("[TripId] IS NOT NULL AND [TransactionType] = 'CONTRIBUTION'");
+
+                    b.ToTable("RiskFundTransactions", t =>
+                        {
+                            t.HasTrigger("TR_RiskFundTransactions_AppendOnly");
+
+                            t.HasCheckConstraint("CK_RiskFundTransactions_AdministrativeAudit", "[TransactionType] NOT IN ('OPENING_BALANCE','ADJUSTMENT') OR ([PerformedByUserId] IS NOT NULL AND [PerformedByUserId] <> '00000000-0000-0000-0000-000000000000' AND [ExternalReference] IS NOT NULL AND LTRIM(RTRIM([ExternalReference])) <> '' AND [EvidenceUrl] IS NOT NULL AND LTRIM(RTRIM([EvidenceUrl])) <> '' AND LTRIM(RTRIM([Reason])) <> '' AND LTRIM(RTRIM([IdempotencyKey])) <> '')");
+
+                            t.HasCheckConstraint("CK_RiskFundTransactions_Amount", "[Amount] > 0");
+
+                            t.HasCheckConstraint("CK_RiskFundTransactions_Balance", "[BalanceBefore] >= 0 AND [BalanceAfter] >= 0");
+
+                            t.HasCheckConstraint("CK_RiskFundTransactions_BalanceMovement", "([Direction] = 'CREDIT' AND [BalanceAfter] = [BalanceBefore] + [Amount]) OR ([Direction] = 'DEBIT' AND [BalanceAfter] = [BalanceBefore] - [Amount])");
+
+                            t.HasCheckConstraint("CK_RiskFundTransactions_TypeDirection", "([TransactionType] IN ('OPENING_BALANCE','CONTRIBUTION','DRIVER_RECOVERY','CUSTOMER_RECOVERY','THIRD_PARTY_RECOVERY','INSURANCE_RECOVERY') AND [Direction] = 'CREDIT') OR ([TransactionType] IN ('CLAIM_ADVANCE','CLAIM_PAYOUT') AND [Direction] = 'DEBIT') OR [TransactionType] = 'ADJUSTMENT'");
+
+                            t.HasCheckConstraint("CK_RiskFundTransactions_TypeLinks", "([TransactionType] IN ('OPENING_BALANCE','ADJUSTMENT') AND [TripId] IS NULL AND [ProtectionClaimId] IS NULL AND [ClaimRecoveryId] IS NULL) OR ([TransactionType] = 'CONTRIBUTION' AND [TripId] IS NOT NULL AND [ProtectionClaimId] IS NULL AND [ClaimRecoveryId] IS NULL) OR ([TransactionType] IN ('CLAIM_ADVANCE','CLAIM_PAYOUT') AND [TripId] IS NULL AND [ProtectionClaimId] IS NOT NULL AND [ClaimRecoveryId] IS NULL) OR ([TransactionType] IN ('DRIVER_RECOVERY','CUSTOMER_RECOVERY','THIRD_PARTY_RECOVERY','INSURANCE_RECOVERY') AND [TripId] IS NULL AND [ProtectionClaimId] IS NOT NULL AND [ClaimRecoveryId] IS NOT NULL)");
+                        });
+
+                    b.HasAnnotation("SqlServer:UseSqlOutputClause", false);
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.RiskProtectionPolicyVersion", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("BasePlatformCommissionRate")
+                        .HasColumnType("decimal(7,6)");
+
+                    b.Property<string>("ChangeReason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<decimal>("ClaimAutoApprovalThreshold")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("DefaultProtectionLimit")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("DriverGrossNegligenceCap")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("DriverGrossNegligenceRate")
+                        .HasColumnType("decimal(7,6)");
+
+                    b.Property<decimal>("DriverOrdinaryNegligenceCap")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("DriverOrdinaryNegligenceRate")
+                        .HasColumnType("decimal(7,6)");
+
+                    b.Property<DateTime>("EffectiveFromUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("MockInsuranceCoverageLimit")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("RiskFundEnabled")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("RiskReserveRate")
+                        .HasColumnType("decimal(7,6)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EffectiveFromUtc")
+                        .IsUnique();
+
+                    b.ToTable("RiskProtectionPolicyVersions", t =>
+                        {
+                            t.HasTrigger("TR_RiskProtectionPolicyVersions_ImmutableWhenReferenced");
+
+                            t.HasCheckConstraint("CK_RiskProtectionPolicy_CommissionRate", "[BasePlatformCommissionRate] >= 0 AND [BasePlatformCommissionRate] <= 1");
+
+                            t.HasCheckConstraint("CK_RiskProtectionPolicy_NegligenceRates", "[DriverOrdinaryNegligenceRate] >= 0 AND [DriverOrdinaryNegligenceRate] <= 1 AND [DriverGrossNegligenceRate] >= 0 AND [DriverGrossNegligenceRate] <= 1");
+
+                            t.HasCheckConstraint("CK_RiskProtectionPolicy_ReserveRate", "[RiskReserveRate] >= 0 AND [RiskReserveRate] <= 1");
+                        });
+
+                    b.HasAnnotation("SqlServer:UseSqlOutputClause", false);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1L,
+                            BasePlatformCommissionRate = 0.30m,
+                            ChangeReason = "Legacy 30 percent commission baseline; risk protection disabled",
+                            ClaimAutoApprovalThreshold = 0m,
+                            CreatedAtUtc = new DateTime(2000, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DefaultProtectionLimit = 0m,
+                            DriverGrossNegligenceCap = 0m,
+                            DriverGrossNegligenceRate = 0m,
+                            DriverOrdinaryNegligenceCap = 0m,
+                            DriverOrdinaryNegligenceRate = 0m,
+                            EffectiveFromUtc = new DateTime(2000, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MockInsuranceCoverageLimit = 0m,
+                            RiskFundEnabled = false,
+                            RiskReserveRate = 0m,
+                            RowVersion = new byte[0]
                         });
                 });
 
@@ -1401,6 +2432,114 @@ namespace SafeRide.Infrastructure.Migrations
                             t.HasCheckConstraint("CK_SOSAlerts_Location", "[Location].STSrid = 4326");
 
                             t.HasCheckConstraint("CK_SOSAlerts_SOSStatus", "[SOSStatus] IN ('Active', 'Resolved', 'Cancelled')");
+                        });
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.SafetyPaymentReconciliation", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("CustomerPayableAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("DriverCreditedAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("RefundObligationAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("RemainingPayableAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<decimal>("SuccessfulPaymentAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<long>("TripId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TripId")
+                        .IsUnique();
+
+                    b.ToTable("SafetyPaymentReconciliations", t =>
+                        {
+                            t.HasCheckConstraint("CK_SafetyPaymentReconciliations_Amounts", "[CustomerPayableAmount] >= 0 AND [SuccessfulPaymentAmount] >= 0 AND [RemainingPayableAmount] >= 0 AND [RefundObligationAmount] >= 0 AND [DriverCreditedAmount] >= 0 AND NOT ([RemainingPayableAmount] > 0 AND [RefundObligationAmount] > 0)");
+
+                            t.HasCheckConstraint("CK_SafetyPaymentReconciliations_Status", "[Status] IN ('NOT_REQUIRED','PAYMENT_PENDING','PAID','REFUND_PENDING','REFUNDED')");
+                        });
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.SafetyTerminationEvidence", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("EvidenceUrl")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<long>("FileSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("StoragePublicId")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<long>("TripId")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("UploadedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UploadedByUserId");
+
+                    b.HasIndex("TripId", "CreatedAtUtc");
+
+                    b.ToTable("SafetyTerminationEvidence", t =>
+                        {
+                            t.HasCheckConstraint("CK_SafetyTerminationEvidence_TrustedMetadata", "[EvidenceUrl] <> '' AND [StoragePublicId] <> '' AND [OriginalFileName] <> '' AND [ContentType] <> '' AND [FileSizeBytes] > 0 AND [UploadedByUserId] <> '00000000-0000-0000-0000-000000000000'");
                         });
                 });
 
@@ -1557,8 +2696,19 @@ namespace SafeRide.Infrastructure.Migrations
                     b.Property<string>("RoutePolyline")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<DateTime?>("SafetyTerminatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("SafetyTerminationReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
                     b.Property<DateTime?>("StartedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("TerminationCategory")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<string>("TripStatus")
                         .IsRequired()
@@ -1589,6 +2739,132 @@ namespace SafeRide.Infrastructure.Migrations
 
                             t.HasCheckConstraint("CK_Trips_TripStatus", "[TripStatus] IN ('ACCEPTED', 'DRIVER_ARRIVING', 'ARRIVED', 'IN_PROGRESS', 'WAITING_RETURN_CONFIRM', 'RETURN_CONFIRMED', 'WAITING_PAYMENT', 'COMPLETED', 'CANCELLED')");
                         });
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.TripFinancialSettlement", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("CommissionBase")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("CustomerPayableAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("DriverEarning")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("GrossPlatformCommission")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("IsRiskContributionEligible")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("NetOperatingRevenue")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("NetPlatformCommission")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("PlatformCommissionRate")
+                        .HasColumnType("decimal(7,6)");
+
+                    b.Property<long>("PolicyVersionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("PromotionExpense")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("RiskContribution")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("RiskReserveRate")
+                        .HasColumnType("decimal(7,6)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<DateTime?>("SettledAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<long>("TripId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PolicyVersionId");
+
+                    b.HasIndex("TripId")
+                        .IsUnique();
+
+                    b.ToTable("TripFinancialSettlements", t =>
+                        {
+                            t.HasCheckConstraint("CK_TripFinancialSettlements_NonNegative", "[CommissionBase] >= 0 AND [PromotionExpense] >= 0 AND [CustomerPayableAmount] >= 0 AND [GrossPlatformCommission] >= 0 AND [DriverEarning] >= 0 AND [RiskContribution] >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.TripProtectionCoverage", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("ActivatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal?>("InsuranceCoverageSnapshot")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("InsuranceDeductibleSnapshot")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("InsuranceProviderSnapshot")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("PolicyNumberSnapshot")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<long>("PolicyVersionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("PreTripVehicleCheckId")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("ProtectionLimit")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<long>("TripId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("VehicleInsurancePolicyId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PolicyVersionId");
+
+                    b.HasIndex("PreTripVehicleCheckId");
+
+                    b.HasIndex("TripId")
+                        .IsUnique();
+
+                    b.HasIndex("VehicleInsurancePolicyId");
+
+                    b.ToTable("TripProtectionCoverages");
                 });
 
             modelBuilder.Entity("SafeRide.Domain.Entities.TripReturnConfirmation", b =>
@@ -1851,6 +3127,79 @@ namespace SafeRide.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("SafeRide.Domain.Entities.VehicleInsurancePolicy", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("CoverageAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("Deductible")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("DocumentUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime>("EffectiveFromUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("InsuranceType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("PolicyNumber")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime?>("ReviewedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<long>("VehicleId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("VerificationStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("VehicleId");
+
+                    b.HasIndex("Provider", "PolicyNumber")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("VehicleInsurancePolicies");
+                });
+
             modelBuilder.Entity("SafeRide.Domain.Entities.WalletTransaction", b =>
                 {
                     b.Property<long>("Id")
@@ -1869,6 +3218,10 @@ namespace SafeRide.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<string>("SettlementEffect")
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
                     b.Property<string>("TransactionType")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -1886,6 +3239,11 @@ namespace SafeRide.Infrastructure.Migrations
                     b.HasIndex("TripId");
 
                     b.HasIndex("WalletId");
+
+                    b.HasIndex("TripId", "WalletId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_WalletTransactions_Trip_Wallet_SettlementEffect")
+                        .HasFilter("[TripId] IS NOT NULL AND [SettlementEffect] IS NOT NULL");
 
                     b.ToTable("WalletTransactions", t =>
                         {
@@ -2006,6 +3364,97 @@ namespace SafeRide.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("SafeRide.Domain.Entities.AccidentEvidence", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.AccidentReport", "AccidentReport")
+                        .WithMany("Evidence")
+                        .HasForeignKey("AccidentReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AccidentReport");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.AccidentLiabilityAssessment", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.AccidentReport", "AccidentReport")
+                        .WithOne("LiabilityAssessment")
+                        .HasForeignKey("SafeRide.Domain.Entities.AccidentLiabilityAssessment", "AccidentReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AccidentReport");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.AccidentLiabilityCause", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.AccidentLiabilityAssessment", "Assessment")
+                        .WithMany("Causes")
+                        .HasForeignKey("AssessmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Assessment");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.AccidentReport", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.Trip", "Trip")
+                        .WithMany()
+                        .HasForeignKey("TripId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Trip");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.AccountBanConfiguration", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.AspNetUser", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_AccountBanConfigurations_UpdatedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.AccountBanHistory", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.AspNetUser", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_AccountBanHistories_CreatedByUser");
+
+                    b.HasOne("SafeRide.Domain.Entities.AspNetUser", "ReleasedByUser")
+                        .WithMany()
+                        .HasForeignKey("ReleasedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_AccountBanHistories_ReleasedByUser");
+
+                    b.HasOne("SafeRide.Domain.Entities.Rating", "TriggeringRating")
+                        .WithMany()
+                        .HasForeignKey("TriggeringRatingId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_AccountBanHistories_TriggeringRating");
+
+                    b.HasOne("SafeRide.Domain.Entities.AspNetUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_AccountBanHistories_User");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("ReleasedByUser");
+
+                    b.Navigation("TriggeringRating");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("SafeRide.Domain.Entities.AdminNotification", b =>
                 {
                     b.HasOne("SafeRide.Domain.Entities.AspNetUser", "ApprovedByUser")
@@ -2120,6 +3569,28 @@ namespace SafeRide.Infrastructure.Migrations
                     b.Navigation("Promotion");
                 });
 
+            modelBuilder.Entity("SafeRide.Domain.Entities.ClaimReconciliationRecord", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.ProtectionClaim", "ProtectionClaim")
+                        .WithMany("ReconciliationRecords")
+                        .HasForeignKey("ProtectionClaimId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ProtectionClaim");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.ClaimRecovery", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.ProtectionClaim", "ProtectionClaim")
+                        .WithMany("Recoveries")
+                        .HasForeignKey("ProtectionClaimId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ProtectionClaim");
+                });
+
             modelBuilder.Entity("SafeRide.Domain.Entities.DriverKyc", b =>
                 {
                     b.HasOne("SafeRide.Domain.Entities.AspNetUser", "Driver")
@@ -2129,6 +3600,17 @@ namespace SafeRide.Infrastructure.Migrations
                         .HasConstraintName("FK_DriverKyc_AspNetUsers");
 
                     b.Navigation("Driver");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.DriverLiability", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.ProtectionClaim", "ProtectionClaim")
+                        .WithMany("DriverLiabilities")
+                        .HasForeignKey("ProtectionClaimId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ProtectionClaim");
                 });
 
             modelBuilder.Entity("SafeRide.Domain.Entities.DriverProfile", b =>
@@ -2153,6 +3635,71 @@ namespace SafeRide.Infrastructure.Migrations
                     b.Navigation("Driver");
                 });
 
+            modelBuilder.Entity("SafeRide.Domain.Entities.InsuranceClaimProviderAudit", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.ProtectionClaim", "ProtectionClaim")
+                        .WithMany("InsuranceProviderAudits")
+                        .HasForeignKey("ProtectionClaimId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ProtectionClaim");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.LiabilityDisputeAudit", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.AccidentLiabilityAssessment", "Assessment")
+                        .WithMany("Disputes")
+                        .HasForeignKey("AssessmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Assessment");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.LiabilityDisputeEvidence", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.AccidentEvidence", "AccidentEvidence")
+                        .WithMany("LiabilityDisputes")
+                        .HasForeignKey("AccidentEvidenceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SafeRide.Domain.Entities.LiabilityDisputeAudit", "LiabilityDisputeAudit")
+                        .WithMany("Evidence")
+                        .HasForeignKey("LiabilityDisputeAuditId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AccidentEvidence");
+
+                    b.Navigation("LiabilityDisputeAudit");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.ManualPaymentRefund", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.Payment", "Payment")
+                        .WithMany()
+                        .HasForeignKey("PaymentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SafeRide.Domain.Entities.AspNetUser", null)
+                        .WithMany()
+                        .HasForeignKey("RefundedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("SafeRide.Domain.Entities.SafetyPaymentReconciliation", "Reconciliation")
+                        .WithOne("Refund")
+                        .HasForeignKey("SafeRide.Domain.Entities.ManualPaymentRefund", "SafetyPaymentReconciliationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Payment");
+
+                    b.Navigation("Reconciliation");
+                });
+
             modelBuilder.Entity("SafeRide.Domain.Entities.Notification", b =>
                 {
                     b.HasOne("SafeRide.Domain.Entities.AspNetUser", "User")
@@ -2175,6 +3722,17 @@ namespace SafeRide.Infrastructure.Migrations
                     b.Navigation("Trip");
                 });
 
+            modelBuilder.Entity("SafeRide.Domain.Entities.PreTripVehicleCheck", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.Trip", "Trip")
+                        .WithMany()
+                        .HasForeignKey("TripId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Trip");
+                });
+
             modelBuilder.Entity("SafeRide.Domain.Entities.PricingRule", b =>
                 {
                     b.HasOne("SafeRide.Domain.Entities.ServiceType", "ServiceType")
@@ -2184,6 +3742,17 @@ namespace SafeRide.Infrastructure.Migrations
                         .HasConstraintName("FK_PricingRules_ServiceType");
 
                     b.Navigation("ServiceType");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.ProtectionClaim", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.AccidentReport", "AccidentReport")
+                        .WithOne("ProtectionClaim")
+                        .HasForeignKey("SafeRide.Domain.Entities.ProtectionClaim", "AccidentReportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AccidentReport");
                 });
 
             modelBuilder.Entity("SafeRide.Domain.Entities.Rating", b =>
@@ -2227,6 +3796,11 @@ namespace SafeRide.Infrastructure.Migrations
 
             modelBuilder.Entity("SafeRide.Domain.Entities.Report", b =>
                 {
+                    b.HasOne("SafeRide.Domain.Entities.PreTripVehicleCheck", null)
+                        .WithMany()
+                        .HasForeignKey("PreTripVehicleCheckId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.HasOne("SafeRide.Domain.Entities.Trip", "Trip")
                         .WithMany("Reports")
                         .HasForeignKey("TripId")
@@ -2241,6 +3815,32 @@ namespace SafeRide.Infrastructure.Migrations
                     b.Navigation("Trip");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.RiskFundTransaction", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.ClaimRecovery", null)
+                        .WithMany()
+                        .HasForeignKey("ClaimRecoveryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("SafeRide.Domain.Entities.ProtectionClaim", null)
+                        .WithMany()
+                        .HasForeignKey("ProtectionClaimId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("SafeRide.Domain.Entities.RiskFundAccount", "RiskFundAccount")
+                        .WithMany("Transactions")
+                        .HasForeignKey("RiskFundAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SafeRide.Domain.Entities.Trip", null)
+                        .WithMany()
+                        .HasForeignKey("TripId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("RiskFundAccount");
                 });
 
             modelBuilder.Entity("SafeRide.Domain.Entities.RouteDeviation", b =>
@@ -2280,6 +3880,34 @@ namespace SafeRide.Infrastructure.Migrations
                     b.Navigation("Trip");
                 });
 
+            modelBuilder.Entity("SafeRide.Domain.Entities.SafetyPaymentReconciliation", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.Trip", "Trip")
+                        .WithOne("SafetyPaymentReconciliation")
+                        .HasForeignKey("SafeRide.Domain.Entities.SafetyPaymentReconciliation", "TripId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Trip");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.SafetyTerminationEvidence", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.Trip", "Trip")
+                        .WithMany()
+                        .HasForeignKey("TripId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SafeRide.Domain.Entities.AspNetUser", null)
+                        .WithMany()
+                        .HasForeignKey("UploadedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Trip");
+                });
+
             modelBuilder.Entity("SafeRide.Domain.Entities.Trip", b =>
                 {
                     b.HasOne("SafeRide.Domain.Entities.Booking", "Booking")
@@ -2304,6 +3932,59 @@ namespace SafeRide.Infrastructure.Migrations
                     b.Navigation("CancelledByUser");
 
                     b.Navigation("Driver");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.TripFinancialSettlement", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.RiskProtectionPolicyVersion", "PolicyVersion")
+                        .WithMany()
+                        .HasForeignKey("PolicyVersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SafeRide.Domain.Entities.Trip", "Trip")
+                        .WithOne()
+                        .HasForeignKey("SafeRide.Domain.Entities.TripFinancialSettlement", "TripId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("PolicyVersion");
+
+                    b.Navigation("Trip");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.TripProtectionCoverage", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.RiskProtectionPolicyVersion", "PolicyVersion")
+                        .WithMany()
+                        .HasForeignKey("PolicyVersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SafeRide.Domain.Entities.PreTripVehicleCheck", "PreTripVehicleCheck")
+                        .WithMany()
+                        .HasForeignKey("PreTripVehicleCheckId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SafeRide.Domain.Entities.Trip", "Trip")
+                        .WithOne()
+                        .HasForeignKey("SafeRide.Domain.Entities.TripProtectionCoverage", "TripId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SafeRide.Domain.Entities.VehicleInsurancePolicy", "VehicleInsurancePolicy")
+                        .WithMany()
+                        .HasForeignKey("VehicleInsurancePolicyId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("PolicyVersion");
+
+                    b.Navigation("PreTripVehicleCheck");
+
+                    b.Navigation("Trip");
+
+                    b.Navigation("VehicleInsurancePolicy");
                 });
 
             modelBuilder.Entity("SafeRide.Domain.Entities.TripReturnConfirmation", b =>
@@ -2383,6 +4064,17 @@ namespace SafeRide.Infrastructure.Migrations
                     b.Navigation("OwnerUser");
                 });
 
+            modelBuilder.Entity("SafeRide.Domain.Entities.VehicleInsurancePolicy", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.Vehicle", "Vehicle")
+                        .WithMany("VehicleInsurancePolicies")
+                        .HasForeignKey("VehicleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Vehicle");
+                });
+
             modelBuilder.Entity("SafeRide.Domain.Entities.WalletTransaction", b =>
                 {
                     b.HasOne("SafeRide.Domain.Entities.Trip", "Trip")
@@ -2410,6 +4102,27 @@ namespace SafeRide.Infrastructure.Migrations
                         .HasConstraintName("FK_Withdrawal_Wallet");
 
                     b.Navigation("Wallet");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.AccidentEvidence", b =>
+                {
+                    b.Navigation("LiabilityDisputes");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.AccidentLiabilityAssessment", b =>
+                {
+                    b.Navigation("Causes");
+
+                    b.Navigation("Disputes");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.AccidentReport", b =>
+                {
+                    b.Navigation("Evidence");
+
+                    b.Navigation("LiabilityAssessment");
+
+                    b.Navigation("ProtectionClaim");
                 });
 
             modelBuilder.Entity("SafeRide.Domain.Entities.AspNetUser", b =>
@@ -2468,6 +4181,11 @@ namespace SafeRide.Infrastructure.Migrations
                     b.Navigation("WithdrawalRequests");
                 });
 
+            modelBuilder.Entity("SafeRide.Domain.Entities.LiabilityDisputeAudit", b =>
+                {
+                    b.Navigation("Evidence");
+                });
+
             modelBuilder.Entity("SafeRide.Domain.Entities.PricingRule", b =>
                 {
                     b.Navigation("Bookings");
@@ -2476,6 +4194,27 @@ namespace SafeRide.Infrastructure.Migrations
             modelBuilder.Entity("SafeRide.Domain.Entities.Promotion", b =>
                 {
                     b.Navigation("BookingPromotions");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.ProtectionClaim", b =>
+                {
+                    b.Navigation("DriverLiabilities");
+
+                    b.Navigation("InsuranceProviderAudits");
+
+                    b.Navigation("ReconciliationRecords");
+
+                    b.Navigation("Recoveries");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.RiskFundAccount", b =>
+                {
+                    b.Navigation("Transactions");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.SafetyPaymentReconciliation", b =>
+                {
+                    b.Navigation("Refund");
                 });
 
             modelBuilder.Entity("SafeRide.Domain.Entities.ServiceType", b =>
@@ -2504,6 +4243,8 @@ namespace SafeRide.Infrastructure.Migrations
 
                     b.Navigation("SOSAlerts");
 
+                    b.Navigation("SafetyPaymentReconciliation");
+
                     b.Navigation("TripShares");
 
                     b.Navigation("WalletTransactions");
@@ -2517,6 +4258,8 @@ namespace SafeRide.Infrastructure.Migrations
             modelBuilder.Entity("SafeRide.Domain.Entities.Vehicle", b =>
                 {
                     b.Navigation("Bookings");
+
+                    b.Navigation("VehicleInsurancePolicies");
                 });
 #pragma warning restore 612, 618
         }

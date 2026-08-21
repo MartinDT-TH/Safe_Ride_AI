@@ -14,6 +14,8 @@ using Microsoft.IdentityModel.Tokens;
 using SafeRide.Application.Features.Auth.Services;
 using SafeRide.Application.Common.Models;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Features.RiskProtection;
+using SafeRide.Application.Features.Admin.Revenue;
 using SafeRide.Domain.Entities;
 using SafeRide.Infrastructure.Authentication;
 using SafeRide.Infrastructure.AiChat;
@@ -98,7 +100,9 @@ public static class DependencyInjection
         services.AddDbContext<ApplicationDbContext>(
             options => options.UseSqlServer(
                 configuration.GetConnectionString("DefaultConnection"),
-                sqlOptions => sqlOptions.UseNetTopologySuite()));
+                sqlOptions => sqlOptions
+                    .UseNetTopologySuite()
+                    .EnableRetryOnFailure()));
 
         services
             .AddIdentity<AspNetUser, AspNetRole>(options =>
@@ -125,6 +129,7 @@ public static class DependencyInjection
             .Validate(options => options.AccessTokenMinutes > 0, "Authentication:TripContinuation:AccessTokenMinutes must be greater than zero.")
             .Validate(options => options.RefreshTokenMinutes > 0, "Authentication:TripContinuation:RefreshTokenMinutes must be greater than zero.")
             .Validate(options => options.AbsoluteMaxHoursFromTripStart > 0, "Authentication:TripContinuation:AbsoluteMaxHoursFromTripStart must be greater than zero.")
+            .Validate(options => options.AbsoluteMaxHoursFromBookingCreation > 0, "Authentication:TripContinuation:AbsoluteMaxHoursFromBookingCreation must be greater than zero.")
             .Validate(options => options.PostCompletionRatingGraceMinutes > 0, "Authentication:TripContinuation:PostCompletionRatingGraceMinutes must be greater than zero.")
             .ValidateOnStart();
         services
@@ -291,6 +296,18 @@ public static class DependencyInjection
         services.AddSingleton<ICloudinaryImageService, CloudinaryImageService>();
         services.AddSingleton<IIdentityDocumentStorage, CloudinaryIdentityDocumentStorage>();
         services.AddSingleton<ITripReturnEvidenceStorage, CloudinaryTripReturnEvidenceStorage>();
+        services.AddSingleton<IAccidentEvidenceStorage, CloudinaryAccidentEvidenceStorage>();
+        if (environment.IsDevelopment() || environment.IsEnvironment("Testing"))
+        {
+            services.AddSingleton<IFileSafetyScanner, NonProductionFileSafetyScanner>();
+        }
+        else
+        {
+            services.AddSingleton<IFileSafetyScanner, UnconfiguredFileSafetyScanner>();
+        }
+        services.AddSingleton<IEvidenceFileValidator, EvidenceFileValidator>();
+        services.AddSingleton<IPreTripVehicleCheckEvidenceStorage, CloudinaryPreTripVehicleCheckEvidenceStorage>();
+        services.AddSingleton<ISafetyTerminationEvidenceStorage, CloudinarySafetyTerminationEvidenceStorage>();
         services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IGoogleTokenVerifier, GoogleTokenVerifier>();
@@ -325,6 +342,19 @@ public static class DependencyInjection
         services.AddScoped<IDriverWalletService, DriverWalletService>();
         services.AddScoped<IDriverRealtimeService, DriverRealtimeService>();
         services.AddScoped<TripFareFinalizationService>();
+        services.AddSingleton<ITripCommissionCalculator, TripCommissionCalculator>();
+        services.AddSingleton<IClaimSettlementCalculator, TripCommissionCalculator>();
+        services.AddScoped<IRiskProtectionPolicyProvider, RiskProtectionPolicyProvider>();
+        services.AddScoped<IPreTripVehicleCheckService, PreTripVehicleCheckService>();
+        services.AddScoped<IVehicleInsurancePolicyService, VehicleInsurancePolicyService>();
+        services.AddScoped<ISafetyReportService, SafetyReportService>();
+        services.AddScoped<RiskFundLedgerService>();
+        services.AddScoped<IRiskFundLedgerService>(provider => provider.GetRequiredService<RiskFundLedgerService>());
+        services.AddScoped<ITripFinancialSettlementService, TripFinancialSettlementService>();
+        services.AddScoped<ISafetyPaymentReconciliationService, SafetyPaymentReconciliationService>();
+        services.AddScoped<IInsuranceProvider, MockInsuranceProvider>();
+        services.AddScoped<IAccidentManagementService, AccidentManagementService>();
+        services.AddScoped<IAdminRevenueQueryService, AdminRevenueQueryService>();
         services.AddScoped<TripPaymentSettlementService>();
         services.AddScoped<ITripStatusService, TripStatusService>();
         services.AddScoped<ITripSharingService, TripSharingService>();

@@ -2389,4 +2389,229 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get endTripResponseFailed => '운행 종료 요청에 응답하지 못했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get preTripSafetyTitle => '운행 전 차량 안전 점검';
+
+  @override
+  String get preTripSafetyDescription =>
+      '운행 시작 전에 모든 항목을 확인하세요. 실패 기록도 감사 목적으로 보관됩니다.';
+
+  @override
+  String get brakeResponse => '브레이크 반응';
+
+  @override
+  String get frontRearLights => '전조등 및 후미등';
+
+  @override
+  String get turnSignals => '방향 지시등';
+
+  @override
+  String get visibleTires => '타이어 외관';
+
+  @override
+  String get dashboardWarning => '계기판 경고 없음';
+
+  @override
+  String get windshieldVisibility => '유리와 거울 시야';
+
+  @override
+  String get noMajorVisibleIssue => '중대한 외관 문제 없음';
+
+  @override
+  String get confirmSafetyCheck => '안전 점검 확인';
+
+  @override
+  String get allChecksRequired => '운행 시작 전에 모든 안전 항목을 통과해야 합니다.';
+
+  @override
+  String get safetyTermination => '안전 사유로 종료';
+
+  @override
+  String get safetyTerminationDescription =>
+      '운행은 취소 상태로 유지됩니다. 프로모션은 사용되지 않으며 시작 후에는 부분 요금이 적용될 수 있습니다.';
+
+  @override
+  String get safetyTerminationReasonHint => '안전 위험을 설명하세요';
+
+  @override
+  String get reportAccident => '사고 신고';
+
+  @override
+  String get accidentDescriptionHint => '사고 경위와 초기 피해를 설명하세요';
+
+  @override
+  String get accidentReported => '사고 신고를 제출했습니다.';
+
+  @override
+  String get safetyTerminationFailed => '안전 사유로 운행을 종료할 수 없습니다.';
+
+  @override
+  String get preTripCheckFailed => '안전 점검을 제출할 수 없습니다.';
+
+  @override
+  String get riskProtectionCaseTitle => '사고 보호 사건';
+
+  @override
+  String get riskProtectionClaim => '보호 청구';
+
+  @override
+  String get riskProtectionEvidence => '증거';
+
+  @override
+  String get riskProtectionAssessment => '책임 평가';
+
+  @override
+  String get uploadAccidentEvidence => '증거 사진 추가';
+
+  @override
+  String get disputeLiability => '책임 재검토 요청';
+
+  @override
+  String get disputeReasonHint => '재검토가 필요한 이유를 입력하세요';
+
+  @override
+  String get liabilityDisputed => '재검토 요청을 제출했습니다.';
+
+  @override
+  String get accidentEvidenceUploaded => '증거를 업로드했습니다.';
+
+  @override
+  String get noAccidentEvidence => '업로드된 증거가 없습니다.';
+
+  @override
+  String get noProtectionClaim => '보호 청구가 아직 생성되지 않았습니다.';
+
+  @override
+  String get driverLiabilities => '나의 책임';
+
+  @override
+  String get noDriverLiabilities => '확정된 운전자 책임이 없습니다.';
+
+  @override
+  String get confirmedAmount => '확정 금액';
+
+  @override
+  String get paidAmount => '납부 금액';
+
+  @override
+  String get outstandingAmount => '미납 금액';
+
+  @override
+  String get attributableDamage => '운전자 귀책 적격 손해';
+
+  @override
+  String get recoveryHistory => '회수 내역';
+
+  @override
+  String get claimStatus => '청구 상태';
+
+  @override
+  String get insuranceCoverage => '보험 보장';
+
+  @override
+  String get riskFundCoverage => '위험 기금 보장';
+
+  @override
+  String get participantLiabilities => '당사자 책임';
+
+  @override
+  String get accidentStatus => '사고 상태';
+
+  @override
+  String get accidentCategory => '사고 유형';
+
+  @override
+  String get accidentOccurredAt => '발생 시각';
+
+  @override
+  String get safetyReportTitle => '안전 신고';
+
+  @override
+  String get unsafeCustomer => '위험한 고객';
+
+  @override
+  String get vehicleIssue => '차량 문제';
+
+  @override
+  String get safetyReasonCode => '사유 코드';
+
+  @override
+  String get safetyReportDescription => '상황을 설명하세요';
+
+  @override
+  String get requestSosEscalation => 'SOS 에스컬레이션 요청';
+
+  @override
+  String get requestSosEscalationHint => '현재 위치를 보내고 지속 SOS 알림을 생성합니다';
+
+  @override
+  String get safetyReportSubmitted => '안전 신고를 제출했습니다.';
+
+  @override
+  String get safetyReportFailed => '안전 신고를 제출할 수 없습니다. 다시 시도하세요.';
+
+  @override
+  String get vehicleFaultType => '차량 결함 유형';
+
+  @override
+  String get otherVehicleFault => '기타 차량 결함';
+
+  @override
+  String get optionalEvidence => '증거 자료(선택)';
+
+  @override
+  String get vehicleInsurance => '보험';
+
+  @override
+  String get addInsurance => '보험 추가';
+
+  @override
+  String get insuranceLoadFailed => '보험 정보를 불러올 수 없습니다. 다시 시도해 주세요.';
+
+  @override
+  String get insuranceUpdateFailed => '보험을 업데이트할 수 없습니다.';
+
+  @override
+  String get deleteInsuranceQuestion => '보험 계약을 삭제할까요?';
+
+  @override
+  String get policyNumber => '증권 번호';
+
+  @override
+  String get optionalInsuranceEmpty => '보험은 선택 사항입니다. 이 차량에는 계약이 없습니다.';
+
+  @override
+  String get addInsurancePolicy => '보험 계약 추가';
+
+  @override
+  String get editInsurancePolicy => '보험 계약 수정';
+
+  @override
+  String get insuranceType => '보험 유형';
+
+  @override
+  String get mandatoryTplInsurance => '의무 제3자 책임보험';
+
+  @override
+  String get physicalDamageInsurance => '차량 손해';
+
+  @override
+  String get insuranceProvider => '보험사';
+
+  @override
+  String get effectiveDate => '시작일';
+
+  @override
+  String get insuranceCoverageLimit => '보장 한도';
+
+  @override
+  String get insuranceDeductible => '자기부담금';
+
+  @override
+  String get optionalDocumentUrl => '문서 URL(선택)';
+
+  @override
+  String get optionalInsuranceHint =>
+      '보험은 선택 사항입니다. 생성 또는 수정하면 직원 확인을 위해 PENDING 상태로 돌아갑니다.';
 }

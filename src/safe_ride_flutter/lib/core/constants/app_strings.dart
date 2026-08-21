@@ -221,7 +221,7 @@ abstract final class LocationStrings {
 abstract final class AppConfig {
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://saferidefpt.runasp.net/api/',
+    defaultValue: 'http://demotripshare.runasp.net/api/',
   );
   // https://safe-ride-ai.onrender.com
   // http://192.168.1.19:5026
@@ -272,6 +272,18 @@ abstract final class ApiEndpoints {
   static String confirmDriverOffer(int bookingId, int offerId) =>
       '/bookings/$bookingId/confirm-driver-offer/$offerId';
   static String tripStatus(int tripId) => '/trips/$tripId/status';
+  static String preTripVehicleChecks(int tripId) =>
+      '/trips/$tripId/vehicle-safety-checks';
+  static String safetyTermination(int tripId) =>
+      '/trips/$tripId/safety-termination';
+  static String safetyReports(int tripId) => '/trips/$tripId/safety-reports';
+  static String tripAccidents(int tripId) => '/trips/$tripId/accidents';
+  static String accidentDetails(int accidentId) => '/accidents/$accidentId';
+  static String accidentEvidence(int accidentId) =>
+      '/accidents/$accidentId/evidence';
+  static String accidentDisputes(int accidentId) =>
+      '/accidents/$accidentId/disputes';
+  static const driverLiabilities = '/drivers/liabilities';
   static String completeTrip(int tripId) => '/trips/$tripId/complete';
   static String triggerTripSOS(int tripId) => '/trips/$tripId/sos';
   static String createDriverTripQrPayment(int tripId) =>
@@ -339,6 +351,7 @@ abstract final class ApiKeys {
   static const sessionMode = 'sessionMode';
   static const reloginRequiredAfterTrip = 'reloginRequiredAfterTrip';
   static const continuationTripId = 'continuationTripId';
+  static const continuationBookingId = 'continuationBookingId';
   static const continuationAbsoluteExpiresAt = 'continuationAbsoluteExpiresAt';
   static const detail = 'detail';
   static const code = 'code';
@@ -359,6 +372,9 @@ abstract final class ApiKeys {
   static const actualDurationMinutes = 'actualDurationMinutes';
   static const actualEncodedPolyline = 'actualEncodedPolyline';
   static const tripEndedAt = 'tripEndedAt';
+  static const terminationCategory = 'terminationCategory';
+  static const safetyTerminationReason = 'safetyTerminationReason';
+  static const safetyTerminatedAt = 'safetyTerminatedAt';
   static const arrivalPolyline = 'arrivalPolyline';
   static const driverOffer = 'driverOffer';
   static const vehicle = 'vehicle';
@@ -369,6 +385,11 @@ abstract final class ApiKeys {
   static const amount = 'amount';
   static const currency = 'currency';
   static const paidAt = 'paidAt';
+  static const successfulPaymentAmount = 'successfulPaymentAmount';
+  static const remainingPayableAmount = 'remainingPayableAmount';
+  static const refundObligationAmount = 'refundObligationAmount';
+  static const reconciliationStatus = 'reconciliationStatus';
+  static const refundStatus = 'refundStatus';
   static const tripStatus = 'tripStatus';
   static const tripId = 'tripId';
   static const isSOSActivated = 'isSOSActivated';
@@ -447,6 +468,7 @@ abstract final class StorageKeys {
   static const reloginRequired = 'auth.relogin_required';
   static const sessionMode = 'auth.session_mode';
   static const continuationTripId = 'auth.continuation_trip_id';
+  static const continuationBookingId = 'auth.continuation_booking_id';
   static const continuationAbsoluteExpiresAt =
       'auth.continuation_absolute_expires_at';
   static const deviceId = 'device.id';

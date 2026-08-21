@@ -27,6 +27,19 @@ internal static class BookingDetailsMapper
             mapRoutingService,
             cancellationToken);
         var price = BookingPriceMapper.FromBooking(booking);
+        var safetyTerminated = booking.Trip is
+        {
+            TripStatus: TripStatus.CANCELLED,
+            TerminationCategory: TripTerminationCategory.SAFETY
+        };
+        var originalFare = safetyTerminated
+            ? booking.Trip!.ActualFare ?? 0m
+            : price.OriginalFare;
+        var promotionCode = safetyTerminated ? null : price.PromotionCode;
+        var discountAmount = safetyTerminated ? 0m : price.DiscountAmount;
+        var finalFare = safetyTerminated
+            ? booking.Trip!.FinalFare ?? booking.Trip.ActualFare ?? 0m
+            : price.FinalFare;
         var matchingSnapshot = matchingPolicyProvider.GetSnapshot(booking, utcNow);
         var matchingMessage = driverOffer?.OfferStatus == DriverOfferStatus.DriverAccepted
             ? "Tài xế phù hợp đã sẵn sàng."
@@ -40,10 +53,10 @@ internal static class BookingDetailsMapper
             (double)(booking.EstimatedDistanceKm ?? 0m),
             booking.EstimatedDurationMinutes ?? 0,
             booking.EstimatedFare,
-            price.OriginalFare,
-            price.PromotionCode,
-            price.DiscountAmount,
-            price.FinalFare,
+            originalFare,
+            promotionCode,
+            discountAmount,
+            finalFare,
             booking.RoutePolyline,
             arrivalPolyline,
             "Loaded booking details successfully.",
@@ -71,43 +84,73 @@ internal static class BookingDetailsMapper
             matchingSnapshot.ExpiresAt,
             matchingSnapshot.EstimatedRemainingSeconds,
             matchingMessage,
-            MapPayment(booking.Trip, price.FinalFare),
+            MapPayment(booking.Trip, finalFare),
             ActualDistanceKm: booking.Trip?.ActualDistanceKm is null
                 ? null
                 : (double)booking.Trip.ActualDistanceKm.Value,
             ActualDurationMinutes: booking.Trip?.ActualDurationMinutes,
             ActualEncodedPolyline: booking.Trip?.RoutePolyline,
-            TripEndedAt: booking.Trip?.EndedAt);
+            TripEndedAt: booking.Trip?.EndedAt,
+            TerminationCategory: booking.Trip?.TerminationCategory,
+            SafetyTerminationReason: booking.Trip?.SafetyTerminationReason,
+            SafetyTerminatedAt: booking.Trip?.SafetyTerminatedAt);
     }
 
     private static TripPaymentSummaryDto? MapPayment(Trip? trip, decimal finalFare)
     {
         if (trip is null
-            || trip.TripStatus is TripStatus.CANCELLED)
+            || trip.TripStatus is TripStatus.CANCELLED
+                && trip.TerminationCategory != TripTerminationCategory.SAFETY)
         {
             return null;
         }
 
+        var reconciliation = trip.SafetyPaymentReconciliation;
+        var requiresAdditionalPayment = reconciliation?.RemainingPayableAmount > 0m;
         var payment = trip.Payments
-            .OrderByDescending(x => x.PaymentStatus == PaymentStatus.Success)
+            .OrderByDescending(x => requiresAdditionalPayment
+                ? x.PaymentStatus == PaymentStatus.Pending
+                : x.PaymentStatus == PaymentStatus.Success)
             .ThenByDescending(x => x.CreatedAt)
             .FirstOrDefault();
-        var status = payment?.PaymentStatus ?? PaymentStatus.Pending;
+        var zeroFarePaymentCompleted = trip.FinalFare is <= 0m
+            && trip.TripStatus is TripStatus.WAITING_RETURN_CONFIRM
+                or TripStatus.RETURN_CONFIRMED
+                or TripStatus.COMPLETED;
+        var status = requiresAdditionalPayment
+            ? PaymentStatus.Pending
+            : payment?.PaymentStatus
+                ?? (zeroFarePaymentCompleted ? PaymentStatus.Success : PaymentStatus.Pending);
+        var amount = requiresAdditionalPayment
+            ? reconciliation!.RemainingPayableAmount
+            : payment?.Amount ?? finalFare;
 
         return new TripPaymentSummaryDto(
             payment?.Id,
             payment?.PaymentMethod,
             status,
-            payment?.Amount ?? finalFare,
+            amount,
             payment?.Currency ?? "VND",
             payment?.PaidAt,
-            BuildPaymentMessage(trip.TripStatus, status));
+            zeroFarePaymentCompleted
+                ? "Chuyáº¿n Ä‘i khÃ´ng phÃ¡t sinh phÃ­ thanh toÃ¡n."
+                : BuildPaymentMessage(trip.TripStatus, status, reconciliation?.Status),
+            reconciliation?.SuccessfulPaymentAmount ?? 0m,
+            reconciliation?.RemainingPayableAmount ?? 0m,
+            reconciliation?.RefundObligationAmount ?? 0m,
+            reconciliation?.Status,
+            reconciliation?.Refund?.Status);
     }
 
     private static string BuildPaymentMessage(
         TripStatus tripStatus,
-        PaymentStatus paymentStatus)
+        PaymentStatus paymentStatus,
+        SafetyPaymentReconciliationStatus? reconciliationStatus = null)
     {
+        if (reconciliationStatus == SafetyPaymentReconciliationStatus.REFUND_PENDING)
+            return "Khoản hoàn tiền đang chờ Nhân viên xử lý và cung cấp bằng chứng.";
+        if (reconciliationStatus == SafetyPaymentReconciliationStatus.REFUNDED)
+            return "Khoản hoàn tiền đã được xác nhận bằng chứng.";
         if (paymentStatus == PaymentStatus.Success || tripStatus == TripStatus.COMPLETED)
         {
             return "Thanh toán đã hoàn tất.";

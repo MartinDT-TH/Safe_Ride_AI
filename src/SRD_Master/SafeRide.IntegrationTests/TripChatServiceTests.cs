@@ -17,6 +17,7 @@ using SafeRide.Infrastructure.TripChat;
 
 namespace SafeRide.IntegrationTests;
 
+[Trait(SqlServerTestDatabase.ProviderTraitName, SqlServerTestDatabase.InMemoryProvider)]
 public sealed class TripChatServiceTests
 {
     private static readonly DateTime UtcNow =

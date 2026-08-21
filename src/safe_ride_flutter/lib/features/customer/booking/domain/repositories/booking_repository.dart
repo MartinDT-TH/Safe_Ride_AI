@@ -65,6 +65,12 @@ abstract class BookingRepository {
     required String message,
   });
 
+  Future<int> reportAccident(
+    String accessToken, {
+    required int tripId,
+    required String description,
+  });
+
   Future<void> respondToDriverEndTrip(
     String accessToken, {
     required int tripId,

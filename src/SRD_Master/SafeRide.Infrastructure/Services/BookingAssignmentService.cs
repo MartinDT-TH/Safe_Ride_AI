@@ -51,7 +51,19 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         _tripTrackingOptions = tripTrackingOptions;
     }
 
-    public async Task<CreateBookingResponse> ConfirmDriverAsync(
+    public Task<CreateBookingResponse> ConfirmDriverAsync(
+        Guid customerId,
+        long bookingId,
+        long? offerId,
+        CancellationToken cancellationToken) =>
+        _dbContext.Database.CreateExecutionStrategy().ExecuteAsync(
+            () => ConfirmDriverCoreAsync(
+                customerId,
+                bookingId,
+                offerId,
+                cancellationToken));
+
+    private async Task<CreateBookingResponse> ConfirmDriverCoreAsync(
         Guid customerId,
         long bookingId,
         long? offerId,
@@ -193,7 +205,14 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             assignment.Trip.TripStatus);
     }
 
-    public async Task<CreateBookingResponse> RejectDriverAsync(
+    public Task<CreateBookingResponse> RejectDriverAsync(
+        Guid customerId,
+        long bookingId,
+        CancellationToken cancellationToken) =>
+        _dbContext.Database.CreateExecutionStrategy().ExecuteAsync(
+            () => RejectDriverCoreAsync(customerId, bookingId, cancellationToken));
+
+    private async Task<CreateBookingResponse> RejectDriverCoreAsync(
         Guid customerId,
         long bookingId,
         CancellationToken cancellationToken)
@@ -282,7 +301,14 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             nextOffer);
     }
 
-    public async Task<CreateBookingResponse> AcceptDriverOfferAsync(
+    public Task<CreateBookingResponse> AcceptDriverOfferAsync(
+        Guid driverId,
+        long offerId,
+        CancellationToken cancellationToken) =>
+        _dbContext.Database.CreateExecutionStrategy().ExecuteAsync(
+            () => AcceptDriverOfferCoreAsync(driverId, offerId, cancellationToken));
+
+    private async Task<CreateBookingResponse> AcceptDriverOfferCoreAsync(
         Guid driverId,
         long offerId,
         CancellationToken cancellationToken)
@@ -314,6 +340,25 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
 
         var existingTrip = await _dbContext.Trips
             .FirstOrDefaultAsync(x => x.BookingId == booking.BookingId, cancellationToken);
+        if (booking.BookingType == BookingType.Now
+            && booking.BookingStatus == BookingStatus.Searching
+            && offer.OfferStatus == DriverOfferStatus.DriverAccepted
+            && offer.ExpiresAt > utcNow
+            && existingTrip is null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            var acceptedOffer = await RunNowAcceptancePostCommitAsync(
+                booking,
+                offer,
+                utcNow,
+                cancellationToken);
+            return BuildResponse(
+                booking,
+                "Tài xế phù hợp đã sẵn sàng.",
+                null,
+                acceptedOffer);
+        }
+
         if (booking.BookingType == BookingType.Scheduled
             && booking.BookingStatus == BookingStatus.DriverAssigned
             && offer.OfferStatus == DriverOfferStatus.CustomerConfirmed
@@ -465,6 +510,41 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             "Tài xế phù hợp đã sẵn sàng.",
             null,
             driverOffer);
+    }
+
+    private async Task<BookingDriverOfferDto?> RunNowAcceptancePostCommitAsync(
+        Booking booking,
+        BookingDriverOffer offer,
+        DateTime utcNow,
+        CancellationToken cancellationToken)
+    {
+        await _jobScheduler.CancelExpireDriverOfferAsync(offer.Id, cancellationToken);
+        _jobScheduler.ScheduleExpireDriverOffer(
+            offer.Id,
+            offer.ExpiresAt - utcNow);
+        await CacheMatchingOfferAsync(offer);
+        await _redisService.SetAsync(
+            RedisKeys.MatchingDriverLock(offer.DriverId),
+            booking.BookingId.ToString(),
+            offer.ExpiresAt - utcNow);
+
+        var driverOffer = await GetOfferDtoAsync(offer.Id, utcNow, cancellationToken);
+        if (driverOffer is not null)
+        {
+            await _realtimeNotificationService.PublishDriverOfferAcceptedAsync(
+                new DriverOfferAcceptedEvent(
+                    booking.BookingId,
+                    booking.CustomerId,
+                    offer.DriverId,
+                    offer.Id,
+                    utcNow,
+                    offer.ExpiresAt,
+                    driverOffer,
+                    "Tài xế phù hợp đã sẵn sàng."),
+                cancellationToken);
+        }
+
+        return driverOffer;
     }
 
     public async Task RejectDriverOfferAsync(

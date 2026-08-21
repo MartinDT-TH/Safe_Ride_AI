@@ -8,45 +8,62 @@ namespace SafeRide.UnitTests;
 public sealed class FareEstimationServiceValidationTests
 {
     [Fact]
-    public void FinalizeFare_WhenSixtyPercentOfRouteCompleted_ChargesSixtyPercent()
+    public void FinalizeFare_WhenPerKilometerTripHasNoMovement_ReturnsZero()
     {
-        var trip = new SafeRide.Domain.Entities.Trip
+        var pricingRule = new PricingRule
         {
-            Booking = new SafeRide.Domain.Entities.Booking
-            {
-                EstimatedDistanceKm = 10m,
-                EstimatedFare = 100_000m
-            }
+            BaseFare = 20_000m,
+            MinFare = 50_000m,
+            PricePerKm = 5_000m
         };
-        var service = new TripFareFinalizationService(new FareEstimationService());
-
-        var result = service.Calculate(trip, 6m, 10);
-
-        Assert.Equal(60_000m, result.ActualFare);
-        Assert.Equal(60_000m, result.FinalFare);
-    }
-
-    [Fact]
-    public void FinalizeFare_WhenEarlyEndHasZeroDistance_UsesMinimumFare()
-    {
         var trip = new Trip
         {
             Booking = new Booking
             {
                 EstimatedDistanceKm = 10m,
-                EstimatedFare = 100_000m
+                EstimatedFare = 100_000m,
+                PricingRule = pricingRule
+            }
+        };
+        trip.Booking.BookingPromotions.Add(new BookingPromotion
+        {
+            DiscountAmount = 10_000m
+        });
+        var service = new TripFareFinalizationService(new FareEstimationService());
+
+        var result = service.Calculate(trip, 0m, 1);
+
+        Assert.Equal(0m, result.ActualFare);
+        Assert.Equal(0m, result.FinalFare);
+    }
+
+    [Fact]
+    public void FinalizeFare_WhenTripEndsEarly_PreservesMinimumFare()
+    {
+        var pricingRule = new PricingRule
+        {
+            BaseFare = 20_000m,
+            MinFare = 50_000m,
+            PricePerKm = 5_000m
+        };
+        var trip = new Trip
+        {
+            Booking = new Booking
+            {
+                EstimatedDistanceKm = 10m,
+                EstimatedFare = 100_000m,
+                PricingRule = pricingRule
             }
         };
         var service = new TripFareFinalizationService(new FareEstimationService());
 
         var result = service.Calculate(
             trip,
-            actualDistanceKm: 0m,
-            actualDurationMinutes: 0,
-            minimumFare: 2_000m);
+            actualDistanceKm: 1m,
+            actualDurationMinutes: 10);
 
-        Assert.Equal(2_000m, result.ActualFare);
-        Assert.Equal(2_000m, result.FinalFare);
+        Assert.Equal(50_000m, result.ActualFare);
+        Assert.Equal(50_000m, result.FinalFare);
     }
 
     [Fact]

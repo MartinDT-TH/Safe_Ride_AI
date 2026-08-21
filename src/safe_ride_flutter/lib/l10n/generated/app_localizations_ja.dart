@@ -804,7 +804,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get issueDate => '発行日';
 
   @override
-  String get expiryDate => '有効期限';
+  String get expiryDate => '満了日';
 
   @override
   String get documents => '書類';
@@ -2385,4 +2385,228 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get endTripResponseFailed => '終了リクエストに応答できませんでした。もう一度お試しください。';
+
+  @override
+  String get preTripSafetyTitle => '運行前車両安全確認';
+
+  @override
+  String get preTripSafetyDescription => '開始前に全項目を確認してください。不合格の履歴も監査用に保存されます。';
+
+  @override
+  String get brakeResponse => 'ブレーキの反応';
+
+  @override
+  String get frontRearLights => '前後ライト';
+
+  @override
+  String get turnSignals => '方向指示器';
+
+  @override
+  String get visibleTires => 'タイヤの外観';
+
+  @override
+  String get dashboardWarning => '警告灯なし';
+
+  @override
+  String get windshieldVisibility => '窓とミラーの視界';
+
+  @override
+  String get noMajorVisibleIssue => '重大な外観異常なし';
+
+  @override
+  String get confirmSafetyCheck => '安全確認を送信';
+
+  @override
+  String get allChecksRequired => '運行開始前に全項目が合格する必要があります。';
+
+  @override
+  String get safetyTermination => '安全上の理由で終了';
+
+  @override
+  String get safetyTerminationDescription =>
+      '運行はキャンセルのままです。プロモーションは使用されず、開始後は部分運賃が発生する場合があります。';
+
+  @override
+  String get safetyTerminationReasonHint => '安全上のリスクを説明';
+
+  @override
+  String get reportAccident => '事故を報告';
+
+  @override
+  String get accidentDescriptionHint => '状況と初期損害を説明';
+
+  @override
+  String get accidentReported => '事故報告を送信しました。';
+
+  @override
+  String get safetyTerminationFailed => '安全上の終了処理に失敗しました。';
+
+  @override
+  String get preTripCheckFailed => '安全確認を送信できませんでした。';
+
+  @override
+  String get riskProtectionCaseTitle => '事故保護ケース';
+
+  @override
+  String get riskProtectionClaim => '保護請求';
+
+  @override
+  String get riskProtectionEvidence => '証拠';
+
+  @override
+  String get riskProtectionAssessment => '責任評価';
+
+  @override
+  String get uploadAccidentEvidence => '証拠写真を追加';
+
+  @override
+  String get disputeLiability => '責任評価の再審査を依頼';
+
+  @override
+  String get disputeReasonHint => '再審査が必要な理由を入力してください';
+
+  @override
+  String get liabilityDisputed => '再審査依頼を送信しました。';
+
+  @override
+  String get accidentEvidenceUploaded => '証拠をアップロードしました。';
+
+  @override
+  String get noAccidentEvidence => '証拠はまだありません。';
+
+  @override
+  String get noProtectionClaim => '保護請求はまだ作成されていません。';
+
+  @override
+  String get driverLiabilities => '自分の責任';
+
+  @override
+  String get noDriverLiabilities => '確定した運転者責任はありません。';
+
+  @override
+  String get confirmedAmount => '確定額';
+
+  @override
+  String get paidAmount => '支払済み';
+
+  @override
+  String get outstandingAmount => '未払い額';
+
+  @override
+  String get attributableDamage => '運転者責任の対象損害';
+
+  @override
+  String get recoveryHistory => '回収履歴';
+
+  @override
+  String get claimStatus => '請求状況';
+
+  @override
+  String get insuranceCoverage => '保険補償';
+
+  @override
+  String get riskFundCoverage => 'リスク基金補償';
+
+  @override
+  String get participantLiabilities => '当事者の責任';
+
+  @override
+  String get accidentStatus => '事故状況';
+
+  @override
+  String get accidentCategory => '事故区分';
+
+  @override
+  String get accidentOccurredAt => '発生日時';
+
+  @override
+  String get safetyReportTitle => '安全レポート';
+
+  @override
+  String get unsafeCustomer => '危険な顧客';
+
+  @override
+  String get vehicleIssue => '車両の問題';
+
+  @override
+  String get safetyReasonCode => '理由コード';
+
+  @override
+  String get safetyReportDescription => '状況を説明してください';
+
+  @override
+  String get requestSosEscalation => 'SOSエスカレーションを依頼';
+
+  @override
+  String get requestSosEscalationHint => '現在地を送信し、永続的なSOS警告を作成します';
+
+  @override
+  String get safetyReportSubmitted => '安全レポートを送信しました。';
+
+  @override
+  String get safetyReportFailed => '安全レポートを送信できませんでした。もう一度お試しください。';
+
+  @override
+  String get vehicleFaultType => '車両の不具合種別';
+
+  @override
+  String get otherVehicleFault => 'その他の車両不具合';
+
+  @override
+  String get optionalEvidence => '証拠（任意）';
+
+  @override
+  String get vehicleInsurance => '保険';
+
+  @override
+  String get addInsurance => '保険を追加';
+
+  @override
+  String get insuranceLoadFailed => '保険情報を読み込めませんでした。再試行してください。';
+
+  @override
+  String get insuranceUpdateFailed => '保険を更新できませんでした。';
+
+  @override
+  String get deleteInsuranceQuestion => '保険契約を削除しますか？';
+
+  @override
+  String get policyNumber => '証券番号';
+
+  @override
+  String get optionalInsuranceEmpty => '保険は任意です。この車両には契約がありません。';
+
+  @override
+  String get addInsurancePolicy => '保険契約を追加';
+
+  @override
+  String get editInsurancePolicy => '保険契約を編集';
+
+  @override
+  String get insuranceType => '保険種別';
+
+  @override
+  String get mandatoryTplInsurance => '自賠責保険';
+
+  @override
+  String get physicalDamageInsurance => '車両損害';
+
+  @override
+  String get insuranceProvider => '保険会社';
+
+  @override
+  String get effectiveDate => '開始日';
+
+  @override
+  String get insuranceCoverageLimit => '補償限度額';
+
+  @override
+  String get insuranceDeductible => '免責額';
+
+  @override
+  String get optionalDocumentUrl => '書類URL（任意）';
+
+  @override
+  String get optionalInsuranceHint =>
+      '保険は任意です。作成または編集すると、スタッフ確認のためPENDINGに戻ります。';
 }
