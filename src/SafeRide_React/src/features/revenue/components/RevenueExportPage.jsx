@@ -4,7 +4,8 @@ import { faArrowLeft, faClockRotateLeft, faCloudArrowDown, faDownload, faFileCsv
 import { AdminLayout } from '../../../shared/layouts/AdminLayout';
 import { apiDownload } from '../../../shared/api/apiClient';
 import useAdminSearch from '../../../shared/hooks/useAdminSearch';
-import RevenueDatePicker from './RevenueDatePicker';
+import { DatePicker } from '../../../shared/components/DatePicker';
+import { Select } from '../../../shared/components/Select';
 import './RevenueExportPage.css';
 
 const REPORTS = [{ value: 'revenue', label: 'Doanh thu (Revenue)' }];
@@ -40,10 +41,10 @@ function RevenueExportPage({ initialRange, onBack }) {
     <header><h1>Xuất dữ liệu Excel</h1><p>Tùy chỉnh và tải xuống các báo cáo định kỳ của SafeRide.</p></header>
     <div className="export-workspace">
       <section className="export-config card"><h2><span><FontAwesomeIcon icon={faSliders} /></span>Cấu hình báo cáo</h2>
-        <div className="export-fields"><label>Loại báo cáo<select value={form.report} onChange={(e) => setForm({ ...form, report: e.target.value })}>{REPORTS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+        <div className="export-fields"><label>Loại báo cáo<Select value={form.report} onChange={(e) => setForm({ ...form, report: e.target.value })}>{REPORTS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</Select></label>
           <fieldset><legend>Định dạng tệp</legend><div className="format-options"><button className={form.format === 'xlsx' ? 'active' : ''} type="button" onClick={() => setForm({ ...form, format: 'xlsx' })}><FontAwesomeIcon icon={faFileExcel} />.XLSX</button><button className={form.format === 'csv' ? 'active' : ''} type="button" onClick={() => setForm({ ...form, format: 'csv' })}><FontAwesomeIcon icon={faFileCsv} />.CSV</button></div></fieldset>
         </div>
-        <div className="date-heading">Khoảng thời gian</div><div className="export-dates"><RevenueDatePicker className="export-picker" selected={parseDate(form.from)} onChange={(date) => setForm({ ...form, from: toDateValue(date) })} selectsStart startDate={parseDate(form.from)} endDate={parseDate(form.to)} maxDate={parseDate(form.to)} /><RevenueDatePicker className="export-picker" selected={parseDate(form.to)} onChange={(date) => setForm({ ...form, to: toDateValue(date) })} selectsEnd startDate={parseDate(form.from)} endDate={parseDate(form.to)} minDate={parseDate(form.from)} /></div>
+        <div className="date-heading">Khoảng thời gian</div><div className="export-dates"><DatePicker className="export-picker" selected={parseDate(form.from)} onChange={(date) => setForm({ ...form, from: toDateValue(date) })} selectsStart startDate={parseDate(form.from)} endDate={parseDate(form.to)} maxDate={parseDate(form.to)} /><DatePicker className="export-picker" selected={parseDate(form.to)} onChange={(date) => setForm({ ...form, to: toDateValue(date) })} selectsEnd startDate={parseDate(form.from)} endDate={parseDate(form.to)} minDate={parseDate(form.from)} /></div>
         {status.error && <p className="export-error">{status.error}</p>}<button className="start-export" disabled={!valid || status.loading} type="button" onClick={exportReport}><FontAwesomeIcon icon={faDownload} />{status.loading ? 'Đang tạo tệp...' : 'Bắt đầu xuất dữ liệu'}</button>
       </section>
       <section className="export-ready card"><span><FontAwesomeIcon icon={faCloudArrowDown} /></span><h2>{history.length ? 'Xuất dữ liệu thành công' : 'Sẵn sàng'}</h2><p>{history.length ? 'Tệp báo cáo mới nhất đã được tải xuống thiết bị của bạn.' : 'Chọn các thông số bên trái để bắt đầu tạo tệp báo cáo của bạn.'}</p></section>

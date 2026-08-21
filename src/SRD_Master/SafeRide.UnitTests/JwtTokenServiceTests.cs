@@ -14,6 +14,7 @@ public sealed class JwtTokenServiceTests
         Audience = "SafeRide.Tests.Client",
         SecretKey = "unit-test-secret-key-that-is-long-enough-123456",
         AccessTokenMinutes = 15,
+        AdminAccessTokenDays = 15,
         RefreshTokenDays = 30
     };
 
@@ -44,6 +45,28 @@ public sealed class JwtTokenServiceTests
             claim.Type == ClaimTypes.Email
             && claim.Value == user.Email);
         Assert.Equal(Options.AccessTokenMinutes * 60, result.ExpiresIn);
+    }
+
+    [Theory]
+    [InlineData("Admin")]
+    [InlineData("Staff")]
+    public async Task ManagementAccessToken_UsesConfiguredLongLifetime(string role)
+    {
+        var user = new AspNetUser
+        {
+            Id = Guid.NewGuid(),
+            UserName = $"{role.ToLowerInvariant()}@example.test",
+            Email = $"{role.ToLowerInvariant()}@example.test",
+            FullName = $"SafeRide {role}",
+            IsActive = true
+        };
+        var service = new JwtTokenService(
+            Microsoft.Extensions.Options.Options.Create(Options),
+            null!);
+
+        var result = await service.GenerateAccessTokenAsync(user, new[] { role });
+
+        Assert.Equal(Options.AdminAccessTokenDays * 24 * 60 * 60, result.ExpiresIn);
     }
 
     [Fact]

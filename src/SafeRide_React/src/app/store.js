@@ -1,6 +1,7 @@
 import { configureStore } from '@reduxjs/toolkit';
-import authReducer from '../features/auth/authSlice';
-import uiReducer from '../features/ui/uiSlice';
+import authReducer from '../slices/authSlice';
+import uiReducer from '../slices/uiSlice';
+import apiReducer from '../slices/apiSlice';
 /**
  * Central Redux store for the entire SafeRide Admin app.
  *
@@ -10,5 +11,6 @@ export const store = configureStore({
     reducer: {
         auth: authReducer,
         ui: uiReducer,
+        api: apiReducer,
     },
 });

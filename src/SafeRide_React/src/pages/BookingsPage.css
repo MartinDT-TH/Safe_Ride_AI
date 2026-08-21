@@ -140,7 +140,7 @@
   text-transform: uppercase;
 }
 
-.bookings-filter__field select,
+.bookings-filter__field .shared-select__trigger,
 .bookings-date-range {
   min-height: 52px;
   border: 1px solid #cbd8db;
@@ -148,7 +148,7 @@
   background: #fbfbfb;
 }
 
-.bookings-filter__field select {
+.bookings-filter__field .shared-select__trigger {
   padding: 0 14px;
   color: var(--sr-gray-800);
   font-size: 14px;

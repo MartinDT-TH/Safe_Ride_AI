@@ -158,7 +158,7 @@
 }
 
 .admin-promotions-search input,
-.admin-promotions-search select {
+.admin-promotions-search .shared-select__trigger {
     width: 100%;
     min-width: 0;
     height: 40px;
@@ -175,7 +175,7 @@
 }
 
 .admin-promotions-search input:focus,
-.admin-promotions-search select:focus {
+.admin-promotions-search .shared-select__trigger:focus {
     border-color: #69aeb4;
     outline: 3px solid rgba(0, 118, 130, 0.1);
 }

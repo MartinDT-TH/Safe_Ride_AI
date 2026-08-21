@@ -4,7 +4,7 @@ import { faCalendarDays, faDownload, faFilter } from '@fortawesome/free-solid-sv
 import { AdminLayout } from '../shared/layouts/AdminLayout';
 import { RevenueBarChart, RevenueDonut, RevenueStats } from '../features/revenue/components';
 import RevenueExportPage from '../features/revenue/components/RevenueExportPage';
-import RevenueDatePicker from '../features/revenue/components/RevenueDatePicker';
+import { DatePicker } from '../shared/components/DatePicker';
 import { getRevenuePath, mapRevenue } from '../features/revenue/revenueApi';
 import useFetch from '../shared/hooks/useFetch';
 import useAdminSearch from '../shared/hooks/useAdminSearch';
@@ -66,9 +66,9 @@ function RevenueFilters({ mode, setMode, draft, setDraft, onApply }) {
       {[['range', 'Theo ngày'], ['month', 'Theo tháng'], ['year', 'Theo năm']].map(([value, label]) => <button className={mode === value ? 'active' : ''} key={value} type="button" onClick={() => setMode(value)}>{label}</button>)}
     </div>
     <div className="filter-fields">
-      {mode === 'range' && <><label>Từ ngày<RevenueDatePicker selected={parseLocalDate(draft.from)} onChange={(date) => setDraft({ ...draft, from: toLocalDate(date) })} selectsStart startDate={parseLocalDate(draft.from)} endDate={parseLocalDate(draft.to)} maxDate={parseLocalDate(draft.to)} /></label><label>Đến ngày<RevenueDatePicker selected={parseLocalDate(draft.to)} onChange={(date) => setDraft({ ...draft, to: toLocalDate(date) })} selectsEnd startDate={parseLocalDate(draft.from)} endDate={parseLocalDate(draft.to)} minDate={parseLocalDate(draft.from)} /></label></>}
-      {mode === 'month' && <label>Chọn tháng<RevenueDatePicker selected={parseLocalDate(`${draft.month}-01`)} onChange={(date) => setDraft({ ...draft, month: toLocalDate(date).slice(0, 7) })} showMonthYearPicker dateFormat="MM/yyyy" /></label>}
-      {mode === 'year' && <label>Chọn năm<RevenueDatePicker selected={new Date(Number(draft.year), 0, 1)} onChange={(date) => setDraft({ ...draft, year: String(date.getFullYear()) })} showYearPicker dateFormat="yyyy" minDate={new Date(2020, 0, 1)} maxDate={new Date(2100, 11, 31)} /></label>}
+      {mode === 'range' && <><label>Từ ngày<DatePicker selected={parseLocalDate(draft.from)} onChange={(date) => setDraft({ ...draft, from: toLocalDate(date) })} selectsStart startDate={parseLocalDate(draft.from)} endDate={parseLocalDate(draft.to)} maxDate={parseLocalDate(draft.to)} /></label><label>Đến ngày<DatePicker selected={parseLocalDate(draft.to)} onChange={(date) => setDraft({ ...draft, to: toLocalDate(date) })} selectsEnd startDate={parseLocalDate(draft.from)} endDate={parseLocalDate(draft.to)} minDate={parseLocalDate(draft.from)} /></label></>}
+      {mode === 'month' && <label>Chọn tháng<DatePicker selected={parseLocalDate(`${draft.month}-01`)} onChange={(date) => setDraft({ ...draft, month: toLocalDate(date).slice(0, 7) })} showMonthYearPicker dateFormat="MM/yyyy" /></label>}
+      {mode === 'year' && <label>Chọn năm<DatePicker selected={new Date(Number(draft.year), 0, 1)} onChange={(date) => setDraft({ ...draft, year: String(date.getFullYear()) })} showYearPicker dateFormat="yyyy" minDate={new Date(2020, 0, 1)} maxDate={new Date(2100, 11, 31)} /></label>}
       <button className="apply-filter" type="button" onClick={apply}>Áp dụng</button>
     </div>
   </section>;

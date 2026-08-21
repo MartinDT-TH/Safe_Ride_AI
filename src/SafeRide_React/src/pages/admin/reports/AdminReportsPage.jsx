@@ -11,6 +11,7 @@ import useAdminSearch from '../../../shared/hooks/useAdminSearch';
 import useFetch from '../../../shared/hooks/useFetch';
 import Pagination from '../../../shared/components/Pagination/Pagination';
 import StatusBadge from '../../../shared/components/StatusBadge/StatusBadge';
+import { Select } from '../../../shared/components/Select';
 import {
     getAdminReport,
     getAdminReportsPath,
@@ -133,12 +134,12 @@ function AdminReportsPage() {
                     </label>
                     <label className="admin-reports-filter-field">
                         <span>Trạng thái</span>
-                        <select value={statusFilter} onChange={handleStatusFilterChange}>
+                        <Select value={statusFilter} onChange={handleStatusFilterChange}>
                             <option value="all">Tất cả trạng thái</option>
                             {STATUS_OPTIONS.map((option) => (
                                 <option key={option.value} value={option.value}>{option.label}</option>
                             ))}
-                        </select>
+                        </Select>
                     </label>
                 </section>
 

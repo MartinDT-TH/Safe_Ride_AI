@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faEnvelope, faLock, faEye, faEyeSlash, faArrowRight } from '@fortawesome/free-solid-svg-icons';
 import { useAppDispatch } from '../../../app/hooks';
-import { loginSuccess } from '../authSlice';
-import { apiRequest, saveAuthTokens } from '../../../shared/api/apiClient';
+import { clearAuthError } from '../../../slices/authSlice';
+import { login } from '../../../thunks/authThunks';
+import { useAppSelector } from '../../../app/hooks';
 import { FormInput, FormCheckbox, Button } from '../../../shared/components';
 import './LoginForm.css';
 function LoginForm() {
@@ -12,40 +13,13 @@ function LoginForm() {
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [rememberMe, setRememberMe] = useState(false);
-    const [error, setError] = useState(null);
-    const [isSubmitting, setIsSubmitting] = useState(false);
+    const error = useAppSelector((state) => state.auth.error);
+    const isSubmitting = useAppSelector((state) => state.auth.status === 'loading');
+    useEffect(() => () => dispatch(clearAuthError()), [dispatch]);
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setError(null);
-        setIsSubmitting(true);
-        try {
-            const response = await apiRequest('/admin/auth/login', {
-                auth: false,
-                method: 'POST',
-                body: JSON.stringify({
-                    email,
-                    password,
-                    deviceName: 'SafeRide Admin Web',
-                }),
-            });
-            saveAuthTokens(response.accessToken, response.refreshToken);
-            const isStaff = response.roles.includes('Staff');
-            dispatch(loginSuccess({
-                user: {
-                    name: response.fullName,
-                    email: response.email ?? email ?? 'admin@saferide.com',
-                    roles: response.roles,
-                    role: isStaff ? 'Nhân viên' : 'Quản trị cao cấp',
-                },
-                rememberMe,
-            }));
-        }
-        catch (caughtError) {
-            setError(caughtError instanceof Error ? caughtError.message : 'Không thể đăng nhập.');
-        }
-        finally {
-            setIsSubmitting(false);
-        }
+        dispatch(clearAuthError());
+        await dispatch(login({ email, password, rememberMe }));
     };
     const passwordToggle = (<button type="button" className="password-toggle-btn" id="toggle-password" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}>
       <FontAwesomeIcon icon={showPassword ? faEyeSlash : faEye}/>
