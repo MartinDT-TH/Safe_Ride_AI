@@ -1260,7 +1260,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get promotions => 'プロモーション';
 
   @override
-  String get sos => 'SOS';
+  String get sos => '緊急SOS';
 
   @override
   String get recentTrips => '最近の乗車';
@@ -1823,13 +1823,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get callDriver => 'ドライバーに電話';
 
   @override
-  String get activateSosQuestion => 'SOSを有効にしますか？';
+  String get activateSosQuestion => '緊急SOSを有効にしますか？';
 
   @override
   String get activateSosDescription => 'この乗車の緊急信号を送信しますか？';
 
   @override
-  String get activateSos => 'SOSを有効化';
+  String get activateSos => '緊急SOSを有効化';
 
   @override
   String get sosActivationFailed => 'SOSを有効にできませんでした。もう一度お試しください。';
@@ -1910,10 +1910,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get tripEndFailed => '乗車を終了できませんでした。もう一度お試しください。';
 
   @override
-  String get sosActivated => 'SOS有効';
+  String get sosActivated => '緊急SOS有効';
 
   @override
-  String get sendingSos => 'SOSを送信中...';
+  String get sendingSos => '緊急SOSを送信中...';
 
   @override
   String get shareRoute => 'ルートを共有';
@@ -2430,13 +2430,22 @@ class AppLocalizationsJa extends AppLocalizations {
   String get safetyTerminationReasonHint => '安全上のリスクを説明';
 
   @override
+  String get captureSafetyEvidence => '証拠写真を撮影（任意）';
+
+  @override
+  String get retakePhoto => '撮り直す';
+
+  @override
   String get reportAccident => '事故を報告';
 
   @override
   String get accidentDescriptionHint => '状況と初期損害を説明';
 
   @override
-  String get accidentReported => '事故報告を送信しました。';
+  String get createAccidentReport => '報告を作成';
+
+  @override
+  String get accidentReported => '事故報告を作成しました。';
 
   @override
   String get safetyTerminationFailed => '安全上の終了処理に失敗しました。';
@@ -2460,6 +2469,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get uploadAccidentEvidence => '証拠写真を追加';
 
   @override
+  String get sendEvidencePhoto => '写真を送信';
+
+  @override
+  String get evidencePreviewFailed => '選択した画像を読み込めません。もう一度選択してください。';
+
+  @override
   String get disputeLiability => '責任評価の再審査を依頼';
 
   @override
@@ -2469,7 +2484,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get liabilityDisputed => '再審査依頼を送信しました。';
 
   @override
-  String get accidentEvidenceUploaded => '証拠をアップロードしました。';
+  String get accidentEvidenceUploaded => '証拠写真を送信しました。';
 
   @override
   String get noAccidentEvidence => '証拠はまだありません。';
@@ -2520,7 +2535,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get accidentOccurredAt => '発生日時';
 
   @override
-  String get safetyReportTitle => '安全レポート';
+  String get safetyReportTitle => '安全上の問題を報告';
 
   @override
   String get unsafeCustomer => '危険な顧客';
@@ -2529,7 +2544,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get vehicleIssue => '車両の問題';
 
   @override
-  String get safetyReasonCode => '理由コード';
+  String get safetyReasonCode => '理由';
 
   @override
   String get safetyReportDescription => '状況を説明してください';
@@ -2541,10 +2556,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get requestSosEscalationHint => '現在地を送信し、永続的なSOS警告を作成します';
 
   @override
-  String get safetyReportSubmitted => '安全レポートを送信しました。';
+  String get safetyReportSubmitted => '安全上の問題を報告しました。';
 
   @override
-  String get safetyReportFailed => '安全レポートを送信できませんでした。もう一度お試しください。';
+  String get safetyReportFailed => '安全上の問題を報告できませんでした。もう一度お試しください。';
 
   @override
   String get vehicleFaultType => '車両の不具合種別';

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../../core/localization/localization_extensions.dart';
+
+typedef EvidenceImagePicker = Future<XFile?> Function(ImageSource source);
 
 class PreTripCheckDialogResult {
   const PreTripCheckDialogResult({
@@ -35,6 +38,12 @@ const vehicleFaultTypes = <String>[
   'OTHER',
 ];
 
+String safetyReportReasonCodeForType(String reportType) => switch (reportType) {
+  'UNSAFE_CUSTOMER' => 'UNSAFE_CUSTOMER',
+  'VEHICLE_ISSUE' => 'VEHICLE_ISSUE',
+  _ => throw ArgumentError.value(reportType, 'reportType'),
+};
+
 class SafetyReportDialogResult {
   const SafetyReportDialogResult({
     required this.reportType,
@@ -51,7 +60,6 @@ class SafetyReportDialogResult {
 
 Future<SafetyReportDialogResult?> showSafetyReportDialog(BuildContext context) {
   var reportType = 'UNSAFE_CUSTOMER';
-  var reasonCode = '';
   var description = '';
   var escalationRequested = false;
   return showDialog<SafetyReportDialogResult>(
@@ -82,13 +90,6 @@ Future<SafetyReportDialogResult?> showSafetyReportDialog(BuildContext context) {
               ),
               const SizedBox(height: 12),
               TextField(
-                onChanged: (value) => setState(() => reasonCode = value),
-                decoration: InputDecoration(
-                  labelText: context.l10n.safetyReasonCode,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
                 minLines: 3,
                 maxLines: 5,
                 onChanged: (value) => setState(() => description = value),
@@ -113,13 +114,13 @@ Future<SafetyReportDialogResult?> showSafetyReportDialog(BuildContext context) {
             child: Text(context.l10n.cancel),
           ),
           FilledButton(
-            onPressed: reasonCode.trim().isEmpty || description.trim().isEmpty
+            onPressed: description.trim().isEmpty
                 ? null
                 : () => Navigator.pop(
                     dialogContext,
                     SafetyReportDialogResult(
                       reportType: reportType,
-                      reasonCode: reasonCode.trim(),
+                      reasonCode: safetyReportReasonCodeForType(reportType),
                       description: description.trim(),
                       escalationRequested: escalationRequested,
                     ),
@@ -257,53 +258,155 @@ Future<PreTripCheckDialogResult?> showPreTripSafetyCheckDialog(
 }
 
 Future<SafetyTerminationDialogResult?> showSafetyTerminationDialog(
-  BuildContext context,
-) {
+  BuildContext context, {
+  EvidenceImagePicker? pickEvidenceImage,
+}) {
   var reason = '';
   XFile? evidence;
+  Uint8List? evidenceBytes;
+  String? mediaError;
+  final picker =
+      pickEvidenceImage ??
+      (source) => ImagePicker().pickImage(
+        source: source,
+        preferredCameraDevice: CameraDevice.rear,
+        imageQuality: 85,
+      );
   return showDialog<SafetyTerminationDialogResult>(
     context: context,
     builder: (dialogContext) => StatefulBuilder(
       builder: (context, setState) => AlertDialog(
         title: Text(context.l10n.safetyTermination),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(context.l10n.safetyTerminationDescription),
-              const SizedBox(height: 14),
-              TextField(
-                autofocus: true,
-                maxLines: 4,
-                onChanged: (value) => setState(() => reason = value),
-                decoration: InputDecoration(
-                  hintText: context.l10n.safetyTerminationReasonHint,
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(context.l10n.safetyTerminationDescription),
+                const SizedBox(height: 14),
+                TextField(
+                  autofocus: true,
+                  maxLines: 4,
+                  onChanged: (value) => setState(() => reason = value),
+                  decoration: InputDecoration(
+                    hintText: context.l10n.safetyTerminationReasonHint,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final picked = await ImagePicker().pickImage(
-                    source: ImageSource.gallery,
-                    imageQuality: 85,
-                  );
-                  if (picked != null) setState(() => evidence = picked);
-                },
-                icon: const Icon(Icons.attach_file),
-                label: Text(
-                  evidence == null
-                      ? context.l10n.optionalEvidence
-                      : evidence!.name,
+                const SizedBox(height: 10),
+                if (evidence != null) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: evidenceBytes == null
+                        ? Container(
+                            height: 150,
+                            width: double.infinity,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainer,
+                            alignment: Alignment.center,
+                            child: const Icon(Icons.image_outlined, size: 44),
+                          )
+                        : Image.memory(
+                            evidenceBytes!,
+                            height: 180,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                Container(
+                                  height: 150,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.surfaceContainer,
+                                  alignment: Alignment.center,
+                                  child: const Icon(
+                                    Icons.broken_image_outlined,
+                                  ),
+                                ),
+                          ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.check_circle,
+                        color: Colors.green,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          evidence!.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    setState(() => mediaError = null);
+                    try {
+                      final picked = await picker(ImageSource.camera);
+                      if (picked == null || !context.mounted) return;
+                      Uint8List? previewBytes;
+                      try {
+                        previewBytes = await picked.readAsBytes();
+                      } catch (_) {
+                        previewBytes = null;
+                      }
+                      if (!context.mounted) return;
+                      setState(() {
+                        evidence = picked;
+                        evidenceBytes = previewBytes;
+                      });
+                    } on PlatformException {
+                      if (!context.mounted) return;
+                      setState(
+                        () => mediaError = context.l10n.mediaAccessFailed(
+                          context.l10n.camera,
+                        ),
+                      );
+                    } catch (_) {
+                      if (!context.mounted) return;
+                      setState(
+                        () => mediaError = context.l10n.mediaAccessFailed(
+                          context.l10n.camera,
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.camera_alt_outlined),
+                  label: Text(
+                    evidence == null
+                        ? context.l10n.captureSafetyEvidence
+                        : context.l10n.retakePhoto,
+                  ),
                 ),
-              ),
-              if (evidence != null)
-                TextButton.icon(
-                  onPressed: () => setState(() => evidence = null),
-                  icon: const Icon(Icons.close),
-                  label: Text(context.l10n.removePhoto),
-                ),
-            ],
+                if (mediaError != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    mediaError!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
+                if (evidence != null)
+                  TextButton.icon(
+                    onPressed: () => setState(() {
+                      evidence = null;
+                      evidenceBytes = null;
+                      mediaError = null;
+                    }),
+                    icon: const Icon(Icons.close),
+                    label: Text(context.l10n.removePhoto),
+                  ),
+              ],
+            ),
           ),
         ),
         actions: [
@@ -334,7 +437,7 @@ Future<String?> showAccidentReportDialog(BuildContext context) =>
       title: context.l10n.reportAccident,
       description: context.l10n.accidentDescriptionHint,
       hint: context.l10n.accidentDescriptionHint,
-      confirmLabel: context.l10n.report,
+      confirmLabel: context.l10n.createAccidentReport,
     );
 
 Future<String?> _showReasonDialog(

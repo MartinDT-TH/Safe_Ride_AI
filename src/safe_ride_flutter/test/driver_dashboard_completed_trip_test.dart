@@ -110,11 +110,94 @@ void main() {
     expect(provider.activeTrip?.paymentCompleted, isTrue);
     provider.dispose();
   });
+
+  test(
+    'successful payment advances the driver view to return confirmation',
+    () async {
+      final socket = _FakeSocketService();
+      final dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              handler.resolve(
+                Response<dynamic>(requestOptions: options, statusCode: 204),
+              );
+            },
+          ),
+        );
+      final provider = DriverDashboardProvider(socketService: socket, dio: dio);
+      await provider.initializeRealtime('header.payload.signature');
+
+      socket.emitBooking(
+        const BookingUpdate(
+          bookingId: 101,
+          status: 'DriverAssigned',
+          tripId: 202,
+          tripStatus: 'WAITING_PAYMENT',
+        ),
+      );
+      socket.emitPayment(
+        const TripPaymentUpdate(
+          tripId: 202,
+          bookingId: 101,
+          customerId: 'customer',
+          driverId: 'driver',
+          paymentId: 303,
+          paymentMethod: 'CASH',
+          paymentStatus: 'Success',
+          amount: 62000,
+          currency: 'VND',
+          tripStatus: 'WAITING_RETURN_CONFIRM',
+          message: 'Paid',
+          eventName: 'TripPaymentSucceeded',
+        ),
+      );
+
+      expect(provider.activeTrip?.tripStatus, 'WAITING_RETURN_CONFIRM');
+      expect(provider.activeTrip?.paymentCompleted, isTrue);
+      provider.dispose();
+    },
+  );
+
+  test(
+    'return-confirmed recovery completes and clears the active trip',
+    () async {
+      String? requestedPath;
+      final socket = _FakeSocketService();
+      final dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              requestedPath = options.path;
+              handler.resolve(
+                Response<dynamic>(requestOptions: options, statusCode: 204),
+              );
+            },
+          ),
+        );
+      final provider = DriverDashboardProvider(socketService: socket, dio: dio);
+      await provider.initializeRealtime('header.payload.signature');
+      socket.emitBooking(
+        const BookingUpdate(
+          bookingId: 101,
+          status: 'DriverAssigned',
+          tripId: 202,
+          tripStatus: 'RETURN_CONFIRMED',
+        ),
+      );
+
+      expect(await provider.completeActiveTrip(), isTrue);
+      expect(requestedPath, endsWith('/trips/202/complete'));
+      expect(provider.activeTrip, isNull);
+      provider.dispose();
+    },
+  );
 }
 
 class _FakeSocketService extends SocketService {
   void Function(BookingUpdate update)? _bookingHandler;
   void Function(TripStatusUpdate update)? _tripStatusHandler;
+  void Function(TripPaymentUpdate update)? _paymentHandler;
   final List<int> leftTripIds = [];
 
   @override
@@ -144,7 +227,9 @@ class _FakeSocketService extends SocketService {
   void onTripPaymentUpdated(
     void Function(TripPaymentUpdate update) handler, {
     String key = 'default',
-  }) {}
+  }) {
+    _paymentHandler = handler;
+  }
 
   @override
   void onBookingUpdated(
@@ -169,4 +254,6 @@ class _FakeSocketService extends SocketService {
 
   void emitTripStatus(TripStatusUpdate update) =>
       _tripStatusHandler?.call(update);
+
+  void emitPayment(TripPaymentUpdate update) => _paymentHandler?.call(update);
 }

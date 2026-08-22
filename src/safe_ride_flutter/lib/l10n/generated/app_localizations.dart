@@ -2483,7 +2483,7 @@ abstract class AppLocalizations {
   /// No description provided for @sos.
   ///
   /// In vi, this message translates to:
-  /// **'SOS'**
+  /// **'SOS khẩn cấp'**
   String get sos;
 
   /// No description provided for @recentTrips.
@@ -3533,7 +3533,7 @@ abstract class AppLocalizations {
   /// No description provided for @activateSosQuestion.
   ///
   /// In vi, this message translates to:
-  /// **'Kích hoạt SOS?'**
+  /// **'Kích hoạt SOS khẩn cấp?'**
   String get activateSosQuestion;
 
   /// No description provided for @activateSosDescription.
@@ -3545,7 +3545,7 @@ abstract class AppLocalizations {
   /// No description provided for @activateSos.
   ///
   /// In vi, this message translates to:
-  /// **'Kích hoạt SOS'**
+  /// **'Kích hoạt SOS khẩn cấp'**
   String get activateSos;
 
   /// No description provided for @sosActivationFailed.
@@ -3695,13 +3695,13 @@ abstract class AppLocalizations {
   /// No description provided for @sosActivated.
   ///
   /// In vi, this message translates to:
-  /// **'SOS đã kích hoạt'**
+  /// **'SOS khẩn cấp đã kích hoạt'**
   String get sosActivated;
 
   /// No description provided for @sendingSos.
   ///
   /// In vi, this message translates to:
-  /// **'Đang gửi tín hiệu SOS...'**
+  /// **'Đang gửi tín hiệu SOS khẩn cấp...'**
   String get sendingSos;
 
   /// No description provided for @shareRoute.
@@ -4688,6 +4688,18 @@ abstract class AppLocalizations {
   /// **'Mô tả rủi ro an toàn'**
   String get safetyTerminationReasonHint;
 
+  /// No description provided for @captureSafetyEvidence.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chụp ảnh bằng chứng (tùy chọn)'**
+  String get captureSafetyEvidence;
+
+  /// No description provided for @retakePhoto.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chụp lại'**
+  String get retakePhoto;
+
   /// No description provided for @reportAccident.
   ///
   /// In vi, this message translates to:
@@ -4700,10 +4712,16 @@ abstract class AppLocalizations {
   /// **'Mô tả diễn biến và thiệt hại ban đầu'**
   String get accidentDescriptionHint;
 
+  /// No description provided for @createAccidentReport.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tạo báo cáo'**
+  String get createAccidentReport;
+
   /// No description provided for @accidentReported.
   ///
   /// In vi, this message translates to:
-  /// **'Đã gửi báo cáo tai nạn.'**
+  /// **'Đã tạo báo cáo tai nạn.'**
   String get accidentReported;
 
   /// No description provided for @safetyTerminationFailed.
@@ -4748,6 +4766,18 @@ abstract class AppLocalizations {
   /// **'Thêm ảnh bằng chứng'**
   String get uploadAccidentEvidence;
 
+  /// No description provided for @sendEvidencePhoto.
+  ///
+  /// In vi, this message translates to:
+  /// **'Gửi ảnh'**
+  String get sendEvidencePhoto;
+
+  /// No description provided for @evidencePreviewFailed.
+  ///
+  /// In vi, this message translates to:
+  /// **'Không thể đọc ảnh đã chọn. Vui lòng chọn lại.'**
+  String get evidencePreviewFailed;
+
   /// No description provided for @disputeLiability.
   ///
   /// In vi, this message translates to:
@@ -4769,7 +4799,7 @@ abstract class AppLocalizations {
   /// No description provided for @accidentEvidenceUploaded.
   ///
   /// In vi, this message translates to:
-  /// **'Đã tải lên bằng chứng.'**
+  /// **'Đã gửi ảnh bằng chứng.'**
   String get accidentEvidenceUploaded;
 
   /// No description provided for @noAccidentEvidence.
@@ -4871,7 +4901,7 @@ abstract class AppLocalizations {
   /// No description provided for @safetyReportTitle.
   ///
   /// In vi, this message translates to:
-  /// **'Báo cáo an toàn'**
+  /// **'Báo cáo sự cố an toàn'**
   String get safetyReportTitle;
 
   /// No description provided for @unsafeCustomer.
@@ -4889,7 +4919,7 @@ abstract class AppLocalizations {
   /// No description provided for @safetyReasonCode.
   ///
   /// In vi, this message translates to:
-  /// **'Mã lý do'**
+  /// **'Lý do'**
   String get safetyReasonCode;
 
   /// No description provided for @safetyReportDescription.
@@ -4913,13 +4943,13 @@ abstract class AppLocalizations {
   /// No description provided for @safetyReportSubmitted.
   ///
   /// In vi, this message translates to:
-  /// **'Đã gửi báo cáo an toàn.'**
+  /// **'Đã gửi báo cáo sự cố an toàn.'**
   String get safetyReportSubmitted;
 
   /// No description provided for @safetyReportFailed.
   ///
   /// In vi, this message translates to:
-  /// **'Không thể gửi báo cáo an toàn. Vui lòng thử lại.'**
+  /// **'Không thể gửi báo cáo sự cố an toàn. Vui lòng thử lại.'**
   String get safetyReportFailed;
 
   /// No description provided for @vehicleFaultType.

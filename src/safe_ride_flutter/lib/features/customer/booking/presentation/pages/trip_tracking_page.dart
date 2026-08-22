@@ -281,7 +281,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       setState(() {
         _currentTripStatus = booking.tripStatus ?? _currentTripStatus;
         _isSOSActivated = _isSOSActivated || booking.isSOSActivated;
-        _isPrepaid = booking.payment?.isSuccess == true;
+        _isPrepaid = _isPrepaid || booking.payment?.isSuccess == true;
         _isWaitingForDriverPayment =
             booking.tripStatus == 'WAITING_PAYMENT' &&
             booking.payment?.isSuccess != true;
@@ -371,7 +371,10 @@ class _TripTrackingPageState extends State<TripTrackingPage>
           return;
         }
         if (update.isSuccess) {
-          setState(() => _isWaitingForDriverPayment = false);
+          setState(() {
+            _isPrepaid = true;
+            _isWaitingForDriverPayment = false;
+          });
           unawaited(_openRatingAfterSuccessfulPayment());
         } else {
           setState(() => _isWaitingForDriverPayment = true);
@@ -1832,6 +1835,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
 
     setState(() {
       _currentTripStatus = booking.tripStatus ?? _currentTripStatus;
+      _isPrepaid = _isPrepaid || booking.payment?.isSuccess == true;
       _isWaitingForDriverPayment =
           booking.tripStatus == 'WAITING_PAYMENT' &&
           booking.payment?.isSuccess != true;
@@ -1882,6 +1886,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     final activeBooking = context.read<BookingProvider>().activeBooking;
     final current = booking ?? activeBooking ?? widget.booking;
     final paymentSucceeded =
+        _isPrepaid ||
         current.payment?.isSuccess == true ||
         activeBooking?.payment?.isSuccess == true ||
         widget.booking.payment?.isSuccess == true;
@@ -1912,7 +1917,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
       _finishCompletedTrip();
       return;
     }
-    if (booking.payment?.isSuccess == true &&
+    if ((_isPrepaid || booking.payment?.isSuccess == true) &&
         booking.tripStatus == 'WAITING_RETURN_CONFIRM') {
       await _openSummaryPage(booking);
     }
@@ -2115,7 +2120,7 @@ class _SosButton extends StatelessWidget {
                     ),
                     SizedBox(width: 4),
                     Text(
-                      'SOS',
+                      context.l10n.sos,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -2127,7 +2132,7 @@ class _SosButton extends StatelessWidget {
                   ],
                 )
               : Text(
-                  isLoading ? context.l10n.sendingSos : 'SOS',
+                  isLoading ? context.l10n.sendingSos : context.l10n.sos,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,

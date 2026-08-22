@@ -1263,7 +1263,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get promotions => '프로모션';
 
   @override
-  String get sos => 'SOS';
+  String get sos => '긴급 SOS';
 
   @override
   String get recentTrips => '최근 여정';
@@ -1828,13 +1828,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get callDriver => '기사에게 전화';
 
   @override
-  String get activateSosQuestion => 'SOS를 활성화할까요?';
+  String get activateSosQuestion => '긴급 SOS를 활성화할까요?';
 
   @override
   String get activateSosDescription => '이 여정에 긴급 신호를 보내시겠습니까?';
 
   @override
-  String get activateSos => 'SOS 활성화';
+  String get activateSos => '긴급 SOS 활성화';
 
   @override
   String get sosActivationFailed => 'SOS를 활성화할 수 없습니다. 다시 시도해 주세요.';
@@ -1909,16 +1909,16 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get tripCannotEndNow => '지금은 여정을 종료할 수 없습니다.';
+  String get tripCannotEndNow => '지금은 이 여정을 종료할 수 없습니다.';
 
   @override
   String get tripEndFailed => '여정을 종료할 수 없습니다. 다시 시도해 주세요.';
 
   @override
-  String get sosActivated => 'SOS 활성화됨';
+  String get sosActivated => '긴급 SOS 활성화됨';
 
   @override
-  String get sendingSos => 'SOS 전송 중...';
+  String get sendingSos => '긴급 SOS 전송 중...';
 
   @override
   String get shareRoute => '경로 공유';
@@ -2435,13 +2435,22 @@ class AppLocalizationsKo extends AppLocalizations {
   String get safetyTerminationReasonHint => '안전 위험을 설명하세요';
 
   @override
+  String get captureSafetyEvidence => '증거 사진 촬영(선택)';
+
+  @override
+  String get retakePhoto => '다시 촬영';
+
+  @override
   String get reportAccident => '사고 신고';
 
   @override
   String get accidentDescriptionHint => '사고 경위와 초기 피해를 설명하세요';
 
   @override
-  String get accidentReported => '사고 신고를 제출했습니다.';
+  String get createAccidentReport => '신고서 생성';
+
+  @override
+  String get accidentReported => '사고 신고서를 생성했습니다.';
 
   @override
   String get safetyTerminationFailed => '안전 사유로 운행을 종료할 수 없습니다.';
@@ -2465,6 +2474,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get uploadAccidentEvidence => '증거 사진 추가';
 
   @override
+  String get sendEvidencePhoto => '사진 보내기';
+
+  @override
+  String get evidencePreviewFailed => '선택한 이미지를 읽을 수 없습니다. 다시 선택해 주세요.';
+
+  @override
   String get disputeLiability => '책임 재검토 요청';
 
   @override
@@ -2474,7 +2489,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get liabilityDisputed => '재검토 요청을 제출했습니다.';
 
   @override
-  String get accidentEvidenceUploaded => '증거를 업로드했습니다.';
+  String get accidentEvidenceUploaded => '증거 사진을 보냈습니다.';
 
   @override
   String get noAccidentEvidence => '업로드된 증거가 없습니다.';
@@ -2525,7 +2540,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get accidentOccurredAt => '발생 시각';
 
   @override
-  String get safetyReportTitle => '안전 신고';
+  String get safetyReportTitle => '안전 사고 신고';
 
   @override
   String get unsafeCustomer => '위험한 고객';
@@ -2534,7 +2549,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get vehicleIssue => '차량 문제';
 
   @override
-  String get safetyReasonCode => '사유 코드';
+  String get safetyReasonCode => '사유';
 
   @override
   String get safetyReportDescription => '상황을 설명하세요';
@@ -2546,10 +2561,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get requestSosEscalationHint => '현재 위치를 보내고 지속 SOS 알림을 생성합니다';
 
   @override
-  String get safetyReportSubmitted => '안전 신고를 제출했습니다.';
+  String get safetyReportSubmitted => '안전 사고 신고를 제출했습니다.';
 
   @override
-  String get safetyReportFailed => '안전 신고를 제출할 수 없습니다. 다시 시도하세요.';
+  String get safetyReportFailed => '안전 사고 신고를 제출할 수 없습니다. 다시 시도하세요.';
 
   @override
   String get vehicleFaultType => '차량 결함 유형';

@@ -1255,7 +1255,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get promotions => '优惠活动';
 
   @override
-  String get sos => 'SOS';
+  String get sos => '紧急 SOS';
 
   @override
   String get recentTrips => '最近行程';
@@ -1815,13 +1815,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get callDriver => '呼叫司机';
 
   @override
-  String get activateSosQuestion => '启用 SOS？';
+  String get activateSosQuestion => '启用紧急 SOS？';
 
   @override
   String get activateSosDescription => '确定要为此行程发送紧急信号吗？';
 
   @override
-  String get activateSos => '启用 SOS';
+  String get activateSos => '启用紧急 SOS';
 
   @override
   String get sosActivationFailed => '无法启用 SOS，请重试。';
@@ -1902,10 +1902,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tripEndFailed => '无法结束行程，请重试。';
 
   @override
-  String get sosActivated => 'SOS 已启用';
+  String get sosActivated => '紧急 SOS 已启用';
 
   @override
-  String get sendingSos => '正在发送 SOS...';
+  String get sendingSos => '正在发送紧急 SOS...';
 
   @override
   String get shareRoute => '分享路线';
@@ -2418,13 +2418,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get safetyTerminationReasonHint => '描述安全风险';
 
   @override
+  String get captureSafetyEvidence => '拍摄证据照片（可选）';
+
+  @override
+  String get retakePhoto => '重新拍摄';
+
+  @override
   String get reportAccident => '报告事故';
 
   @override
   String get accidentDescriptionHint => '描述事故经过和初步损失';
 
   @override
-  String get accidentReported => '事故报告已提交。';
+  String get createAccidentReport => '创建报告';
+
+  @override
+  String get accidentReported => '事故报告已创建。';
 
   @override
   String get safetyTerminationFailed => '无法因安全原因结束行程。';
@@ -2448,6 +2457,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get uploadAccidentEvidence => '添加证据照片';
 
   @override
+  String get sendEvidencePhoto => '发送照片';
+
+  @override
+  String get evidencePreviewFailed => '无法读取所选图片，请重新选择。';
+
+  @override
   String get disputeLiability => '申请责任复核';
 
   @override
@@ -2457,7 +2472,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get liabilityDisputed => '已提交复核申请。';
 
   @override
-  String get accidentEvidenceUploaded => '证据已上传。';
+  String get accidentEvidenceUploaded => '证据照片已发送。';
 
   @override
   String get noAccidentEvidence => '尚未上传证据。';
@@ -2508,7 +2523,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get accidentOccurredAt => '发生时间';
 
   @override
-  String get safetyReportTitle => '安全报告';
+  String get safetyReportTitle => '报告安全事件';
 
   @override
   String get unsafeCustomer => '不安全的客户';
@@ -2517,7 +2532,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get vehicleIssue => '车辆问题';
 
   @override
-  String get safetyReasonCode => '原因代码';
+  String get safetyReasonCode => '原因';
 
   @override
   String get safetyReportDescription => '描述事件';
@@ -2529,10 +2544,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get requestSosEscalationHint => '发送当前位置并创建持久 SOS 警报';
 
   @override
-  String get safetyReportSubmitted => '安全报告已提交。';
+  String get safetyReportSubmitted => '安全事件报告已提交。';
 
   @override
-  String get safetyReportFailed => '无法提交安全报告，请重试。';
+  String get safetyReportFailed => '无法提交安全事件报告，请重试。';
 
   @override
   String get vehicleFaultType => '车辆故障类型';

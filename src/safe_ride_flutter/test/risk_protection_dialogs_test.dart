@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
@@ -16,6 +18,11 @@ void main() {
       'ELECTRICAL_FAILURE',
       'OTHER',
     ]);
+  });
+
+  test('safety report reason codes are generated from the selected type', () {
+    expect(safetyReportReasonCodeForType('UNSAFE_CUSTOMER'), 'UNSAFE_CUSTOMER');
+    expect(safetyReportReasonCodeForType('VEHICLE_ISSUE'), 'VEHICLE_ISSUE');
   });
 
   test(
@@ -56,6 +63,111 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(result, 'Va cham nhe');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'safety termination uses camera and camera cancellation keeps the reason',
+    (tester) async {
+      SafetyTerminationDialogResult? result;
+      ImageSource? requestedSource;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('vi'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => FilledButton(
+                onPressed: () async {
+                  result = await showSafetyTerminationDialog(
+                    context,
+                    pickEvidenceImage: (source) async {
+                      requestedSource = source;
+                      return null;
+                    },
+                  );
+                },
+                child: const Text('open safety termination'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('open safety termination'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField),
+        'Khách có hành vi nguy hiểm',
+      );
+      await tester.tap(find.text('Chụp ảnh bằng chứng (tùy chọn)'));
+      await tester.pumpAndSettle();
+
+      expect(requestedSource, ImageSource.camera);
+      expect(find.text('Khách có hành vi nguy hiểm'), findsOneWidget);
+
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Kết thúc vì an toàn'),
+      );
+      await tester.pumpAndSettle();
+
+      expect(result?.reason, 'Khách có hành vi nguy hiểm');
+      expect(result?.evidence, isNull);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('captured safety evidence is shown and can be submitted', (
+    tester,
+  ) async {
+    SafetyTerminationDialogResult? result;
+    final evidence = XFile.fromData(
+      base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      ),
+      name: 'camera.png',
+      mimeType: 'image/png',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('vi'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () async {
+                result = await showSafetyTerminationDialog(
+                  context,
+                  pickEvidenceImage: (_) async => evidence,
+                );
+              },
+              child: const Text('open capture'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open capture'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Sự cố an toàn');
+    await tester.tap(find.text('Chụp ảnh bằng chứng (tùy chọn)'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byIcon(Icons.check_circle, skipOffstage: false),
+      findsOneWidget,
+    );
+    expect(find.text('Chụp lại', skipOffstage: false), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Kết thúc vì an toàn'));
+    await tester.pumpAndSettle();
+
+    expect(result?.evidence, same(evidence));
     expect(tester.takeException(), isNull);
   });
 }

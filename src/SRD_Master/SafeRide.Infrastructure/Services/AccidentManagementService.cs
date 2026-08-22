@@ -76,46 +76,54 @@ public sealed class AccidentManagementService : IAccidentManagementService
         if (!hasEligibleCoverage)
             throw Conflict("Chuyến đi không có protection coverage hợp lệ tại thời điểm tai nạn.");
 
-        var accident = new AccidentReport
+        var recipients = isManagement
+            ? new[] { trip.DriverId, trip.Booking.CustomerId }
+            : new[] { trip.DriverId == userId ? trip.Booking.CustomerId : trip.DriverId };
+        var strategy = _dbContext.Database.CreateExecutionStrategy();
+        var accident = await strategy.ExecuteAsync(async () =>
         {
-            TripId = tripId,
-            ReportedByUserId = userId,
-            Category = request.Category,
-            Status = AccidentStatus.REPORTED,
-            OccurredAtUtc = occurredAtUtc,
-            Latitude = request.Latitude,
-            Longitude = request.Longitude,
-            Description = description,
-            PoliceReportReference = string.IsNullOrWhiteSpace(policeReference) ? null : policeReference,
-            CreatedAtUtc = now
-        };
-        await using var transaction = _dbContext.Database.IsRelational()
-            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
-            : null;
-        try
-        {
-            _dbContext.AccidentReports.Add(accident);
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            var recipients = isManagement
-                ? new[] { trip.DriverId, trip.Booking.CustomerId }
-                : new[] { trip.DriverId == userId ? trip.Booking.CustomerId : trip.DriverId };
-            _dbContext.Notifications.AddRange(recipients.Distinct().Select(recipientId => new Notification
+            // SQL Server is configured with EnableRetryOnFailure. The execution
+            // strategy must own the complete user transaction or EF Core rejects it.
+            _dbContext.ChangeTracker.Clear();
+            await using var transaction = _dbContext.Database.IsRelational()
+                ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
+                : null;
+            try
             {
-                UserId = recipientId,
-                Title = "Đã ghi nhận báo cáo tai nạn",
-                Content = "Một bên tham gia chuyến đi đã gửi báo cáo tai nạn. Vui lòng theo dõi cập nhật trong hồ sơ.",
-                NotificationType = "AccidentReported",
-                ReferenceId = accident.Id,
-                SentAt = now
-            }));
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
-        }
-        catch
-        {
-            if (transaction is not null) await transaction.RollbackAsync(cancellationToken);
-            throw;
-        }
+                var created = new AccidentReport
+                {
+                    TripId = tripId,
+                    ReportedByUserId = userId,
+                    Category = request.Category,
+                    Status = AccidentStatus.REPORTED,
+                    OccurredAtUtc = occurredAtUtc,
+                    Latitude = request.Latitude,
+                    Longitude = request.Longitude,
+                    Description = description,
+                    PoliceReportReference = string.IsNullOrWhiteSpace(policeReference) ? null : policeReference,
+                    CreatedAtUtc = now
+                };
+                _dbContext.AccidentReports.Add(created);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                _dbContext.Notifications.AddRange(recipients.Distinct().Select(recipientId => new Notification
+                {
+                    UserId = recipientId,
+                    Title = "Đã ghi nhận báo cáo tai nạn",
+                    Content = "Một bên tham gia chuyến đi đã gửi báo cáo tai nạn. Vui lòng theo dõi cập nhật trong hồ sơ.",
+                    NotificationType = "AccidentReported",
+                    ReferenceId = created.Id,
+                    SentAt = now
+                }));
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+                return created;
+            }
+            catch
+            {
+                if (transaction is not null) await transaction.RollbackAsync(cancellationToken);
+                throw;
+            }
+        });
         try
         {
             await _realtime.PublishAccidentCreatedAsync(new AccidentCreatedEvent(

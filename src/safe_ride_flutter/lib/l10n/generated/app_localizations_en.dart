@@ -1305,7 +1305,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get promotions => 'Promotions';
 
   @override
-  String get sos => 'SOS';
+  String get sos => 'Emergency SOS';
 
   @override
   String get recentTrips => 'Recent trips';
@@ -1892,14 +1892,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get callDriver => 'Call driver';
 
   @override
-  String get activateSosQuestion => 'Activate SOS?';
+  String get activateSosQuestion => 'Activate emergency SOS?';
 
   @override
   String get activateSosDescription =>
       'Send an emergency signal for this trip?';
 
   @override
-  String get activateSos => 'Activate SOS';
+  String get activateSos => 'Activate emergency SOS';
 
   @override
   String get sosActivationFailed => 'Could not activate SOS. Please try again.';
@@ -1983,10 +1983,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tripEndFailed => 'Could not end the trip. Please try again.';
 
   @override
-  String get sosActivated => 'SOS activated';
+  String get sosActivated => 'Emergency SOS activated';
 
   @override
-  String get sendingSos => 'Sending SOS...';
+  String get sendingSos => 'Sending emergency SOS...';
 
   @override
   String get shareRoute => 'Share route';
@@ -2531,6 +2531,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get safetyTerminationReasonHint => 'Describe the safety risk';
 
   @override
+  String get captureSafetyEvidence => 'Capture evidence photo (optional)';
+
+  @override
+  String get retakePhoto => 'Retake';
+
+  @override
   String get reportAccident => 'Report accident';
 
   @override
@@ -2538,7 +2544,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Describe what happened and any immediate damage';
 
   @override
-  String get accidentReported => 'Accident report submitted.';
+  String get createAccidentReport => 'Create report';
+
+  @override
+  String get accidentReported => 'Accident report created.';
 
   @override
   String get safetyTerminationFailed => 'Could not end the trip for safety.';
@@ -2562,6 +2571,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get uploadAccidentEvidence => 'Add evidence photo';
 
   @override
+  String get sendEvidencePhoto => 'Send photo';
+
+  @override
+  String get evidencePreviewFailed =>
+      'Could not read the selected image. Please choose it again.';
+
+  @override
   String get disputeLiability => 'Request liability review';
 
   @override
@@ -2572,7 +2588,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get liabilityDisputed => 'Your review request was submitted.';
 
   @override
-  String get accidentEvidenceUploaded => 'Evidence was uploaded.';
+  String get accidentEvidenceUploaded => 'Evidence photo sent.';
 
   @override
   String get noAccidentEvidence => 'No evidence has been uploaded.';
@@ -2623,7 +2639,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get accidentOccurredAt => 'Occurred at';
 
   @override
-  String get safetyReportTitle => 'Safety report';
+  String get safetyReportTitle => 'Report safety incident';
 
   @override
   String get unsafeCustomer => 'Unsafe customer';
@@ -2632,7 +2648,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get vehicleIssue => 'Vehicle issue';
 
   @override
-  String get safetyReasonCode => 'Reason code';
+  String get safetyReasonCode => 'Reason';
 
   @override
   String get safetyReportDescription => 'Describe the incident';
@@ -2645,11 +2661,11 @@ class AppLocalizationsEn extends AppLocalizations {
       'Send the current location and create a durable SOS alert';
 
   @override
-  String get safetyReportSubmitted => 'Safety report submitted.';
+  String get safetyReportSubmitted => 'Safety incident report submitted.';
 
   @override
   String get safetyReportFailed =>
-      'Could not submit the safety report. Please try again.';
+      'Could not submit the safety incident report. Please try again.';
 
   @override
   String get vehicleFaultType => 'Vehicle fault type';

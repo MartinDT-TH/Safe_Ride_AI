@@ -1468,7 +1468,7 @@ class _ActiveTripCard extends StatelessWidget {
                   ? _buildWaitingReturnSection(context, trip.tripId, isUpdating)
                   : _buildWaitingPaymentSection(context, trip.tripId)
             else if (isReturnConfirmed)
-              _buildReturnConfirmedBanner(context)
+              _buildReturnConfirmedSection(context, isUpdating)
             else if (isWaitingPayment)
               _buildWaitingPaymentSection(context, trip.tripId),
             if (canCancel) ...[
@@ -1580,30 +1580,61 @@ class _ActiveTripCard extends StatelessWidget {
 
   // ─────────── RETURN_CONFIRMED banner ─────────────────────────────────
 
-  static Widget _buildReturnConfirmedBanner(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Color(0xFFE8F7F0),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Color(0xFF0A8F62).withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.check_circle_rounded, color: Color(0xFF0A8F62), size: 22),
-          SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              context.l10n.returnConfirmedCompleting,
-              style: TextStyle(
-                color: Color(0xFF0A5C3E),
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
+  static Widget _buildReturnConfirmedSection(
+    BuildContext context,
+    bool isUpdating,
+  ) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Color(0xFFE8F7F0),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: Color(0xFF0A8F62).withValues(alpha: 0.3),
             ),
           ),
-        ],
-      ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.check_circle_rounded,
+                color: Color(0xFF0A8F62),
+                size: 22,
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  context.l10n.returnConfirmedCompleting,
+                  style: TextStyle(
+                    color: Color(0xFF0A5C3E),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: isUpdating
+                ? null
+                : () => _runTripAction(
+                    context,
+                    () => context
+                        .read<DriverDashboardProvider>()
+                        .completeActiveTrip(),
+                  ),
+            icon: Icon(Icons.sync_rounded),
+            label: Text(
+              isUpdating ? context.l10n.processing : context.l10n.checkAgain,
+            ),
+          ),
+        ),
+      ],
     );
   }
 

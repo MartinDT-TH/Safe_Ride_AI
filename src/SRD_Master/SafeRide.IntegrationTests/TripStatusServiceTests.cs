@@ -447,6 +447,48 @@ public sealed class TripStatusServiceTests
         Assert.Equal(50_400m, payout.Amount);
         Assert.Equal(WalletTransactionType.Income, payout.TransactionType);
     }
+
+    [Fact]
+    public async Task ConfirmReturnByCustomer_WhenReturnWasPersisted_ResumesCompletionWithoutDuplicates()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.WAITING_RETURN_CONFIRM);
+        await fixture.AddSuccessfulPaymentAsync(62_000m);
+        fixture.Realtime.FailOnceForTripStatus = TripStatus.RETURN_CONFIRMED;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            fixture.Service.ConfirmReturnByCustomerAsync(
+                fixture.CustomerId,
+                fixture.TripId,
+                vehicleReturnedConfirmed: true,
+                CancellationToken.None,
+                ratingScore: 5,
+                comment: "Safe trip"));
+
+        Assert.Equal(
+            TripStatus.RETURN_CONFIRMED,
+            (await fixture.DbContext.Trips.SingleAsync(x => x.Id == fixture.TripId)).TripStatus);
+
+        await fixture.Service.ConfirmReturnByCustomerAsync(
+            fixture.CustomerId,
+            fixture.TripId,
+            vehicleReturnedConfirmed: true,
+            CancellationToken.None,
+            ratingScore: 5,
+            comment: "Safe trip");
+
+        var trip = await fixture.DbContext.Trips
+            .Include(x => x.Booking)
+            .Include(x => x.ReturnConfirmations)
+            .Include(x => x.Rating)
+            .SingleAsync(x => x.Id == fixture.TripId);
+        Assert.Equal(TripStatus.COMPLETED, trip.TripStatus);
+        Assert.Equal(BookingStatus.Completed, trip.Booking.BookingStatus);
+        Assert.Single(trip.ReturnConfirmations);
+        Assert.NotNull(trip.Rating);
+        Assert.Equal("Safe trip", trip.Rating.Comment);
+        Assert.Equal(3, fixture.Promotion.CurrentUsageCount);
+    }
+
     [Fact]
     public async Task ConfirmReturnByCustomer_CannotResumeAfterTripEnded()
     {
@@ -514,6 +556,49 @@ public sealed class TripStatusServiceTests
         Assert.Equal(HandoverStatus.DriverConfirmed, confirmation.HandoverStatus);
         Assert.Single(confirmation.Evidence);
         Assert.Null(trip.Rating);
+    }
+
+    [Fact]
+    public async Task ConfirmReturnByDriver_WhenReturnWasPersisted_ResumesWithoutDeletingEvidence()
+    {
+        var storage = new TrackingTripReturnEvidenceStorage();
+        using var fixture = await TripStatusFixture.CreateAsync(
+            TripStatus.WAITING_RETURN_CONFIRM,
+            returnEvidenceStorage: storage);
+        await fixture.AddSuccessfulPaymentAsync(62_000m);
+        fixture.Realtime.FailOnceForTripStatus = TripStatus.RETURN_CONFIRMED;
+        await using var firstEvidence = new MemoryStream([0xFF, 0xD8, 0xFF]);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            fixture.Service.ConfirmReturnByDriverAsync(
+                fixture.DriverId,
+                fixture.TripId,
+                [new ReturnEvidenceItem(firstEvidence, "return.jpg", "image/jpeg", 3)],
+                note: "Driver confirmed for customer",
+                CancellationToken.None));
+
+        Assert.Equal(
+            TripStatus.RETURN_CONFIRMED,
+            (await fixture.DbContext.Trips.SingleAsync(x => x.Id == fixture.TripId)).TripStatus);
+        Assert.Equal(1, storage.SaveCalls);
+        Assert.Empty(storage.DeletedPublicIds);
+
+        await using var retryEvidence = new MemoryStream([0xFF, 0xD8, 0xFF]);
+        await fixture.Service.ConfirmReturnByDriverAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            [new ReturnEvidenceItem(retryEvidence, "return.jpg", "image/jpeg", 3)],
+            note: "Driver confirmed for customer",
+            CancellationToken.None);
+
+        var trip = await fixture.DbContext.Trips
+            .Include(x => x.ReturnConfirmations)
+                .ThenInclude(x => x.Evidence)
+            .SingleAsync(x => x.Id == fixture.TripId);
+        Assert.Equal(TripStatus.COMPLETED, trip.TripStatus);
+        Assert.Equal(1, storage.SaveCalls);
+        Assert.Empty(storage.DeletedPublicIds);
+        Assert.Single(Assert.Single(trip.ReturnConfirmations).Evidence);
     }
 
     [Theory]
@@ -2038,6 +2123,7 @@ public sealed class TripStatusServiceTests
     private sealed class RealtimeNotificationServiceFake
         : IRealtimeNotificationService
     {
+        public TripStatus? FailOnceForTripStatus { get; set; }
         public List<TripStatusChangedEvent> TripStatusNotifications { get; } = [];
         public List<TripPaymentPendingEvent> TripPaymentPendingNotifications { get; } = [];
         public List<TripPaymentSucceededEvent> TripPaymentSucceededNotifications { get; } = [];
@@ -2056,6 +2142,11 @@ public sealed class TripStatusServiceTests
             CancellationToken cancellationToken = default)
         {
             TripStatusNotifications.Add(notification);
+            if (FailOnceForTripStatus == notification.TripStatus)
+            {
+                FailOnceForTripStatus = null;
+                throw new InvalidOperationException("Simulated realtime failure after persistence.");
+            }
             return Task.CompletedTask;
         }
 

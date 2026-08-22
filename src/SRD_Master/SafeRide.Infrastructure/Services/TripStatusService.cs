@@ -488,6 +488,7 @@ public sealed class TripStatusService : ITripStatusService
                 .ThenInclude(x => x.SurgePricingRule)
             .Include(x => x.Payments)
             .Include(x => x.Rating)
+            .Include(x => x.ReturnConfirmations)
             .FirstOrDefaultAsync(
                 x => x.Id == tripId && x.Booking.CustomerId == customerId,
                 cancellationToken);
@@ -497,6 +498,28 @@ public sealed class TripStatusService : ITripStatusService
                 "trip.not_found",
                 "Khong tim thay chuyen di cua khach hang.",
                 404);
+        }
+
+        var existingCustomerConfirmation = trip.ReturnConfirmations
+            .OrderByDescending(x => x.ConfirmedAt)
+            .FirstOrDefault(x =>
+                x.ConfirmedByUserId == customerId
+                && x.HandoverStatus == HandoverStatus.CustomerConfirmed);
+        if ((trip.TripStatus is TripStatus.RETURN_CONFIRMED or TripStatus.COMPLETED)
+            && existingCustomerConfirmation is not null)
+        {
+            if (trip.TripStatus == TripStatus.RETURN_CONFIRMED)
+            {
+                await CompleteTripAsync(customerId, trip.Id, cancellationToken);
+            }
+
+            await EvaluateSubmittedRatingAsync(
+                trip.Id,
+                customerId,
+                trip.DriverId,
+                cancellationToken);
+            await CleanupTripTrackingAsync(trip.Id, cancellationToken);
+            return;
         }
 
         if (trip.TripStatus != TripStatus.WAITING_RETURN_CONFIRM)
@@ -585,29 +608,12 @@ public sealed class TripStatusService : ITripStatusService
             customerId,
             cancellationToken);
 
-        await ApplyTripStatusAsync(
-            trip,
-            TripStatus.COMPLETED,
+        await CompleteTripAsync(customerId, trip.Id, cancellationToken);
+        await EvaluateSubmittedRatingAsync(
+            trip.Id,
             customerId,
+            trip.DriverId,
             cancellationToken);
-        if (ratingScore is not null)
-        {
-            var submittedRatingId = await _dbContext.Ratings
-                .AsNoTracking()
-                .Where(x =>
-                    x.TripId == trip.Id &&
-                    x.CustomerId == customerId &&
-                    x.DriverId == trip.DriverId)
-                .OrderByDescending(x => x.CreatedAt)
-                .Select(x => (long?)x.Id)
-                .FirstOrDefaultAsync(cancellationToken);
-            if (submittedRatingId.HasValue)
-            {
-                await _accountBanEvaluationService.EvaluateRatingAsync(
-                    submittedRatingId.Value,
-                    cancellationToken);
-            }
-        }
 
         await CleanupTripTrackingAsync(trip.Id, cancellationToken);
     }
@@ -637,6 +643,7 @@ public sealed class TripStatusService : ITripStatusService
             .Include(x => x.Booking)
                 .ThenInclude(x => x.SurgePricingRule)
             .Include(x => x.Payments)
+            .Include(x => x.ReturnConfirmations)
             .FirstOrDefaultAsync(
                 x => x.Id == tripId && x.DriverId == driverId,
                 cancellationToken);
@@ -646,6 +653,23 @@ public sealed class TripStatusService : ITripStatusService
                 "trip.not_found",
                 "Không tìm thấy chuyến đi của tài xế.",
                 404);
+        }
+
+        var existingDriverConfirmation = trip.ReturnConfirmations
+            .OrderByDescending(x => x.ConfirmedAt)
+            .FirstOrDefault(x =>
+                x.ConfirmedByUserId == driverId
+                && x.HandoverStatus == HandoverStatus.DriverConfirmed);
+        if ((trip.TripStatus is TripStatus.RETURN_CONFIRMED or TripStatus.COMPLETED)
+            && existingDriverConfirmation is not null)
+        {
+            if (trip.TripStatus == TripStatus.RETURN_CONFIRMED)
+            {
+                await CompleteTripAsync(driverId, trip.Id, cancellationToken);
+            }
+
+            await CleanupTripTrackingAsync(trip.Id, cancellationToken);
+            return;
         }
 
         if (trip.TripStatus != TripStatus.WAITING_RETURN_CONFIRM)
@@ -763,17 +787,22 @@ public sealed class TripStatusService : ITripStatusService
                 driverId,
                 cancellationToken);
 
-            await ApplyTripStatusAsync(
-                trip,
-                TripStatus.COMPLETED,
-                driverId,
-                cancellationToken);
+            await CompleteTripAsync(driverId, trip.Id, cancellationToken);
 
             await CleanupTripTrackingAsync(trip.Id, cancellationToken);
         }
         catch
         {
-            foreach (var stored in storedFiles.Where(x => !string.IsNullOrWhiteSpace(x.ImagePublicId)))
+            var confirmationPersisted = await _dbContext.TripReturnConfirmations
+                .AsNoTracking()
+                .AnyAsync(
+                    x => x.TripId == tripId
+                        && x.ConfirmedByUserId == driverId
+                        && x.HandoverStatus == HandoverStatus.DriverConfirmed,
+                    CancellationToken.None);
+            foreach (var stored in storedFiles.Where(x =>
+                !confirmationPersisted
+                && !string.IsNullOrWhiteSpace(x.ImagePublicId)))
             {
                 try
                 {
@@ -799,6 +828,29 @@ public sealed class TripStatusService : ITripStatusService
 
     private static readonly string[] ReturnEvidenceContentTypes =
         ["image/jpeg", "image/png", "image/webp"];
+
+    private async Task EvaluateSubmittedRatingAsync(
+        long tripId,
+        Guid customerId,
+        Guid driverId,
+        CancellationToken cancellationToken)
+    {
+        var submittedRatingId = await _dbContext.Ratings
+            .AsNoTracking()
+            .Where(x =>
+                x.TripId == tripId
+                && x.CustomerId == customerId
+                && x.DriverId == driverId)
+            .OrderByDescending(x => x.CreatedAt)
+            .Select(x => (long?)x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (submittedRatingId.HasValue)
+        {
+            await _accountBanEvaluationService.EvaluateRatingAsync(
+                submittedRatingId.Value,
+                cancellationToken);
+        }
+    }
 
     public Task SafetyTerminateAsync(
         Guid userId,

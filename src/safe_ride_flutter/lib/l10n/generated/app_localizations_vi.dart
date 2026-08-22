@@ -1298,7 +1298,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get promotions => 'Khuyến mãi';
 
   @override
-  String get sos => 'SOS';
+  String get sos => 'SOS khẩn cấp';
 
   @override
   String get recentTrips => 'Chuyến đi gần đây';
@@ -1882,14 +1882,14 @@ class AppLocalizationsVi extends AppLocalizations {
   String get callDriver => 'Gọi tài xế';
 
   @override
-  String get activateSosQuestion => 'Kích hoạt SOS?';
+  String get activateSosQuestion => 'Kích hoạt SOS khẩn cấp?';
 
   @override
   String get activateSosDescription =>
       'Bạn có chắc muốn gửi tín hiệu khẩn cấp cho chuyến đi này không?';
 
   @override
-  String get activateSos => 'Kích hoạt SOS';
+  String get activateSos => 'Kích hoạt SOS khẩn cấp';
 
   @override
   String get sosActivationFailed =>
@@ -1975,10 +1975,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get tripEndFailed => 'Không thể kết thúc chuyến. Vui lòng thử lại.';
 
   @override
-  String get sosActivated => 'SOS đã kích hoạt';
+  String get sosActivated => 'SOS khẩn cấp đã kích hoạt';
 
   @override
-  String get sendingSos => 'Đang gửi tín hiệu SOS...';
+  String get sendingSos => 'Đang gửi tín hiệu SOS khẩn cấp...';
 
   @override
   String get shareRoute => 'Chia sẻ lộ trình';
@@ -2520,13 +2520,22 @@ class AppLocalizationsVi extends AppLocalizations {
   String get safetyTerminationReasonHint => 'Mô tả rủi ro an toàn';
 
   @override
+  String get captureSafetyEvidence => 'Chụp ảnh bằng chứng (tùy chọn)';
+
+  @override
+  String get retakePhoto => 'Chụp lại';
+
+  @override
   String get reportAccident => 'Báo cáo tai nạn';
 
   @override
   String get accidentDescriptionHint => 'Mô tả diễn biến và thiệt hại ban đầu';
 
   @override
-  String get accidentReported => 'Đã gửi báo cáo tai nạn.';
+  String get createAccidentReport => 'Tạo báo cáo';
+
+  @override
+  String get accidentReported => 'Đã tạo báo cáo tai nạn.';
 
   @override
   String get safetyTerminationFailed => 'Không thể kết thúc chuyến vì an toàn.';
@@ -2550,6 +2559,13 @@ class AppLocalizationsVi extends AppLocalizations {
   String get uploadAccidentEvidence => 'Thêm ảnh bằng chứng';
 
   @override
+  String get sendEvidencePhoto => 'Gửi ảnh';
+
+  @override
+  String get evidencePreviewFailed =>
+      'Không thể đọc ảnh đã chọn. Vui lòng chọn lại.';
+
+  @override
   String get disputeLiability => 'Yêu cầu xem xét trách nhiệm';
 
   @override
@@ -2560,7 +2576,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get liabilityDisputed => 'Đã gửi yêu cầu xem xét lại.';
 
   @override
-  String get accidentEvidenceUploaded => 'Đã tải lên bằng chứng.';
+  String get accidentEvidenceUploaded => 'Đã gửi ảnh bằng chứng.';
 
   @override
   String get noAccidentEvidence => 'Chưa có bằng chứng nào.';
@@ -2613,7 +2629,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get accidentOccurredAt => 'Thời điểm xảy ra';
 
   @override
-  String get safetyReportTitle => 'Báo cáo an toàn';
+  String get safetyReportTitle => 'Báo cáo sự cố an toàn';
 
   @override
   String get unsafeCustomer => 'Khách hàng không an toàn';
@@ -2622,7 +2638,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get vehicleIssue => 'Sự cố phương tiện';
 
   @override
-  String get safetyReasonCode => 'Mã lý do';
+  String get safetyReasonCode => 'Lý do';
 
   @override
   String get safetyReportDescription => 'Mô tả sự việc';
@@ -2635,11 +2651,11 @@ class AppLocalizationsVi extends AppLocalizations {
       'Gửi vị trí hiện tại và tạo cảnh báo SOS bền vững';
 
   @override
-  String get safetyReportSubmitted => 'Đã gửi báo cáo an toàn.';
+  String get safetyReportSubmitted => 'Đã gửi báo cáo sự cố an toàn.';
 
   @override
   String get safetyReportFailed =>
-      'Không thể gửi báo cáo an toàn. Vui lòng thử lại.';
+      'Không thể gửi báo cáo sự cố an toàn. Vui lòng thử lại.';
 
   @override
   String get vehicleFaultType => 'Loại lỗi phương tiện';

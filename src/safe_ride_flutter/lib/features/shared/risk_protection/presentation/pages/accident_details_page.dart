@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -107,31 +109,164 @@ class _AccidentDetailsView extends StatelessWidget {
     BuildContext context,
     RiskProtectionProvider provider,
   ) async {
-    final file = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-      maxWidth: 2400,
-    );
+    XFile? file;
+    try {
+      file = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
+    } catch (_) {
+      if (context.mounted) {
+        _showMessage(
+          context,
+          context.l10n.mediaAccessFailed(context.l10n.gallery),
+        );
+      }
+      return;
+    }
     if (file == null || !context.mounted) return;
-    final description = await _textDialog(
-      context,
-      title: context.l10n.uploadAccidentEvidence,
-      hint: context.l10n.optionalNote,
-      isRequired: false,
-    );
-    if (description == null || !context.mounted) return;
-    final success = await provider.uploadEvidence(
-      accidentId: accidentId,
-      file: file,
-      description: description,
-    );
+
+    late final Uint8List previewBytes;
+    try {
+      previewBytes = await file.readAsBytes();
+    } catch (_) {
+      if (context.mounted) {
+        _showMessage(context, context.l10n.evidencePreviewFailed);
+      }
+      return;
+    }
     if (!context.mounted) return;
-    _showMessage(
-      context,
-      success
-          ? context.l10n.accidentEvidenceUploaded
-          : provider.errorMessage ?? context.l10n.evidenceUploadFailed,
+
+    final uploaded = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        var description = '';
+        var isSubmitting = false;
+        String? uploadError;
+        return StatefulBuilder(
+          builder: (context, setState) => PopScope(
+            canPop: !isSubmitting,
+            child: AlertDialog(
+              title: Text(context.l10n.uploadAccidentEvidence),
+              content: SizedBox(
+                width: 420,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.memory(
+                          previewBytes,
+                          height: 220,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              Container(
+                                height: 180,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.surfaceContainer,
+                                alignment: Alignment.center,
+                                child: const Icon(Icons.broken_image_outlined),
+                              ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.check_circle,
+                            color: Colors.green,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              file!.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        enabled: !isSubmitting,
+                        minLines: 2,
+                        maxLines: 4,
+                        onChanged: (value) => description = value,
+                        decoration: InputDecoration(
+                          labelText: context.l10n.optionalNote,
+                        ),
+                      ),
+                      if (uploadError != null) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          uploadError!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(false),
+                  child: Text(context.l10n.cancel),
+                ),
+                FilledButton.icon(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          setState(() {
+                            isSubmitting = true;
+                            uploadError = null;
+                          });
+                          final success = await provider.uploadEvidence(
+                            accidentId: accidentId,
+                            file: file!,
+                            description: description,
+                          );
+                          if (!dialogContext.mounted) return;
+                          if (success) {
+                            Navigator.of(dialogContext).pop(true);
+                            return;
+                          }
+                          setState(() {
+                            isSubmitting = false;
+                            uploadError =
+                                provider.errorMessage ??
+                                context.l10n.evidenceUploadFailed;
+                          });
+                        },
+                  icon: isSubmitting
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.send_outlined),
+                  label: Text(
+                    isSubmitting
+                        ? context.l10n.submitting
+                        : context.l10n.sendEvidencePhoto,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
+    if (uploaded == true && context.mounted) {
+      _showMessage(context, context.l10n.accidentEvidenceUploaded);
+    }
   }
 }
 
