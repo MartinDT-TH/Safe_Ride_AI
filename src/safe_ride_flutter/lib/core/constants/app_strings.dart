@@ -129,7 +129,7 @@ abstract final class BookingStrings {
   static const selectVehicle = 'Chọn xe của bạn';
   static const specialRequest = 'Yêu cầu đặc biệt (không bắt buộc)';
   static const fareCalculationNote =
-      'Giá cước sẽ được backend tính từ quãng đường và thời gian thực tế.';
+      'Cước được chấp nhận sẽ được khóa khi bạn đặt chuyến.';
   static const confirmNow = 'Xác nhận đặt ngay';
   static const confirmScheduled = 'Xác nhận đặt trước';
   static const pickupLabel = 'ĐIỂM ĐÓN';

@@ -22,6 +22,17 @@ import '../../../../shared/history/domain/repositories/history_repository.dart';
 
 enum DriverStatus { offline, online }
 
+enum DriverTripEndReason {
+  normalCompletion('NORMAL_COMPLETION'),
+  customerRequestedStop('CUSTOMER_REQUESTED_STOP'),
+  driverUnableToContinue('DRIVER_UNABLE_TO_CONTINUE'),
+  startedByMistake('STARTED_BY_MISTAKE');
+
+  const DriverTripEndReason(this.apiValue);
+
+  final String apiValue;
+}
+
 String imageContentTypeForEvidence(XFile file) {
   final mimeType = file.mimeType?.toLowerCase();
   if (mimeType == 'image/jpeg' ||
@@ -1089,7 +1100,7 @@ class DriverDashboardProvider extends ChangeNotifier {
   }
 
   /// Ends an IN_PROGRESS trip and advances it to the payment stage.
-  Future<bool> endTripAsync() async {
+  Future<bool> endTripAsync(DriverTripEndReason reason) async {
     final trip = _activeTrip;
     final token = _accessToken;
     if (trip == null || token == null || _isUpdatingTrip) {
@@ -1104,6 +1115,7 @@ class DriverDashboardProvider extends ChangeNotifier {
       await _flushPendingLocationUpdates();
       await _dio.post(
         ApiEndpoints.endTrip(trip.tripId),
+        data: {'reason': reason.apiValue},
         options: Options(
           headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
         ),

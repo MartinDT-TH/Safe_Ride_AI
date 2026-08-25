@@ -149,6 +149,32 @@ public sealed class RedisService : IRedisService, IDisposable
         return (long)result;
     }
 
+    public async Task<double> SetMaximumDoubleAsync(
+        string key,
+        double candidate,
+        TimeSpan expiration)
+    {
+        const string script = """
+            local current = tonumber(redis.call('GET', KEYS[1]) or '0')
+            local candidate = tonumber(ARGV[1])
+            local maximum = math.max(current, candidate)
+            redis.call('SET', KEYS[1], tostring(maximum), 'PX', ARGV[2])
+            return tostring(maximum)
+            """;
+
+        var result = await Database.ScriptEvaluateAsync(
+            script,
+            new RedisKey[] { key },
+            new RedisValue[]
+            {
+                candidate.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+                (long)expiration.TotalMilliseconds
+            });
+        return double.Parse(
+            result.ToString(),
+            System.Globalization.CultureInfo.InvariantCulture);
+    }
+
     public Task GeoAddAsync(
         string key,
         double longitude,

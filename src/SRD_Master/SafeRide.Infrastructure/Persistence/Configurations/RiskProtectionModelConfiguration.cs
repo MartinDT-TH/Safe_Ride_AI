@@ -77,7 +77,14 @@ internal static class RiskProtectionModelConfiguration
         modelBuilder.Entity<Trip>(entity =>
         {
             entity.Property(x => x.TerminationCategory).HasConversion<string>().HasMaxLength(20);
+            entity.Property(x => x.EndReason).HasConversion<string>().HasMaxLength(40);
+            entity.Property(x => x.PlannedRouteProgress).HasColumnType("decimal(7,6)");
+            entity.Property(x => x.FinalizationLatitude).HasColumnType("decimal(9,6)");
+            entity.Property(x => x.FinalizationLongitude).HasColumnType("decimal(9,6)");
             entity.Property(x => x.SafetyTerminationReason).HasMaxLength(500);
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_Trips_PlannedRouteProgress",
+                "[PlannedRouteProgress] IS NULL OR ([PlannedRouteProgress] >= 0 AND [PlannedRouteProgress] <= 1)"));
         });
 
         modelBuilder.Entity<Report>(entity =>

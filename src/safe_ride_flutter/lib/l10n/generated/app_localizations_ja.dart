@@ -1732,7 +1732,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get specialRequest => '特別なリクエスト（任意）';
 
   @override
-  String get fareCalculationNote => '実際の距離と時間に基づきバックエンドで料金を計算します。';
+  String get fareCalculationNote => '予約確定時に承認済み運賃が固定されます。';
 
   @override
   String get confirmScheduled => '予約乗車を確定';
@@ -2369,7 +2369,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get driverEndTripRequestMessage =>
-      'ドライバーが今すぐ乗車を終了したいと申し出ています。同意すると、実際の走行距離に基づいて最低2,000 VNDの料金が計算されます。';
+      'ドライバーが途中終了を希望しています。料金は予約ルートの進捗と最低サービス運賃に基づきます。';
 
   @override
   String get continueTrip => '乗車を続ける';
@@ -2624,4 +2624,30 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get optionalInsuranceHint =>
       '保険は任意です。作成または編集すると、スタッフ確認のためPENDINGに戻ります。';
+
+  @override
+  String get endTripReasonTitle => '終了理由';
+
+  @override
+  String get endTripReasonDescription =>
+      '正しい理由を選択してください。安全上の終了はRisk Protectionの専用手順を使用します。';
+
+  @override
+  String get normalCompletionReason => '目的地に到着';
+
+  @override
+  String get normalCompletionReasonDescription => '予約時の運賃を適用します。';
+
+  @override
+  String get customerRequestedStopReason => 'お客様の希望で途中終了';
+
+  @override
+  String get customerRequestedStopReasonDescription =>
+      '予約ルートの進捗と最低サービス運賃を使用します。';
+
+  @override
+  String get driverUnableToContinueReason => 'ドライバーが続行できない';
+
+  @override
+  String get startedByMistakeReason => '誤って開始した';
 }

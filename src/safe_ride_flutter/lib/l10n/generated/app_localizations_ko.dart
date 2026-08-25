@@ -1736,7 +1736,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get specialRequest => '특별 요청 (선택)';
 
   @override
-  String get fareCalculationNote => '실제 거리와 시간을 기준으로 백엔드에서 요금을 계산합니다.';
+  String get fareCalculationNote => '예약 확정 시 승인된 운임이 고정됩니다.';
 
   @override
   String get confirmScheduled => '예약 여정 확인';
@@ -2373,7 +2373,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get driverEndTripRequestMessage =>
-      '기사가 지금 운행을 종료하려고 합니다. 동의하면 실제 이동 거리에 따라 최소 2,000 VND의 요금이 부과됩니다.';
+      '기사가 운행을 조기 종료하려고 합니다. 요금은 예약 경로 진행률과 최소 서비스 운임을 사용합니다.';
 
   @override
   String get continueTrip => '운행 계속';
@@ -2629,4 +2629,30 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get optionalInsuranceHint =>
       '보험은 선택 사항입니다. 생성 또는 수정하면 직원 확인을 위해 PENDING 상태로 돌아갑니다.';
+
+  @override
+  String get endTripReasonTitle => '운행 종료 사유';
+
+  @override
+  String get endTripReasonDescription =>
+      '정확한 사유를 선택하세요. 안전 종료는 별도의 Risk Protection 절차를 사용해야 합니다.';
+
+  @override
+  String get normalCompletionReason => '목적지 도착';
+
+  @override
+  String get normalCompletionReasonDescription => '예약된 운임을 적용합니다.';
+
+  @override
+  String get customerRequestedStopReason => '고객의 조기 종료 요청';
+
+  @override
+  String get customerRequestedStopReasonDescription =>
+      '예약 경로 진행률과 최소 서비스 운임을 사용합니다.';
+
+  @override
+  String get driverUnableToContinueReason => '기사가 계속 운행할 수 없음';
+
+  @override
+  String get startedByMistakeReason => '실수로 운행 시작';
 }

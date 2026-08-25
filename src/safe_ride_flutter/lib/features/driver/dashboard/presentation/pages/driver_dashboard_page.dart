@@ -1450,12 +1450,7 @@ class _ActiveTripCard extends StatelessWidget {
                 child: ElevatedButton.icon(
                   onPressed: isUpdating
                       ? null
-                      : () => _runTripAction(
-                          context,
-                          () => context
-                              .read<DriverDashboardProvider>()
-                              .endTripAsync(),
-                        ),
+                      : () => _endTripWithReason(context),
                   icon: const Icon(Icons.flag_rounded),
                   label: Text(
                     isUpdating ? context.l10n.processing : context.l10n.endTrip,
@@ -1768,6 +1763,61 @@ class _ActiveTripCard extends StatelessWidget {
       }
       return provider.startTrip();
     });
+  }
+
+  static Future<void> _endTripWithReason(BuildContext context) async {
+    final reason = await showDialog<DriverTripEndReason>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.l10n.endTripReasonTitle),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(context.l10n.endTripReasonDescription),
+              const SizedBox(height: 12),
+              ListTile(
+                leading: const Icon(Icons.location_on_outlined),
+                title: Text(context.l10n.normalCompletionReason),
+                subtitle: Text(context.l10n.normalCompletionReasonDescription),
+                onTap: () => Navigator.of(
+                  dialogContext,
+                ).pop(DriverTripEndReason.normalCompletion),
+              ),
+              ListTile(
+                leading: const Icon(Icons.flag_outlined),
+                title: Text(context.l10n.customerRequestedStopReason),
+                subtitle: Text(
+                  context.l10n.customerRequestedStopReasonDescription,
+                ),
+                onTap: () => Navigator.of(
+                  dialogContext,
+                ).pop(DriverTripEndReason.customerRequestedStop),
+              ),
+              ListTile(
+                leading: const Icon(Icons.person_off_outlined),
+                title: Text(context.l10n.driverUnableToContinueReason),
+                onTap: () => Navigator.of(
+                  dialogContext,
+                ).pop(DriverTripEndReason.driverUnableToContinue),
+              ),
+              ListTile(
+                leading: const Icon(Icons.undo_rounded),
+                title: Text(context.l10n.startedByMistakeReason),
+                onTap: () => Navigator.of(
+                  dialogContext,
+                ).pop(DriverTripEndReason.startedByMistake),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!context.mounted || reason == null) return;
+    await _runTripAction(
+      context,
+      () => context.read<DriverDashboardProvider>().endTripAsync(reason),
+    );
   }
 
   static Future<void> _reportAccident(BuildContext context) async {

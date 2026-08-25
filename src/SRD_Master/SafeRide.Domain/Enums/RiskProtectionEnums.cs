@@ -1,6 +1,16 @@
 namespace SafeRide.Domain.Enums;
 
 public enum TripTerminationCategory { STANDARD, SAFETY }
+public enum TripEndReason
+{
+    NORMAL_COMPLETION,
+    CUSTOMER_REQUESTED_STOP,
+    DRIVER_UNABLE_TO_CONTINUE,
+    STARTED_BY_MISTAKE,
+    VEHICLE_SAFETY_ISSUE,
+    SYSTEM_ERROR,
+    SAFETY_TERMINATION
+}
 public enum SafetyPaymentReconciliationStatus { NOT_REQUIRED, PAYMENT_PENDING, PAID, REFUND_PENDING, REFUNDED }
 public enum ManualRefundStatus { REFUND_PENDING, REFUNDED }
 public enum PreTripCheckResult { PASS, FAIL }

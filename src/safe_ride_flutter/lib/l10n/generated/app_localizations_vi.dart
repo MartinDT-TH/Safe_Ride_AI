@@ -1786,7 +1786,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get fareCalculationNote =>
-      'Giá cước sẽ được backend tính từ quãng đường và thời gian thực tế.';
+      'Cước được chấp nhận sẽ được khóa khi bạn đặt chuyến.';
 
   @override
   String get confirmScheduled => 'Xác nhận đặt trước';
@@ -2454,7 +2454,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get driverEndTripRequestMessage =>
-      'Tài xế muốn kết thúc chuyến đi ngay bây giờ. Nếu đồng ý, cước phí sẽ được tính theo tỷ lệ quãng đường thực tế đã đi, tối thiểu 2.000đ.';
+      'Tài xế muốn kết thúc chuyến sớm. Cước sẽ dựa trên tiến độ tuyến đã đặt và mức cước dịch vụ tối thiểu.';
 
   @override
   String get continueTrip => 'Tiếp tục chuyến';
@@ -2722,4 +2722,30 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get optionalInsuranceHint =>
       'Bảo hiểm không bắt buộc. Tạo hoặc sửa hợp đồng sẽ chuyển trạng thái về PENDING để Staff xác minh.';
+
+  @override
+  String get endTripReasonTitle => 'Lý do kết thúc chuyến';
+
+  @override
+  String get endTripReasonDescription =>
+      'Chọn đúng lý do. Kết thúc vì an toàn phải dùng quy trình Risk Protection riêng.';
+
+  @override
+  String get normalCompletionReason => 'Đã đến điểm đến';
+
+  @override
+  String get normalCompletionReasonDescription => 'Áp dụng cước đã đặt.';
+
+  @override
+  String get customerRequestedStopReason => 'Khách yêu cầu dừng sớm';
+
+  @override
+  String get customerRequestedStopReasonDescription =>
+      'Cước dựa trên tiến độ tuyến đã đặt và mức cước dịch vụ tối thiểu.';
+
+  @override
+  String get driverUnableToContinueReason => 'Tài xế không thể tiếp tục';
+
+  @override
+  String get startedByMistakeReason => 'Bắt đầu chuyến do nhầm lẫn';
 }

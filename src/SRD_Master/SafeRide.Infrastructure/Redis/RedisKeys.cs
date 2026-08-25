@@ -97,6 +97,9 @@ public static class RedisKeys
     public static string TripRouteProgress(long tripId) =>
         $"sr:trip:route-progress:{tripId}";
 
+    public static string TripPlannedRouteProgress(long tripId) =>
+        $"sr:trip:planned-route-progress:{tripId}";
+
     public static string TripRouteReverseSamples(long tripId) =>
         $"sr:trip:route-reverse-samples:{tripId}";
 
@@ -118,6 +121,7 @@ public static class RedisKeys
         TripRouteRerouteCooldown(tripId),
         TripRouteDeviationAlertCooldown(tripId),
         TripRouteProgress(tripId),
+        TripPlannedRouteProgress(tripId),
         TripRouteReverseSamples(tripId)
     ];
 

@@ -1724,7 +1724,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get specialRequest => '特殊要求（可选）';
 
   @override
-  String get fareCalculationNote => '后端将根据实际距离和时间计算车费。';
+  String get fareCalculationNote => '确认预订时会锁定已接受的车费。';
 
   @override
   String get confirmScheduled => '确认预约行程';
@@ -2357,8 +2357,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get driverEndTripRequestTitle => '结束行程请求';
 
   @override
-  String get driverEndTripRequestMessage =>
-      '司机希望立即结束行程。如果您同意，车费将按实际行驶距离计算，最低收费为2,000越南盾。';
+  String get driverEndTripRequestMessage => '司机希望提前结束行程。车费将使用预订路线进度和最低服务车费。';
 
   @override
   String get continueTrip => '继续行程';
@@ -2611,4 +2610,29 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get optionalInsuranceHint => '保险为可选项。新建或编辑后将重置为 PENDING，等待员工验证。';
+
+  @override
+  String get endTripReasonTitle => '结束行程原因';
+
+  @override
+  String get endTripReasonDescription =>
+      '请选择准确原因。安全终止必须使用单独的 Risk Protection 流程。';
+
+  @override
+  String get normalCompletionReason => '已到达目的地';
+
+  @override
+  String get normalCompletionReasonDescription => '使用预订时的车费。';
+
+  @override
+  String get customerRequestedStopReason => '乘客要求提前结束';
+
+  @override
+  String get customerRequestedStopReasonDescription => '使用预订路线进度和最低服务车费。';
+
+  @override
+  String get driverUnableToContinueReason => '司机无法继续行程';
+
+  @override
+  String get startedByMistakeReason => '误开始行程';
 }

@@ -134,11 +134,14 @@ public sealed class TripsController : ControllerBase
     [HttpPost("{tripId:long}/end")]
     [AllowTripContinuation(TripContinuationOperation.TripStatusUpdate)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> End(
         long tripId,
+        [FromBody] EndTripRequest request,
         CancellationToken cancellationToken)
     {
         if (!TryGetDriverId(out var driverId))
@@ -154,7 +157,8 @@ public sealed class TripsController : ControllerBase
         await _tripStatusService.EndTripAsync(
             driverId,
             tripId,
-            cancellationToken);
+            cancellationToken,
+            request.Reason);
 
         return NoContent();
     }

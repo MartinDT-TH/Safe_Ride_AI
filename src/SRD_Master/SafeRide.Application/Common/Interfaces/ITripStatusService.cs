@@ -15,7 +15,8 @@ public interface ITripStatusService
     Task EndTripAsync(
         Guid driverId,
         long tripId,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        TripEndReason reason = TripEndReason.NORMAL_COMPLETION);
 
     Task RespondToEndTripRequestAsync(
         Guid customerId,

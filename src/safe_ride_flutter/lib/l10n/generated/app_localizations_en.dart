@@ -1796,7 +1796,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fareCalculationNote =>
-      'The backend will calculate the fare from the actual distance and time.';
+      'The accepted fare is locked when you book the trip.';
 
   @override
   String get confirmScheduled => 'Confirm scheduled trip';
@@ -2465,7 +2465,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get driverEndTripRequestMessage =>
-      'The driver wants to end the trip now. If you agree, the fare will be based on the actual distance travelled, with a minimum charge of VND 2,000.';
+      'The driver wants to end the trip early. The fare will use booked-route progress and the minimum service fare.';
 
   @override
   String get continueTrip => 'Continue trip';
@@ -2732,4 +2732,30 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get optionalInsuranceHint =>
       'Insurance is optional. Creating or editing a policy resets it to PENDING for Staff verification.';
+
+  @override
+  String get endTripReasonTitle => 'Reason for ending trip';
+
+  @override
+  String get endTripReasonDescription =>
+      'Choose the accurate reason. Safety endings must use the separate Risk Protection flow.';
+
+  @override
+  String get normalCompletionReason => 'Destination reached';
+
+  @override
+  String get normalCompletionReasonDescription => 'Uses the booked fare.';
+
+  @override
+  String get customerRequestedStopReason => 'Customer requested early stop';
+
+  @override
+  String get customerRequestedStopReasonDescription =>
+      'Uses booked-route progress and the minimum service fare.';
+
+  @override
+  String get driverUnableToContinueReason => 'Driver cannot continue';
+
+  @override
+  String get startedByMistakeReason => 'Trip started by mistake';
 }

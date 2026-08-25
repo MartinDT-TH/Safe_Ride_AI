@@ -3371,7 +3371,7 @@ abstract class AppLocalizations {
   /// No description provided for @fareCalculationNote.
   ///
   /// In vi, this message translates to:
-  /// **'Giá cước sẽ được backend tính từ quãng đường và thời gian thực tế.'**
+  /// **'Cước được chấp nhận sẽ được khóa khi bạn đặt chuyến.'**
   String get fareCalculationNote;
 
   /// No description provided for @confirmScheduled.
@@ -4571,7 +4571,7 @@ abstract class AppLocalizations {
   /// No description provided for @driverEndTripRequestMessage.
   ///
   /// In vi, this message translates to:
-  /// **'Tài xế muốn kết thúc chuyến đi ngay bây giờ. Nếu đồng ý, cước phí sẽ được tính theo tỷ lệ quãng đường thực tế đã đi, tối thiểu 2.000đ.'**
+  /// **'Tài xế muốn kết thúc chuyến sớm. Cước sẽ dựa trên tiến độ tuyến đã đặt và mức cước dịch vụ tối thiểu.'**
   String get driverEndTripRequestMessage;
 
   /// No description provided for @continueTrip.
@@ -5077,6 +5077,54 @@ abstract class AppLocalizations {
   /// In vi, this message translates to:
   /// **'Bảo hiểm không bắt buộc. Tạo hoặc sửa hợp đồng sẽ chuyển trạng thái về PENDING để Staff xác minh.'**
   String get optionalInsuranceHint;
+
+  /// No description provided for @endTripReasonTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Lý do kết thúc chuyến'**
+  String get endTripReasonTitle;
+
+  /// No description provided for @endTripReasonDescription.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chọn đúng lý do. Kết thúc vì an toàn phải dùng quy trình Risk Protection riêng.'**
+  String get endTripReasonDescription;
+
+  /// No description provided for @normalCompletionReason.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đã đến điểm đến'**
+  String get normalCompletionReason;
+
+  /// No description provided for @normalCompletionReasonDescription.
+  ///
+  /// In vi, this message translates to:
+  /// **'Áp dụng cước đã đặt.'**
+  String get normalCompletionReasonDescription;
+
+  /// No description provided for @customerRequestedStopReason.
+  ///
+  /// In vi, this message translates to:
+  /// **'Khách yêu cầu dừng sớm'**
+  String get customerRequestedStopReason;
+
+  /// No description provided for @customerRequestedStopReasonDescription.
+  ///
+  /// In vi, this message translates to:
+  /// **'Cước dựa trên tiến độ tuyến đã đặt và mức cước dịch vụ tối thiểu.'**
+  String get customerRequestedStopReasonDescription;
+
+  /// No description provided for @driverUnableToContinueReason.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tài xế không thể tiếp tục'**
+  String get driverUnableToContinueReason;
+
+  /// No description provided for @startedByMistakeReason.
+  ///
+  /// In vi, this message translates to:
+  /// **'Bắt đầu chuyến do nhầm lẫn'**
+  String get startedByMistakeReason;
 }
 
 class _AppLocalizationsDelegate

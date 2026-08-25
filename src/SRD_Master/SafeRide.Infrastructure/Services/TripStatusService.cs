@@ -340,8 +340,10 @@ public sealed class TripStatusService : ITripStatusService
     public async Task EndTripAsync(
         Guid driverId,
         long tripId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TripEndReason reason = TripEndReason.NORMAL_COMPLETION)
     {
+        ValidateDriverEndReason(reason);
         var trip = await _dbContext.Trips
             .Include(x => x.Booking)
                 .ThenInclude(x => x.BookingPromotions)
@@ -373,7 +375,7 @@ public sealed class TripStatusService : ITripStatusService
             trip,
             driverId,
             cancellationToken,
-            _options.CurrentValue.MinimumEarlyEndFare);
+            reason);
 
         await ApplyTripStatusAsync(
             trip,
@@ -437,7 +439,7 @@ public sealed class TripStatusService : ITripStatusService
                 trip,
                 customerId,
                 cancellationToken,
-                _options.CurrentValue.MinimumEarlyEndFare);
+                TripEndReason.CUSTOMER_REQUESTED_STOP);
 
             await ApplyTripStatusAsync(
                 trip,
@@ -572,7 +574,8 @@ public sealed class TripStatusService : ITripStatusService
             await FinalizeTripAsync(
                 trip,
                 customerId,
-                cancellationToken);
+                cancellationToken,
+                trip.EndReason ?? TripEndReason.NORMAL_COMPLETION);
         }
 
         var utcNow = _dateTimeProvider.UtcNow;
@@ -731,7 +734,8 @@ public sealed class TripStatusService : ITripStatusService
                 await FinalizeTripAsync(
                     trip,
                     driverId,
-                    cancellationToken);
+                    cancellationToken,
+                    trip.EndReason ?? TripEndReason.NORMAL_COMPLETION);
             }
 
             // GPS is read from the server-side Redis cache; the driver cannot inject coordinates.
@@ -943,7 +947,11 @@ public sealed class TripStatusService : ITripStatusService
 
         if (trip.TripStatus == TripStatus.IN_PROGRESS)
         {
-            await FinalizeTripAsync(trip, userId, cancellationToken);
+            await FinalizeTripAsync(
+                trip,
+                userId,
+                cancellationToken,
+                TripEndReason.SAFETY_TERMINATION);
             // Promotions are not applied or consumed for an MVP safety termination.
             trip.FinalFare = trip.ActualFare;
         }
@@ -956,6 +964,7 @@ public sealed class TripStatusService : ITripStatusService
         }
 
         trip.TerminationCategory = TripTerminationCategory.SAFETY;
+        trip.EndReason = TripEndReason.SAFETY_TERMINATION;
         trip.SafetyTerminationReason = normalizedReason;
         trip.SafetyTerminatedAt = _dateTimeProvider.UtcNow;
         trip.CancellationReason = normalizedReason;
@@ -1265,7 +1274,7 @@ public sealed class TripStatusService : ITripStatusService
         Domain.Entities.Trip trip,
         DateTime endedAtUtc,
         CancellationToken cancellationToken,
-        decimal minimumFare)
+        TripEndReason reason)
     {
         if (trip.EndedAt.HasValue
             && trip.ActualDistanceKm.HasValue
@@ -1292,12 +1301,64 @@ public sealed class TripStatusService : ITripStatusService
             snapshot,
             routeEstimate);
         trip.RoutePolyline = ResolveActualPolyline(snapshot, routeEstimate);
+        trip.FareFinalizedAtUtc ??= endedAtUtc;
+        if (snapshot.LastAcceptedPoint is not null)
+        {
+            trip.FinalizationLatitude ??= decimal.Round(
+                (decimal)snapshot.LastAcceptedPoint.Latitude,
+                6,
+                MidpointRounding.AwayFromZero);
+            trip.FinalizationLongitude ??= decimal.Round(
+                (decimal)snapshot.LastAcceptedPoint.Longitude,
+                6,
+                MidpointRounding.AwayFromZero);
+        }
 
-        var fare = _tripFareFinalizationService.Calculate(
-            trip,
-            trip.ActualDistanceKm.Value,
-            trip.ActualDurationMinutes.Value,
-            minimumFare);
+        TripFareFinalizationResult fare;
+        if (trip.Booking.PricingSnapshotVersion is >= Domain.Entities.Booking.CurrentPricingSnapshotVersion
+            && reason is not TripEndReason.SAFETY_TERMINATION
+                and not TripEndReason.VEHICLE_SAFETY_ISSUE)
+        {
+            var destinationReached = IsDestinationReached(
+                snapshot.LastAcceptedPoint,
+                trip.Booking.DestinationLocation?.Y,
+                trip.Booking.DestinationLocation?.X);
+            var plannedProgress = await ResolvePlannedRouteProgressAsync(
+                trip,
+                snapshot.LastAcceptedPoint);
+            trip.TerminationCategory = TripTerminationCategory.STANDARD;
+            trip.EndReason = reason;
+            trip.DestinationReached = destinationReached;
+            trip.PlannedRouteProgress = plannedProgress;
+            fare = _tripFareFinalizationService.CalculateLockedFare(
+                trip,
+                reason,
+                plannedProgress,
+                destinationReached);
+        }
+        else
+        {
+            // V0 trips stay on the isolated compatibility calculator. Safety
+            // termination also preserves the existing Risk Protection payable
+            // input before its dedicated reconciliation runs.
+            if (reason is not TripEndReason.SAFETY_TERMINATION
+                and not TripEndReason.VEHICLE_SAFETY_ISSUE)
+            {
+                trip.TerminationCategory = TripTerminationCategory.STANDARD;
+                trip.EndReason = reason;
+                trip.DestinationReached = IsDestinationReached(
+                    snapshot.LastAcceptedPoint,
+                    trip.Booking.DestinationLocation?.Y,
+                    trip.Booking.DestinationLocation?.X);
+                trip.PlannedRouteProgress = await ResolvePlannedRouteProgressAsync(
+                    trip,
+                    snapshot.LastAcceptedPoint);
+            }
+            fare = _tripFareFinalizationService.Calculate(
+                trip,
+                trip.ActualDistanceKm.Value,
+                trip.ActualDurationMinutes.Value);
+        }
         trip.ActualFare = fare.ActualFare;
         trip.FinalFare = fare.FinalFare;
     }
@@ -1306,7 +1367,7 @@ public sealed class TripStatusService : ITripStatusService
         Domain.Entities.Trip trip,
         Guid actorId,
         CancellationToken cancellationToken,
-        decimal minimumFare = 0m)
+        TripEndReason reason)
     {
         var lockAcquired = await _redisService.TryAcquireDistributedLockAsync(
             RedisKeys.TripTrackingFinalizeLock(trip.Id),
@@ -1329,7 +1390,107 @@ public sealed class TripStatusService : ITripStatusService
             trip,
             utcNow,
             cancellationToken,
-            minimumFare);
+            reason);
+    }
+
+    private async Task<decimal> ResolvePlannedRouteProgressAsync(
+        Domain.Entities.Trip trip,
+        TripTrackingPoint? lastPoint)
+    {
+        var maximumProgress = 0d;
+        var progressJson = await _redisService.GetAsync(
+            RedisKeys.TripPlannedRouteProgress(trip.Id));
+        if (!string.IsNullOrWhiteSpace(progressJson))
+        {
+            if (double.TryParse(
+                progressJson,
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var cachedProgress))
+            {
+                maximumProgress = cachedProgress;
+            }
+            else
+            {
+                await _redisService.RemoveAsync(
+                    RedisKeys.TripPlannedRouteProgress(trip.Id));
+            }
+        }
+
+        if (lastPoint is not null && !string.IsNullOrWhiteSpace(trip.Booking.RoutePolyline))
+        {
+            try
+            {
+                var route = EncodedPolylineGeometry.Decode(trip.Booking.RoutePolyline);
+                var projection = EncodedPolylineGeometry.Project(
+                    new LocationPoint(lastPoint.Latitude, lastPoint.Longitude),
+                    route);
+                if (projection.TotalRouteMeters > 0
+                    && projection.DistanceToRouteMeters
+                        <= _options.CurrentValue.RouteDeviationThresholdMeters)
+                {
+                    maximumProgress = Math.Max(
+                        maximumProgress,
+                        projection.ProgressMeters / projection.TotalRouteMeters);
+                }
+            }
+            catch (FormatException exception)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "Invalid original booking route while finalizing trip {TripId}.",
+                    trip.Id);
+            }
+        }
+
+        return decimal.Round(
+            (decimal)Math.Clamp(maximumProgress, 0d, 1d),
+            6,
+            MidpointRounding.AwayFromZero);
+    }
+
+    private bool IsDestinationReached(
+        TripTrackingPoint? lastPoint,
+        double? destinationLatitude,
+        double? destinationLongitude)
+    {
+        if (lastPoint is null
+            || !destinationLatitude.HasValue
+            || !destinationLongitude.HasValue)
+        {
+            return false;
+        }
+
+        return _tripFareFinalizationService.IsDestinationReached(
+                lastPoint.Latitude,
+                lastPoint.Longitude,
+                destinationLatitude.Value,
+                destinationLongitude.Value);
+    }
+
+    private static void ValidateDriverEndReason(TripEndReason reason)
+    {
+        if (reason is TripEndReason.NORMAL_COMPLETION
+            or TripEndReason.CUSTOMER_REQUESTED_STOP
+            or TripEndReason.DRIVER_UNABLE_TO_CONTINUE
+            or TripEndReason.STARTED_BY_MISTAKE)
+        {
+            return;
+        }
+
+        if (reason is TripEndReason.VEHICLE_SAFETY_ISSUE
+            or TripEndReason.SAFETY_TERMINATION)
+        {
+            throw new BookingException(
+                "trip.safety_termination_required",
+                "Hãy dùng quy trình kết thúc vì an toàn để Risk Protection xử lý chuyến đi.",
+                409);
+        }
+
+        throw new BookingException(
+            "trip.end_reason_not_allowed",
+            "Tài xế không được phép sử dụng lý do kết thúc chuyến này.",
+            403);
     }
 
     private async Task<RouteEstimateResult?> TryGetFallbackRouteEstimateAsync(

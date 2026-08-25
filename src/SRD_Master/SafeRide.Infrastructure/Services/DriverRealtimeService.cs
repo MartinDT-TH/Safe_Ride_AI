@@ -90,6 +90,9 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
             activeTrip,
             utcNow,
             cancellationToken);
+        await RecordPlannedRouteProgressIfEligibleAsync(
+            location,
+            activeTrip);
         await RecalculateRouteIfDeviatedAsync(
             driverId,
             location,
@@ -513,6 +516,49 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
         }
     }
 
+    private async Task RecordPlannedRouteProgressIfEligibleAsync(
+        DriverLocationUpdateInput location,
+        ActiveDriverTripSnapshot? activeTrip)
+    {
+        if (activeTrip is null
+            || activeTrip.TripStatus != TripStatus.IN_PROGRESS
+            || string.IsNullOrWhiteSpace(activeTrip.RoutePolyline))
+        {
+            return;
+        }
+
+        try
+        {
+            var route = EncodedPolylineGeometry.Decode(activeTrip.RoutePolyline);
+            var projection = EncodedPolylineGeometry.Project(
+                new LocationPoint(location.Latitude, location.Longitude),
+                route);
+            if (projection.TotalRouteMeters <= 0
+                || projection.DistanceToRouteMeters
+                    > _tripTrackingOptions.CurrentValue.RouteDeviationThresholdMeters)
+            {
+                return;
+            }
+
+            var key = RedisKeys.TripPlannedRouteProgress(activeTrip.TripId);
+            var candidate = Math.Clamp(
+                projection.ProgressMeters / projection.TotalRouteMeters,
+                0d,
+                1d);
+            await _redisService.SetMaximumDoubleAsync(
+                key,
+                candidate,
+                TimeSpan.FromHours(_tripTrackingOptions.CurrentValue.ActiveRouteTtlHours));
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _logger.LogWarning(
+                exception,
+                "Could not update original planned-route progress for trip {TripId}.",
+                activeTrip.TripId);
+        }
+    }
+
     private async Task<ActiveDriverTripSnapshot?> GetActiveTripForLocationAsync(
         Guid driverId,
         CancellationToken cancellationToken)
@@ -676,4 +722,5 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
         double MaximumProgressMeters,
         double RemainingMeters,
         DateTime UpdatedAt);
+
 }
