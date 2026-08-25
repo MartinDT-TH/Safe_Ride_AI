@@ -10,6 +10,7 @@ using SafeRide.Infrastructure.Services.AccountBans;
 
 namespace SafeRide.IntegrationTests;
 
+[Trait(SqlServerTestDatabase.ProviderTraitName, SqlServerTestDatabase.InMemoryProvider)]
 public sealed class AccountBanServiceTests
 {
     private static readonly DateTime UtcNow = new(2026, 8, 15, 10, 0, 0, DateTimeKind.Utc);

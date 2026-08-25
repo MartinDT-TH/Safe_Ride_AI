@@ -1,4 +1,5 @@
 using SafeRide.Application.Features.Trips.DTOs;
+using SafeRide.Application.Features.RiskProtection;
 using SafeRide.Domain.Enums;
 
 namespace SafeRide.Application.Common.Interfaces;
@@ -14,13 +15,24 @@ public interface ITripStatusService
     Task EndTripAsync(
         Guid driverId,
         long tripId,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        TripEndReason reason = TripEndReason.NORMAL_COMPLETION);
 
-    Task RespondToEndTripRequestAsync(
-        Guid customerId,
+    Task<TripEndReconciliationResult> RequestEndTripReconciliationAsync(
+        Guid driverId,
         long tripId,
-        bool accepted,
-        CancellationToken cancellationToken);
+        TripEndReason reason,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    Task<TripEndReconciliationResult> ResolveEndTripReconciliationAsync(
+        Guid staffUserId,
+        long tripId,
+        long requestId,
+        bool approved,
+        string? resolutionNote,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
 
     Task ConfirmReturnByCustomerAsync(
         Guid customerId,
@@ -46,5 +58,31 @@ public interface ITripStatusService
     Task CompleteTripAsync(
         Guid userId,
         long tripId,
+        CancellationToken cancellationToken);
+
+    Task AdvanceAfterSuccessfulPaymentAsync(
+        Guid userId,
+        long tripId,
+        CancellationToken cancellationToken);
+
+    Task SafetyTerminateAsync(
+        Guid userId,
+        bool isStaff,
+        long tripId,
+        string reason,
+        CancellationToken cancellationToken);
+    Task EnsureCanSafetyTerminateAsync(
+        Guid userId,
+        bool isStaff,
+        long tripId,
+        string reason,
+        CancellationToken cancellationToken) => Task.CompletedTask;
+
+    Task SafetyTerminateAsync(
+        Guid userId,
+        bool isStaff,
+        long tripId,
+        string reason,
+        IReadOnlyList<StoredSafetyTerminationEvidence> evidence,
         CancellationToken cancellationToken);
 }

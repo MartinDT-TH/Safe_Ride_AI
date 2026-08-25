@@ -31,8 +31,6 @@ function AdminAccountBanSettingsPage() {
 
   useEffect(() => {
     let isMounted = true;
-    setIsLoading(true);
-    setError('');
 
     getAccountBanConfiguration()
       .then((nextConfiguration) => {

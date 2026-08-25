@@ -15,6 +15,7 @@ class SessionTokens {
     required this.sessionMode,
     required this.reloginRequiredAfterTrip,
     this.continuationTripId,
+    this.continuationBookingId,
     this.continuationAbsoluteExpiresAt,
   });
 
@@ -23,6 +24,7 @@ class SessionTokens {
   final String sessionMode;
   final bool reloginRequiredAfterTrip;
   final int? continuationTripId;
+  final int? continuationBookingId;
   final DateTime? continuationAbsoluteExpiresAt;
 
   bool get isTripContinuation => sessionMode == SessionModes.tripContinuation;
@@ -156,6 +158,10 @@ class SessionManager {
     return _storage.readContinuationTripId();
   }
 
+  Future<int?> continuationBookingId() {
+    return _storage.readContinuationBookingId();
+  }
+
   bool isTerminalAuthCode(Object? code) {
     return switch (code?.toString()) {
       'auth.refresh_token_expired' ||
@@ -233,6 +239,9 @@ class SessionManager {
       continuationTripId: _parseInt(
         _readResponseValue(response, ApiKeys.continuationTripId),
       ),
+      continuationBookingId: _parseInt(
+        _readResponseValue(response, ApiKeys.continuationBookingId),
+      ),
       continuationAbsoluteExpiresAt: _parseDate(
         _readResponseValue(response, ApiKeys.continuationAbsoluteExpiresAt),
       ),
@@ -242,7 +251,7 @@ class SessionManager {
   Future<void> _persistTokens(SessionTokens tokens) async {
     _cachedAccessToken = tokens.accessToken;
     _cachedExpiry = _readExpiry(tokens.accessToken);
-    
+
     await _storage.saveTokens(
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
@@ -251,6 +260,7 @@ class SessionManager {
       sessionMode: tokens.sessionMode,
       reloginRequired: tokens.reloginRequiredAfterTrip,
       continuationTripId: tokens.continuationTripId,
+      continuationBookingId: tokens.continuationBookingId,
       continuationAbsoluteExpiresAt: tokens.continuationAbsoluteExpiresAt,
     );
   }

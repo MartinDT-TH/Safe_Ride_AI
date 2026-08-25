@@ -31,6 +31,7 @@ public sealed class AdminNotificationConfiguration
         builder.Property(x => x.Status)
             .HasConversion<string>()
             .HasMaxLength(20)
+            .HasSentinel(AdminNotificationStatus.Pending)
             .HasDefaultValueSql($"('{AdminNotificationStatus.Pending}')");
 
         builder.Property(x => x.CreatedAt)

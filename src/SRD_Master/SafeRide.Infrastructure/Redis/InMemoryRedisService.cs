@@ -182,6 +182,31 @@ public sealed class InMemoryRedisService : IRedisService
         }
     }
 
+    public Task<double> SetMaximumDoubleAsync(
+        string key,
+        double candidate,
+        TimeSpan expiration)
+    {
+        lock (_sync)
+        {
+            var currentValue = GetValue(key);
+            var current = double.TryParse(
+                currentValue,
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var parsed)
+                ? parsed
+                : 0d;
+            var maximum = Math.Max(current, candidate);
+            _entries[key] = new CacheEntry(
+                maximum.ToString(
+                    "R",
+                    System.Globalization.CultureInfo.InvariantCulture),
+                GetExpiration(expiration));
+            return Task.FromResult(maximum);
+        }
+    }
+
     public Task GeoAddAsync(
         string key,
         double longitude,

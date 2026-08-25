@@ -131,11 +131,11 @@ function NotificationsPage() {
     }, [successMessage]);
 
     useEffect(() => {
-        setCurrentPage(1);
+        queueMicrotask(() => setCurrentPage(1));
     }, [filters.status, filters.type, filters.audience, query]);
 
     useEffect(() => {
-        setReviewPage(1);
+        queueMicrotask(() => setReviewPage(1));
     }, [query]);
 
     const openSendView = () => {
@@ -200,29 +200,6 @@ function NotificationsPage() {
         }
         catch (caughtError) {
             setMutationError(caughtError instanceof Error ? caughtError.message : 'Không thể gửi thông báo.');
-        }
-        finally {
-            setIsMutating(false);
-        }
-    };
-
-    const handleApproveNotification = async (notification) => {
-        return openApproveDialog(notification);
-        const confirmed = window.confirm(`Duyệt thông báo "${notification.title}"?`);
-        if (!confirmed) {
-            return;
-        }
-
-        setMutationError(null);
-        setIsMutating(true);
-        try {
-            await approveAdminNotification(notification.rawId);
-            setSuccessMessage('Thông báo đã được duyệt và phát hành tới người dùng phù hợp.');
-            listResult.refetch();
-            reviewResult.refetch();
-        }
-        catch (caughtError) {
-            setMutationError(caughtError instanceof Error ? caughtError.message : 'Không thể duyệt thông báo.');
         }
         finally {
             setIsMutating(false);

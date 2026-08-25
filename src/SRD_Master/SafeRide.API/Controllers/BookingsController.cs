@@ -84,6 +84,8 @@ public sealed class BookingsController : ControllerBase
                 customerId,
                 request.VehicleId,
                 request.ServiceTypeId,
+                request.BookingType,
+                request.ScheduledAt,
                 request.PickupLatitude,
                 request.PickupLongitude,
                 request.DestinationLatitude,
@@ -96,6 +98,11 @@ public sealed class BookingsController : ControllerBase
             result.EstimatedDurationMinutes,
             result.EncodedPolyline,
             result.EstimatedFare,
+            result.NormalFare,
+            result.SurgedFare,
+            result.SurgeAmount,
+            result.LongDistanceComponent,
+            result.MinimumServiceFare,
             result.SurgeMultiplier));
     }
 
@@ -259,6 +266,7 @@ public sealed class BookingsController : ControllerBase
     /// This step actually creates the Trip.
     /// </summary>
     [HttpPost("{bookingId:long}/confirm-driver")]
+    [AllowTripContinuation(TripContinuationOperation.BookingManage)]
     [ProducesResponseType<BookingResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -305,6 +313,7 @@ public sealed class BookingsController : ControllerBase
     /// The Trip is created during this step.
     /// </summary>
     [HttpPost("{bookingId:long}/confirm-driver-offer/{offerId:long}")]
+    [AllowTripContinuation(TripContinuationOperation.BookingManage)]
     [ProducesResponseType<BookingResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -349,6 +358,7 @@ public sealed class BookingsController : ControllerBase
     }
 
     [HttpPost("{bookingId:long}/reject-driver")]
+    [AllowTripContinuation(TripContinuationOperation.BookingManage)]
     [ProducesResponseType<BookingResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]

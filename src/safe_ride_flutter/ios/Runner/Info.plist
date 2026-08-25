@@ -31,10 +31,14 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>SafeRide cần quyền dùng camera để tài xế chụp ảnh bằng chứng an toàn.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>SafeRide dùng vị trí để xác định điểm đón của chuyến đi.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>SafeRide dùng micro để nhận nội dung bạn nói với trợ lý AI.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>SafeRide cần quyền truy cập thư viện ảnh để bạn chọn ảnh bằng chứng.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>SafeRide dùng nhận dạng giọng nói để chuyển lời nói thành tin nhắn cho trợ lý AI.</string>
 	<key>UIApplicationSceneManifest</key>

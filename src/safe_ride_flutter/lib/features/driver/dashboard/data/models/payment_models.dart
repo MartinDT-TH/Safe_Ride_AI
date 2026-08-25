@@ -65,6 +65,15 @@ class PaymentStatusResult {
     this.paymentId,
     this.paymentMethod,
     this.paidAt,
+    this.successfulPaymentAmount = 0,
+    this.remainingPayableAmount = 0,
+    this.refundObligationAmount = 0,
+    this.reconciliationStatus,
+    this.refundStatus,
+    this.fareEarning,
+    this.longDistanceEarning,
+    this.longPickupCompensation,
+    this.totalPayout,
   });
 
   final int tripId;
@@ -80,8 +89,19 @@ class PaymentStatusResult {
   final String tripStatus;
   final String message;
   final DateTime? paidAt;
+  final double successfulPaymentAmount;
+  final double remainingPayableAmount;
+  final double refundObligationAmount;
+  final String? reconciliationStatus;
+  final String? refundStatus;
+  final double? fareEarning;
+  final double? longDistanceEarning;
+  final double? longPickupCompensation;
+  final double? totalPayout;
 
-  bool get isSuccess => paymentStatus.toLowerCase() == 'success';
+  bool get isSuccess =>
+      paymentStatus.toLowerCase() == 'success' && remainingPayableAmount <= 0;
+  bool get requiresPayment => remainingPayableAmount > 0;
 
   factory PaymentStatusResult.fromJson(Map<String, dynamic> json) {
     return PaymentStatusResult(
@@ -102,6 +122,19 @@ class PaymentStatusResult {
       paidAt: json['paidAt'] == null
           ? null
           : DateTime.tryParse(json['paidAt'].toString()),
+      successfulPaymentAmount:
+          (json['successfulPaymentAmount'] as num?)?.toDouble() ?? 0,
+      remainingPayableAmount:
+          (json['remainingPayableAmount'] as num?)?.toDouble() ?? 0,
+      refundObligationAmount:
+          (json['refundObligationAmount'] as num?)?.toDouble() ?? 0,
+      reconciliationStatus: json['reconciliationStatus']?.toString(),
+      refundStatus: json['refundStatus']?.toString(),
+      fareEarning: (json['fareEarning'] as num?)?.toDouble(),
+      longDistanceEarning: (json['longDistanceEarning'] as num?)?.toDouble(),
+      longPickupCompensation: (json['longPickupCompensation'] as num?)
+          ?.toDouble(),
+      totalPayout: (json['totalPayout'] as num?)?.toDouble(),
     );
   }
 }

@@ -14,6 +14,7 @@ public partial class WalletTransaction
     public long? TripId { get; set; }
 
     public WalletTransactionType TransactionType { get; set; }
+    public WalletSettlementEffect? SettlementEffect { get; set; }
 
     public decimal Amount { get; set; }
     public string? Description { get; set; }

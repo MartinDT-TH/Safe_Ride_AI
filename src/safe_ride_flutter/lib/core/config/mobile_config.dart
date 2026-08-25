@@ -62,6 +62,7 @@ class MobileConfig {
         MobileStatusOption(value: 'DRIVER_ARRIVING', label: 'DRIVER_ARRIVING'),
         MobileStatusOption(value: 'ARRIVED', label: 'ARRIVED'),
         MobileStatusOption(value: 'IN_PROGRESS', label: 'IN_PROGRESS'),
+        MobileStatusOption(value: 'WAITING_PAYMENT', label: 'WAITING_PAYMENT'),
         MobileStatusOption(
           value: 'WAITING_RETURN_CONFIRM',
           label: 'WAITING_RETURN_CONFIRM',
@@ -70,7 +71,6 @@ class MobileConfig {
           value: 'RETURN_CONFIRMED',
           label: 'RETURN_CONFIRMED',
         ),
-        MobileStatusOption(value: 'WAITING_PAYMENT', label: 'WAITING_PAYMENT'),
         MobileStatusOption(value: 'COMPLETED', label: 'COMPLETED'),
         MobileStatusOption(value: 'CANCELLED', label: 'CANCELLED'),
       ],
@@ -172,8 +172,6 @@ class MobileRealtimeEvents {
     required this.customerConfirmedDriverOffer,
     required this.tripCreated,
     required this.tripStatusChanged,
-    required this.tripEndRequested,
-    required this.tripEndRequestResponded,
     required this.sosTriggered,
     required this.tripPaymentPending,
     required this.tripPaymentSucceeded,
@@ -196,8 +194,6 @@ class MobileRealtimeEvents {
   final String customerConfirmedDriverOffer;
   final String tripCreated;
   final String tripStatusChanged;
-  final String tripEndRequested;
-  final String tripEndRequestResponded;
   final String sosTriggered;
   final String tripPaymentPending;
   final String tripPaymentSucceeded;
@@ -294,16 +290,6 @@ class MobileRealtimeEvents {
         'tripStatusChanged',
         fallback.tripStatusChanged,
       ),
-      tripEndRequested: _read(
-        json,
-        'tripEndRequested',
-        fallback.tripEndRequested,
-      ),
-      tripEndRequestResponded: _read(
-        json,
-        'tripEndRequestResponded',
-        fallback.tripEndRequestResponded,
-      ),
       sosTriggered: _read(json, 'sosTriggered', fallback.sosTriggered),
       tripPaymentPending: _read(
         json,
@@ -336,8 +322,6 @@ class MobileRealtimeEvents {
     customerConfirmedDriverOffer: 'CustomerConfirmedDriverOffer',
     tripCreated: 'TripCreated',
     tripStatusChanged: 'TripStatusChanged',
-    tripEndRequested: 'TripEndRequested',
-    tripEndRequestResponded: 'TripEndRequestResponded',
     sosTriggered: 'SOSTriggered',
     tripPaymentPending: 'TripPaymentPending',
     tripPaymentSucceeded: 'TripPaymentSucceeded',

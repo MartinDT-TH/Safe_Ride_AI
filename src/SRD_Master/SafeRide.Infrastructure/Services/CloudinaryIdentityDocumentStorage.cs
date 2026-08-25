@@ -65,7 +65,28 @@ public sealed class CloudinaryIdentityDocumentStorage : IIdentityDocumentStorage
             upload.SecureUrl.ToString(),
             originalFileName,
             contentType,
-            upload.Bytes);
+            upload.Bytes,
+            upload.PublicId);
+    }
+
+    public async Task DeleteAsync(
+        string storageKey,
+        string contentType,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(storageKey)) return;
+        EnsureConfigured();
+        var cloudinary = new Cloudinary(new Account(
+            _options.CloudName,
+            _options.ApiKey,
+            _options.ApiSecret));
+        await cloudinary.DestroyAsync(new DeletionParams(storageKey)
+        {
+            ResourceType = ImageContentTypes.Contains(contentType)
+                ? ResourceType.Image
+                : ResourceType.Raw,
+            Invalidate = true
+        });
     }
 
     private static async Task<RawUploadResult> UploadImageAsync(

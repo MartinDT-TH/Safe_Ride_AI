@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using SafeRide.Application.Common.Exceptions;
 using SafeRide.Application.Features.AccountBans;
 using SafeRide.Application.Features.AdminUserAccounts;
@@ -17,6 +19,8 @@ namespace SafeRide.API.Middlewares;
 
 public sealed class ApiExceptionMiddleware
 {
+    private static readonly JsonSerializerOptions ProblemJsonOptions =
+        new(JsonSerializerDefaults.Web);
     private readonly RequestDelegate _next;
     private readonly ILogger<ApiExceptionMiddleware> _logger;
     private readonly IHostEnvironment _environment;
@@ -148,6 +152,19 @@ public sealed class ApiExceptionMiddleware
                 context.Request.Method,
                 context.Request.Path);
         }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Optimistic concurrency conflict for {Method} {Path}.",
+                context.Request.Method,
+                context.Request.Path);
+            await WriteProblemAsync(
+                context,
+                StatusCodes.Status409Conflict,
+                "persistence.concurrency_conflict",
+                "Dữ liệu đã được cập nhật bởi yêu cầu khác. Vui lòng tải lại và thử lại.");
+        }
         catch (Exception exception)
         {
             _logger.LogError(
@@ -196,6 +213,10 @@ public sealed class ApiExceptionMiddleware
             problem.Extensions["retryAfterSeconds"] = retryAfterSeconds.Value;
         }
 
-        await context.Response.WriteAsJsonAsync(problem);
+        await JsonSerializer.SerializeAsync(
+            context.Response.Body,
+            problem,
+            ProblemJsonOptions,
+            context.RequestAborted);
     }
 }

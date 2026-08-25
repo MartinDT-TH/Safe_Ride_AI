@@ -41,12 +41,12 @@ function CustomerTable({
         : totalCustomers;
 
     useEffect(() => {
-        setCurrentPage(1);
+        queueMicrotask(() => setCurrentPage(1));
     }, [activeFilter, searchQuery]);
 
     useEffect(() => {
         if (currentPage > totalPages) {
-            setCurrentPage(totalPages);
+            queueMicrotask(() => setCurrentPage(totalPages));
         }
     }, [currentPage, totalPages]);
 

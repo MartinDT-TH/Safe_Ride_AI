@@ -9,6 +9,7 @@ using SafeRide.Infrastructure.Repositories;
 
 namespace SafeRide.IntegrationTests;
 
+[Trait(SqlServerTestDatabase.ProviderTraitName, SqlServerTestDatabase.InMemoryProvider)]
 public sealed class AdminPromotionTests
 {
     private static readonly DateTime StartDate =

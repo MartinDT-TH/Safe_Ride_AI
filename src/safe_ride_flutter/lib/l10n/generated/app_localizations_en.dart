@@ -1305,7 +1305,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get promotions => 'Promotions';
 
   @override
-  String get sos => 'SOS';
+  String get sos => 'Emergency SOS';
 
   @override
   String get recentTrips => 'Recent trips';
@@ -1796,7 +1796,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fareCalculationNote =>
-      'The backend will calculate the fare from the actual distance and time.';
+      'The accepted fare is locked when you book the trip.';
 
   @override
   String get confirmScheduled => 'Confirm scheduled trip';
@@ -1892,14 +1892,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get callDriver => 'Call driver';
 
   @override
-  String get activateSosQuestion => 'Activate SOS?';
+  String get activateSosQuestion => 'Activate emergency SOS?';
 
   @override
   String get activateSosDescription =>
       'Send an emergency signal for this trip?';
 
   @override
-  String get activateSos => 'Activate SOS';
+  String get activateSos => 'Activate emergency SOS';
 
   @override
   String get sosActivationFailed => 'Could not activate SOS. Please try again.';
@@ -1983,10 +1983,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tripEndFailed => 'Could not end the trip. Please try again.';
 
   @override
-  String get sosActivated => 'SOS activated';
+  String get sosActivated => 'Emergency SOS activated';
 
   @override
-  String get sendingSos => 'Sending SOS...';
+  String get sendingSos => 'Sending emergency SOS...';
 
   @override
   String get shareRoute => 'Share route';
@@ -2461,27 +2461,276 @@ class AppLocalizationsEn extends AppLocalizations {
   String get offerCustomerConfirmed => 'Customer confirmed';
 
   @override
-  String get driverEndTripRequestTitle => 'End trip request';
+  String get preTripSafetyTitle => 'Pre-trip vehicle safety check';
 
   @override
-  String get driverEndTripRequestMessage =>
-      'The driver wants to end the trip now. If you agree, the fare will be based on the actual distance travelled, with a minimum charge of VND 2,000.';
+  String get preTripSafetyDescription =>
+      'Confirm every item before starting. Failed attempts remain in the audit history.';
 
   @override
-  String get continueTrip => 'Continue trip';
+  String get brakeResponse => 'Brake response';
 
   @override
-  String get endTripRequestSent =>
-      'End trip request sent. Waiting for the customer to respond.';
+  String get frontRearLights => 'Front and rear lights';
 
   @override
-  String get endTripRequestAccepted => 'The customer agreed to end the trip.';
+  String get turnSignals => 'Turn signals';
 
   @override
-  String get endTripRequestRejected =>
-      'The customer declined. The trip will continue.';
+  String get visibleTires => 'Visible tire condition';
 
   @override
-  String get endTripResponseFailed =>
-      'Could not respond to the end trip request. Please try again.';
+  String get dashboardWarning => 'No dashboard warning';
+
+  @override
+  String get windshieldVisibility => 'Clear windshield and mirrors';
+
+  @override
+  String get noMajorVisibleIssue => 'No major visible issue';
+
+  @override
+  String get confirmSafetyCheck => 'Confirm safety check';
+
+  @override
+  String get allChecksRequired =>
+      'All safety items must pass before starting the trip.';
+
+  @override
+  String get safetyTermination => 'End for safety';
+
+  @override
+  String get safetyTerminationDescription =>
+      'The trip remains cancelled. Promotion will not be used and partial fare may apply after the trip starts.';
+
+  @override
+  String get safetyTerminationReasonHint => 'Describe the safety risk';
+
+  @override
+  String get captureSafetyEvidence => 'Capture evidence photo (optional)';
+
+  @override
+  String get retakePhoto => 'Retake';
+
+  @override
+  String get reportAccident => 'Report accident';
+
+  @override
+  String get accidentDescriptionHint =>
+      'Describe what happened and any immediate damage';
+
+  @override
+  String get createAccidentReport => 'Create report';
+
+  @override
+  String get accidentReported => 'Accident report created.';
+
+  @override
+  String get safetyTerminationFailed => 'Could not end the trip for safety.';
+
+  @override
+  String get preTripCheckFailed => 'Could not submit the safety check.';
+
+  @override
+  String get riskProtectionCaseTitle => 'Accident protection case';
+
+  @override
+  String get riskProtectionClaim => 'Protection claim';
+
+  @override
+  String get riskProtectionEvidence => 'Evidence';
+
+  @override
+  String get riskProtectionAssessment => 'Liability assessment';
+
+  @override
+  String get uploadAccidentEvidence => 'Add evidence photo';
+
+  @override
+  String get sendEvidencePhoto => 'Send photo';
+
+  @override
+  String get evidencePreviewFailed =>
+      'Could not read the selected image. Please choose it again.';
+
+  @override
+  String get disputeLiability => 'Request liability review';
+
+  @override
+  String get disputeReasonHint =>
+      'Explain why the assessment should be reviewed';
+
+  @override
+  String get liabilityDisputed => 'Your review request was submitted.';
+
+  @override
+  String get accidentEvidenceUploaded => 'Evidence photo sent.';
+
+  @override
+  String get noAccidentEvidence => 'No evidence has been uploaded.';
+
+  @override
+  String get noProtectionClaim => 'The protection claim has not been created.';
+
+  @override
+  String get driverLiabilities => 'My liabilities';
+
+  @override
+  String get noDriverLiabilities => 'You have no confirmed driver liability.';
+
+  @override
+  String get confirmedAmount => 'Confirmed amount';
+
+  @override
+  String get paidAmount => 'Paid amount';
+
+  @override
+  String get outstandingAmount => 'Outstanding amount';
+
+  @override
+  String get attributableDamage => 'Driver-attributable eligible damage';
+
+  @override
+  String get recoveryHistory => 'Recovery history';
+
+  @override
+  String get claimStatus => 'Claim status';
+
+  @override
+  String get insuranceCoverage => 'Insurance coverage';
+
+  @override
+  String get riskFundCoverage => 'Risk Fund coverage';
+
+  @override
+  String get participantLiabilities => 'Participant liabilities';
+
+  @override
+  String get accidentStatus => 'Accident status';
+
+  @override
+  String get accidentCategory => 'Accident category';
+
+  @override
+  String get accidentOccurredAt => 'Occurred at';
+
+  @override
+  String get safetyReportTitle => 'Report safety incident';
+
+  @override
+  String get unsafeCustomer => 'Unsafe customer';
+
+  @override
+  String get vehicleIssue => 'Vehicle issue';
+
+  @override
+  String get safetyReasonCode => 'Reason';
+
+  @override
+  String get safetyReportDescription => 'Describe the incident';
+
+  @override
+  String get requestSosEscalation => 'Request SOS escalation';
+
+  @override
+  String get requestSosEscalationHint =>
+      'Send the current location and create a durable SOS alert';
+
+  @override
+  String get safetyReportSubmitted => 'Safety incident report submitted.';
+
+  @override
+  String get safetyReportFailed =>
+      'Could not submit the safety incident report. Please try again.';
+
+  @override
+  String get vehicleFaultType => 'Vehicle fault type';
+
+  @override
+  String get otherVehicleFault => 'Other vehicle fault';
+
+  @override
+  String get optionalEvidence => 'Evidence (optional)';
+
+  @override
+  String get vehicleInsurance => 'Insurance';
+
+  @override
+  String get addInsurance => 'Add insurance';
+
+  @override
+  String get insuranceLoadFailed =>
+      'Could not load insurance information. Please try again.';
+
+  @override
+  String get insuranceUpdateFailed => 'Could not update insurance.';
+
+  @override
+  String get deleteInsuranceQuestion => 'Delete insurance policy?';
+
+  @override
+  String get policyNumber => 'Policy number';
+
+  @override
+  String get optionalInsuranceEmpty =>
+      'Insurance is optional. This vehicle has no policies.';
+
+  @override
+  String get addInsurancePolicy => 'Add insurance policy';
+
+  @override
+  String get editInsurancePolicy => 'Edit insurance policy';
+
+  @override
+  String get insuranceType => 'Insurance type';
+
+  @override
+  String get mandatoryTplInsurance => 'Mandatory third-party liability';
+
+  @override
+  String get physicalDamageInsurance => 'Physical damage';
+
+  @override
+  String get insuranceProvider => 'Provider';
+
+  @override
+  String get effectiveDate => 'Effective date';
+
+  @override
+  String get insuranceCoverageLimit => 'Coverage limit';
+
+  @override
+  String get insuranceDeductible => 'Deductible';
+
+  @override
+  String get optionalDocumentUrl => 'Document URL (optional)';
+
+  @override
+  String get optionalInsuranceHint =>
+      'Insurance is optional. Creating or editing a policy resets it to PENDING for Staff verification.';
+
+  @override
+  String get endTripReasonTitle => 'Reason for ending trip';
+
+  @override
+  String get endTripReasonDescription =>
+      'Choose the accurate reason. Safety endings must use the separate Risk Protection flow.';
+
+  @override
+  String get normalCompletionReason => 'Destination reached';
+
+  @override
+  String get normalCompletionReasonDescription => 'Uses the booked fare.';
+
+  @override
+  String get customerRequestedStopReason => 'Customer requested early stop';
+
+  @override
+  String get customerRequestedStopReasonDescription =>
+      'Uses booked-route progress and the minimum service fare.';
+
+  @override
+  String get driverUnableToContinueReason => 'Driver cannot continue';
+
+  @override
+  String get startedByMistakeReason => 'Trip started by mistake';
 }

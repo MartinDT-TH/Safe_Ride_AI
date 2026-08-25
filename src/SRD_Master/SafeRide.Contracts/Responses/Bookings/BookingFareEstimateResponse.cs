@@ -5,4 +5,9 @@ public sealed record BookingFareEstimateResponse(
     int EstimatedDurationMinutes,
     string? EncodedPolyline,
     decimal EstimatedFare,
-    decimal? SurgeMultiplier);
+    decimal NormalFare,
+    decimal SurgedFare,
+    decimal SurgeAmount,
+    decimal LongDistanceComponent,
+    decimal MinimumServiceFare,
+    decimal SurgeMultiplier);

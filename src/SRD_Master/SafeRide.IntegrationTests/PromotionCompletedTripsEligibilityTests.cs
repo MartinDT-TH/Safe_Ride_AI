@@ -11,6 +11,7 @@ using SafeRide.Infrastructure.Repositories;
 
 namespace SafeRide.IntegrationTests;
 
+[Trait(SqlServerTestDatabase.ProviderTraitName, SqlServerTestDatabase.InMemoryProvider)]
 public sealed class PromotionCompletedTripsEligibilityTests
 {
     private static readonly DateTime UtcNow =

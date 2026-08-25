@@ -59,6 +59,8 @@ import '../features/shared/feedback/data/datasources/feedback_remote_datasource.
 import '../features/shared/feedback/data/repositories/feedback_repository_impl.dart';
 import '../features/shared/feedback/domain/repositories/feedback_repository.dart';
 import '../features/shared/feedback/presentation/providers/feedback_provider.dart';
+import '../features/shared/risk_protection/data/datasources/risk_protection_remote_datasource.dart';
+import '../features/shared/risk_protection/presentation/providers/risk_protection_provider.dart';
 
 final getIt = GetIt.instance;
 
@@ -248,6 +250,15 @@ Future<void> setupDependencies() async {
   );
   getIt.registerFactory<FeedbackProvider>(
     () => FeedbackProvider(getIt<FeedbackRepository>()),
+  );
+  getIt.registerLazySingleton<RiskProtectionRemoteDatasource>(
+    () => RiskProtectionRemoteDatasource(),
+  );
+  getIt.registerFactory<RiskProtectionProvider>(
+    () => RiskProtectionProvider(
+      getIt<RiskProtectionRemoteDatasource>(),
+      getIt<SessionManager>(),
+    ),
   );
 
   getIt.registerFactory<TripChatProvider>(() => TripChatProvider());

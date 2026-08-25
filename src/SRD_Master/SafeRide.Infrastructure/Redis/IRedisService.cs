@@ -54,6 +54,29 @@ namespace SafeRide.Infrastructure.Redis
 
         Task<long> IncrementAsync(string key, TimeSpan expiration);
 
+        async Task<double> SetMaximumDoubleAsync(
+            string key,
+            double candidate,
+            TimeSpan expiration)
+        {
+            var currentValue = await GetAsync(key);
+            var current = double.TryParse(
+                currentValue,
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var parsed)
+                ? parsed
+                : 0d;
+            var maximum = Math.Max(current, candidate);
+            await SetAsync(
+                key,
+                maximum.ToString(
+                    "R",
+                    System.Globalization.CultureInfo.InvariantCulture),
+                expiration);
+            return maximum;
+        }
+
         Task GeoAddAsync(
             string key,
             double longitude,

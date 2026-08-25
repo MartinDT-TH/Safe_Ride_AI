@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:http_parser/http_parser.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/network/auth_header.dart';
@@ -20,6 +21,39 @@ import '../../../../shared/history/data/models/history_trip.dart';
 import '../../../../shared/history/domain/repositories/history_repository.dart';
 
 enum DriverStatus { offline, online }
+
+enum DriverTripEndReason {
+  normalCompletion('NORMAL_COMPLETION'),
+  customerRequestedStop('CUSTOMER_REQUESTED_STOP'),
+  driverUnableToContinue('DRIVER_UNABLE_TO_CONTINUE'),
+  startedByMistake('STARTED_BY_MISTAKE');
+
+  const DriverTripEndReason(this.apiValue);
+
+  final String apiValue;
+}
+
+String imageContentTypeForEvidence(XFile file) {
+  final mimeType = file.mimeType?.toLowerCase();
+  if (mimeType == 'image/jpeg' ||
+      mimeType == 'image/png' ||
+      mimeType == 'image/webp') {
+    return mimeType!;
+  }
+
+  final fileName = file.name.isNotEmpty
+      ? file.name
+      : file.path.split(RegExp(r'[/\\]')).last;
+  final extension = fileName.contains('.')
+      ? fileName.split('.').last.toLowerCase()
+      : '';
+  return switch (extension) {
+    'png' => 'image/png',
+    'webp' => 'image/webp',
+    'jpg' || 'jpeg' => 'image/jpeg',
+    _ => mimeType ?? 'application/octet-stream',
+  };
+}
 
 class _PendingDriverLocationUpdate {
   _PendingDriverLocationUpdate({
@@ -166,6 +200,8 @@ class DriverDashboardProvider extends ChangeNotifier {
 
   double? _demoLat;
   double? _demoLng;
+  double? _lastLatitude;
+  double? _lastLongitude;
   double? get demoLat => _demoLat;
   double? get demoLng => _demoLng;
 
@@ -178,6 +214,8 @@ class DriverDashboardProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   String? _tripRequestsErrorMessage;
   String? get tripRequestsErrorMessage => _tripRequestsErrorMessage;
+  String? _tripRequestActionErrorCode;
+  String? get tripRequestActionErrorCode => _tripRequestActionErrorCode;
 
   Future<void> initializeRealtime(String accessToken) async {
     if (accessToken.isEmpty) {
@@ -267,7 +305,6 @@ class DriverDashboardProvider extends ChangeNotifier {
       _currentRequest = TripRequest(
         offerId: offer.offerId,
         bookingId: offer.bookingId,
-        expectedIncome: 0,
         pickupDistance: LocaleProvider.currentLocalizations.calculating,
         pickupTime: offer.expiresAt == null
             ? LocaleProvider.currentLocalizations.secondsRemaining(30)
@@ -275,6 +312,9 @@ class DriverDashboardProvider extends ChangeNotifier {
         pickupAddress: offer.message,
         destinationAddress:
             LocaleProvider.currentLocalizations.viewTripAfterAccept,
+        longPickupCompensation: null,
+        isLongPickup: false,
+        isLongDistanceTrip: false,
       );
       _hasNewRequest = true;
       notifyListeners();
@@ -341,14 +381,6 @@ class DriverDashboardProvider extends ChangeNotifier {
       }
     }, key: 'driverDashboard');
 
-    _socketService.onTripEndRequestResponded((update) {
-      if (_activeTrip?.tripId != update.tripId) return;
-      _snackbarMessage = update.accepted == true
-          ? LocaleProvider.currentLocalizations.endTripRequestAccepted
-          : LocaleProvider.currentLocalizations.endTripRequestRejected;
-      notifyListeners();
-    }, key: 'driverDashboardEndRequest');
-
     _socketService.onTripPaymentUpdated((update) {
       if (_activeTrip?.tripId != update.tripId) {
         return;
@@ -362,7 +394,10 @@ class DriverDashboardProvider extends ChangeNotifier {
       }
 
       if (update.isSuccess) {
-        _activeTrip = _activeTrip!.copyWith(paymentCompleted: true);
+        _activeTrip = _activeTrip!.copyWith(
+          tripStatus: update.tripStatus,
+          paymentCompleted: true,
+        );
         notifyListeners();
         return;
       }
@@ -457,9 +492,6 @@ class DriverDashboardProvider extends ChangeNotifier {
       }
     }
     _socketService.removeTripStatusChangedHandler('driverDashboard');
-    _socketService.removeTripEndRequestRespondedHandler(
-      'driverDashboardEndRequest',
-    );
     _socketService.removeTripPaymentUpdatedHandler('driverDashboardPayment');
     _socketService.removeDriverLocationUpdatedHandler('driverDashboardDemo');
     _socketService.removeBookingUpdatedHandler('driverDashboardBooking');
@@ -474,7 +506,6 @@ class DriverDashboardProvider extends ChangeNotifier {
     _currentRequest = TripRequest(
       offerId: 0,
       bookingId: 0,
-      expectedIncome: 120000,
       pickupDistance: '1.5 km',
       pickupTime: LocaleProvider.currentLocalizations.minutesValue(5),
       pickupAddress: '80 Trần Duy Hưng, Cầu Giấy',
@@ -490,11 +521,30 @@ class DriverDashboardProvider extends ChangeNotifier {
   Future<void> acceptRequest() async {
     final request = _currentRequest;
     final token = _accessToken;
-    if (request == null || token == null || _isResponding) {
+    if (_isResponding) {
+      return;
+    }
+    if (request == null) {
+      _snackbarMessage = LocaleProvider.currentLocalizations.acceptTripFailed;
+      notifyListeners();
+      unawaited(loadOpenTripRequests());
+      return;
+    }
+    if (token == null || token.isEmpty) {
+      _snackbarMessage = LocaleProvider.currentLocalizations.sessionExpired;
+      notifyListeners();
+      return;
+    }
+    if (request.offerId <= 0 || request.bookingId <= 0) {
+      _snackbarMessage =
+          LocaleProvider.currentLocalizations.tripRequestsLoadFailed;
+      notifyListeners();
+      await loadOpenTripRequests();
       return;
     }
 
     _isResponding = true;
+    _tripRequestActionErrorCode = null;
     notifyListeners();
     _socketService.onBookingUpdated(
       _handleBookingUpdate,
@@ -519,9 +569,10 @@ class DriverDashboardProvider extends ChangeNotifier {
       final data = response.data is Map
           ? Map<String, dynamic>.from(response.data as Map)
           : const <String, dynamic>{};
-      final bookingStatus =
-          (data[ApiKeys.bookingStatus] ?? data['BookingStatus'])?.toString();
-      final tripId = (data[ApiKeys.tripId] ?? data['TripId']) as num?;
+      final bookingStatus = _normalizeBookingStatus(
+        data[ApiKeys.bookingStatus] ?? data['BookingStatus'],
+      );
+      final tripId = _parsePositiveInt(data[ApiKeys.tripId] ?? data['TripId']);
       final tripStatus = _normalizeTripStatus(
         data[ApiKeys.tripStatus] ?? data['TripStatus'],
       );
@@ -529,12 +580,12 @@ class DriverDashboardProvider extends ChangeNotifier {
       final driverOffer = driverOfferRaw is Map
           ? Map<String, dynamic>.from(driverOfferRaw)
           : const <String, dynamic>{};
-      final offerStatus =
-          (driverOffer[ApiKeys.offerStatus] ?? driverOffer['OfferStatus'])
-              ?.toString();
+      final offerStatus = _normalizeOfferStatus(
+        driverOffer[ApiKeys.offerStatus] ?? driverOffer['OfferStatus'],
+      );
 
       if (bookingStatus == 'DriverAssigned' && tripId != null) {
-        final tripIdValue = tripId.toInt();
+        final tripIdValue = tripId;
         _hasNewRequest = false;
         _currentRequest = null;
         _isWaitingForCustomerConfirmation = false;
@@ -569,14 +620,51 @@ class DriverDashboardProvider extends ChangeNotifier {
       }
 
       unawaited(loadOpenTripRequests());
-    } catch (e) {
-      debugPrint('Failed to accept request: $e');
-      _errorMessage = LocaleProvider.currentLocalizations.acceptTripFailed;
-      _hasNewRequest = false;
-      _currentRequest = null;
+    } on DioException catch (error) {
+      final failure = _readTripRequestActionFailure(error);
+      debugPrint(
+        'Failed to accept request: status=${error.response?.statusCode} '
+        'code=${failure.code}',
+      );
+      _tripRequestActionErrorCode = failure.code;
+      _snackbarMessage = failure.message;
+      await _reconcileAfterAcceptFailure();
+    } catch (error) {
+      debugPrint('Failed to accept request: $error');
+      _tripRequestActionErrorCode = null;
+      _snackbarMessage = LocaleProvider.currentLocalizations.acceptTripFailed;
+      await _reconcileAfterAcceptFailure();
     } finally {
       _isResponding = false;
       notifyListeners();
+    }
+  }
+
+  ({String? code, String message}) _readTripRequestActionFailure(
+    DioException error,
+  ) {
+    final data = error.response?.data;
+    final code = data is Map ? data[ApiKeys.code]?.toString() : null;
+    final detail = data is Map
+        ? (data[ApiKeys.detail] ?? data[ApiKeys.message])?.toString()
+        : null;
+    return (
+      code: code,
+      message: ApiErrorLocalizer.translate(
+        LocaleProvider.currentLocalizations,
+        code: code,
+        fallback:
+            detail ?? LocaleProvider.currentLocalizations.acceptTripFailed,
+      ),
+    );
+  }
+
+  Future<void> _reconcileAfterAcceptFailure() async {
+    await loadOpenTripRequests();
+    if (_currentRequest == null &&
+        !_isWaitingForCustomerConfirmation &&
+        _activeTrip == null) {
+      await loadActiveTrip();
     }
   }
 
@@ -657,6 +745,8 @@ class DriverDashboardProvider extends ChangeNotifier {
     double? accuracyMeters,
     double? speedMetersPerSecond,
   }) async {
+    _lastLatitude = lat;
+    _lastLongitude = lng;
     final update = _PendingDriverLocationUpdate(
       latitude: lat,
       longitude: lng,
@@ -755,6 +845,230 @@ class DriverDashboardProvider extends ChangeNotifier {
     return updateTripStatus('IN_PROGRESS');
   }
 
+  Future<bool> submitPreTripVehicleCheck({
+    required bool brakeResponsePassed,
+    required bool frontRearLightsPassed,
+    required bool turnSignalsPassed,
+    required bool visibleTiresPassed,
+    required bool dashboardWarningPassed,
+    required bool windshieldVisibilityPassed,
+    required bool noMajorVisibleIssue,
+    String? faultType,
+    String? note,
+    XFile? evidence,
+  }) async {
+    final trip = _activeTrip;
+    final token = _accessToken;
+    if (trip == null || token == null || _isUpdatingTrip) return false;
+    _isUpdatingTrip = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      final data = evidence == null
+          ? <String, dynamic>{
+              'brakeResponsePassed': brakeResponsePassed,
+              'frontRearLightsPassed': frontRearLightsPassed,
+              'turnSignalsPassed': turnSignalsPassed,
+              'visibleTiresPassed': visibleTiresPassed,
+              'dashboardWarningPassed': dashboardWarningPassed,
+              'windshieldVisibilityPassed': windshieldVisibilityPassed,
+              'noMajorVisibleIssue': noMajorVisibleIssue,
+              'faultType': faultType,
+              'note': note?.trim(),
+            }
+          : FormData.fromMap({
+              'brakeResponsePassed': brakeResponsePassed,
+              'frontRearLightsPassed': frontRearLightsPassed,
+              'turnSignalsPassed': turnSignalsPassed,
+              'visibleTiresPassed': visibleTiresPassed,
+              'dashboardWarningPassed': dashboardWarningPassed,
+              'windshieldVisibilityPassed': windshieldVisibilityPassed,
+              'noMajorVisibleIssue': noMajorVisibleIssue,
+              'faultType': ?faultType,
+              if (note?.trim().isNotEmpty == true) 'note': note!.trim(),
+              'evidence': await MultipartFile.fromFile(
+                evidence.path,
+                filename: evidence.name,
+                contentType: MediaType.parse(
+                  imageContentTypeForEvidence(evidence),
+                ),
+              ),
+            });
+      await _dio.post(
+        ApiEndpoints.preTripVehicleChecks(trip.tripId),
+        data: data,
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+        ),
+      );
+      return true;
+    } on DioException catch (error) {
+      _captureTripActionError(error);
+      rethrow;
+    } catch (_) {
+      _errorMessage = LocaleProvider.currentLocalizations.preTripCheckFailed;
+      rethrow;
+    } finally {
+      _isUpdatingTrip = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> safetyTerminate(
+    String reason, {
+    List<XFile> evidence = const [],
+  }) async {
+    final trip = _activeTrip;
+    final token = _accessToken;
+    if (trip == null || token == null || _isUpdatingTrip) return false;
+    if (evidence.length > 3) {
+      _errorMessage = LocaleProvider.currentLocalizations.maximumEvidencePhotos;
+      notifyListeners();
+      return false;
+    }
+    _isUpdatingTrip = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      await _flushPendingLocationUpdates();
+      final data = evidence.isEmpty
+          ? <String, dynamic>{'reason': reason.trim()}
+          : await _buildSafetyTerminationFormData(reason, evidence);
+      await _dio.post(
+        ApiEndpoints.safetyTermination(trip.tripId),
+        data: data,
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+        ),
+      );
+      _clearActiveTrip();
+      return true;
+    } on DioException catch (error) {
+      _captureTripActionError(error);
+      rethrow;
+    } catch (_) {
+      _errorMessage =
+          LocaleProvider.currentLocalizations.safetyTerminationFailed;
+      rethrow;
+    } finally {
+      _isUpdatingTrip = false;
+      notifyListeners();
+    }
+  }
+
+  Future<FormData> _buildSafetyTerminationFormData(
+    String reason,
+    List<XFile> evidence,
+  ) async {
+    final data = FormData();
+    data.fields.add(MapEntry('reason', reason.trim()));
+    for (final file in evidence) {
+      data.files.add(
+        MapEntry(
+          'evidence',
+          await MultipartFile.fromFile(
+            file.path,
+            filename: file.name,
+            contentType: MediaType.parse(imageContentTypeForEvidence(file)),
+          ),
+        ),
+      );
+    }
+    return data;
+  }
+
+  void _captureTripActionError(DioException error) {
+    final data = error.response?.data;
+    final code = data is Map ? data[ApiKeys.code]?.toString() : null;
+    final detail = data is Map
+        ? (data[ApiKeys.detail] ?? data[ApiKeys.message])?.toString()
+        : null;
+    _errorMessage = ApiErrorLocalizer.translate(
+      LocaleProvider.currentLocalizations,
+      code: code,
+      fallback: detail ?? LocaleProvider.currentLocalizations.genericError,
+    );
+  }
+
+  Future<bool> submitSafetyReport({
+    required String reportType,
+    required String reasonCode,
+    required String description,
+    required bool escalationRequested,
+  }) async {
+    final trip = _activeTrip;
+    final token = _accessToken;
+    if (trip == null || token == null || _isUpdatingTrip) return false;
+    if (escalationRequested &&
+        (_lastLatitude == null || _lastLongitude == null)) {
+      throw StateError('Current location is required for SOS escalation.');
+    }
+    _isUpdatingTrip = true;
+    notifyListeners();
+    try {
+      await _dio.post(
+        ApiEndpoints.safetyReports(trip.tripId),
+        data: {
+          'reportType': reportType,
+          'reasonCode': reasonCode.trim(),
+          'description': description.trim(),
+          'latitude': _lastLatitude,
+          'longitude': _lastLongitude,
+          'escalationRequested': escalationRequested,
+        },
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+        ),
+      );
+      return true;
+    } finally {
+      _isUpdatingTrip = false;
+      notifyListeners();
+    }
+  }
+
+  Future<int?> reportAccident(String description) async {
+    final trip = _activeTrip;
+    final token = _accessToken;
+    if (trip == null || token == null || _isUpdatingTrip) return null;
+    _isUpdatingTrip = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      final response = await _dio.post(
+        ApiEndpoints.tripAccidents(trip.tripId),
+        data: {
+          'category': 'MULTIPLE',
+          'occurredAtUtc': DateTime.now().toUtc().toIso8601String(),
+          'description': description.trim(),
+        },
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+        ),
+      );
+      final data = response.data;
+      return data is Map ? (data['id'] as num?)?.toInt() : null;
+    } on DioException catch (error) {
+      final data = error.response?.data;
+      final code = data is Map ? data[ApiKeys.code]?.toString() : null;
+      final detail = data is Map
+          ? (data[ApiKeys.detail] ?? data[ApiKeys.message])?.toString()
+          : null;
+      _errorMessage = ApiErrorLocalizer.translate(
+        LocaleProvider.currentLocalizations,
+        code: code,
+        fallback: detail ?? LocaleProvider.currentLocalizations.genericError,
+      );
+      rethrow;
+    } catch (_) {
+      _errorMessage = LocaleProvider.currentLocalizations.genericError;
+      rethrow;
+    } finally {
+      _isUpdatingTrip = false;
+      notifyListeners();
+    }
+  }
+
   Future<bool> cancelActiveTrip() {
     return updateTripStatus('CANCELLED');
   }
@@ -786,8 +1100,8 @@ class DriverDashboardProvider extends ChangeNotifier {
     }
   }
 
-  /// Requests customer approval before ending an IN_PROGRESS trip.
-  Future<bool> endTripAsync() async {
+  /// Ends an IN_PROGRESS trip and advances it to the payment stage.
+  Future<bool> endTripAsync(DriverTripEndReason reason) async {
     final trip = _activeTrip;
     final token = _accessToken;
     if (trip == null || token == null || _isUpdatingTrip) {
@@ -800,13 +1114,25 @@ class DriverDashboardProvider extends ChangeNotifier {
       // Make the latest queued GPS points visible to fare finalization before
       // the backend closes the trip tracking snapshot.
       await _flushPendingLocationUpdates();
-      await _dio.post(
+      final response = await _dio.post(
         ApiEndpoints.endTrip(trip.tripId),
+        data: {'reason': reason.apiValue},
         options: Options(
           headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
         ),
       );
-      _snackbarMessage = LocaleProvider.currentLocalizations.endTripRequestSent;
+      await loadActiveTrip();
+      if (response.statusCode == 202) {
+        final body = response.data;
+        _snackbarMessage = body is Map<String, dynamic>
+            ? body['message']?.toString()
+            : null;
+        _snackbarMessage ??=
+            'Submitted for staff review. The fare has not been finalized.';
+      } else {
+        _snackbarMessage =
+            LocaleProvider.currentLocalizations.waitingForPayment;
+      }
       return true;
     } catch (e) {
       debugPrint('Failed to end trip: $e');
@@ -923,7 +1249,9 @@ class DriverDashboardProvider extends ChangeNotifier {
             destLng: sameTrip ? oldTrip?.destLng : null,
             encodedPolyline: sameTrip ? oldTrip?.encodedPolyline : null,
             arrivalPolyline: sameTrip ? oldTrip?.arrivalPolyline : null,
-            paymentCompleted: paymentCompleted,
+            paymentCompleted:
+                paymentCompleted ||
+                (sameTrip && oldTrip?.paymentCompleted == true),
           );
           _socketService.joinTrip(tripIdValue);
           if (!_hasActiveTripDetails(tripIdValue)) {
@@ -956,6 +1284,7 @@ class DriverDashboardProvider extends ChangeNotifier {
     }
 
     _isUpdatingTrip = true;
+    _errorMessage = null;
     notifyListeners();
     _socketService.onBookingUpdated(
       _handleBookingUpdate,
@@ -978,6 +1307,13 @@ class DriverDashboardProvider extends ChangeNotifier {
         _activeTrip = trip.copyWith(tripStatus: tripStatus);
       }
       return true;
+    } on DioException catch (error) {
+      _captureTripActionError(error);
+      rethrow;
+    } catch (_) {
+      _errorMessage =
+          LocaleProvider.currentLocalizations.tripStatusUpdateFailed;
+      rethrow;
     } finally {
       _isUpdatingTrip = false;
       notifyListeners();
@@ -1207,7 +1543,6 @@ class DriverDashboardProvider extends ChangeNotifier {
     return TripRequest(
       offerId: request.offerId,
       bookingId: request.bookingId,
-      expectedIncome: request.expectedIncome,
       pickupDistance: _formatPickupDistance(request.pickupDistanceKm),
       pickupTime: _formatPickupTime(
         request.pickupDurationMinutes,
@@ -1217,6 +1552,9 @@ class DriverDashboardProvider extends ChangeNotifier {
       destinationAddress: request.destinationAddress.trim().isEmpty
           ? LocaleProvider.currentLocalizations.noDestination
           : request.destinationAddress,
+      longPickupCompensation: request.longPickupCompensation,
+      isLongPickup: request.isLongPickup,
+      isLongDistanceTrip: request.isLongDistanceTrip,
     );
   }
 
@@ -1250,6 +1588,69 @@ class DriverDashboardProvider extends ChangeNotifier {
     }
 
     return LocaleProvider.currentLocalizations.calculating;
+  }
+
+  static int? _parsePositiveInt(Object? value) {
+    final parsed = value is num
+        ? value.toInt()
+        : int.tryParse(value?.toString().trim() ?? '');
+    return parsed != null && parsed > 0 ? parsed : null;
+  }
+
+  static String? _normalizeBookingStatus(Object? value) {
+    if (value == null) return null;
+    final numericValue = value is num
+        ? value.toInt()
+        : int.tryParse(value.toString().trim());
+    if (numericValue != null) {
+      return switch (numericValue) {
+        0 => 'PendingSchedule',
+        1 => 'Searching',
+        2 => 'DriverAssigned',
+        3 => 'Cancelled',
+        4 => 'Expired',
+        5 => 'Completed',
+        _ => null,
+      };
+    }
+
+    return switch (value.toString().trim().toLowerCase()) {
+      'pendingschedule' => 'PendingSchedule',
+      'searching' => 'Searching',
+      'driverassigned' => 'DriverAssigned',
+      'cancelled' || 'canceled' => 'Cancelled',
+      'expired' => 'Expired',
+      'completed' => 'Completed',
+      _ => null,
+    };
+  }
+
+  static String? _normalizeOfferStatus(Object? value) {
+    if (value == null) return null;
+    final numericValue = value is num
+        ? value.toInt()
+        : int.tryParse(value.toString().trim());
+    if (numericValue != null) {
+      return switch (numericValue) {
+        0 => 'Sent',
+        1 => 'DriverAccepted',
+        2 => 'CustomerConfirmed',
+        3 => 'Rejected',
+        4 => 'Expired',
+        5 => 'Cancelled',
+        _ => null,
+      };
+    }
+
+    return switch (value.toString().trim().toLowerCase()) {
+      'sent' => 'Sent',
+      'driveraccepted' => 'DriverAccepted',
+      'customerconfirmed' => 'CustomerConfirmed',
+      'rejected' => 'Rejected',
+      'expired' => 'Expired',
+      'cancelled' || 'canceled' => 'Cancelled',
+      _ => null,
+    };
   }
 
   static String? _normalizeTripStatus(Object? value) {
@@ -1362,19 +1763,23 @@ class ActiveDriverTrip {
 class TripRequest {
   final int offerId;
   final int bookingId;
-  final double expectedIncome;
   final String pickupDistance;
   final String pickupTime;
   final String pickupAddress;
   final String destinationAddress;
+  final double? longPickupCompensation;
+  final bool isLongPickup;
+  final bool isLongDistanceTrip;
 
   TripRequest({
     required this.offerId,
     required this.bookingId,
-    required this.expectedIncome,
     required this.pickupDistance,
     required this.pickupTime,
     required this.pickupAddress,
     required this.destinationAddress,
+    this.longPickupCompensation,
+    this.isLongPickup = false,
+    this.isLongDistanceTrip = false,
   });
 }
