@@ -66,6 +66,60 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('pre-trip evidence uses camera and shows the captured photo', (
+    tester,
+  ) async {
+    ImageSource? requestedSource;
+    final evidence = XFile.fromData(
+      base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      ),
+      name: 'pretrip-camera.png',
+      mimeType: 'image/png',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('vi'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () => showPreTripSafetyCheckDialog(
+                context,
+                pickEvidenceImage: (source) async {
+                  requestedSource = source;
+                  return evidence;
+                },
+              ),
+              child: const Text('open pre-trip'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open pre-trip'));
+    await tester.pumpAndSettle();
+    final captureButton = find.widgetWithText(OutlinedButton, 'Chụp ảnh');
+    await tester.dragUntilVisible(
+      captureButton,
+      find.byType(SingleChildScrollView),
+      const Offset(0, -250),
+    );
+    await tester.tap(captureButton);
+    await tester.pumpAndSettle();
+
+    expect(requestedSource, ImageSource.camera);
+    expect(
+      find.text('pretrip-camera.png', skipOffstage: false),
+      findsOneWidget,
+    );
+    expect(find.text('Chụp lại', skipOffstage: false), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'safety termination uses camera and camera cancellation keeps the reason',
     (tester) async {
@@ -114,7 +168,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(result?.reason, 'Khách có hành vi nguy hiểm');
-      expect(result?.evidence, isNull);
+      expect(result?.evidence, isEmpty);
       expect(tester.takeException(), isNull);
     },
   );
@@ -158,16 +212,19 @@ void main() {
     await tester.tap(find.text('Chụp ảnh bằng chứng (tùy chọn)'));
     await tester.pumpAndSettle();
 
-    expect(
-      find.byIcon(Icons.check_circle, skipOffstage: false),
-      findsOneWidget,
-    );
-    expect(find.text('Chụp lại', skipOffstage: false), findsOneWidget);
+    expect(find.text('1/3 ảnh', skipOffstage: false), findsOneWidget);
+    expect(find.text('Chụp ảnh', skipOffstage: false), findsOneWidget);
+
+    await tester.tap(find.text('Chụp ảnh', skipOffstage: false));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2/3 ảnh', skipOffstage: false), findsOneWidget);
 
     await tester.tap(find.widgetWithText(FilledButton, 'Kết thúc vì an toàn'));
     await tester.pumpAndSettle();
 
-    expect(result?.evidence, same(evidence));
+    expect(result?.evidence, hasLength(2));
+    expect(result?.evidence, everyElement(same(evidence)));
     expect(tester.takeException(), isNull);
   });
 }

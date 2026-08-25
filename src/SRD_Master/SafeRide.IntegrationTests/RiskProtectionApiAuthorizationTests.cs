@@ -134,6 +134,24 @@ public sealed class RiskProtectionApiAuthorizationTests
     }
 
     [Fact]
+    public async Task AccidentEvidenceHttp_StorageMayCloseStreamWithoutBreakingResponse()
+    {
+        using var rootFactory = new AuthApiFactory();
+        var storage = new StubAccidentEvidenceStorage(disposeContentOnSave: true);
+        using var factory = CreateAccidentFactory(
+            rootFactory,
+            new AcceptedFileSafetyScanner(),
+            evidenceStorage: storage);
+        using var client = await CreateClientAsync(factory, Guid.NewGuid(), "Driver");
+        using var evidence = ValidJpegMultipart();
+
+        var response = await client.PostAsync("/api/accidents/42/evidence", evidence);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal(4, storage.LastFileSizeBytes);
+    }
+
+    [Fact]
     public async Task ConcurrentStaffClaimUpdate_ReturnsStable409ProblemDetails()
     {
         using var rootFactory = new AuthApiFactory();
@@ -544,21 +562,30 @@ public sealed class RiskProtectionApiAuthorizationTests
 
     private sealed class StubAccidentEvidenceStorage : IAccidentEvidenceStorage
     {
+        private readonly bool _disposeContentOnSave;
+
+        public StubAccidentEvidenceStorage(bool disposeContentOnSave = false) =>
+            _disposeContentOnSave = disposeContentOnSave;
+
         public List<string> DeletedPublicIds { get; } = [];
         public int SaveCalls { get; private set; }
+        public long? LastFileSizeBytes { get; private set; }
 
-        public Task<StoredAccidentEvidenceFile> SaveAsync(
+        public async Task<StoredAccidentEvidenceFile> SaveAsync(
             long accidentId,
             string originalFileName,
             string contentType,
+            long fileSizeBytes,
             Stream content,
             CancellationToken cancellationToken)
         {
             SaveCalls++;
-            return Task.FromResult(new StoredAccidentEvidenceFile(
+            LastFileSizeBytes = fileSizeBytes;
+            if (_disposeContentOnSave) await content.DisposeAsync();
+            return new StoredAccidentEvidenceFile(
                 "https://storage.test/evidence",
                 $"test/{accidentId}/{Guid.NewGuid():N}",
-                content.Length));
+                fileSizeBytes);
         }
 
         public Task DeleteAsync(string publicId, string contentType, CancellationToken cancellationToken)
@@ -704,7 +731,7 @@ public sealed class RiskProtectionApiAuthorizationTests
     private sealed class StubTripStatusService : ITripStatusService
     {
         public Task SafetyTerminateAsync(Guid userId, bool isStaff, long tripId, string reason, CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task SafetyTerminateAsync(Guid userId, bool isStaff, long tripId, string reason, StoredSafetyTerminationEvidence? evidence, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task SafetyTerminateAsync(Guid userId, bool isStaff, long tripId, string reason, IReadOnlyList<StoredSafetyTerminationEvidence> evidence, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task UpdateDriverTripStatusAsync(Guid driverId, long tripId, TripStatus tripStatus, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task EndTripAsync(Guid driverId, long tripId, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task RespondToEndTripRequestAsync(Guid customerId, long tripId, bool accepted, CancellationToken cancellationToken) => Task.CompletedTask;

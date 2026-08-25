@@ -278,7 +278,7 @@ public sealed class TripStatusServiceTests
     }
 
     [Fact]
-    public async Task StartTrip_WithVerifiedVehicleInsurance_SnapshotsPolicyValues()
+    public async Task StartTrip_WithVerifiedPhysicalDamageInsurance_SnapshotsPolicyValues()
     {
         using var fixture = await TripStatusFixture.CreateAsync(
             TripStatus.ARRIVED,
@@ -300,7 +300,20 @@ public sealed class TripStatusServiceTests
             VerificationStatus = InsuranceVerificationStatus.VERIFIED,
             CreatedAtUtc = UtcNow
         };
-        fixture.DbContext.VehicleInsurancePolicies.Add(insurance);
+        var higherCoverageMandatoryTpl = new VehicleInsurancePolicy
+        {
+            VehicleId = vehicleId,
+            InsuranceType = VehicleInsuranceType.MANDATORY_TPL,
+            Provider = "Mandatory TPL Insurer",
+            PolicyNumber = "TPL-001",
+            EffectiveFromUtc = UtcNow.AddDays(-1),
+            ExpiresAtUtc = UtcNow.AddDays(30),
+            CoverageAmount = 100_000_000m,
+            Deductible = 0m,
+            VerificationStatus = InsuranceVerificationStatus.VERIFIED,
+            CreatedAtUtc = UtcNow
+        };
+        fixture.DbContext.VehicleInsurancePolicies.AddRange(insurance, higherCoverageMandatoryTpl);
         await fixture.DbContext.SaveChangesAsync();
         var checkService = new PreTripVehicleCheckService(
             fixture.DbContext,
@@ -1245,6 +1258,52 @@ public sealed class TripStatusServiceTests
         Assert.Empty(await fixture.DbContext.TripFinancialSettlements.ToListAsync());
         Assert.Empty(await fixture.DbContext.RiskFundTransactions.ToListAsync());
         Assert.Contains(RedisKeys.TripTrackingPath(fixture.TripId), fixture.Redis.RemovedKeys);
+    }
+
+    [Fact]
+    public async Task SafetyTerminate_WithMultipleEvidence_PersistsEveryImage()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.ARRIVED);
+        var evidence = new[]
+        {
+            new StoredSafetyTerminationEvidence(
+                "https://storage.test/safety/first.jpg",
+                "safety/first",
+                "first.jpg",
+                "image/jpeg",
+                101),
+            new StoredSafetyTerminationEvidence(
+                "https://storage.test/safety/second.png",
+                "safety/second",
+                "second.png",
+                "image/png",
+                202)
+        };
+
+        await fixture.Service.SafetyTerminateAsync(
+            fixture.DriverId,
+            isStaff: false,
+            fixture.TripId,
+            "Nguy cơ an toàn",
+            evidence,
+            CancellationToken.None);
+
+        var persisted = await fixture.DbContext.SafetyTerminationEvidence
+            .OrderBy(item => item.Id)
+            .ToListAsync();
+        Assert.Equal(2, persisted.Count);
+        Assert.Collection(
+            persisted,
+            first =>
+            {
+                Assert.Equal("first.jpg", first.OriginalFileName);
+                Assert.Equal(fixture.DriverId, first.UploadedByUserId);
+            },
+            second =>
+            {
+                Assert.Equal("second.png", second.OriginalFileName);
+                Assert.Equal(fixture.DriverId, second.UploadedByUserId);
+            });
     }
 
     [Fact]

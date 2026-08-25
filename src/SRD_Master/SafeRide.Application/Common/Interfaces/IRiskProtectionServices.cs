@@ -191,6 +191,7 @@ public interface IAccidentEvidenceStorage
         long accidentId,
         string originalFileName,
         string contentType,
+        long fileSizeBytes,
         Stream content,
         CancellationToken cancellationToken);
 

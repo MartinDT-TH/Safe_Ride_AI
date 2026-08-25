@@ -1196,16 +1196,6 @@ public sealed class AccidentManagementService : IAccidentManagementService
         if ((request.DriverFaultPercentage == 0m) != (request.DriverFaultLevel == DriverFaultLevel.NO_FAULT))
             throw Invalid("DriverFaultLevel phải là NO_FAULT khi và chỉ khi tỷ lệ lỗi Driver bằng 0%.");
 
-        var customerIntoxication = request.Causes.Any(x =>
-            x.RootCause == AccidentRootCause.CUSTOMER_INTOXICATION);
-        var customerUnsafeBehavior = request.Causes.Any(x =>
-            x.RootCause == AccidentRootCause.CUSTOMER_INTERFERENCE
-            && x.ResponsibleParty == ResponsiblePartyType.CUSTOMER);
-        if (request.Causes.Any(x => x.RootCause == AccidentRootCause.CUSTOMER_INTOXICATION
-                && x.ResponsibleParty != ResponsiblePartyType.CUSTOMER)
-            || customerIntoxication && !customerUnsafeBehavior)
-            throw Invalid("Customer intoxication chỉ được phân bổ lỗi khi có unsafe behavior/root cause của Customer.");
-
         var customerKnewDefect = request.Causes.Any(x =>
             x.RootCause == AccidentRootCause.VEHICLE_PRE_EXISTING_DEFECT
             && x.ResponsibleParty == ResponsiblePartyType.CUSTOMER);

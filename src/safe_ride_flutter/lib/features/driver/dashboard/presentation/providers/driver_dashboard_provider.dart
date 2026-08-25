@@ -902,27 +902,26 @@ class DriverDashboardProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> safetyTerminate(String reason, {XFile? evidence}) async {
+  Future<bool> safetyTerminate(
+    String reason, {
+    List<XFile> evidence = const [],
+  }) async {
     final trip = _activeTrip;
     final token = _accessToken;
     if (trip == null || token == null || _isUpdatingTrip) return false;
+    if (evidence.length > 3) {
+      _errorMessage = LocaleProvider.currentLocalizations.maximumEvidencePhotos;
+      notifyListeners();
+      return false;
+    }
     _isUpdatingTrip = true;
     _errorMessage = null;
     notifyListeners();
     try {
       await _flushPendingLocationUpdates();
-      final data = evidence == null
+      final data = evidence.isEmpty
           ? <String, dynamic>{'reason': reason.trim()}
-          : FormData.fromMap({
-              'reason': reason.trim(),
-              'evidence': await MultipartFile.fromFile(
-                evidence.path,
-                filename: evidence.name,
-                contentType: MediaType.parse(
-                  imageContentTypeForEvidence(evidence),
-                ),
-              ),
-            });
+          : await _buildSafetyTerminationFormData(reason, evidence);
       await _dio.post(
         ApiEndpoints.safetyTermination(trip.tripId),
         data: data,
@@ -943,6 +942,27 @@ class DriverDashboardProvider extends ChangeNotifier {
       _isUpdatingTrip = false;
       notifyListeners();
     }
+  }
+
+  Future<FormData> _buildSafetyTerminationFormData(
+    String reason,
+    List<XFile> evidence,
+  ) async {
+    final data = FormData();
+    data.fields.add(MapEntry('reason', reason.trim()));
+    for (final file in evidence) {
+      data.files.add(
+        MapEntry(
+          'evidence',
+          await MultipartFile.fromFile(
+            file.path,
+            filename: file.name,
+            contentType: MediaType.parse(imageContentTypeForEvidence(file)),
+          ),
+        ),
+      );
+    }
+    return data;
   }
 
   void _captureTripActionError(DioException error) {

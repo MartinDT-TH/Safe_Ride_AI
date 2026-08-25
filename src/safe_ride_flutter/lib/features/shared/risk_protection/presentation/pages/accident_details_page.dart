@@ -109,36 +109,14 @@ class _AccidentDetailsView extends StatelessWidget {
     BuildContext context,
     RiskProtectionProvider provider,
   ) async {
-    XFile? file;
-    try {
-      file = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 85,
-      );
-    } catch (_) {
-      if (context.mounted) {
-        _showMessage(
-          context,
-          context.l10n.mediaAccessFailed(context.l10n.gallery),
-        );
-      }
-      return;
-    }
-    if (file == null || !context.mounted) return;
+    final firstPhoto = await _captureEvidencePhoto(context);
+    if (firstPhoto == null || !context.mounted) return;
 
-    late final Uint8List previewBytes;
-    try {
-      previewBytes = await file.readAsBytes();
-    } catch (_) {
-      if (context.mounted) {
-        _showMessage(context, context.l10n.evidencePreviewFailed);
-      }
-      return;
-    }
-    if (!context.mounted) return;
-
+    final photos = <_PendingEvidencePhoto>[firstPhoto];
+    const maxPhotos = 3;
     final uploaded = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (dialogContext) {
         var description = '';
         var isSubmitting = false;
@@ -155,41 +133,94 @@ class _AccidentDetailsView extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.memory(
-                          previewBytes,
-                          height: 220,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              Container(
-                                height: 180,
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.surfaceContainer,
-                                alignment: Alignment.center,
-                                child: const Icon(Icons.broken_image_outlined),
-                              ),
-                        ),
+                      Text(
+                        context.l10n.photoCount(photos.length, maxPhotos),
+                        style: Theme.of(context).textTheme.labelLarge,
                       ),
                       const SizedBox(height: 8),
-                      Row(
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
                         children: [
-                          const Icon(
-                            Icons.check_circle,
-                            color: Colors.green,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              file!.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                          for (var index = 0; index < photos.length; index++)
+                            SizedBox(
+                              width: 112,
+                              child: Column(
+                                children: [
+                                  Stack(
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Image.memory(
+                                          photos[index].previewBytes,
+                                          height: 96,
+                                          width: 112,
+                                          fit: BoxFit.cover,
+                                          errorBuilder:
+                                              (
+                                                context,
+                                                error,
+                                                stackTrace,
+                                              ) => Container(
+                                                height: 96,
+                                                width: 112,
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.surfaceContainer,
+                                                alignment: Alignment.center,
+                                                child: const Icon(
+                                                  Icons.broken_image_outlined,
+                                                ),
+                                              ),
+                                        ),
+                                      ),
+                                      Positioned(
+                                        right: 2,
+                                        top: 2,
+                                        child: IconButton.filled(
+                                          visualDensity: VisualDensity.compact,
+                                          tooltip: context.l10n.removePhoto,
+                                          onPressed: isSubmitting
+                                              ? null
+                                              : () => setState(
+                                                  () => photos.removeAt(index),
+                                                ),
+                                          icon: const Icon(
+                                            Icons.close,
+                                            size: 18,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    context.l10n.photoNumber(index + 1),
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
                         ],
+                      ),
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        onPressed: isSubmitting || photos.length >= maxPhotos
+                            ? null
+                            : () async {
+                                final photo = await _captureEvidencePhoto(
+                                  context,
+                                );
+                                if (photo == null || !context.mounted) return;
+                                setState(() {
+                                  photos.add(photo);
+                                  uploadError = null;
+                                });
+                              },
+                        icon: const Icon(Icons.camera_alt_outlined),
+                        label: Text(context.l10n.takePhoto),
                       ),
                       const SizedBox(height: 12),
                       TextField(
@@ -222,24 +253,34 @@ class _AccidentDetailsView extends StatelessWidget {
                   child: Text(context.l10n.cancel),
                 ),
                 FilledButton.icon(
-                  onPressed: isSubmitting
+                  onPressed: isSubmitting || photos.isEmpty
                       ? null
                       : () async {
                           setState(() {
                             isSubmitting = true;
                             uploadError = null;
                           });
-                          final success = await provider.uploadEvidence(
-                            accidentId: accidentId,
-                            file: file!,
-                            description: description,
-                          );
+                          final filesToUpload =
+                              List<_PendingEvidencePhoto>.from(photos);
+                          var uploadedCount = 0;
+                          while (uploadedCount < filesToUpload.length) {
+                            final success = await provider.uploadEvidence(
+                              accidentId: accidentId,
+                              file: filesToUpload[uploadedCount].file,
+                              description: description,
+                            );
+                            if (!success) break;
+                            uploadedCount++;
+                          }
                           if (!dialogContext.mounted) return;
-                          if (success) {
+                          if (uploadedCount == filesToUpload.length) {
                             Navigator.of(dialogContext).pop(true);
                             return;
                           }
                           setState(() {
+                            if (uploadedCount > 0) {
+                              photos.removeRange(0, uploadedCount);
+                            }
                             isSubmitting = false;
                             uploadError =
                                 provider.errorMessage ??
@@ -268,6 +309,48 @@ class _AccidentDetailsView extends StatelessWidget {
       _showMessage(context, context.l10n.accidentEvidenceUploaded);
     }
   }
+
+  Future<_PendingEvidencePhoto?> _captureEvidencePhoto(
+    BuildContext context,
+  ) async {
+    XFile? file;
+    try {
+      file = await ImagePicker().pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.rear,
+        imageQuality: 85,
+        maxWidth: 1920,
+      );
+    } catch (_) {
+      if (context.mounted) {
+        _showMessage(
+          context,
+          context.l10n.mediaAccessFailed(context.l10n.camera),
+        );
+      }
+      return null;
+    }
+    if (file == null || !context.mounted) return null;
+
+    late final Uint8List previewBytes;
+    try {
+      previewBytes = await file.readAsBytes();
+    } catch (_) {
+      if (context.mounted) {
+        _showMessage(context, context.l10n.evidencePreviewFailed);
+      }
+      return null;
+    }
+    if (!context.mounted) return null;
+    return _PendingEvidencePhoto(file, previewBytes);
+  }
+}
+
+class _PendingEvidencePhoto {
+  const _PendingEvidencePhoto(this.file, this.previewBytes);
+
+  final XFile file;
+  final Uint8List previewBytes;
 }
 
 class _AccidentCard extends StatelessWidget {

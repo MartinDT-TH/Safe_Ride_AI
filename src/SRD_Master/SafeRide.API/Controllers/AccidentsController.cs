@@ -70,7 +70,7 @@ public sealed class AccidentsController : ControllerBase
         await using var stream = validated.Content;
         var stored = await _evidenceStorage.SaveAsync(
             accidentId, validated.FileName, validated.ContentType,
-            stream, cancellationToken);
+            validated.FileSizeBytes, stream, cancellationToken);
         try
         {
             var evidence = await _service.AddEvidenceAsync(

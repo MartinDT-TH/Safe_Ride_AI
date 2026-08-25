@@ -184,6 +184,7 @@ public sealed class PreTripVehicleCheckService : IPreTripVehicleCheckService
         var insurance = await _dbContext.VehicleInsurancePolicies
             .Where(x => x.VehicleId == trip.Booking.VehicleId
                 && !x.IsDeleted
+                && x.InsuranceType == VehicleInsuranceType.PHYSICAL_DAMAGE
                 && x.VerificationStatus == InsuranceVerificationStatus.VERIFIED
                 && x.EffectiveFromUtc <= startedAtUtc
                 && x.ExpiresAtUtc > startedAtUtc)

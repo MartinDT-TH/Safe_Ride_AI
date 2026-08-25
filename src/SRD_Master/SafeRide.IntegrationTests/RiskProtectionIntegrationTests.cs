@@ -893,35 +893,9 @@ public sealed class RiskProtectionIntegrationTests
     }
 
     [Fact]
-    public async Task LiabilityAssessment_CustomerIntoxicationRequiresUnsafeBehaviorRootCause()
+    public void LiabilityAssessment_CustomerIntoxicationIsNotARootCause()
     {
-        await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
-        var service = CreateAccidentService(db);
-        var invalid = new LiabilityAssessmentRequest(
-            0m, 100m, 0m, 0m, 0m,
-            DriverFaultLevel.NO_FAULT,
-            VehicleDefectAwareness.UNKNOWN,
-            [new LiabilityCauseRequest(
-                AccidentRootCause.CUSTOMER_INTOXICATION,
-                ResponsiblePartyType.CUSTOMER,
-                100m)]);
-
-        var exception = await Assert.ThrowsAsync<BookingException>(() => service.SaveAssessmentAsync(
-            Guid.NewGuid(), graph.Accident.Id, invalid, true, CancellationToken.None));
-        Assert.Equal("risk_protection.invalid_request", exception.Code);
-
-        var valid = invalid with
-        {
-            Causes =
-            [
-                new LiabilityCauseRequest(AccidentRootCause.CUSTOMER_INTOXICATION, ResponsiblePartyType.CUSTOMER, 50m),
-                new LiabilityCauseRequest(AccidentRootCause.CUSTOMER_INTERFERENCE, ResponsiblePartyType.CUSTOMER, 50m)
-            ]
-        };
-        var result = await service.SaveAssessmentAsync(
-            Guid.NewGuid(), graph.Accident.Id, valid, true, CancellationToken.None);
-        Assert.Equal(ProtectionClaimStatus.UNDER_REVIEW, result.Status);
+        Assert.DoesNotContain("CUSTOMER_INTOXICATION", Enum.GetNames<AccidentRootCause>());
     }
 
     [Fact]

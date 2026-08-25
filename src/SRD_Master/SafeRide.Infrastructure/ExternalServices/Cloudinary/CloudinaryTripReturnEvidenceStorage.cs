@@ -42,6 +42,12 @@ public sealed class CloudinaryTripReturnEvidenceStorage : ITripReturnEvidenceSto
 
         var publicId = $"saferide/trip-return-evidence/{tripId}/photo-{displayOrder}";
 
+        // Cloudinary may close the supplied stream after upload, so capture
+        // optional metadata before handing ownership to the SDK.
+        long? sizeBytes = null;
+        try { sizeBytes = content.Length; }
+        catch (NotSupportedException) { }
+
         var upload = await cloudinary.UploadAsync(
             new ImageUploadParams
             {
@@ -60,12 +66,6 @@ public sealed class CloudinaryTripReturnEvidenceStorage : ITripReturnEvidenceSto
             throw new InvalidOperationException(
                 upload.Error?.Message ?? "Cloudinary did not return an image URL.");
         }
-
-        // Content length after upload; stream.Length may be unavailable for forward-only streams,
-        // so we fall back to the size reported by the upload params.
-        long? sizeBytes = null;
-        try { sizeBytes = content.Length; }
-        catch (NotSupportedException) { }
 
         return new StoredReturnEvidenceFile(
             upload.SecureUrl.ToString(),

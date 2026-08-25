@@ -22,10 +22,13 @@ class PreTripCheckDialogResult {
 }
 
 class SafetyTerminationDialogResult {
-  const SafetyTerminationDialogResult({required this.reason, this.evidence});
+  const SafetyTerminationDialogResult({
+    required this.reason,
+    this.evidence = const [],
+  });
 
   final String reason;
-  final XFile? evidence;
+  final List<XFile> evidence;
 }
 
 const vehicleFaultTypes = <String>[
@@ -134,8 +137,9 @@ Future<SafetyReportDialogResult?> showSafetyReportDialog(BuildContext context) {
 }
 
 Future<PreTripCheckDialogResult?> showPreTripSafetyCheckDialog(
-  BuildContext context,
-) {
+  BuildContext context, {
+  EvidenceImagePicker? pickEvidenceImage,
+}) {
   final labels = [
     context.l10n.brakeResponse,
     context.l10n.frontRearLights,
@@ -149,6 +153,16 @@ Future<PreTripCheckDialogResult?> showPreTripSafetyCheckDialog(
   String? faultType;
   var note = '';
   XFile? evidence;
+  Uint8List? evidenceBytes;
+  String? mediaError;
+  final picker =
+      pickEvidenceImage ??
+      (source) => ImagePicker().pickImage(
+        source: source,
+        preferredCameraDevice: CameraDevice.rear,
+        imageQuality: 85,
+        maxWidth: 1920,
+      );
 
   return showDialog<PreTripCheckDialogResult>(
     context: context,
@@ -187,6 +201,7 @@ Future<PreTripCheckDialogResult?> showPreTripSafetyCheckDialog(
                     const SizedBox(height: 10),
                     DropdownButtonFormField<String>(
                       initialValue: faultType,
+                      isExpanded: true,
                       decoration: InputDecoration(
                         labelText: context.l10n.vehicleFaultType,
                       ),
@@ -194,7 +209,11 @@ Future<PreTripCheckDialogResult?> showPreTripSafetyCheckDialog(
                           .map(
                             (value) => DropdownMenuItem(
                               value: value,
-                              child: Text(_faultTypeLabel(context, value)),
+                              child: Text(
+                                _faultTypeLabel(context, value),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           )
                           .toList(growable: false),
@@ -207,24 +226,101 @@ Future<PreTripCheckDialogResult?> showPreTripSafetyCheckDialog(
                     ),
                   ],
                   const SizedBox(height: 10),
+                  if (evidence != null) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: evidenceBytes == null
+                          ? Container(
+                              height: 150,
+                              width: double.infinity,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.surfaceContainer,
+                              alignment: Alignment.center,
+                              child: const Icon(Icons.image_outlined, size: 44),
+                            )
+                          : Image.memory(
+                              evidenceBytes!,
+                              height: 180,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  Container(
+                                    height: 150,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.surfaceContainer,
+                                    alignment: Alignment.center,
+                                    child: const Icon(
+                                      Icons.broken_image_outlined,
+                                    ),
+                                  ),
+                            ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      evidence!.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   OutlinedButton.icon(
                     onPressed: () async {
-                      final picked = await ImagePicker().pickImage(
-                        source: ImageSource.gallery,
-                        imageQuality: 85,
-                      );
-                      if (picked != null) setState(() => evidence = picked);
+                      setState(() => mediaError = null);
+                      try {
+                        final picked = await picker(ImageSource.camera);
+                        if (picked == null || !context.mounted) return;
+                        Uint8List? previewBytes;
+                        try {
+                          previewBytes = await picked.readAsBytes();
+                        } catch (_) {
+                          previewBytes = null;
+                        }
+                        if (!context.mounted) return;
+                        setState(() {
+                          evidence = picked;
+                          evidenceBytes = previewBytes;
+                        });
+                      } on PlatformException {
+                        if (!context.mounted) return;
+                        setState(
+                          () => mediaError = context.l10n.mediaAccessFailed(
+                            context.l10n.camera,
+                          ),
+                        );
+                      } catch (_) {
+                        if (!context.mounted) return;
+                        setState(
+                          () => mediaError = context.l10n.mediaAccessFailed(
+                            context.l10n.camera,
+                          ),
+                        );
+                      }
                     },
-                    icon: const Icon(Icons.attach_file),
+                    icon: const Icon(Icons.camera_alt_outlined),
                     label: Text(
                       evidence == null
-                          ? context.l10n.optionalEvidence
-                          : evidence!.name,
+                          ? context.l10n.takePhoto
+                          : context.l10n.retakePhoto,
                     ),
                   ),
+                  if (mediaError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      mediaError!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ],
                   if (evidence != null)
                     TextButton.icon(
-                      onPressed: () => setState(() => evidence = null),
+                      onPressed: () => setState(() {
+                        evidence = null;
+                        evidenceBytes = null;
+                        mediaError = null;
+                      }),
                       icon: const Icon(Icons.close),
                       label: Text(context.l10n.removePhoto),
                     ),
@@ -262,9 +358,9 @@ Future<SafetyTerminationDialogResult?> showSafetyTerminationDialog(
   EvidenceImagePicker? pickEvidenceImage,
 }) {
   var reason = '';
-  XFile? evidence;
-  Uint8List? evidenceBytes;
+  final evidence = <({XFile file, Uint8List? bytes})>[];
   String? mediaError;
+  const maxEvidencePhotos = 3;
   final picker =
       pickEvidenceImage ??
       (source) => ImagePicker().pickImage(
@@ -295,95 +391,128 @@ Future<SafetyTerminationDialogResult?> showSafetyTerminationDialog(
                   ),
                 ),
                 const SizedBox(height: 10),
-                if (evidence != null) ...[
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: evidenceBytes == null
-                        ? Container(
-                            height: 150,
-                            width: double.infinity,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.surfaceContainer,
-                            alignment: Alignment.center,
-                            child: const Icon(Icons.image_outlined, size: 44),
-                          )
-                        : Image.memory(
-                            evidenceBytes!,
-                            height: 180,
-                            width: double.infinity,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                Container(
-                                  height: 150,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.surfaceContainer,
-                                  alignment: Alignment.center,
-                                  child: const Icon(
-                                    Icons.broken_image_outlined,
-                                  ),
-                                ),
-                          ),
+                if (evidence.isNotEmpty) ...[
+                  Text(
+                    context.l10n.photoCount(evidence.length, maxEvidencePhotos),
+                    style: Theme.of(context).textTheme.labelLarge,
                   ),
                   const SizedBox(height: 8),
-                  Row(
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
-                      const Icon(
-                        Icons.check_circle,
-                        color: Colors.green,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          evidence!.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                      for (var index = 0; index < evidence.length; index++)
+                        SizedBox(
+                          width: 112,
+                          child: Column(
+                            children: [
+                              Stack(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: evidence[index].bytes == null
+                                        ? Container(
+                                            height: 96,
+                                            width: 112,
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.surfaceContainer,
+                                            alignment: Alignment.center,
+                                            child: const Icon(
+                                              Icons.image_outlined,
+                                              size: 36,
+                                            ),
+                                          )
+                                        : Image.memory(
+                                            evidence[index].bytes!,
+                                            height: 96,
+                                            width: 112,
+                                            fit: BoxFit.cover,
+                                            errorBuilder:
+                                                (
+                                                  context,
+                                                  error,
+                                                  stackTrace,
+                                                ) => Container(
+                                                  height: 96,
+                                                  width: 112,
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .surfaceContainer,
+                                                  alignment: Alignment.center,
+                                                  child: const Icon(
+                                                    Icons.broken_image_outlined,
+                                                  ),
+                                                ),
+                                          ),
+                                  ),
+                                  Positioned(
+                                    right: 2,
+                                    top: 2,
+                                    child: IconButton.filled(
+                                      visualDensity: VisualDensity.compact,
+                                      tooltip: context.l10n.removePhoto,
+                                      onPressed: () => setState(
+                                        () => evidence.removeAt(index),
+                                      ),
+                                      icon: const Icon(Icons.close, size: 18),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                context.l10n.photoNumber(index + 1),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
                 ],
                 OutlinedButton.icon(
-                  onPressed: () async {
-                    setState(() => mediaError = null);
-                    try {
-                      final picked = await picker(ImageSource.camera);
-                      if (picked == null || !context.mounted) return;
-                      Uint8List? previewBytes;
-                      try {
-                        previewBytes = await picked.readAsBytes();
-                      } catch (_) {
-                        previewBytes = null;
-                      }
-                      if (!context.mounted) return;
-                      setState(() {
-                        evidence = picked;
-                        evidenceBytes = previewBytes;
-                      });
-                    } on PlatformException {
-                      if (!context.mounted) return;
-                      setState(
-                        () => mediaError = context.l10n.mediaAccessFailed(
-                          context.l10n.camera,
-                        ),
-                      );
-                    } catch (_) {
-                      if (!context.mounted) return;
-                      setState(
-                        () => mediaError = context.l10n.mediaAccessFailed(
-                          context.l10n.camera,
-                        ),
-                      );
-                    }
-                  },
+                  onPressed: evidence.length >= maxEvidencePhotos
+                      ? null
+                      : () async {
+                          setState(() => mediaError = null);
+                          try {
+                            final picked = await picker(ImageSource.camera);
+                            if (picked == null || !context.mounted) return;
+                            Uint8List? previewBytes;
+                            try {
+                              previewBytes = await picked.readAsBytes();
+                            } catch (_) {
+                              previewBytes = null;
+                            }
+                            if (!context.mounted) return;
+                            setState(() {
+                              evidence.add((file: picked, bytes: previewBytes));
+                            });
+                          } on PlatformException {
+                            if (!context.mounted) return;
+                            setState(
+                              () => mediaError = context.l10n.mediaAccessFailed(
+                                context.l10n.camera,
+                              ),
+                            );
+                          } catch (_) {
+                            if (!context.mounted) return;
+                            setState(
+                              () => mediaError = context.l10n.mediaAccessFailed(
+                                context.l10n.camera,
+                              ),
+                            );
+                          }
+                        },
                   icon: const Icon(Icons.camera_alt_outlined),
                   label: Text(
-                    evidence == null
+                    evidence.isEmpty
                         ? context.l10n.captureSafetyEvidence
-                        : context.l10n.retakePhoto,
+                        : context.l10n.takePhoto,
                   ),
                 ),
                 if (mediaError != null) ...[
@@ -395,16 +524,6 @@ Future<SafetyTerminationDialogResult?> showSafetyTerminationDialog(
                     ),
                   ),
                 ],
-                if (evidence != null)
-                  TextButton.icon(
-                    onPressed: () => setState(() {
-                      evidence = null;
-                      evidenceBytes = null;
-                      mediaError = null;
-                    }),
-                    icon: const Icon(Icons.close),
-                    label: Text(context.l10n.removePhoto),
-                  ),
               ],
             ),
           ),
@@ -420,7 +539,9 @@ Future<SafetyTerminationDialogResult?> showSafetyTerminationDialog(
                 : () => Navigator.of(dialogContext).pop(
                     SafetyTerminationDialogResult(
                       reason: reason.trim(),
-                      evidence: evidence,
+                      evidence: List.unmodifiable(
+                        evidence.map((item) => item.file),
+                      ),
                     ),
                   ),
             child: Text(context.l10n.safetyTermination),

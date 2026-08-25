@@ -191,7 +191,8 @@ public sealed class StaffRiskProtectionController : ControllerBase
             cancellationToken);
         await using var stream = validated.Content;
         var stored = await _evidenceStorage.SaveAsync(
-            claimId, validated.FileName, validated.ContentType, stream, cancellationToken);
+            claimId, validated.FileName, validated.ContentType,
+            validated.FileSizeBytes, stream, cancellationToken);
         if (string.IsNullOrWhiteSpace(stored.PublicId))
             throw InvalidEvidence("Kho lưu trữ không trả về định danh bằng chứng tin cậy.");
         return new StoredControllerEvidence(

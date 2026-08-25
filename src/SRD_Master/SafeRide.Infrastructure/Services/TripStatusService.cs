@@ -858,7 +858,7 @@ public sealed class TripStatusService : ITripStatusService
         long tripId,
         string reason,
         CancellationToken cancellationToken) =>
-        SafetyTerminateAsync(userId, isStaff, tripId, reason, evidence: null, cancellationToken);
+        SafetyTerminateAsync(userId, isStaff, tripId, reason, evidence: [], cancellationToken);
 
     public async Task EnsureCanSafetyTerminateAsync(
         Guid userId,
@@ -889,7 +889,7 @@ public sealed class TripStatusService : ITripStatusService
         bool isStaff,
         long tripId,
         string reason,
-        StoredSafetyTerminationEvidence? evidence,
+        IReadOnlyList<StoredSafetyTerminationEvidence> evidence,
         CancellationToken cancellationToken)
     {
         var ownsTransaction = _dbContext.Database.IsRelational()
@@ -916,7 +916,7 @@ public sealed class TripStatusService : ITripStatusService
         bool isStaff,
         long tripId,
         string reason,
-        StoredSafetyTerminationEvidence? evidence,
+        IReadOnlyList<StoredSafetyTerminationEvidence> evidence,
         CancellationToken cancellationToken)
     {
         var normalizedReason = ValidateSafetyTerminationReason(reason);
@@ -964,16 +964,16 @@ public sealed class TripStatusService : ITripStatusService
             pendingPayment.PaymentStatus = PaymentStatus.Cancelled;
             pendingPayment.UpdatedAt = _dateTimeProvider.UtcNow;
         }
-        if (evidence is not null)
+        foreach (var item in evidence)
         {
             _dbContext.SafetyTerminationEvidence.Add(new Domain.Entities.SafetyTerminationEvidence
             {
                 TripId = trip.Id,
-                EvidenceUrl = evidence.EvidenceUrl,
-                StoragePublicId = evidence.StoragePublicId,
-                OriginalFileName = evidence.OriginalFileName,
-                ContentType = evidence.ContentType,
-                FileSizeBytes = evidence.FileSizeBytes,
+                EvidenceUrl = item.EvidenceUrl,
+                StoragePublicId = item.StoragePublicId,
+                OriginalFileName = item.OriginalFileName,
+                ContentType = item.ContentType,
+                FileSizeBytes = item.FileSizeBytes,
                 UploadedByUserId = userId,
                 CreatedAtUtc = _dateTimeProvider.UtcNow
             });
@@ -1459,6 +1459,7 @@ public sealed class TripStatusService : ITripStatusService
             profile.WorkStatus = DriverWorkStatus.Online;
             profile.LastActiveAt = utcNow;
             profile.UpdatedAt = utcNow;
+            await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
         await _redisService.SetAsync(

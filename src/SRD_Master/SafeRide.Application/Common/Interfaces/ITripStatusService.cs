@@ -72,6 +72,6 @@ public interface ITripStatusService
         bool isStaff,
         long tripId,
         string reason,
-        StoredSafetyTerminationEvidence? evidence,
+        IReadOnlyList<StoredSafetyTerminationEvidence> evidence,
         CancellationToken cancellationToken);
 }

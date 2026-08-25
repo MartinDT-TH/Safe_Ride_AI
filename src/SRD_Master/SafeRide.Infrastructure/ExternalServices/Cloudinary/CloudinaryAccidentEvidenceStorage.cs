@@ -16,6 +16,7 @@ public sealed class CloudinaryAccidentEvidenceStorage : IAccidentEvidenceStorage
         long accidentId,
         string originalFileName,
         string contentType,
+        long fileSizeBytes,
         Stream content,
         CancellationToken cancellationToken)
     {
@@ -47,10 +48,8 @@ public sealed class CloudinaryAccidentEvidenceStorage : IAccidentEvidenceStorage
         if (upload.Error is not null || upload.SecureUrl is null)
             throw new InvalidOperationException(
                 upload.Error?.Message ?? "Cloudinary did not return an evidence URL.");
-        long? size = null;
-        try { size = content.Length; } catch (NotSupportedException) { }
         return new StoredAccidentEvidenceFile(
-            upload.SecureUrl.ToString(), upload.PublicId, size);
+            upload.SecureUrl.ToString(), upload.PublicId, fileSizeBytes);
     }
 
     public async Task DeleteAsync(

@@ -161,46 +161,81 @@ public sealed class TripRiskProtectionController : ControllerBase
     [HttpPost("{tripId:long}/safety-termination")]
     [Authorize(Roles = "Driver,Staff")]
     [Consumes("multipart/form-data")]
-    [RequestSizeLimit(10_485_760)]
+    [RequestSizeLimit(31_457_280)]
     public async Task<IActionResult> SafetyTerminateWithEvidence(
         long tripId,
         [FromForm] string reason,
-        [FromForm] IFormFile evidence,
+        [FromForm] List<IFormFile> evidence,
         CancellationToken cancellationToken)
     {
+        if (evidence.Count is < 1 or > 3)
+        {
+            throw new BookingException(
+                "trip.safety_evidence_invalid_count",
+                "Cần cung cấp từ 1 đến 3 ảnh bằng chứng an toàn.",
+                StatusCodes.Status400BadRequest);
+        }
+
         var userId = GetUserId();
         var isStaff = User.IsInRole("Staff");
         await _tripStatusService.EnsureCanSafetyTerminateAsync(
             userId, isStaff, tripId, reason, cancellationToken);
-        await using var source = evidence.OpenReadStream();
-        var validated = await ValidateEvidenceAsync(
-            evidence, source, "trip", cancellationToken);
-        await using var content = validated.Content;
-        var stored = await _safetyTerminationEvidenceStorage.SaveAsync(
-            tripId, validated.FileName, validated.ContentType,
-            validated.FileSizeBytes, content, cancellationToken);
+
+        var validatedFiles = new List<ValidatedEvidenceFile>(evidence.Count);
         try
         {
+            foreach (var file in evidence)
+            {
+                await using var source = file.OpenReadStream();
+                validatedFiles.Add(await ValidateEvidenceAsync(
+                    file, source, "trip", cancellationToken));
+            }
+        }
+        catch
+        {
+            foreach (var file in validatedFiles) await file.Content.DisposeAsync();
+            throw;
+        }
+
+        var storedFiles = new List<StoredSafetyTerminationEvidence>(evidence.Count);
+        try
+        {
+            // Upload only after every image has passed validation and scanning.
+            foreach (var validated in validatedFiles)
+            {
+                validated.Content.Position = 0;
+                storedFiles.Add(await _safetyTerminationEvidenceStorage.SaveAsync(
+                    tripId, validated.FileName, validated.ContentType,
+                    validated.FileSizeBytes, validated.Content, cancellationToken));
+            }
+
             await _tripStatusService.SafetyTerminateAsync(
-                userId, isStaff, tripId, reason, stored, cancellationToken);
+                userId, isStaff, tripId, reason, storedFiles, cancellationToken);
             return NoContent();
         }
         catch
         {
-            try
+            foreach (var stored in storedFiles)
             {
-                await _safetyTerminationEvidenceStorage.DeleteAsync(
-                    stored.StoragePublicId, stored.ContentType, CancellationToken.None);
-            }
-            catch (Exception cleanupException)
-            {
-                _logger.LogWarning(
-                    cleanupException,
-                    "Could not delete orphaned safety termination evidence {PublicId} for trip {TripId}.",
-                    stored.StoragePublicId,
-                    tripId);
+                try
+                {
+                    await _safetyTerminationEvidenceStorage.DeleteAsync(
+                        stored.StoragePublicId, stored.ContentType, CancellationToken.None);
+                }
+                catch (Exception cleanupException)
+                {
+                    _logger.LogWarning(
+                        cleanupException,
+                        "Could not delete orphaned safety termination evidence {PublicId} for trip {TripId}.",
+                        stored.StoragePublicId,
+                        tripId);
+                }
             }
             throw;
+        }
+        finally
+        {
+            foreach (var file in validatedFiles) await file.Content.DisposeAsync();
         }
     }
 

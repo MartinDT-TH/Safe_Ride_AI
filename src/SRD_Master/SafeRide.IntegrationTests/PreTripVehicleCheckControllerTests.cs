@@ -185,11 +185,12 @@ public sealed class PreTripVehicleCheckControllerTests
         };
 
         var result = await controller.SafetyTerminateWithEvidence(
-            42, "Phanh không an toàn", file, CancellationToken.None);
+            42, "Phanh không an toàn", [file, JpegFile("second.jpg")], CancellationToken.None);
 
         Assert.IsType<NoContentResult>(result);
-        Assert.True(safetyStorage.SaveCalled);
-        Assert.Equal("https://storage.test/safety/unsafe.png", tripStatus.Evidence?.EvidenceUrl);
+        Assert.Equal(2, safetyStorage.SaveCount);
+        Assert.Equal(2, tripStatus.Evidence.Count);
+        Assert.Equal("https://storage.test/safety/unsafe.png", tripStatus.Evidence[0].EvidenceUrl);
         Assert.Equal(driverId, tripStatus.UserId);
     }
 
@@ -221,13 +222,13 @@ public sealed class PreTripVehicleCheckControllerTests
 
         var exception = await Assert.ThrowsAsync<BookingException>(() =>
             controller.SafetyTerminateWithEvidence(
-                42, "Nguy cơ an toàn", JpegFile(), CancellationToken.None));
+                42, "Nguy cơ an toàn", [JpegFile()], CancellationToken.None));
 
         Assert.Equal(expectedCode, exception.Code);
         Assert.Equal(expectedStatus, exception.StatusCode);
         Assert.True(tripStatus.EnsureCanSafetyTerminateCalled);
-        Assert.False(storage.SaveCalled);
-        Assert.Null(tripStatus.Evidence);
+        Assert.Equal(0, storage.SaveCount);
+        Assert.Empty(tripStatus.Evidence);
     }
 
     [Fact]
@@ -253,10 +254,10 @@ public sealed class PreTripVehicleCheckControllerTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             controller.SafetyTerminateWithEvidence(
-                42, "Nguy cơ an toàn", JpegFile(), CancellationToken.None));
+                42, "Nguy cơ an toàn", [JpegFile(), JpegFile("second.jpg")], CancellationToken.None));
 
-        Assert.True(storage.SaveCalled);
-        Assert.True(storage.DeleteCalled);
+        Assert.Equal(2, storage.SaveCount);
+        Assert.Equal(2, storage.DeleteCount);
     }
 
     private static TripRiskProtectionController CreateController(
@@ -290,10 +291,10 @@ public sealed class PreTripVehicleCheckControllerTests
         };
     }
 
-    private static FormFile JpegFile()
+    private static FormFile JpegFile(string fileName = "evidence.jpg")
     {
         var bytes = new byte[] { 0xFF, 0xD8, 0xFF, 0x01 };
-        return new FormFile(new MemoryStream(bytes), 0, bytes.Length, "evidence", "evidence.jpg")
+        return new FormFile(new MemoryStream(bytes), 0, bytes.Length, "evidence", fileName)
         {
             Headers = new HeaderDictionary(),
             ContentType = "image/jpeg"
@@ -361,22 +362,22 @@ public sealed class PreTripVehicleCheckControllerTests
 
     private sealed class CapturingSafetyEvidenceStorage : ISafetyTerminationEvidenceStorage
     {
-        public bool SaveCalled { get; private set; }
-        public bool DeleteCalled { get; private set; }
+        public int SaveCount { get; private set; }
+        public int DeleteCount { get; private set; }
 
         public Task<StoredSafetyTerminationEvidence> SaveAsync(
             long tripId, string originalFileName, string contentType, long fileSizeBytes,
             Stream content, CancellationToken cancellationToken)
         {
-            SaveCalled = true;
+            SaveCount++;
             return Task.FromResult(new StoredSafetyTerminationEvidence(
                 $"https://storage.test/safety/{originalFileName}",
-                $"safety/{tripId}", originalFileName, contentType, fileSizeBytes));
+                $"safety/{tripId}/{SaveCount}", originalFileName, contentType, fileSizeBytes));
         }
 
         public Task DeleteAsync(string publicId, string contentType, CancellationToken cancellationToken)
         {
-            DeleteCalled = true;
+            DeleteCount++;
             return Task.CompletedTask;
         }
     }
@@ -384,7 +385,7 @@ public sealed class PreTripVehicleCheckControllerTests
     private sealed class CapturingTripStatusService : ITripStatusService
     {
         public Guid UserId { get; private set; }
-        public StoredSafetyTerminationEvidence? Evidence { get; private set; }
+        public IReadOnlyList<StoredSafetyTerminationEvidence> Evidence { get; private set; } = [];
         public bool EnsureCanSafetyTerminateCalled { get; private set; }
         public bool ThrowOnSafetyTerminate { get; init; }
         public Task EnsureCanSafetyTerminateAsync(Guid userId, bool isStaff, long tripId, string reason, CancellationToken cancellationToken)
@@ -393,7 +394,7 @@ public sealed class PreTripVehicleCheckControllerTests
             return Task.CompletedTask;
         }
         public Task SafetyTerminateAsync(Guid userId, bool isStaff, long tripId, string reason, CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task SafetyTerminateAsync(Guid userId, bool isStaff, long tripId, string reason, StoredSafetyTerminationEvidence? evidence, CancellationToken cancellationToken)
+        public Task SafetyTerminateAsync(Guid userId, bool isStaff, long tripId, string reason, IReadOnlyList<StoredSafetyTerminationEvidence> evidence, CancellationToken cancellationToken)
         {
             if (ThrowOnSafetyTerminate)
                 throw new InvalidOperationException("Simulated persistence failure.");
