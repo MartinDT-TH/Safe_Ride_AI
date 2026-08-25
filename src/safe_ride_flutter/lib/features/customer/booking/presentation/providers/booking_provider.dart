@@ -428,6 +428,8 @@ class BookingProvider extends ChangeNotifier {
     required BookingLocation pickup,
     BookingLocation? destination,
     int? estimatedHours,
+    BookingType bookingType = BookingType.now,
+    DateTime? scheduledAt,
   }) async {
     final requestId = ++_estimateRequestId;
     _isEstimating = true;
@@ -443,6 +445,8 @@ class BookingProvider extends ChangeNotifier {
         pickup: pickup,
         destination: destination,
         estimatedHours: estimatedHours,
+        bookingType: bookingType,
+        scheduledAt: scheduledAt,
       );
       if (requestId != _estimateRequestId) return null;
       _fareEstimate = estimate;

@@ -61,6 +61,8 @@ class BookingRemoteDatasource {
     required BookingLocation pickup,
     BookingLocation? destination,
     int? estimatedHours,
+    BookingType bookingType = BookingType.now,
+    DateTime? scheduledAt,
   }) async {
     try {
       final response = await _dio.post(
@@ -68,6 +70,10 @@ class BookingRemoteDatasource {
         data: {
           ApiKeys.vehicleId: vehicleId,
           ApiKeys.serviceTypeId: serviceTypeId,
+          ApiKeys.bookingType: bookingType == BookingType.now
+              ? AppValues.bookingNow
+              : AppValues.bookingScheduled,
+          ApiKeys.scheduledAt: scheduledAt?.toUtc().toIso8601String(),
           ApiKeys.pickupLatitude: pickup.latitude,
           ApiKeys.pickupLongitude: pickup.longitude,
           ApiKeys.destinationLatitude: destination?.latitude ?? pickup.latitude,

@@ -177,6 +177,19 @@ public static class DependencyInjection
             .ValidateOnStart();
 
         services
+            .AddOptions<DriverCompensationOptions>()
+            .Bind(configuration.GetSection(DriverCompensationOptions.SectionName))
+            .Validate(options => options.LongPickupThresholdKm > 0, "DriverCompensation:LongPickupThresholdKm must be greater than zero.")
+            .Validate(options => options.LongPickupThresholdKm <= options.LongPickupOptInThresholdKm, "DriverCompensation:LongPickupOptInThresholdKm must be greater than or equal to LongPickupThresholdKm.")
+            .Validate(options => options.LongDistanceThresholdKm > 0, "DriverCompensation:LongDistanceThresholdKm must be greater than zero.")
+            .Validate(options => options.LongDistanceThresholdKm <= options.LongDistanceOptInThresholdKm, "DriverCompensation:LongDistanceOptInThresholdKm must be greater than or equal to LongDistanceThresholdKm.")
+            .Validate(options => options.LongDistanceOptInThresholdKm <= options.MaximumTripDistanceKm, "DriverCompensation:MaximumTripDistanceKm must be greater than or equal to LongDistanceOptInThresholdKm.")
+            .Validate(options => options.LongPickupRatePerKm >= 0, "DriverCompensation:LongPickupRatePerKm must be greater than or equal to zero.")
+            .Validate(options => options.LongDistanceRatePerKm >= 0, "DriverCompensation:LongDistanceRatePerKm must be greater than or equal to zero.")
+            .Validate(options => options.DestinationReachedThresholdMeters > 0, "DriverCompensation:DestinationReachedThresholdMeters must be greater than zero.")
+            .ValidateOnStart();
+
+        services
             .AddOptions<ScheduledBookingMatchingOptions>()
             .Bind(configuration.GetSection(ScheduledBookingMatchingOptions.SectionName))
             .Validate(options => options.StartMatchingBeforeMinutes > 0, "BackgroundJobs:ScheduledBookingMatching:StartMatchingBeforeMinutes must be greater than zero.")

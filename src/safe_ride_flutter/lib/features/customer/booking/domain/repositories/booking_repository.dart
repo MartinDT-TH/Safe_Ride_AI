@@ -18,6 +18,8 @@ abstract class BookingRepository {
     required BookingLocation pickup,
     BookingLocation? destination,
     int? estimatedHours,
+    BookingType bookingType = BookingType.now,
+    DateTime? scheduledAt,
   });
 
   Future<BookingResponse> createBooking(

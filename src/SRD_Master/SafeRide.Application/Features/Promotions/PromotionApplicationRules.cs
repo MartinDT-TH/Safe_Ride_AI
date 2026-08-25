@@ -122,6 +122,9 @@ internal static class PromotionApplicationRules
                 400);
         }
 
-        return discountAmount;
+        return decimal.Round(
+            discountAmount,
+            0,
+            MidpointRounding.AwayFromZero);
     }
 }

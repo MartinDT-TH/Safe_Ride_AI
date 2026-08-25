@@ -177,6 +177,7 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
       return;
     }
     setState(() => _scheduledAt = scheduledAt);
+    await _refreshEstimate();
   }
 
   Future<void> _refreshEstimate() async {
@@ -203,6 +204,10 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
       pickup: pickup,
       destination: _isHourly ? null : _destination,
       estimatedHours: _isHourly ? _estimatedHours : null,
+      bookingType: widget.showSchedule
+          ? BookingType.scheduled
+          : BookingType.now,
+      scheduledAt: widget.showSchedule ? _scheduledAt : null,
     );
   }
 

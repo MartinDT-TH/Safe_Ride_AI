@@ -84,6 +84,8 @@ public sealed class BookingsController : ControllerBase
                 customerId,
                 request.VehicleId,
                 request.ServiceTypeId,
+                request.BookingType,
+                request.ScheduledAt,
                 request.PickupLatitude,
                 request.PickupLongitude,
                 request.DestinationLatitude,
@@ -96,6 +98,11 @@ public sealed class BookingsController : ControllerBase
             result.EstimatedDurationMinutes,
             result.EncodedPolyline,
             result.EstimatedFare,
+            result.NormalFare,
+            result.SurgedFare,
+            result.SurgeAmount,
+            result.LongDistanceComponent,
+            result.MinimumServiceFare,
             result.SurgeMultiplier));
     }
 
