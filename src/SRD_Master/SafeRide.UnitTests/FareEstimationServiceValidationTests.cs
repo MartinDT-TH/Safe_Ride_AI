@@ -52,7 +52,7 @@ public sealed class FareEstimationServiceValidationTests
     [InlineData(0, 30_000)]
     [InlineData(0.05, 30_000)]
     [InlineData(0.5, 60_000)]
-    public void FinalizeFare_CustomerRequestedStop_UsesProgressWithSnapshotMinimum(
+    public void FinalizeFare_CustomerRequestedStopWithoutLongDistance_UsesProgressWithSnapshotMinimum(
         double progress,
         decimal expectedFare)
     {
@@ -70,7 +70,7 @@ public sealed class FareEstimationServiceValidationTests
     }
 
     [Fact]
-    public void FinalizeFare_CustomerStopWithinDestinationThreshold_UsesFullLockedFare()
+    public void FinalizeFare_CustomerStopAtDestination_StillUsesAuthoritativePlannedProgress()
     {
         var result = CreateService().CalculateLockedFare(
             CreateSnapshottedTrip(),
@@ -78,7 +78,107 @@ public sealed class FareEstimationServiceValidationTests
             plannedRouteProgress: 0.4m,
             destinationReached: true);
 
-        Assert.Equal(120_000m, result.ActualFare);
+        Assert.Equal(48_000m, result.ActualFare);
+    }
+
+    [Theory]
+    [InlineData(0d, 30_000, 30_000, 0)]
+    [InlineData(0.1d, 30_000, 28_000, 2_000)]
+    [InlineData(0.5d, 50_000, 40_000, 10_000)]
+    [InlineData(1d, 100_000, 80_000, 20_000)]
+    public void CustomerRequestedStopComponentAllocation_ProratesBothAcceptedComponents(
+        double progress,
+        decimal expectedGrossFare,
+        decimal expectedFareComponent,
+        decimal expectedLongDistanceComponent)
+    {
+        var allocation =
+            TripFareFinalizationService.CalculateCustomerRequestedStopComponentAllocation(
+                CreateSnapshottedTrip(
+                    estimatedFare: 100_000m,
+                    longDistanceComponent: 20_000m).Booking,
+                (decimal)progress);
+
+        Assert.Equal(expectedGrossFare, allocation.GrossFare);
+        Assert.Equal(expectedFareComponent, allocation.FareComponent);
+        Assert.Equal(expectedLongDistanceComponent, allocation.LongDistanceComponent);
+        Assert.Equal(
+            allocation.GrossFare,
+            allocation.FareComponent + allocation.LongDistanceComponent);
+    }
+
+    [Fact]
+    public void CustomerRequestedStopComponentAllocation_RoundsApprovedGrossBeforeAllocatingComponents()
+    {
+        var allocation =
+            TripFareFinalizationService.CalculateCustomerRequestedStopComponentAllocation(
+                CreateSnapshottedTrip(
+                    estimatedFare: 30_002m,
+                    longDistanceComponent: 20_001m,
+                    acceptedMinimumServiceFare: 0m).Booking,
+                plannedRouteProgress: 0.5m);
+
+        Assert.Equal(15_001m, allocation.GrossFare);
+        Assert.Equal(5_000m, allocation.FareComponent);
+        Assert.Equal(10_001m, allocation.LongDistanceComponent);
+        Assert.Equal(
+            allocation.GrossFare,
+            allocation.FareComponent + allocation.LongDistanceComponent);
+        Assert.Equal(
+            decimal.Round(30_002m * 0.5m, 0, MidpointRounding.AwayFromZero),
+            allocation.GrossFare);
+    }
+
+    [Fact]
+    public void FinalizeFare_CustomerRequestedStop_IgnoresMutableCurrentLongDistanceConfiguration()
+    {
+        var trip = CreateSnapshottedTrip(
+            estimatedFare: 100_000m,
+            longDistanceComponent: 20_000m);
+        trip.Booking.PricingRule!.BaseFare = 1m;
+        trip.Booking.PricingRule.PricePerKm = 1m;
+
+        var result = CreateService(new DriverCompensationOptions
+        {
+            LongDistanceThresholdKm = 999,
+            LongDistanceOptInThresholdKm = 999,
+            LongDistanceRatePerKm = 1m,
+            DestinationReachedThresholdMeters = 250
+        }).CalculateLockedFare(
+            trip,
+            TripEndReason.CUSTOMER_REQUESTED_STOP,
+            plannedRouteProgress: 0.5m,
+            destinationReached: false);
+
+        Assert.Equal(50_000m, result.ActualFare);
+    }
+
+    [Fact]
+    public void FinalizeFare_CustomerRequestedStop_IgnoresActualDistance()
+    {
+        var shortPathTrip = CreateSnapshottedTrip(
+            estimatedFare: 100_000m,
+            longDistanceComponent: 20_000m);
+        var longPathTrip = CreateSnapshottedTrip(
+            estimatedFare: 100_000m,
+            longDistanceComponent: 20_000m);
+        shortPathTrip.ActualDistanceKm = 0.01m;
+        longPathTrip.ActualDistanceKm = 999m;
+
+        var service = CreateService();
+        var shortPathResult = service.CalculateLockedFare(
+            shortPathTrip,
+            TripEndReason.CUSTOMER_REQUESTED_STOP,
+            plannedRouteProgress: 0.5m,
+            destinationReached: false);
+        var longPathResult = service.CalculateLockedFare(
+            longPathTrip,
+            TripEndReason.CUSTOMER_REQUESTED_STOP,
+            plannedRouteProgress: 0.5m,
+            destinationReached: false);
+
+        Assert.Equal(50_000m, shortPathResult.ActualFare);
+        Assert.Equal(shortPathResult, longPathResult);
     }
 
     [Theory]
@@ -189,7 +289,7 @@ public sealed class FareEstimationServiceValidationTests
             DiscountAmount = 10_000m
         });
         var trip = new Trip { Booking = booking };
-        var service = new TripFareFinalizationService(new FareEstimationService());
+        var service = CreateService();
 
         var result = service.Calculate(
             trip,
@@ -201,20 +301,28 @@ public sealed class FareEstimationServiceValidationTests
         Assert.NotEqual(booking.EstimatedFare, result.FinalFare);
     }
 
-    private static TripFareFinalizationService CreateService() => new(
+    private static TripFareFinalizationService CreateService(
+        DriverCompensationOptions? compensationOptions = null) => new(
         new FareEstimationService(),
-        Options.Create(new DriverCompensationOptions
+        Options.Create(compensationOptions ?? new DriverCompensationOptions
         {
             DestinationReachedThresholdMeters = 250
         }));
 
-    private static Trip CreateSnapshottedTrip() => new()
+    private static Trip CreateSnapshottedTrip(
+        decimal estimatedFare = 120_000m,
+        decimal longDistanceComponent = 0m,
+        decimal acceptedMinimumServiceFare = 30_000m) => new()
     {
         Booking = new Booking
         {
             PricingSnapshotVersion = Booking.CurrentPricingSnapshotVersion,
-            EstimatedFare = 120_000m,
-            AcceptedMinimumServiceFare = 30_000m,
+            EstimatedFare = estimatedFare,
+            AcceptedMinimumServiceFare = acceptedMinimumServiceFare,
+            SurgedFare = estimatedFare - longDistanceComponent,
+            LongDistanceComponent = longDistanceComponent,
+            AcceptedLongDistanceThresholdKm = 15m,
+            AcceptedLongDistanceRatePerKm = 3_000m,
             PricingRule = new PricingRule
             {
                 BaseFare = 999_999m,

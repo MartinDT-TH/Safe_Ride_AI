@@ -134,6 +134,7 @@ public sealed class TripsController : ControllerBase
     [HttpPost("{tripId:long}/end")]
     [AllowTripContinuation(TripContinuationOperation.TripStatusUpdate)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<TripEndReconciliationResult>(StatusCodes.Status202Accepted)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
@@ -154,42 +155,21 @@ public sealed class TripsController : ControllerBase
             });
         }
 
+        if (request.Reason is SafeRide.Domain.Enums.TripEndReason.DRIVER_UNABLE_TO_CONTINUE
+            or SafeRide.Domain.Enums.TripEndReason.STARTED_BY_MISTAKE)
+        {
+            return Accepted(await _tripStatusService.RequestEndTripReconciliationAsync(
+                driverId,
+                tripId,
+                request.Reason,
+                cancellationToken));
+        }
+
         await _tripStatusService.EndTripAsync(
             driverId,
             tripId,
             cancellationToken,
             request.Reason);
-
-        return NoContent();
-    }
-
-    [HttpPost("{tripId:long}/end-response")]
-    [Authorize(Roles = "Customer")]
-    [AllowTripContinuation(TripContinuationOperation.TripReturnConfirmation)]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> RespondToEndRequest(
-        long tripId,
-        [FromBody] RespondToEndTripRequest request,
-        CancellationToken cancellationToken)
-    {
-        if (!TryGetUserId(out var customerId))
-        {
-            return Unauthorized(new ProblemDetails
-            {
-                Status = StatusCodes.Status401Unauthorized,
-                Title = "Unauthorized",
-                Detail = "Không xác định được tài khoản khách hàng."
-            });
-        }
-
-        await _tripStatusService.RespondToEndTripRequestAsync(
-            customerId,
-            tripId,
-            request.Accepted,
-            cancellationToken);
 
         return NoContent();
     }

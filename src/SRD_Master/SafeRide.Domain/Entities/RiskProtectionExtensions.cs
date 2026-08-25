@@ -14,6 +14,7 @@ public partial class Trip
     public string? SafetyTerminationReason { get; set; }
     public DateTime? SafetyTerminatedAt { get; set; }
     public SafetyPaymentReconciliation? SafetyPaymentReconciliation { get; set; }
+    public ICollection<TripEndReconciliationRequest> EndReconciliationRequests { get; set; } = new List<TripEndReconciliationRequest>();
 }
 
 public partial class Report

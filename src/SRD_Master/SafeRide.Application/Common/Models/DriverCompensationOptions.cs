@@ -18,5 +18,5 @@ public sealed class DriverCompensationOptions
 
     public decimal LongDistanceRatePerKm { get; set; }
 
-    public double DestinationReachedThresholdMeters { get; set; } = 250;
+    public double DestinationReachedThresholdMeters { get; set; }
 }

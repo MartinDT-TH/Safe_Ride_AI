@@ -2369,28 +2369,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get offerCustomerConfirmed => '고객 확인 완료';
 
   @override
-  String get driverEndTripRequestTitle => '운행 종료 요청';
-
-  @override
-  String get driverEndTripRequestMessage =>
-      '기사가 운행을 조기 종료하려고 합니다. 요금은 예약 경로 진행률과 최소 서비스 운임을 사용합니다.';
-
-  @override
-  String get continueTrip => '운행 계속';
-
-  @override
-  String get endTripRequestSent => '운행 종료 요청을 보냈습니다. 고객의 확인을 기다리고 있습니다.';
-
-  @override
-  String get endTripRequestAccepted => '고객이 운행 종료에 동의했습니다.';
-
-  @override
-  String get endTripRequestRejected => '고객이 거절했습니다. 운행을 계속합니다.';
-
-  @override
-  String get endTripResponseFailed => '운행 종료 요청에 응답하지 못했습니다. 다시 시도해 주세요.';
-
-  @override
   String get preTripSafetyTitle => '운행 전 차량 안전 점검';
 
   @override

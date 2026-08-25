@@ -2354,27 +2354,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get offerCustomerConfirmed => '客户已确认';
 
   @override
-  String get driverEndTripRequestTitle => '结束行程请求';
-
-  @override
-  String get driverEndTripRequestMessage => '司机希望提前结束行程。车费将使用预订路线进度和最低服务车费。';
-
-  @override
-  String get continueTrip => '继续行程';
-
-  @override
-  String get endTripRequestSent => '已发送结束行程请求，正在等待乘客确认。';
-
-  @override
-  String get endTripRequestAccepted => '乘客已同意结束行程。';
-
-  @override
-  String get endTripRequestRejected => '乘客已拒绝，行程将继续。';
-
-  @override
-  String get endTripResponseFailed => '无法回应结束行程请求，请重试。';
-
-  @override
   String get preTripSafetyTitle => '行程前车辆安全检查';
 
   @override

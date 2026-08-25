@@ -105,6 +105,14 @@ public sealed class TripStatusService : ITripStatusService
         TripStatus tripStatus,
         CancellationToken cancellationToken)
     {
+        if (tripStatus == TripStatus.WAITING_PAYMENT)
+        {
+            throw new BookingException(
+                "trip.end_workflow_required",
+                "Hãy dùng quy trình kết thúc chuyến để chốt cước trước khi thanh toán.",
+                409);
+        }
+
         if (tripStatus == TripStatus.WAITING_RETURN_CONFIRM)
         {
             await EndTripAsync(driverId, tripId, cancellationToken);
@@ -371,6 +379,17 @@ public sealed class TripStatusService : ITripStatusService
                 409);
         }
 
+        if (await _dbContext.TripEndReconciliationRequests.AnyAsync(
+                x => x.TripId == trip.Id
+                    && x.Status == TripEndReconciliationStatus.PENDING,
+                cancellationToken))
+        {
+            throw new BookingException(
+                "trip.end_reconciliation_pending",
+                "A staff reconciliation request is already pending for this trip.",
+                409);
+        }
+
         await FinalizeTripAsync(
             trip,
             driverId,
@@ -392,84 +411,143 @@ public sealed class TripStatusService : ITripStatusService
                 cancellationToken);
         }
 
-        // Clear a pending request created by an older server version. Ending a
-        // trip is now driver-authoritative and no longer waits for the customer.
-        await _redisService.RemoveAsync(RedisKeys.TripEndRequest(trip.Id));
     }
 
-    public async Task RespondToEndTripRequestAsync(
-        Guid customerId,
+    public async Task<TripEndReconciliationResult> RequestEndTripReconciliationAsync(
+        Guid driverId,
         long tripId,
-        bool accepted,
+        TripEndReason reason,
         CancellationToken cancellationToken)
     {
-        var trip = await _dbContext.Trips
-            .Include(x => x.Booking)
-                .ThenInclude(x => x.BookingPromotions)
-            .Include(x => x.Booking)
-                .ThenInclude(x => x.PricingRule)
-            .Include(x => x.Booking)
-                .ThenInclude(x => x.SurgePricingRule)
-            .Include(x => x.Payments)
-            .FirstOrDefaultAsync(
-                x => x.Id == tripId && x.Booking.CustomerId == customerId,
-                cancellationToken);
+        if (reason is not TripEndReason.DRIVER_UNABLE_TO_CONTINUE
+            and not TripEndReason.STARTED_BY_MISTAKE)
+            throw new BookingException(
+                "trip.end_reconciliation_reason_not_allowed",
+                "This end reason cannot be submitted for staff reconciliation.", 400);
+
+        var trip = await _dbContext.Trips.AsNoTracking().FirstOrDefaultAsync(
+            x => x.Id == tripId && x.DriverId == driverId, cancellationToken);
         if (trip is null)
-        {
+            throw new BookingException("trip.not_found", "Trip not found.", 404);
+        if (trip.TripStatus != TripStatus.IN_PROGRESS)
             throw new BookingException(
-                "trip.not_found",
-                "Không tìm thấy chuyến đi của khách hàng.",
-                404);
-        }
+                "trip.invalid_status_transition",
+                "Only an in-progress trip can request end reconciliation.", 409);
 
-        var requestKey = RedisKeys.TripEndRequest(trip.Id);
-        if (trip.TripStatus != TripStatus.IN_PROGRESS
-            || string.IsNullOrWhiteSpace(await _redisService.GetAsync(requestKey)))
-        {
-            throw new BookingException(
-                "trip.end_request_not_pending",
-                "Không có yêu cầu kết thúc chuyến đang chờ xác nhận.",
-                409);
-        }
-
-        var respondedAt = _dateTimeProvider.UtcNow;
-        if (accepted)
-        {
-            await FinalizeTripAsync(
-                trip,
-                customerId,
-                cancellationToken,
-                TripEndReason.CUSTOMER_REQUESTED_STOP);
-
-            await ApplyTripStatusAsync(
-                trip,
-                TripStatus.WAITING_PAYMENT,
-                customerId,
+        var existing = await _dbContext.TripEndReconciliationRequests.AsNoTracking()
+            .OrderByDescending(x => x.RequestedAtUtc)
+            .FirstOrDefaultAsync(
+                x => x.TripId == tripId
+                    && x.Status == TripEndReconciliationStatus.PENDING,
                 cancellationToken);
-
-            if (await HasPaymentSucceededAsync(trip, cancellationToken))
-            {
-                await ApplyTripStatusAsync(
-                    trip,
-                    TripStatus.WAITING_RETURN_CONFIRM,
-                    customerId,
-                    cancellationToken);
-            }
+        if (existing is not null)
+        {
+            if (existing.RequestedReason == reason)
+                return ToEndReconciliationResult(existing);
+            throw new BookingException(
+                "trip.end_reconciliation_conflict",
+                "A different end-reason reconciliation is already pending.", 409);
         }
-        await _redisService.RemoveAsync(requestKey);
 
-        await _realtimeNotificationService.PublishTripEndRequestRespondedAsync(
-            new TripEndRequestRespondedEvent(
-                trip.Id,
-                trip.BookingId,
-                trip.Booking.CustomerId,
-                trip.DriverId,
-                accepted,
-                respondedAt,
-                accepted
-                    ? "Khách hàng đã đồng ý kết thúc chuyến đi."
-                    : "Khách hàng đã từ chối. Chuyến đi sẽ tiếp tục."),
-            cancellationToken);
+        var request = new Domain.Entities.TripEndReconciliationRequest
+        {
+            TripId = tripId,
+            RequestedReason = reason,
+            RequestedByDriverId = driverId,
+            RequestedAtUtc = _dateTimeProvider.UtcNow
+        };
+        _dbContext.TripEndReconciliationRequests.Add(request);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception) when (
+            IsEndReconciliationUniqueConstraintViolation(exception))
+        {
+            _dbContext.ChangeTracker.Clear();
+            var winner = await _dbContext.TripEndReconciliationRequests.AsNoTracking()
+                .SingleAsync(
+                    x => x.TripId == tripId
+                        && x.Status == TripEndReconciliationStatus.PENDING,
+                    cancellationToken);
+            if (winner.RequestedReason == reason)
+                return ToEndReconciliationResult(winner);
+            throw new BookingException(
+                "trip.end_reconciliation_conflict",
+                "A different end-reason reconciliation is already pending.", 409);
+        }
+
+        return ToEndReconciliationResult(request);
+    }
+
+    public async Task<TripEndReconciliationResult> ResolveEndTripReconciliationAsync(
+        Guid staffUserId,
+        long tripId,
+        long requestId,
+        bool approved,
+        string? resolutionNote,
+        CancellationToken cancellationToken)
+    {
+        var request = await _dbContext.TripEndReconciliationRequests
+            .Include(x => x.Trip)
+                .ThenInclude(x => x.Booking)
+                    .ThenInclude(x => x.BookingPromotions)
+                        .ThenInclude(x => x.Promotion)
+            .Include(x => x.Trip.Booking.PricingRule)
+            .Include(x => x.Trip.Booking.SurgePricingRule)
+            .Include(x => x.Trip.Payments)
+            .SingleOrDefaultAsync(
+                x => x.Id == requestId && x.TripId == tripId,
+                cancellationToken)
+            ?? throw new BookingException(
+                "trip.end_reconciliation_not_found",
+                "End-reason reconciliation request not found.", 404);
+        var targetStatus = approved
+            ? TripEndReconciliationStatus.APPROVED
+            : TripEndReconciliationStatus.REJECTED;
+        if (request.Status != TripEndReconciliationStatus.PENDING)
+        {
+            if (request.Status == targetStatus)
+                return ToEndReconciliationResult(request);
+            throw new BookingException(
+                "trip.end_reconciliation_already_resolved",
+                "The request has already been resolved with a different decision.", 409);
+        }
+
+        request.Status = targetStatus;
+        request.ResolvedByStaffId = staffUserId;
+        request.ResolvedAtUtc = _dateTimeProvider.UtcNow;
+        request.ResolutionNote = string.IsNullOrWhiteSpace(resolutionNote)
+            ? null
+            : resolutionNote.Trim();
+        if (request.ResolutionNote?.Length > 1000)
+            throw new BookingException(
+                "trip.end_reconciliation_note_too_long",
+                "Resolution note cannot exceed 1000 characters.", 400);
+
+        if (!approved)
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return ToEndReconciliationResult(request);
+        }
+        if (request.Trip.TripStatus != TripStatus.IN_PROGRESS)
+            throw new BookingException(
+                "trip.end_reconciliation_invalid_status",
+                "The trip is no longer in progress.", 409);
+
+        await FinalizeTripAsync(
+            request.Trip, staffUserId, cancellationToken, request.RequestedReason);
+        await ApplyTripStatusAsync(
+            request.Trip, TripStatus.WAITING_PAYMENT, staffUserId, cancellationToken);
+        if (await HasPaymentSucceededAsync(request.Trip, cancellationToken))
+        {
+            await ApplyTripStatusAsync(
+                request.Trip,
+                TripStatus.WAITING_RETURN_CONFIRM,
+                staffUserId,
+                cancellationToken);
+        }
+        return ToEndReconciliationResult(request);
     }
 
     public async Task ConfirmReturnByCustomerAsync(
@@ -881,7 +959,8 @@ public sealed class TripStatusService : ITripStatusService
             && trip.TerminationCategory == TripTerminationCategory.SAFETY
             && string.Equals(trip.SafetyTerminationReason, normalizedReason, StringComparison.Ordinal))
             return;
-        if (trip.TripStatus is TripStatus.COMPLETED or TripStatus.CANCELLED)
+        if (trip.TripStatus is TripStatus.COMPLETED or TripStatus.CANCELLED
+            || !CanTransition(trip.TripStatus, TripStatus.CANCELLED))
             throw new BookingException(
                 "trip.safety_termination_invalid_status",
                 "Chuyến đi đã kết thúc.",
@@ -939,7 +1018,8 @@ public sealed class TripStatusService : ITripStatusService
             && trip.TerminationCategory == TripTerminationCategory.SAFETY
             && string.Equals(trip.SafetyTerminationReason, normalizedReason, StringComparison.Ordinal))
             return;
-        if (trip.TripStatus is TripStatus.COMPLETED or TripStatus.CANCELLED)
+        if (trip.TripStatus is TripStatus.COMPLETED or TripStatus.CANCELLED
+            || !CanTransition(trip.TripStatus, TripStatus.CANCELLED))
             throw new BookingException(
                 "trip.safety_termination_invalid_status",
                 "Chuyến đi đã kết thúc.",
@@ -989,7 +1069,6 @@ public sealed class TripStatusService : ITripStatusService
         }
         await ApplyTripStatusAsync(trip, TripStatus.CANCELLED, userId, cancellationToken);
         await _safetyPaymentReconciliationService.ReconcileAsync(trip, cancellationToken);
-        await _redisService.RemoveAsync(RedisKeys.TripEndRequest(trip.Id));
         await CleanupTripTrackingAsync(trip.Id, cancellationToken);
     }
 
@@ -1319,7 +1398,9 @@ public sealed class TripStatusService : ITripStatusService
             && reason is not TripEndReason.SAFETY_TERMINATION
                 and not TripEndReason.VEHICLE_SAFETY_ISSUE)
         {
-            var destinationReached = IsDestinationReached(
+            var isHourlyBooking = trip.Booking.AcceptedPricePerHour is > 0m
+                && !trip.Booking.AcceptedPricePerKm.HasValue;
+            var destinationReached = !isHourlyBooking && IsDestinationReached(
                 snapshot.LastAcceptedPoint,
                 trip.Booking.DestinationLocation?.Y,
                 trip.Booking.DestinationLocation?.X);
@@ -1328,7 +1409,7 @@ public sealed class TripStatusService : ITripStatusService
                 snapshot.LastAcceptedPoint);
             trip.TerminationCategory = TripTerminationCategory.STANDARD;
             trip.EndReason = reason;
-            trip.DestinationReached = destinationReached;
+            trip.DestinationReached = isHourlyBooking ? null : destinationReached;
             trip.PlannedRouteProgress = plannedProgress;
             fare = _tripFareFinalizationService.CalculateLockedFare(
                 trip,
@@ -1471,11 +1552,18 @@ public sealed class TripStatusService : ITripStatusService
     private static void ValidateDriverEndReason(TripEndReason reason)
     {
         if (reason is TripEndReason.NORMAL_COMPLETION
-            or TripEndReason.CUSTOMER_REQUESTED_STOP
-            or TripEndReason.DRIVER_UNABLE_TO_CONTINUE
-            or TripEndReason.STARTED_BY_MISTAKE)
+            or TripEndReason.CUSTOMER_REQUESTED_STOP)
         {
             return;
+        }
+
+        if (reason is TripEndReason.DRIVER_UNABLE_TO_CONTINUE
+            or TripEndReason.STARTED_BY_MISTAKE)
+        {
+            throw new BookingException(
+                "trip.end_reconciliation_required",
+                "This end reason must be submitted for staff reconciliation.",
+                409);
         }
 
         if (reason is TripEndReason.VEHICLE_SAFETY_ISSUE
@@ -1679,6 +1767,14 @@ public sealed class TripStatusService : ITripStatusService
             .FirstOrDefault(payment => payment.PaymentStatus == PaymentStatus.Pending);
         if (pending is not null)
         {
+            if (pending.PaymentMethod == PaymentMethod.QR
+                && !string.IsNullOrWhiteSpace(pending.TransactionReference))
+            {
+                // A pre-trip QR order is an immutable provider intent. Its paid
+                // amount is reconciled against the final settlement later.
+                return pending;
+            }
+
             pending.PaymentMethod = PaymentMethod.CASH;
             pending.TransactionReference = null;
             pending.Amount = amount;
@@ -1708,7 +1804,13 @@ public sealed class TripStatusService : ITripStatusService
     {
         if (trip.Payments.Any(payment => payment.PaymentStatus == PaymentStatus.Success))
         {
-            return;
+            var reconciliation = await _safetyPaymentReconciliationService.ReconcileAsync(
+                trip,
+                cancellationToken);
+            if (reconciliation.RemainingPayableAmount == 0m)
+            {
+                return;
+            }
         }
         if (await _dbContext.TripFinancialSettlements.AnyAsync(
                 settlement => settlement.TripId == trip.Id
@@ -1731,7 +1833,10 @@ public sealed class TripStatusService : ITripStatusService
     {
         if (trip.Payments.Any(payment => payment.PaymentStatus == PaymentStatus.Success))
         {
-            return true;
+            var reconciliation = await _safetyPaymentReconciliationService.ReconcileAsync(
+                trip,
+                cancellationToken);
+            return reconciliation.RemainingPayableAmount == 0m;
         }
 
         return await _dbContext.TripFinancialSettlements.AnyAsync(
@@ -1771,8 +1876,7 @@ public sealed class TripStatusService : ITripStatusService
                 or TripStatus.CANCELLED,
             TripStatus.IN_PROGRESS => requested is TripStatus.WAITING_PAYMENT
                 or TripStatus.CANCELLED,
-            TripStatus.WAITING_RETURN_CONFIRM => requested is TripStatus.IN_PROGRESS
-                or TripStatus.RETURN_CONFIRMED,
+            TripStatus.WAITING_RETURN_CONFIRM => requested is TripStatus.RETURN_CONFIRMED,
             TripStatus.RETURN_CONFIRMED => requested is TripStatus.COMPLETED,
             TripStatus.WAITING_PAYMENT => requested is TripStatus.WAITING_RETURN_CONFIRM,
             _ => false
@@ -1796,6 +1900,35 @@ public sealed class TripStatusService : ITripStatusService
 
         return false;
     }
+
+    private static bool IsEndReconciliationUniqueConstraintViolation(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException!)
+        {
+            if (current.Message.Contains(
+                    "UX_TripEndReconciliations_Trip_Pending",
+                    StringComparison.OrdinalIgnoreCase)
+                || current.Message.Contains("2601", StringComparison.OrdinalIgnoreCase)
+                || current.Message.Contains("2627", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    private static TripEndReconciliationResult ToEndReconciliationResult(
+        Domain.Entities.TripEndReconciliationRequest request) =>
+        new(
+            request.Id,
+            request.TripId,
+            request.RequestedReason,
+            request.Status,
+            request.RequestedAtUtc,
+            request.ResolvedAtUtc,
+            request.Status == TripEndReconciliationStatus.PENDING
+                ? "The request was submitted for staff review; fare has not been finalized."
+                : request.Status == TripEndReconciliationStatus.APPROVED
+                    ? "Staff approved and finalized the reconciled end reason."
+                    : "Staff rejected the request; the trip remains active.");
 
     private static int CalculateActualDurationMinutes(
         DateTime startedAtUtc,

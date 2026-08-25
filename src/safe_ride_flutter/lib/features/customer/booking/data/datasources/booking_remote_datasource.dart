@@ -368,35 +368,6 @@ class BookingRemoteDatasource {
     }
   }
 
-  Future<void> respondToEndTripRequest(
-    String accessToken, {
-    required int tripId,
-    required bool accepted,
-  }) async {
-    try {
-      await _dio.post(
-        ApiEndpoints.respondToEndTripRequest(tripId),
-        data: {'accepted': accepted},
-        options: Options(
-          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
-        ),
-      );
-    } on DioException catch (exception) {
-      final data = exception.response?.data;
-      if (data is Map && data[ApiKeys.detail] != null) {
-        throw BookingApiException(
-          data[ApiKeys.detail].toString(),
-          code: data[ApiKeys.code]?.toString(),
-          statusCode: exception.response?.statusCode,
-        );
-      }
-      throw BookingApiException(
-        LocaleProvider.currentLocalizations.tripEndFailed,
-        statusCode: exception.response?.statusCode,
-      );
-    }
-  }
-
   Future<void> triggerSOS(
     String accessToken, {
     required int tripId,

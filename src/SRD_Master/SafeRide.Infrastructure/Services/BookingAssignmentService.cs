@@ -714,12 +714,14 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         long currentOfferId,
         CancellationToken cancellationToken)
     {
+        var utcNow = _dateTimeProvider.UtcNow;
         var hasOtherActiveOffer = await _dbContext.BookingDriverOffers
             .AnyAsync(
                 x => x.BookingId == bookingId
                     && x.Id != currentOfferId
                     && (x.OfferStatus == DriverOfferStatus.Sent
-                        || x.OfferStatus == DriverOfferStatus.DriverAccepted),
+                        || x.OfferStatus == DriverOfferStatus.DriverAccepted)
+                    && x.ExpiresAt > utcNow,
                 cancellationToken);
         if (hasOtherActiveOffer)
         {
@@ -755,12 +757,14 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         long currentOfferId,
         CancellationToken cancellationToken)
     {
+        var utcNow = _dateTimeProvider.UtcNow;
         var hasOtherActiveOffer = await _dbContext.BookingDriverOffers
             .AnyAsync(
                 x => x.DriverId == driverId
                     && x.Id != currentOfferId
                     && (x.OfferStatus == DriverOfferStatus.Sent
-                        || x.OfferStatus == DriverOfferStatus.DriverAccepted),
+                        || x.OfferStatus == DriverOfferStatus.DriverAccepted)
+                    && x.ExpiresAt > utcNow,
                 cancellationToken);
         if (hasOtherActiveOffer)
         {

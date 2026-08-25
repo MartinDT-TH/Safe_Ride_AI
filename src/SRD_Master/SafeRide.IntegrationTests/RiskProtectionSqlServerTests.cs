@@ -533,8 +533,32 @@ public sealed class RiskProtectionSqlServerTests
         Assert.All(results, result =>
         {
             Assert.Equal(PaymentStatus.Success, result.PaymentStatus);
-            Assert.Equal(TripStatus.COMPLETED, result.TripStatus);
+            Assert.Equal(TripStatus.WAITING_RETURN_CONFIRM, result.TripStatus);
         });
+
+        await using (var completionContext = database.CreateDbContext())
+        {
+            Assert.Equal(
+                TripStatus.WAITING_RETURN_CONFIRM,
+                (await completionContext.Trips.SingleAsync(x => x.Id == graph.TripId)).TripStatus);
+            Assert.Equal(
+                2,
+                (await completionContext.Promotions.SingleAsync(x => x.Id == graph.PromotionId))
+                    .CurrentUsageCount);
+            Assert.False(await completionContext.RiskFundTransactions.AnyAsync(
+                x => x.TripId == graph.TripId
+                    && x.TransactionType == RiskFundTransactionType.CONTRIBUTION));
+
+            await CreateTripStatusService(
+                    completionContext,
+                    new FixedDateTimeProvider(
+                        new DateTime(2026, 8, 20, 0, 0, 0, DateTimeKind.Utc)))
+                .ConfirmReturnByCustomerAsync(
+                    graph.CustomerId,
+                    graph.TripId,
+                    vehicleReturnedConfirmed: true,
+                    CancellationToken.None);
+        }
 
         await using var verification = database.CreateDbContext();
         var trip = await verification.Trips.SingleAsync(x => x.Id == graph.TripId);
@@ -713,7 +737,12 @@ public sealed class RiskProtectionSqlServerTests
             new TripSharingServiceFake(),
             new FixedOptionsMonitor<TripTrackingOptions>(new TripTrackingOptions()),
             new NoOpMapRoutingService(),
-            new TripFareFinalizationService(new FareEstimationService()),
+            new TripFareFinalizationService(
+                new FareEstimationService(),
+                Options.Create(new DriverCompensationOptions
+                {
+                    DestinationReachedThresholdMeters = 250
+                })),
             paymentSettlement,
             new PreTripVehicleCheckService(context, policyProvider, clock),
             financialSettlement,
@@ -1061,10 +1090,14 @@ public sealed class RiskProtectionSqlServerTests
             CreatedAt = now
         });
         await context.SaveChangesAsync();
-        return new RiskCoveredQrGraph(trip.Id, promotion.Id, orderCode);
+        return new RiskCoveredQrGraph(trip.Id, customerId, promotion.Id, orderCode);
     }
 
-    private sealed record RiskCoveredQrGraph(long TripId, long PromotionId, string OrderCode);
+    private sealed record RiskCoveredQrGraph(
+        long TripId,
+        Guid CustomerId,
+        long PromotionId,
+        string OrderCode);
 
     private sealed record ArrivedTripGraph(
         long TripId,

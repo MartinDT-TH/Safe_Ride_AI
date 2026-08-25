@@ -4562,48 +4562,6 @@ abstract class AppLocalizations {
   /// **'Khách đã xác nhận'**
   String get offerCustomerConfirmed;
 
-  /// No description provided for @driverEndTripRequestTitle.
-  ///
-  /// In vi, this message translates to:
-  /// **'Yêu cầu kết thúc chuyến'**
-  String get driverEndTripRequestTitle;
-
-  /// No description provided for @driverEndTripRequestMessage.
-  ///
-  /// In vi, this message translates to:
-  /// **'Tài xế muốn kết thúc chuyến sớm. Cước sẽ dựa trên tiến độ tuyến đã đặt và mức cước dịch vụ tối thiểu.'**
-  String get driverEndTripRequestMessage;
-
-  /// No description provided for @continueTrip.
-  ///
-  /// In vi, this message translates to:
-  /// **'Tiếp tục chuyến'**
-  String get continueTrip;
-
-  /// No description provided for @endTripRequestSent.
-  ///
-  /// In vi, this message translates to:
-  /// **'Đã gửi yêu cầu kết thúc chuyến. Đang chờ khách hàng xác nhận.'**
-  String get endTripRequestSent;
-
-  /// No description provided for @endTripRequestAccepted.
-  ///
-  /// In vi, this message translates to:
-  /// **'Khách hàng đã đồng ý kết thúc chuyến.'**
-  String get endTripRequestAccepted;
-
-  /// No description provided for @endTripRequestRejected.
-  ///
-  /// In vi, this message translates to:
-  /// **'Khách hàng đã từ chối. Chuyến đi tiếp tục.'**
-  String get endTripRequestRejected;
-
-  /// No description provided for @endTripResponseFailed.
-  ///
-  /// In vi, this message translates to:
-  /// **'Không thể phản hồi yêu cầu kết thúc chuyến. Vui lòng thử lại.'**
-  String get endTripResponseFailed;
-
   /// No description provided for @preTripSafetyTitle.
   ///
   /// In vi, this message translates to:

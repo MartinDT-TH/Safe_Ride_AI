@@ -13,11 +13,11 @@ public sealed class TripFareFinalizationService
 
     public TripFareFinalizationService(
         IFareEstimationService fareEstimationService,
-        IOptions<DriverCompensationOptions>? compensationOptions = null)
+        IOptions<DriverCompensationOptions> compensationOptions)
     {
         _fareEstimationService = fareEstimationService;
-        DestinationReachedThresholdMeters = compensationOptions?.Value
-            .DestinationReachedThresholdMeters ?? 250d;
+        DestinationReachedThresholdMeters =
+            compensationOptions.Value.DestinationReachedThresholdMeters;
     }
 
     public double DestinationReachedThresholdMeters { get; }
@@ -79,27 +79,25 @@ public sealed class TripFareFinalizationService
         }
 
         var lockedFare = RoundVnd(trip.Booking.EstimatedFare);
-        var minimumFare = trip.Booking.AcceptedMinimumServiceFare;
-        if (!minimumFare.HasValue)
+        if (!trip.Booking.AcceptedMinimumServiceFare.HasValue)
         {
-            throw new BookingException(
-                "trip.pricing_snapshot_incomplete",
-                "Dữ liệu giá khóa của chuyến đi chưa đầy đủ.",
-                409);
+            throw PricingSnapshotIncomplete();
         }
 
+        var isHourlyBooking = trip.Booking.AcceptedPricePerHour is > 0m
+            && !trip.Booking.AcceptedPricePerKm.HasValue;
         plannedRouteProgress = Math.Clamp(plannedRouteProgress, 0m, 1m);
         var actualFare = reason switch
         {
-            TripEndReason.NORMAL_COMPLETION when destinationReached => lockedFare,
+            TripEndReason.NORMAL_COMPLETION when destinationReached || isHourlyBooking => lockedFare,
             TripEndReason.NORMAL_COMPLETION => throw new BookingException(
                 "trip.destination_not_reached",
                 "Chưa xác nhận xe đã đến điểm đến đã đặt. Hãy chọn đúng lý do kết thúc chuyến.",
                 409),
-            TripEndReason.CUSTOMER_REQUESTED_STOP when destinationReached => lockedFare,
-            TripEndReason.CUSTOMER_REQUESTED_STOP => Math.Max(
-                RoundVnd(lockedFare * plannedRouteProgress),
-                RoundVnd(minimumFare.Value)),
+            TripEndReason.CUSTOMER_REQUESTED_STOP =>
+                CalculateCustomerRequestedStopComponentAllocation(
+                    trip.Booking,
+                    plannedRouteProgress).GrossFare,
             TripEndReason.DRIVER_UNABLE_TO_CONTINUE => 0m,
             TripEndReason.STARTED_BY_MISTAKE => 0m,
             TripEndReason.SYSTEM_ERROR => throw new BookingException(
@@ -123,8 +121,48 @@ public sealed class TripFareFinalizationService
         return new TripFareFinalizationResult(actualFare, finalFare);
     }
 
+    public static CustomerRequestedStopComponentAllocation
+        CalculateCustomerRequestedStopComponentAllocation(
+            Booking booking,
+            decimal plannedRouteProgress)
+    {
+        if (!booking.AcceptedMinimumServiceFare.HasValue
+            || !booking.LongDistanceComponent.HasValue)
+        {
+            throw PricingSnapshotIncomplete();
+        }
+
+        var acceptedLongDistanceComponent = booking.LongDistanceComponent.Value;
+        var acceptedFareComponent = booking.EstimatedFare - acceptedLongDistanceComponent;
+        if (booking.EstimatedFare < 0m
+            || booking.AcceptedMinimumServiceFare.Value < 0m
+            || acceptedLongDistanceComponent < 0m
+            || acceptedFareComponent < 0m)
+        {
+            throw PricingSnapshotIncomplete();
+        }
+
+        var progress = Math.Clamp(plannedRouteProgress, 0m, 1m);
+        var progressGrossFare = RoundVnd(booking.EstimatedFare * progress);
+        var progressLongDistanceComponent = RoundVnd(acceptedLongDistanceComponent * progress);
+        var grossFare = Math.Max(
+            progressGrossFare,
+            RoundVnd(booking.AcceptedMinimumServiceFare.Value));
+        var finalFareComponent = grossFare - progressLongDistanceComponent;
+
+        return new CustomerRequestedStopComponentAllocation(
+            grossFare,
+            finalFareComponent,
+            progressLongDistanceComponent);
+    }
+
     private static decimal RoundVnd(decimal value) =>
         decimal.Round(value, 0, MidpointRounding.AwayFromZero);
+
+    private static BookingException PricingSnapshotIncomplete() => new(
+        "trip.pricing_snapshot_incomplete",
+        "Dữ liệu giá khóa của chuyến đi chưa đầy đủ.",
+        409);
 
     private static double CalculateHaversineDistanceMeters(
         double latitude1,
@@ -151,3 +189,8 @@ public sealed class TripFareFinalizationService
 public sealed record TripFareFinalizationResult(
     decimal ActualFare,
     decimal FinalFare);
+
+public sealed record CustomerRequestedStopComponentAllocation(
+    decimal GrossFare,
+    decimal FareComponent,
+    decimal LongDistanceComponent);

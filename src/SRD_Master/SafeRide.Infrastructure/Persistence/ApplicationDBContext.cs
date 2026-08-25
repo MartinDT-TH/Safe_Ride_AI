@@ -61,6 +61,8 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
 
     public virtual DbSet<Trip> Trips { get; set; }
 
+    public virtual DbSet<TripEndReconciliationRequest> TripEndReconciliationRequests { get; set; }
+
     public virtual DbSet<TripReturnConfirmation> TripReturnConfirmations { get; set; }
 
     public virtual DbSet<TripReturnEvidence> TripReturnEvidence { get; set; }
@@ -123,6 +125,7 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
         modelBuilder.ApplyConfiguration(new BookingConfiguration());
         modelBuilder.ApplyConfiguration(new TripReturnConfirmationConfiguration());
         modelBuilder.ApplyConfiguration(new TripReturnEvidenceConfiguration());
+        modelBuilder.ApplyConfiguration(new TripEndReconciliationRequestConfiguration());
 
         modelBuilder.Entity<BookingDriverOffer>(entity =>
         {
@@ -171,6 +174,9 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
         modelBuilder.Entity<BookingPromotion>(entity =>
         {
             entity.HasKey(e => new { e.BookingId, e.PromotionId }).HasName("PK__BookingP__96B958114224E6FD");
+            entity.HasIndex(e => e.BookingId)
+                .IsUnique()
+                .HasDatabaseName("UX_BookingPromotions_BookingId");
 
             entity.ToTable(tb =>
             {
@@ -316,6 +322,14 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
         modelBuilder.Entity<Payment>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK__Payments__3214EC076511D9DA");
+            entity.HasIndex(e => e.TripId)
+                .IsUnique()
+                .HasFilter("[PaymentMethod] = 'QR' AND [PaymentStatus] = 'Pending'")
+                .HasDatabaseName("UX_Payments_Trip_PendingQr");
+            entity.HasIndex(e => e.TransactionReference)
+                .IsUnique()
+                .HasFilter("[TransactionReference] IS NOT NULL")
+                .HasDatabaseName("UX_Payments_TransactionReference");
 
             entity.ToTable(tb =>
             {
@@ -604,8 +618,12 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
                 .HasForeignKey(d => d.CancelledByUserId)
                 .HasConstraintName("FK_Trips_CancelledBy");
 
-            // A driver can have many historical trips.
-            // The filtered unique index UX_Trips_Driver_Active already guarantees only one active trip at a time.
+            entity.HasIndex(e => e.DriverId)
+                .IsUnique()
+                .HasFilter("[TripStatus] <> 'COMPLETED' AND [TripStatus] <> 'CANCELLED'")
+                .HasDatabaseName("UX_Trips_Driver_Active");
+
+            // A driver can have many historical trips, but only one active trip.
             entity.HasOne(d => d.Driver).WithMany()
                 .HasForeignKey(d => d.DriverId)
                 .OnDelete(DeleteBehavior.ClientSetNull)

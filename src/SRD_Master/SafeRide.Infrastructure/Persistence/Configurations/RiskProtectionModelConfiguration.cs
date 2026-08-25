@@ -45,6 +45,9 @@ internal static class RiskProtectionModelConfiguration
                 "CK_SafetyPaymentReconciliations_Amounts",
                 "[CustomerPayableAmount] >= 0 AND [SuccessfulPaymentAmount] >= 0 AND [RemainingPayableAmount] >= 0 AND [RefundObligationAmount] >= 0 AND [DriverCreditedAmount] >= 0 AND NOT ([RemainingPayableAmount] > 0 AND [RefundObligationAmount] > 0)"));
             entity.ToTable(table => table.HasCheckConstraint(
+                "CK_SafetyPaymentReconciliations_Identity",
+                "[SuccessfulPaymentAmount] + [RemainingPayableAmount] = [CustomerPayableAmount] + [RefundObligationAmount]"));
+            entity.ToTable(table => table.HasCheckConstraint(
                 "CK_SafetyPaymentReconciliations_Status",
                 "[Status] IN ('NOT_REQUIRED','PAYMENT_PENDING','PAID','REFUND_PENDING','REFUNDED')"));
         });

@@ -99,7 +99,8 @@ class PaymentStatusResult {
   final double? longPickupCompensation;
   final double? totalPayout;
 
-  bool get isSuccess => paymentStatus.toLowerCase() == 'success';
+  bool get isSuccess =>
+      paymentStatus.toLowerCase() == 'success' && remainingPayableAmount <= 0;
   bool get requiresPayment => remainingPayableAmount > 0;
 
   factory PaymentStatusResult.fromJson(Map<String, dynamic> json) {

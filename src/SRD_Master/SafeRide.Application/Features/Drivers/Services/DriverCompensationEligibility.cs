@@ -18,14 +18,18 @@ public static class DriverCompensationEligibility
         DriverCompensationOptions options) =>
         !IsHourlyBooking(booking)
         && booking.EstimatedDistanceKm is > 0m
-        && booking.EstimatedDistanceKm.Value > (decimal)options.LongDistanceOptInThresholdKm;
+        && booking.EstimatedDistanceKm.Value > ResolveLongDistanceOptInThresholdKm(
+            booking,
+            options);
 
     public static bool ExceedsMaximumTripDistance(
         Booking booking,
         DriverCompensationOptions options) =>
         !IsHourlyBooking(booking)
         && booking.EstimatedDistanceKm is > 0m
-        && booking.EstimatedDistanceKm.Value > (decimal)options.MaximumTripDistanceKm;
+        && booking.EstimatedDistanceKm.Value > ResolveMaximumTripDistanceKm(
+            booking,
+            options);
 
     public static bool RequiresLongPickupOptIn(
         decimal pickupDistanceKm,
@@ -43,5 +47,37 @@ public static class DriverCompensationEligibility
             eligibleDistance * options.LongPickupRatePerKm,
             0,
             MidpointRounding.AwayFromZero);
+    }
+
+    private static decimal ResolveLongDistanceOptInThresholdKm(
+        Booking booking,
+        DriverCompensationOptions options) =>
+        ResolveV1SnapshotValue(
+            booking,
+            booking.AcceptedLongDistanceOptInThresholdKm,
+            nameof(Booking.AcceptedLongDistanceOptInThresholdKm))
+        ?? Convert.ToDecimal(options.LongDistanceOptInThresholdKm);
+
+    private static decimal ResolveMaximumTripDistanceKm(
+        Booking booking,
+        DriverCompensationOptions options) =>
+        ResolveV1SnapshotValue(
+            booking,
+            booking.AcceptedMaximumTripDistanceKm,
+            nameof(Booking.AcceptedMaximumTripDistanceKm))
+        ?? Convert.ToDecimal(options.MaximumTripDistanceKm);
+
+    private static decimal? ResolveV1SnapshotValue(
+        Booking booking,
+        decimal? acceptedValue,
+        string propertyName)
+    {
+        if (booking.PricingSnapshotVersion is not >= Booking.CurrentPricingSnapshotVersion)
+        {
+            return null;
+        }
+
+        return acceptedValue ?? throw new InvalidOperationException(
+            $"Pricing snapshot V{booking.PricingSnapshotVersion} is missing {propertyName}.");
     }
 }

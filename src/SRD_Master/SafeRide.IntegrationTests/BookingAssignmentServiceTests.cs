@@ -71,6 +71,39 @@ public sealed class BookingAssignmentServiceTests
     }
 
     [SqlServerFact]
+    public async Task AcceptDriverOfferAsync_ExpiredCompetingBookingOffer_DoesNotBlockAcceptance()
+    {
+        await using var fixture = await Fixture.CreateAsync(
+            BookingType.Now,
+            includeCompetingOffer: true);
+        var expiredOffer = await fixture.DbContext.BookingDriverOffers
+            .SingleAsync(x => x.Id == fixture.CompetingOfferId);
+        expiredOffer.ExpiresAt = UtcNow.AddSeconds(-1);
+        await fixture.DbContext.SaveChangesAsync();
+
+        var response = await fixture.Service.AcceptDriverOfferAsync(
+            fixture.DriverId,
+            fixture.WinningOfferId,
+            CancellationToken.None);
+
+        Assert.Equal(DriverOfferStatus.DriverAccepted, response.DriverOffer?.OfferStatus);
+    }
+
+    [SqlServerFact]
+    public async Task AcceptDriverOfferAsync_ExpiredOtherDriverOffer_DoesNotBlockAcceptance()
+    {
+        await using var fixture = await Fixture.CreateAsync(BookingType.Now);
+        await fixture.AddExpiredOfferForDriverAsync();
+
+        var response = await fixture.Service.AcceptDriverOfferAsync(
+            fixture.DriverId,
+            fixture.WinningOfferId,
+            CancellationToken.None);
+
+        Assert.Equal(DriverOfferStatus.DriverAccepted, response.DriverOffer?.OfferStatus);
+    }
+
+    [SqlServerFact]
     public async Task AcceptDriverOfferAsync_ScheduledBooking_AutoAssignsDriver()
     {
         await using var fixture = await Fixture.CreateAsync(BookingType.Scheduled);
@@ -357,6 +390,42 @@ public sealed class BookingAssignmentServiceTests
                 _redis,
                 _matchingPolicy,
                 new OptionsMonitorFake<TripTrackingOptions>(new TripTrackingOptions()));
+
+        public async Task AddExpiredOfferForDriverAsync()
+        {
+            var currentBooking = await DbContext.Bookings
+                .SingleAsync(x => x.BookingId == BookingId);
+            var historicalBooking = new Booking
+            {
+                CustomerId = CustomerId,
+                VehicleId = currentBooking.VehicleId,
+                ServiceTypeId = currentBooking.ServiceTypeId,
+                BookingType = BookingType.Now,
+                BookingStatus = BookingStatus.Searching,
+                BookingSource = BookingSource.Manual,
+                PickupAddress = "Historical pickup",
+                PickupLocation = new Point(106.65, 10.75) { SRID = 4326 },
+                DestinationAddress = "Historical destination",
+                DestinationLocation = new Point(106.68, 10.78) { SRID = 4326 },
+                EstimatedDistanceKm = 5m,
+                EstimatedDurationMinutes = 15,
+                EstimatedFare = 100_000m,
+                CreatedAt = UtcNow.AddHours(-2),
+                UpdatedAt = UtcNow.AddHours(-2)
+            };
+            DbContext.Bookings.Add(historicalBooking);
+            await DbContext.SaveChangesAsync();
+
+            DbContext.BookingDriverOffers.Add(new BookingDriverOffer
+            {
+                BookingId = historicalBooking.BookingId,
+                DriverId = DriverId,
+                OfferStatus = DriverOfferStatus.Sent,
+                OfferedAt = UtcNow.AddMinutes(-2),
+                ExpiresAt = UtcNow.AddSeconds(-1)
+            });
+            await DbContext.SaveChangesAsync();
+        }
 
         private async Task SeedAsync(
             BookingType bookingType,

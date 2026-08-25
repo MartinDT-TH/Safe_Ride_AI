@@ -513,12 +513,65 @@ public sealed class RiskProtectionIntegrationTests
     }
 
     [Fact]
-    public async Task ComponentAwareSettlement_EarlyStopWithLongDistanceComponent_IsBlocked()
+    public async Task ComponentAwareSettlement_EarlyStopWithLongDistanceComponent_ProratesComponentsAndPreservesPromotionPolicy()
     {
         await using var db = CreateDbContext();
         var graph = await SeedTripAsync(
             db, TripStatus.WAITING_PAYMENT, riskEnabled: false, componentAwarePricing: true);
-        graph.Trip.ActualFare = 80_000m;
+        graph.Trip.ActualFare = 50_000m;
+        graph.Trip.PlannedRouteProgress = 0.5m;
+        graph.Trip.ActualDistanceKm = 999m;
+        graph.Trip.EndReason = TripEndReason.CUSTOMER_REQUESTED_STOP;
+        graph.Trip.Booking.BookingPromotions.Add(new BookingPromotion
+        {
+            BookingId = graph.Trip.BookingId,
+            PromotionId = graph.Promotion.Id,
+            DiscountAmount = 20_000m,
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var service = new TripFinancialSettlementService(
+            db,
+            new TripCommissionCalculator(),
+            new RiskProtectionPolicyProvider(db),
+            new RiskFundLedgerService(db));
+
+        var settlement = await service.GetOrCreateAsync(
+            graph.Trip,
+            safetyTerminated: false,
+            CancellationToken.None);
+
+        Assert.Equal(50_000m, settlement.GrossFare);
+        Assert.Equal(40_000m, settlement.FareComponent);
+        Assert.Equal(10_000m, settlement.LongDistanceComponent);
+        Assert.Equal(20_000m, settlement.SnapshotPromotionDiscount);
+        Assert.Equal(20_000m, settlement.AppliedPromotionDiscount);
+        Assert.Equal(30_000m, settlement.CustomerPayableAmount);
+        Assert.Equal(40_000m, settlement.CommissionBase);
+        Assert.Equal(12_000m, settlement.GrossPlatformCommission);
+        Assert.Equal(28_000m, settlement.DriverFareEarning);
+        Assert.Equal(10_000m, settlement.LongDistanceEarning);
+        Assert.Equal(38_000m, settlement.DriverPayout);
+        Assert.Equal(
+            settlement.GrossFare,
+            settlement.FareComponent + settlement.LongDistanceComponent);
+    }
+
+    [Theory]
+    [InlineData(0d, 30_000, 30_000, 0)]
+    [InlineData(0.1d, 30_000, 28_000, 2_000)]
+    [InlineData(1d, 100_000, 80_000, 20_000)]
+    public async Task ComponentAwareSettlement_EarlyStop_ReconcilesPersistedProgressComponents(
+        double progress,
+        decimal expectedGrossFare,
+        decimal expectedFareComponent,
+        decimal expectedLongDistanceComponent)
+    {
+        await using var db = CreateDbContext();
+        var graph = await SeedTripAsync(
+            db, TripStatus.WAITING_PAYMENT, riskEnabled: false, componentAwarePricing: true);
+        graph.Trip.ActualFare = expectedGrossFare;
+        graph.Trip.PlannedRouteProgress = (decimal)progress;
         graph.Trip.EndReason = TripEndReason.CUSTOMER_REQUESTED_STOP;
         await db.SaveChangesAsync();
         var service = new TripFinancialSettlementService(
@@ -527,12 +580,17 @@ public sealed class RiskProtectionIntegrationTests
             new RiskProtectionPolicyProvider(db),
             new RiskFundLedgerService(db));
 
-        var exception = await Assert.ThrowsAsync<BookingException>(() =>
-            service.GetOrCreateAsync(graph.Trip, safetyTerminated: false, CancellationToken.None));
+        var settlement = await service.GetOrCreateAsync(
+            graph.Trip,
+            safetyTerminated: false,
+            CancellationToken.None);
 
-        Assert.Equal("settlement.component_breakdown_unavailable", exception.Code);
-        Assert.Empty(await db.TripFinancialSettlements.ToListAsync());
-        Assert.Empty(await db.WalletTransactions.ToListAsync());
+        Assert.Equal(expectedGrossFare, settlement.GrossFare);
+        Assert.Equal(expectedFareComponent, settlement.FareComponent);
+        Assert.Equal(expectedLongDistanceComponent, settlement.LongDistanceComponent);
+        Assert.Equal(
+            settlement.GrossFare,
+            settlement.FareComponent + settlement.LongDistanceComponent);
     }
 
     [Fact]
@@ -2033,6 +2091,7 @@ public sealed class RiskProtectionIntegrationTests
             PricingSnapshotVersion = componentAwarePricing
                 ? Booking.CurrentPricingSnapshotVersion
                 : null,
+            AcceptedMinimumServiceFare = componentAwarePricing ? 30_000m : null,
             SurgedFare = componentAwarePricing ? 80_000m : null,
             LongDistanceComponent = componentAwarePricing ? 20_000m : null,
             CreatedAt = DateTime.UtcNow,

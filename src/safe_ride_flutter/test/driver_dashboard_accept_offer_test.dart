@@ -193,7 +193,6 @@ DriverTripRequestModel _request({required String status}) =>
       bookingId: 73,
       offerStatus: status,
       expiresAt: DateTime.utc(2026, 8, 21, 6),
-      expectedIncome: 100000,
       pickupAddress: 'Điểm đón',
       destinationAddress: 'Điểm đến',
     );
@@ -243,12 +242,6 @@ class _FakeSocketService extends SocketService {
   @override
   void onTripStatusChanged(
     void Function(TripStatusUpdate update) handler, {
-    String key = 'default',
-  }) {}
-
-  @override
-  void onTripEndRequestResponded(
-    void Function(TripEndRequestUpdate update) handler, {
     String key = 'default',
   }) {}
 

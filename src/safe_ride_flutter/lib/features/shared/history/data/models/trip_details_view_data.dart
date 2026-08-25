@@ -146,14 +146,14 @@ class TripDetailsViewData {
   }
 
   double get totalFare {
-    final paymentAmount = payment?.amount;
-    if (paymentAmount != null && paymentAmount > 0) {
-      return paymentAmount;
-    }
-
     final finalFare = booking?.finalFare;
     if (finalFare != null && finalFare > 0) {
       return finalFare;
+    }
+
+    final paymentAmount = payment?.amount;
+    if (paymentAmount != null && paymentAmount > 0) {
+      return paymentAmount;
     }
 
     final calculatedFare = baseFare - discountAmount;
@@ -165,6 +165,12 @@ class TripDetailsViewData {
   }
 
   TripPaymentSummary? get payment => booking?.payment;
+
+  double get successfulPaymentAmount => payment?.successfulPaymentAmount ?? 0;
+
+  double get remainingPayableAmount => payment?.remainingPayableAmount ?? 0;
+
+  double get refundObligationAmount => payment?.refundObligationAmount ?? 0;
 
   String? get paymentMethod => _cleanText(payment?.paymentMethod);
 

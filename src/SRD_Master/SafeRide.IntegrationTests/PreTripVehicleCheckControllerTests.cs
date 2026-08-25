@@ -408,7 +408,6 @@ public sealed class PreTripVehicleCheckControllerTests
             long tripId,
             CancellationToken cancellationToken,
             TripEndReason reason = TripEndReason.NORMAL_COMPLETION) => Task.CompletedTask;
-        public Task RespondToEndTripRequestAsync(Guid customerId, long tripId, bool accepted, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ConfirmReturnByCustomerAsync(Guid customerId, long tripId, bool vehicleReturnedConfirmed, CancellationToken cancellationToken, int? ratingScore = null, string? comment = null) => Task.CompletedTask;
         public Task ConfirmReturnByDriverAsync(Guid driverId, long tripId, IReadOnlyList<SafeRide.Application.Features.Trips.DTOs.ReturnEvidenceItem> evidence, string? note, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task CompleteTripAsync(Guid userId, long tripId, CancellationToken cancellationToken) => Task.CompletedTask;

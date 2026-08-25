@@ -29,10 +29,38 @@ public sealed class SafetyPaymentReconciliationService : ISafetyPaymentReconcili
         Trip trip,
         CancellationToken cancellationToken)
     {
-        if (trip.TerminationCategory != TripTerminationCategory.SAFETY
-            || trip.TripStatus != TripStatus.CANCELLED)
+        if (_dbContext.Database.IsRelational()
+            && _dbContext.Database.CurrentTransaction is null)
+        {
+            var strategy = _dbContext.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _dbContext.Database.BeginTransactionAsync(
+                    IsolationLevel.Serializable,
+                    cancellationToken);
+                var result = await ReconcileCoreAsync(trip, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return result;
+            });
+        }
+
+        return await ReconcileCoreAsync(trip, cancellationToken);
+    }
+
+    private async Task<SafetyPaymentReconciliation> ReconcileCoreAsync(
+        Trip trip,
+        CancellationToken cancellationToken)
+    {
+        var isSafetyTermination = trip.TerminationCategory == TripTerminationCategory.SAFETY
+            && trip.TripStatus == TripStatus.CANCELLED;
+        var isFinalizedStandardTrip = trip.TerminationCategory != TripTerminationCategory.SAFETY
+            && trip.TripStatus is TripStatus.WAITING_PAYMENT
+                or TripStatus.WAITING_RETURN_CONFIRM
+                or TripStatus.RETURN_CONFIRMED
+                or TripStatus.COMPLETED;
+        if (!isSafetyTermination && !isFinalizedStandardTrip)
             throw new BookingException(
-                "payment.safety_reconciliation_invalid_trip",
+                "payment.reconciliation_invalid_trip",
                 "Chỉ có thể đối soát thanh toán cho chuyến đã hủy vì an toàn.", 409);
 
         var now = _dateTimeProvider.UtcNow;
@@ -44,10 +72,10 @@ public sealed class SafetyPaymentReconciliationService : ISafetyPaymentReconcili
         var successfulAmount = successfulPayments.Sum(x => x.Amount);
         TripFinancialSettlement? settlement = null;
         var payable = 0m;
-        if (trip.ActualFare.HasValue)
+        if (trip.ActualFare.HasValue || isFinalizedStandardTrip)
         {
             settlement = await _settlementService.GetOrCreateAsync(
-                trip, safetyTerminated: true, cancellationToken);
+                trip, safetyTerminated: isSafetyTermination, cancellationToken);
             payable = settlement.CustomerPayableAmount;
         }
 
@@ -89,7 +117,7 @@ public sealed class SafetyPaymentReconciliationService : ISafetyPaymentReconcili
                     UserId = trip.Booking.CustomerId,
                     Title = "Hoàn tiền chuyến đi đang chờ xử lý",
                     Content = $"SafeRide đang xử lý khoản hoàn {refundAmount:0}đ cho chuyến #{trip.Id}.",
-                    NotificationType = "SafetyRefundPending",
+                    NotificationType = "TripRefundPending",
                     ReferenceId = trip.Id,
                     SentAt = now
                 });
@@ -98,6 +126,13 @@ public sealed class SafetyPaymentReconciliationService : ISafetyPaymentReconcili
             {
                 reconciliation.Refund.PaymentId = refundablePayment.Id;
                 reconciliation.Refund.Amount = refundAmount;
+            }
+            else if (reconciliation.Refund.Amount != refundAmount)
+            {
+                throw new BookingException(
+                    "payment.refund_obligation_changed_after_refund",
+                    "The calculated refund obligation changed after the refund was completed.",
+                    409);
             }
         }
 
@@ -111,7 +146,7 @@ public sealed class SafetyPaymentReconciliationService : ISafetyPaymentReconcili
                     ? SafetyPaymentReconciliationStatus.NOT_REQUIRED
                     : SafetyPaymentReconciliationStatus.PAID;
 
-        if (settlement is not null)
+        if (settlement is not null && isSafetyTermination)
         {
             var successfulQrAmount = successfulPayments
                 .Where(x => x.PaymentMethod == PaymentMethod.QR)
@@ -234,7 +269,7 @@ public sealed class SafetyPaymentReconciliationService : ISafetyPaymentReconcili
                 UserId = customerId,
                 Title = "Đã hoàn tiền chuyến đi",
                 Content = $"Khoản hoàn {refund.Amount:0}đ cho chuyến #{refund.Reconciliation.TripId} đã hoàn tất.",
-                NotificationType = "SafetyRefundCompleted",
+                NotificationType = "TripRefundCompleted",
                 ReferenceId = refund.Reconciliation.TripId,
                 SentAt = _dateTimeProvider.UtcNow
             });

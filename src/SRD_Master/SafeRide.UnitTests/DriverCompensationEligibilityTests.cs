@@ -55,4 +55,45 @@ public sealed class DriverCompensationEligibilityTests
         Assert.False(DriverCompensationEligibility.RequiresLongDistanceOptIn(hourly, Options));
         Assert.False(DriverCompensationEligibility.ExceedsMaximumTripDistance(hourly, Options));
     }
+
+    [Fact]
+    public void LongDistanceEligibility_V1UsesAcceptedThresholds_NotCurrentOptions()
+    {
+        var acceptedOptions = new DriverCompensationOptions
+        {
+            LongDistanceOptInThresholdKm = 45,
+            MaximumTripDistanceKm = 45
+        };
+        var changedOptions = new DriverCompensationOptions
+        {
+            LongDistanceOptInThresholdKm = 30,
+            MaximumTripDistanceKm = 35
+        };
+        var booking = new Booking
+        {
+            PricingSnapshotVersion = Booking.CurrentPricingSnapshotVersion,
+            EstimatedDistanceKm = Convert.ToDecimal(
+                acceptedOptions.LongDistanceOptInThresholdKm),
+            AcceptedLongDistanceOptInThresholdKm = Convert.ToDecimal(
+                acceptedOptions.LongDistanceOptInThresholdKm),
+            AcceptedMaximumTripDistanceKm = Convert.ToDecimal(
+                acceptedOptions.MaximumTripDistanceKm)
+        };
+
+        Assert.False(DriverCompensationEligibility.RequiresLongDistanceOptIn(
+            booking,
+            changedOptions));
+        Assert.False(DriverCompensationEligibility.ExceedsMaximumTripDistance(
+            booking,
+            changedOptions));
+
+        booking.EstimatedDistanceKm += 0.001m;
+
+        Assert.True(DriverCompensationEligibility.RequiresLongDistanceOptIn(
+            booking,
+            changedOptions));
+        Assert.True(DriverCompensationEligibility.ExceedsMaximumTripDistance(
+            booking,
+            changedOptions));
+    }
 }

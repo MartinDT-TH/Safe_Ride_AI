@@ -1114,7 +1114,7 @@ class DriverDashboardProvider extends ChangeNotifier {
       // Make the latest queued GPS points visible to fare finalization before
       // the backend closes the trip tracking snapshot.
       await _flushPendingLocationUpdates();
-      await _dio.post(
+      final response = await _dio.post(
         ApiEndpoints.endTrip(trip.tripId),
         data: {'reason': reason.apiValue},
         options: Options(
@@ -1122,7 +1122,17 @@ class DriverDashboardProvider extends ChangeNotifier {
         ),
       );
       await loadActiveTrip();
-      _snackbarMessage = LocaleProvider.currentLocalizations.waitingForPayment;
+      if (response.statusCode == 202) {
+        final body = response.data;
+        _snackbarMessage = body is Map<String, dynamic>
+            ? body['message']?.toString()
+            : null;
+        _snackbarMessage ??=
+            'Submitted for staff review. The fare has not been finalized.';
+      } else {
+        _snackbarMessage =
+            LocaleProvider.currentLocalizations.waitingForPayment;
+      }
       return true;
     } catch (e) {
       debugPrint('Failed to end trip: $e');

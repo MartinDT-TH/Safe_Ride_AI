@@ -2365,28 +2365,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get offerCustomerConfirmed => 'お客様が確認済み';
 
   @override
-  String get driverEndTripRequestTitle => '乗車終了リクエスト';
-
-  @override
-  String get driverEndTripRequestMessage =>
-      'ドライバーが途中終了を希望しています。料金は予約ルートの進捗と最低サービス運賃に基づきます。';
-
-  @override
-  String get continueTrip => '乗車を続ける';
-
-  @override
-  String get endTripRequestSent => '終了リクエストを送信しました。お客様の確認を待っています。';
-
-  @override
-  String get endTripRequestAccepted => 'お客様が乗車終了に同意しました。';
-
-  @override
-  String get endTripRequestRejected => 'お客様が拒否しました。乗車を続けます。';
-
-  @override
-  String get endTripResponseFailed => '終了リクエストに応答できませんでした。もう一度お試しください。';
-
-  @override
   String get preTripSafetyTitle => '運行前車両安全確認';
 
   @override

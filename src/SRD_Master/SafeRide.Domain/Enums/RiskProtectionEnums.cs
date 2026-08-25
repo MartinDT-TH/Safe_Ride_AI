@@ -11,6 +11,7 @@ public enum TripEndReason
     SYSTEM_ERROR,
     SAFETY_TERMINATION
 }
+public enum TripEndReconciliationStatus { PENDING, APPROVED, REJECTED }
 public enum SafetyPaymentReconciliationStatus { NOT_REQUIRED, PAYMENT_PENDING, PAID, REFUND_PENDING, REFUNDED }
 public enum ManualRefundStatus { REFUND_PENDING, REFUNDED }
 public enum PreTripCheckResult { PASS, FAIL }

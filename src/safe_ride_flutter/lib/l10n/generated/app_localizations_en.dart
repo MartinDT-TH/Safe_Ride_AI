@@ -2461,31 +2461,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get offerCustomerConfirmed => 'Customer confirmed';
 
   @override
-  String get driverEndTripRequestTitle => 'End trip request';
-
-  @override
-  String get driverEndTripRequestMessage =>
-      'The driver wants to end the trip early. The fare will use booked-route progress and the minimum service fare.';
-
-  @override
-  String get continueTrip => 'Continue trip';
-
-  @override
-  String get endTripRequestSent =>
-      'End trip request sent. Waiting for the customer to respond.';
-
-  @override
-  String get endTripRequestAccepted => 'The customer agreed to end the trip.';
-
-  @override
-  String get endTripRequestRejected =>
-      'The customer declined. The trip will continue.';
-
-  @override
-  String get endTripResponseFailed =>
-      'Could not respond to the end trip request. Please try again.';
-
-  @override
   String get preTripSafetyTitle => 'Pre-trip vehicle safety check';
 
   @override

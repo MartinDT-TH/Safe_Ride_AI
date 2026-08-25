@@ -2450,31 +2450,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get offerCustomerConfirmed => 'Khách đã xác nhận';
 
   @override
-  String get driverEndTripRequestTitle => 'Yêu cầu kết thúc chuyến';
-
-  @override
-  String get driverEndTripRequestMessage =>
-      'Tài xế muốn kết thúc chuyến sớm. Cước sẽ dựa trên tiến độ tuyến đã đặt và mức cước dịch vụ tối thiểu.';
-
-  @override
-  String get continueTrip => 'Tiếp tục chuyến';
-
-  @override
-  String get endTripRequestSent =>
-      'Đã gửi yêu cầu kết thúc chuyến. Đang chờ khách hàng xác nhận.';
-
-  @override
-  String get endTripRequestAccepted => 'Khách hàng đã đồng ý kết thúc chuyến.';
-
-  @override
-  String get endTripRequestRejected =>
-      'Khách hàng đã từ chối. Chuyến đi tiếp tục.';
-
-  @override
-  String get endTripResponseFailed =>
-      'Không thể phản hồi yêu cầu kết thúc chuyến. Vui lòng thử lại.';
-
-  @override
   String get preTripSafetyTitle => 'Kiểm tra an toàn trước chuyến';
 
   @override

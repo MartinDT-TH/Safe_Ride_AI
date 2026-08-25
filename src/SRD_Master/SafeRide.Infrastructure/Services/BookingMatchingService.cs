@@ -201,7 +201,8 @@ public sealed class BookingMatchingService : IBookingMatchingService
                     });
 
             approvedDriverLicensesQuery = approvedDriverLicensesQuery
-                .Where(x => redisCandidateIds.Contains(x.DriverId));
+                .Where(x => redisCandidateIds.Contains(x.DriverId)
+                    && x.WorkStatus == DriverWorkStatus.Online);
 
             var approvedDriverLicenses = await approvedDriverLicensesQuery
                 .ToListAsync(cancellationToken);
@@ -223,6 +224,7 @@ public sealed class BookingMatchingService : IBookingMatchingService
                 .AsNoTracking()
                 .Where(x => x.OfferStatus == DriverOfferStatus.Sent
                     || x.OfferStatus == DriverOfferStatus.DriverAccepted)
+                .Where(x => x.ExpiresAt > utcNow)
                 .Where(x => redisCandidateIds.Contains(x.DriverId))
                 .Select(x => x.DriverId)
                 .Distinct()
@@ -250,7 +252,7 @@ public sealed class BookingMatchingService : IBookingMatchingService
                     x.LicenseClass,
                     booking.Vehicle.RequiredLicenseClass)))
                 .Select(group => group.Key)
-                .ToList();
+                .ToHashSet();
 
             var driverPreferences = approvedDriverLicenses
                 .GroupBy(x => x.DriverId)
@@ -262,8 +264,15 @@ public sealed class BookingMatchingService : IBookingMatchingService
 
             var selfMatchedCount = 0;
             var eligibleDriverIds = new List<Guid>();
-            foreach (var driverId in compatibleDriverIds)
+            // Preserve the nearest-first order returned by Redis GEO after SQL
+            // license filtering. EF result order is not authoritative for routing.
+            foreach (var driverId in redisCandidateIds)
             {
+                if (!compatibleDriverIds.Contains(driverId))
+                {
+                    continue;
+                }
+
                 if (driverId == booking.CustomerId)
                 {
                     selfMatchedCount++;

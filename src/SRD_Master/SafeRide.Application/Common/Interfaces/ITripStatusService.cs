@@ -18,11 +18,21 @@ public interface ITripStatusService
         CancellationToken cancellationToken,
         TripEndReason reason = TripEndReason.NORMAL_COMPLETION);
 
-    Task RespondToEndTripRequestAsync(
-        Guid customerId,
+    Task<TripEndReconciliationResult> RequestEndTripReconciliationAsync(
+        Guid driverId,
         long tripId,
-        bool accepted,
-        CancellationToken cancellationToken);
+        TripEndReason reason,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    Task<TripEndReconciliationResult> ResolveEndTripReconciliationAsync(
+        Guid staffUserId,
+        long tripId,
+        long requestId,
+        bool approved,
+        string? resolutionNote,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
 
     Task ConfirmReturnByCustomerAsync(
         Guid customerId,

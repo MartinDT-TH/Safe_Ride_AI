@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Features.Drivers.DTOs;
+using SafeRide.Application.Features.Drivers.Services;
 using SafeRide.Application.Features.RiskProtection;
 using SafeRide.Application.Features.Trips.DTOs;
 using SafeRide.Contracts.Responses.Drivers;
@@ -18,17 +20,20 @@ public sealed class DriverQueryService : IDriverQueryService
     private readonly IRedisService _redisService;
     private readonly IMapRoutingService _mapRoutingService;
     private readonly ITripCommissionCalculator _commissionCalculator;
+    private readonly DriverCompensationOptions _compensationOptions;
 
     public DriverQueryService(
         ApplicationDbContext dbContext,
         IRedisService redisService,
         IMapRoutingService mapRoutingService,
-        ITripCommissionCalculator commissionCalculator)
+        ITripCommissionCalculator commissionCalculator,
+        IOptions<DriverCompensationOptions> compensationOptions)
     {
         _dbContext = dbContext;
         _redisService = redisService;
         _mapRoutingService = mapRoutingService;
         _commissionCalculator = commissionCalculator;
+        _compensationOptions = compensationOptions.Value;
     }
 
     public async Task<IReadOnlyList<NearbyDriverResponse>> GetNearbyDriversAsync(
@@ -202,7 +207,9 @@ public sealed class DriverQueryService : IDriverQueryService
                         (int)Math.Ceiling((offer.ExpiresAt - utcNow).TotalSeconds))
                     : null,
                 offer.LongPickupCompensation,
-                offer.LongPickupCompensation is > 0m,
+                offer.PickupDistanceKm.HasValue
+                    && offer.PickupDistanceKm.Value
+                        > (decimal)_compensationOptions.LongPickupThresholdKm,
                 offer.Booking.AcceptedPricePerHour is not > 0m
                     && offer.Booking.EstimatedDistanceKm.HasValue
                     && offer.Booking.AcceptedLongDistanceThresholdKm.HasValue

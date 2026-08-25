@@ -63,6 +63,53 @@ public sealed class BookingMatchingServiceTests
         Assert.Equal(0, fixture.Realtime.DriverOfferReceivedCount);
     }
 
+    [Theory]
+    [InlineData(DriverOfferStatus.Sent)]
+    [InlineData(DriverOfferStatus.DriverAccepted)]
+    public async Task StartMatchingAsync_ExpiredOfferForAnotherBooking_DoesNotBlockDriver(
+        DriverOfferStatus expiredOfferStatus)
+    {
+        await using var fixture = await MatchingFixture.CreateAsync();
+        fixture.DbContext.BookingDriverOffers.Add(new BookingDriverOffer
+        {
+            // The matching predicate only needs a different historical booking row.
+            // The InMemory provider intentionally does not enforce relational foreign keys.
+            BookingId = fixture.BookingId + 1,
+            DriverId = fixture.DriverId,
+            OfferStatus = expiredOfferStatus,
+            OfferedAt = UtcNow.AddMinutes(-2),
+            ExpiresAt = UtcNow.AddSeconds(-1)
+        });
+        await fixture.DbContext.SaveChangesAsync();
+
+        var result = await fixture.Service.StartMatchingAsync(
+            fixture.BookingId,
+            CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal(1, fixture.Route.RequestCount);
+        Assert.Single(await fixture.DbContext.BookingDriverOffers
+            .Where(x => x.BookingId == fixture.BookingId)
+            .ToListAsync());
+    }
+
+    [Fact]
+    public async Task StartMatchingAsync_PersistentOfflineDriver_DoesNotReceiveOfferFromStaleRedisState()
+    {
+        await using var fixture = await MatchingFixture.CreateAsync();
+        var profile = await fixture.DbContext.DriverProfiles.FindAsync(fixture.DriverId);
+        profile!.WorkStatus = DriverWorkStatus.Offline;
+        await fixture.DbContext.SaveChangesAsync();
+
+        var result = await fixture.Service.StartMatchingAsync(
+            fixture.BookingId,
+            CancellationToken.None);
+
+        Assert.Null(result);
+        Assert.Equal(0, fixture.Route.RequestCount);
+        Assert.Empty(await fixture.DbContext.BookingDriverOffers.ToListAsync());
+    }
+
     [Fact]
     public async Task StartMatchingAsync_ReleasesBookingLockAfterMatchingAttempt()
     {
@@ -92,6 +139,52 @@ public sealed class BookingMatchingServiceTests
         Assert.Equal(7_500m, offer.LongPickupCompensation);
         Assert.Equal(1, fixture.Route.RequestCount);
         Assert.Equal("DriverMatchingPickupEligibility", fixture.Route.LastRequest?.RequestSource);
+    }
+
+    [Fact]
+    public async Task StartMatchingAsync_PreservesNearestFirstRedisGeoOrderAfterSqlFiltering()
+    {
+        await using var fixture = await MatchingFixture.CreateAsync();
+        var nearestId = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
+        var nearestUser = new AspNetUser
+        {
+            Id = nearestId,
+            UserName = "nearest@example.test",
+            Email = "nearest@example.test",
+            FullName = "Nearest Driver",
+            IsActive = true,
+            CreatedAt = UtcNow
+        };
+        fixture.DbContext.AspNetUsers.Add(nearestUser);
+        fixture.DbContext.DriverProfiles.Add(new DriverProfile
+        {
+            DriverId = nearestId,
+            Driver = nearestUser,
+            IdentityCardNumber = "987654321",
+            WorkStatus = DriverWorkStatus.Online,
+            LastActiveAt = UtcNow,
+            CreatedAt = UtcNow.AddDays(-1)
+        });
+        fixture.DbContext.DriverKycs.Add(new DriverKyc
+        {
+            DriverId = nearestId,
+            Driver = nearestUser,
+            DocumentType = KycDocumentType.DRIVING_LICENSE,
+            KycStatus = KycStatus.Approved,
+            LicenseClass = LicenseClass.A1,
+            DocumentNumber = "A987654",
+            CreatedAt = UtcNow.AddDays(-1),
+            VerifiedAt = UtcNow.AddHours(-1)
+        });
+        await fixture.DbContext.SaveChangesAsync();
+
+        await fixture.Redis.GeoAddAsync(
+            RedisKeys.OnlineDriversGeo, 106.70, 10.80, fixture.DriverId.ToString());
+        await MatchingFixture.SeedRedisAsync(fixture.Redis, nearestId);
+
+        await fixture.Service.StartMatchingAsync(fixture.BookingId, CancellationToken.None);
+
+        Assert.Equal(nearestId, Assert.Single(fixture.DbContext.BookingDriverOffers).DriverId);
     }
 
     [Fact]
@@ -315,7 +408,7 @@ public sealed class BookingMatchingServiceTests
             return booking;
         }
 
-        private static async Task SeedRedisAsync(
+        internal static async Task SeedRedisAsync(
             InMemoryRedisService redis,
             Guid driverId)
         {

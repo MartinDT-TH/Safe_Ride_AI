@@ -295,7 +295,10 @@ public sealed class TripFinancialSettlementService : ITripFinancialSettlementSer
         CancellationToken cancellationToken)
     {
         var (fareComponent, longDistanceComponent) = ResolveFinalizedComponents(trip, actualFare);
-        var longPickupCompensation = trip.EndReason == TripEndReason.NORMAL_COMPLETION
+        // StartedAt is the durable earning boundary: the pickup component is earned
+        // when the trip first reaches IN_PROGRESS and is not revoked by a later,
+        // otherwise-valid early-stop reason.
+        var longPickupCompensation = trip.StartedAt.HasValue
             ? await GetAcceptedLongPickupCompensationAsync(trip, cancellationToken)
             : 0m;
         var calculated = _calculator.CalculateComponentAware(
@@ -344,6 +347,27 @@ public sealed class TripFinancialSettlementService : ITripFinancialSettlementSer
         decimal actualFare)
     {
         var grossFare = RoundVnd(actualFare);
+        if (trip.EndReason == TripEndReason.CUSTOMER_REQUESTED_STOP)
+        {
+            if (!trip.PlannedRouteProgress.HasValue)
+            {
+                throw ComponentBreakdownUnavailable(
+                    "Chuyến kết thúc sớm chưa có tiến độ lộ trình đã khóa.");
+            }
+
+            var allocation =
+                TripFareFinalizationService.CalculateCustomerRequestedStopComponentAllocation(
+                    trip.Booking,
+                    trip.PlannedRouteProgress.Value);
+            if (grossFare != allocation.GrossFare)
+            {
+                throw ComponentBreakdownUnavailable(
+                    "Tổng giá đã chốt không khớp với phân bổ theo tiến độ lộ trình đã khóa.");
+            }
+
+            return (allocation.FareComponent, allocation.LongDistanceComponent);
+        }
+
         if (!trip.Booking.SurgedFare.HasValue || !trip.Booking.LongDistanceComponent.HasValue)
         {
             throw ComponentBreakdownUnavailable(
@@ -367,12 +391,6 @@ public sealed class TripFinancialSettlementService : ITripFinancialSettlementSer
                 or TripEndReason.STARTED_BY_MISTAKE)
         {
             return (0m, 0m);
-        }
-
-        if (trip.EndReason == TripEndReason.CUSTOMER_REQUESTED_STOP
-            && acceptedLongDistanceComponent == 0m)
-        {
-            return (grossFare, 0m);
         }
 
         throw ComponentBreakdownUnavailable(
