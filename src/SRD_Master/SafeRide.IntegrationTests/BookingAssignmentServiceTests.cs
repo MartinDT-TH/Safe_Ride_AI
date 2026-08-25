@@ -339,7 +339,17 @@ public sealed class BookingAssignmentServiceTests
                 _matching,
                 _matchingPolicy,
                 Scheduler,
-                new OptionsMonitorFake<TripTrackingOptions>(new TripTrackingOptions()));
+                new OptionsMonitorFake<TripTrackingOptions>(new TripTrackingOptions()),
+                Options.Create(new DriverCompensationOptions
+                {
+                    LongPickupThresholdKm = 5,
+                    LongPickupOptInThresholdKm = 8,
+                    LongDistanceThresholdKm = 15,
+                    LongDistanceOptInThresholdKm = 30,
+                    MaximumTripDistanceKm = 50,
+                    LongPickupRatePerKm = 3_000m,
+                    LongDistanceRatePerKm = 3_000m
+                }));
 
         public BookingRepository CreateRepository() =>
             new(

@@ -31,15 +31,18 @@ public sealed class DriversController : ControllerBase
     private readonly ISender _sender;
     private readonly IBookingAssignmentService _bookingAssignmentService;
     private readonly IDriverRealtimeService _driverRealtimeService;
+    private readonly IDriverMatchingPreferencesService _driverMatchingPreferencesService;
 
     public DriversController(
         ISender sender,
         IBookingAssignmentService bookingAssignmentService,
-        IDriverRealtimeService driverRealtimeService)
+        IDriverRealtimeService driverRealtimeService,
+        IDriverMatchingPreferencesService driverMatchingPreferencesService)
     {
         _sender = sender;
         _bookingAssignmentService = bookingAssignmentService;
         _driverRealtimeService = driverRealtimeService;
+        _driverMatchingPreferencesService = driverMatchingPreferencesService;
     }
 
     [HttpGet("nearby")]
@@ -100,13 +103,74 @@ public sealed class DriversController : ControllerBase
                 request.BookingId,
                 request.OfferStatus,
                 request.ExpiresAt,
-                request.ExpectedIncome,
                 request.PickupAddress,
                 request.DestinationAddress,
                 request.PickupDistanceKm,
                 request.PickupDurationMinutes,
-                request.CustomerConfirmRemainingSeconds))
+                request.CustomerConfirmRemainingSeconds,
+                request.LongPickupCompensation,
+                request.IsLongPickup,
+                request.IsLongDistanceTrip))
             .ToList());
+    }
+
+    [Authorize(Roles = "Driver")]
+    [HttpGet("matching-preferences")]
+    [ProducesResponseType<DriverMatchingPreferencesResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<DriverMatchingPreferencesResponse>> GetMatchingPreferences(
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var driverId))
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            var preferences = await _driverMatchingPreferencesService.GetAsync(
+                driverId,
+                cancellationToken);
+            return Ok(new DriverMatchingPreferencesResponse(
+                preferences.AcceptLongPickupTrips,
+                preferences.AcceptLongDistanceTrips));
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+    }
+
+    [Authorize(Roles = "Driver")]
+    [HttpPut("matching-preferences")]
+    [ProducesResponseType<DriverMatchingPreferencesResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<DriverMatchingPreferencesResponse>> UpdateMatchingPreferences(
+        [FromBody] UpdateDriverMatchingPreferencesRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var driverId))
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            var preferences = await _driverMatchingPreferencesService.UpdateAsync(
+                driverId,
+                request.AcceptLongPickupTrips,
+                request.AcceptLongDistanceTrips,
+                cancellationToken);
+            return Ok(new DriverMatchingPreferencesResponse(
+                preferences.AcceptLongPickupTrips,
+                preferences.AcceptLongDistanceTrips));
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 
     [Authorize(Roles = "Driver")]

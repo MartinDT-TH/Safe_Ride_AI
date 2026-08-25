@@ -119,7 +119,7 @@ public sealed class PayOsPaymentService : IPaymentService
     {
         var trip = await GetDriverPayableTripAsync(driverId, tripId, cancellationToken);
         EnsurePostTripPaymentStatus(trip);
-        var result = await BuildStatusResultAsync(trip, cancellationToken);
+        var result = await BuildStatusResultAsync(trip, cancellationToken, includeDriverFinancials: true);
         if (result.PaymentStatus == PaymentStatus.Success)
         {
             return result;
@@ -329,7 +329,7 @@ public sealed class PayOsPaymentService : IPaymentService
         }
 
         await _dbContext.Entry(trip).Collection(x => x.Payments).LoadAsync(cancellationToken);
-        return await BuildStatusResultAsync(trip, cancellationToken);
+        return await BuildStatusResultAsync(trip, cancellationToken, includeDriverFinancials: true);
     }
 
     public async Task<PaymentStatusResult> ConfirmCashPaymentAsync(
@@ -360,7 +360,7 @@ public sealed class PayOsPaymentService : IPaymentService
 
         if (result.ShouldPublish && result.Payment is not null)
             await PublishTripPaymentSucceededAsync(result.Trip, result.Payment, cancellationToken);
-        return await BuildStatusResultAsync(result.Trip, cancellationToken);
+        return await BuildStatusResultAsync(result.Trip, cancellationToken, includeDriverFinancials: true);
     }
 
     private async Task<PaymentMutationResult> ConfirmCashPaymentCoreAsync(
@@ -933,9 +933,14 @@ public sealed class PayOsPaymentService : IPaymentService
 
     private async Task<PaymentStatusResult> BuildStatusResultAsync(
         Trip trip,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool includeDriverFinancials = false)
     {
         var amounts = await GetPaymentAmountsAsync(trip, cancellationToken);
+        var settlement = includeDriverFinancials
+            ? await _dbContext.TripFinancialSettlements.AsNoTracking()
+                .SingleOrDefaultAsync(x => x.TripId == trip.Id, cancellationToken)
+            : null;
         var payment = trip.Payments
             .OrderByDescending(x => x.PaymentStatus == PaymentStatus.Success)
             .ThenByDescending(x => x.CreatedAt)
@@ -963,8 +968,8 @@ public sealed class PayOsPaymentService : IPaymentService
             displayAmount,
             amounts.OriginalFare,
             amounts.FinalFare,
-            amounts.DriverShare,
-            amounts.PlatformShare,
+            includeDriverFinancials ? amounts.DriverShare : 0m,
+            includeDriverFinancials ? amounts.PlatformShare : 0m,
             Currency,
             payment?.PaidAt,
             trip.TripStatus,
@@ -976,7 +981,11 @@ public sealed class PayOsPaymentService : IPaymentService
             reconciliation?.RemainingPayableAmount ?? 0m,
             reconciliation?.RefundObligationAmount ?? 0m,
             reconciliation?.Status,
-            reconciliation?.Refund?.Status);
+            reconciliation?.Refund?.Status,
+            settlement?.DriverFareEarning,
+            settlement?.LongDistanceEarning,
+            settlement?.LongPickupCompensation,
+            settlement?.DriverPayout ?? (includeDriverFinancials ? amounts.DriverShare : null));
     }
 
     private static bool IsCustomerPaymentVisibleStatus(Trip trip)

@@ -1,10 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Common.Models;
 using SafeRide.Application.Common.Realtime;
 using SafeRide.Application.Features.Bookings;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
 using SafeRide.Application.Features.Bookings.DTOs;
+using SafeRide.Application.Features.Drivers.Services;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
 using SafeRide.Infrastructure.Persistence;
@@ -26,6 +28,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
     private readonly IMatchingPolicyProvider _matchingPolicyProvider;
     private readonly IBookingLifecycleJobScheduler _jobScheduler;
     private readonly IOptionsMonitor<TripTrackingOptions> _tripTrackingOptions;
+    private readonly DriverCompensationOptions _compensationOptions;
 
     public BookingAssignmentService(
         ApplicationDbContext dbContext,
@@ -37,7 +40,8 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         IBookingMatchingService bookingMatchingService,
         IMatchingPolicyProvider matchingPolicyProvider,
         IBookingLifecycleJobScheduler jobScheduler,
-        IOptionsMonitor<TripTrackingOptions> tripTrackingOptions)
+        IOptionsMonitor<TripTrackingOptions> tripTrackingOptions,
+        IOptions<DriverCompensationOptions> compensationOptions)
     {
         _dbContext = dbContext;
         _dateTimeProvider = dateTimeProvider;
@@ -49,6 +53,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         _matchingPolicyProvider = matchingPolicyProvider;
         _jobScheduler = jobScheduler;
         _tripTrackingOptions = tripTrackingOptions;
+        _compensationOptions = compensationOptions.Value;
     }
 
     public Task<CreateBookingResponse> ConfirmDriverAsync(
@@ -176,7 +181,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
                 409);
         }
 
-        await EnsureDriverCanServeBookingAsync(offer.DriverId, booking, cancellationToken);
+        await EnsureDriverCanServeBookingAsync(driverProfile, booking, offer, cancellationToken);
         await EnsureDriverHasNoActiveTripAsync(offer.DriverId, cancellationToken);
 
         var assignment = await CompleteDriverAssignmentAsync(
@@ -431,7 +436,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         }
 
         var driverProfile = await EnsureDriverOnlineAsync(driverId, cancellationToken);
-        await EnsureDriverCanServeBookingAsync(driverId, booking, cancellationToken);
+        await EnsureDriverCanServeBookingAsync(driverProfile, booking, offer, cancellationToken);
         await EnsureDriverHasNoActiveTripAsync(driverId, cancellationToken);
         await EnsureNoOtherActiveDriverOfferAsync(driverId, offer.Id, cancellationToken);
 
@@ -613,8 +618,9 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
     }
 
     private async Task EnsureDriverCanServeBookingAsync(
-        Guid driverId,
+        DriverProfile driverProfile,
         Booking booking,
+        BookingDriverOffer offer,
         CancellationToken cancellationToken)
     {
         if (!_vehicleLicenseRequirementService.HasValidRequirement(booking.Vehicle))
@@ -627,7 +633,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
 
         var driverLicenses = await _dbContext.DriverKycs
             .AsNoTracking()
-            .Where(x => x.DriverId == driverId
+            .Where(x => x.DriverId == driverProfile.DriverId
                 && x.DocumentType == KycDocumentType.DRIVING_LICENSE
                 && x.KycStatus == KycStatus.Approved
                 && x.LicenseClass.HasValue)
@@ -645,6 +651,41 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             throw new BookingException(
                 "driver_offer.license_not_compatible",
                 "Bằng lái của tài xế không phù hợp với chuyến này.",
+                409);
+        }
+
+        if (DriverCompensationEligibility.ExceedsMaximumTripDistance(
+                booking,
+                _compensationOptions))
+        {
+            throw new BookingException(
+                "driver_offer.trip_distance_exceeds_maximum",
+                "Khoảng cách chuyến đi vượt quá giới hạn nhận chuyến.",
+                409);
+        }
+
+        if (DriverCompensationEligibility.RequiresLongDistanceOptIn(
+                booking,
+                _compensationOptions)
+            && !driverProfile.AcceptLongDistanceTrips)
+        {
+            throw new BookingException(
+                "driver_offer.long_distance_opt_in_required",
+                "Tài xế chưa bật nhận chuyến đường dài.",
+                409);
+        }
+
+        // Never recalculate pickup routing at acceptance/assignment. Legacy offers without
+        // a Phase 3 snapshot remain accept-able for backwards compatibility.
+        if (offer.PickupDistanceKm.HasValue
+            && DriverCompensationEligibility.RequiresLongPickupOptIn(
+                offer.PickupDistanceKm.Value,
+                _compensationOptions)
+            && !driverProfile.AcceptLongPickupTrips)
+        {
+            throw new BookingException(
+                "driver_offer.long_pickup_opt_in_required",
+                "Tài xế chưa bật nhận chuyến có quãng đường đón xa.",
                 409);
         }
     }

@@ -61,6 +61,36 @@ public sealed record CommissionCalculationResult(
     decimal RiskContribution,
     decimal NetOperatingRevenue);
 
+public sealed record ComponentAwareCommissionCalculationInput(
+    decimal GrossFare,
+    decimal FareComponent,
+    decimal LongDistanceComponent,
+    decimal SnapshotPromotionDiscount,
+    decimal LongPickupCompensation,
+    decimal PlatformCommissionRate,
+    decimal RiskReserveRate,
+    bool IsRiskContributionEligible);
+
+public sealed record ComponentAwareCommissionCalculationResult(
+    decimal GrossFare,
+    decimal FareComponent,
+    decimal LongDistanceComponent,
+    decimal SnapshotPromotionDiscount,
+    decimal AppliedPromotionDiscount,
+    decimal CustomerPayableAmount,
+    decimal CommissionBase,
+    decimal PlatformCommissionRate,
+    decimal GrossPlatformCommission,
+    decimal DriverFareEarning,
+    decimal LongDistanceEarning,
+    decimal LongPickupCompensation,
+    decimal DriverPayout,
+    decimal PromotionExpense,
+    decimal NetPlatformCommission,
+    decimal RiskReserveRate,
+    decimal RiskContribution,
+    decimal NetOperatingRevenue);
+
 public sealed record DriverLiabilityCalculationInput(
     decimal EligibleDamage,
     decimal DriverFaultPercentage,

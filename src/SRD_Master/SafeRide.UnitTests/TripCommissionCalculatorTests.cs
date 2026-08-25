@@ -64,6 +64,73 @@ public sealed class TripCommissionCalculatorTests
         Assert.Equal(0m, result.RiskContribution);
     }
 
+    [Fact]
+    public void CalculateComponentAware_CommissionsOnlyFareAndPaysAllDriverComponents()
+    {
+        var result = _calculator.CalculateComponentAware(
+            new ComponentAwareCommissionCalculationInput(
+                GrossFare: 130_000m,
+                FareComponent: 100_000m,
+                LongDistanceComponent: 30_000m,
+                SnapshotPromotionDiscount: 20_000m,
+                LongPickupCompensation: 15_000m,
+                PlatformCommissionRate: 0.30m,
+                RiskReserveRate: 0.05m,
+                IsRiskContributionEligible: true));
+
+        Assert.Equal(110_000m, result.CustomerPayableAmount);
+        Assert.Equal(100_000m, result.CommissionBase);
+        Assert.Equal(30_000m, result.GrossPlatformCommission);
+        Assert.Equal(70_000m, result.DriverFareEarning);
+        Assert.Equal(30_000m, result.LongDistanceEarning);
+        Assert.Equal(15_000m, result.LongPickupCompensation);
+        Assert.Equal(115_000m, result.DriverPayout);
+        Assert.Equal(20_000m, result.PromotionExpense);
+        Assert.Equal(10_000m, result.NetPlatformCommission);
+        Assert.Equal(500m, result.RiskContribution);
+        Assert.Equal(-5_500m, result.NetOperatingRevenue);
+    }
+
+    [Fact]
+    public void CalculateComponentAware_DiscountIsCappedByGrossFareWithoutReducingPayout()
+    {
+        var result = _calculator.CalculateComponentAware(
+            new ComponentAwareCommissionCalculationInput(
+                100_000m, 80_000m, 20_000m, 150_000m, 0m, 0.25m, 0.10m, true));
+
+        Assert.Equal(150_000m, result.SnapshotPromotionDiscount);
+        Assert.Equal(100_000m, result.AppliedPromotionDiscount);
+        Assert.Equal(0m, result.CustomerPayableAmount);
+        Assert.Equal(80_000m, result.DriverPayout);
+        Assert.Equal(0m, result.RiskContribution);
+        Assert.Equal(-80_000m, result.NetOperatingRevenue);
+    }
+
+    [Fact]
+    public void CalculateComponentAware_RejectsUnreconciledComponents()
+    {
+        Assert.Throws<ArgumentException>(() => _calculator.CalculateComponentAware(
+            new ComponentAwareCommissionCalculationInput(
+                100_000m, 80_000m, 10_000m, 0m, 0m, 0.30m, 0.05m, true)));
+    }
+
+    [Fact]
+    public void CalculateComponentAware_RoundsCommissionAwayFromZeroBeforeSummingPayout()
+    {
+        var result = _calculator.CalculateComponentAware(
+            new ComponentAwareCommissionCalculationInput(
+                130_005m, 100_005m, 30_000m, 0m, 7_500m, 0.10m, 0m, false));
+
+        Assert.Equal(10_001m, result.GrossPlatformCommission);
+        Assert.Equal(90_004m, result.DriverFareEarning);
+        Assert.Equal(127_504m, result.DriverPayout);
+        Assert.Equal(
+            result.DriverFareEarning
+                + result.LongDistanceEarning
+                + result.LongPickupCompensation,
+            result.DriverPayout);
+    }
+
     [Theory]
     [InlineData(0, 0, 0)]
     [InlineData(40, 0.1, 4000000)]

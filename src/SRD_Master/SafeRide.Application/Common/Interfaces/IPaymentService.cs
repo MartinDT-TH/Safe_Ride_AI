@@ -78,7 +78,11 @@ public sealed record PaymentStatusResult(
     decimal RemainingPayableAmount = 0m,
     decimal RefundObligationAmount = 0m,
     SafetyPaymentReconciliationStatus? ReconciliationStatus = null,
-    ManualRefundStatus? RefundStatus = null);
+    ManualRefundStatus? RefundStatus = null,
+    decimal? FareEarning = null,
+    decimal? LongDistanceEarning = null,
+    decimal? LongPickupCompensation = null,
+    decimal? TotalPayout = null);
 
 public sealed record DemoQrPaymentWebhookRequest(
     long TripId,

@@ -35,6 +35,66 @@ public sealed class TripCommissionCalculator : ITripCommissionCalculator, IClaim
             netCommission - riskContribution);
     }
 
+    public ComponentAwareCommissionCalculationResult CalculateComponentAware(
+        ComponentAwareCommissionCalculationInput input)
+    {
+        if (input.GrossFare < 0
+            || input.FareComponent < 0
+            || input.LongDistanceComponent < 0
+            || input.SnapshotPromotionDiscount < 0
+            || input.LongPickupCompensation < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(input),
+                "Fare components, promotion discount, and pickup compensation must be non-negative.");
+        }
+
+        EnsureRate(input.PlatformCommissionRate, nameof(input.PlatformCommissionRate));
+        EnsureRate(input.RiskReserveRate, nameof(input.RiskReserveRate));
+
+        var grossFare = RoundVnd(input.GrossFare);
+        var fareComponent = RoundVnd(input.FareComponent);
+        var longDistanceComponent = RoundVnd(input.LongDistanceComponent);
+        var snapshotPromotionDiscount = RoundVnd(input.SnapshotPromotionDiscount);
+        var longPickupCompensation = RoundVnd(input.LongPickupCompensation);
+        if (grossFare != fareComponent + longDistanceComponent)
+        {
+            throw new ArgumentException(
+                "Gross fare must equal fare component plus long-distance component.",
+                nameof(input));
+        }
+
+        var customerPayable = Math.Max(0m, grossFare - snapshotPromotionDiscount);
+        var appliedPromotionDiscount = grossFare - customerPayable;
+        var grossCommission = RoundVnd(fareComponent * input.PlatformCommissionRate);
+        var driverFareEarning = fareComponent - grossCommission;
+        var driverPayout = driverFareEarning + longDistanceComponent + longPickupCompensation;
+        var netCommission = grossCommission - appliedPromotionDiscount;
+        var riskContribution = input.IsRiskContributionEligible
+            ? RoundVnd(Math.Max(0m, netCommission) * input.RiskReserveRate)
+            : 0m;
+
+        return new ComponentAwareCommissionCalculationResult(
+            grossFare,
+            fareComponent,
+            longDistanceComponent,
+            snapshotPromotionDiscount,
+            appliedPromotionDiscount,
+            customerPayable,
+            fareComponent,
+            input.PlatformCommissionRate,
+            grossCommission,
+            driverFareEarning,
+            longDistanceComponent,
+            longPickupCompensation,
+            driverPayout,
+            appliedPromotionDiscount,
+            netCommission,
+            input.RiskReserveRate,
+            riskContribution,
+            netCommission - riskContribution - longPickupCompensation);
+    }
+
     public DriverLiabilityCalculationResult CalculateDriverLiability(DriverLiabilityCalculationInput input)
     {
         if (input.EligibleDamage < 0 || input.DriverFaultPercentage is < 0 or > 100)

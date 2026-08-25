@@ -158,7 +158,12 @@ internal static class RiskProtectionModelConfiguration
                 nameof(TripFinancialSettlement.CommissionBase), nameof(TripFinancialSettlement.PromotionExpense),
                 nameof(TripFinancialSettlement.CustomerPayableAmount), nameof(TripFinancialSettlement.GrossPlatformCommission),
                 nameof(TripFinancialSettlement.DriverEarning), nameof(TripFinancialSettlement.NetPlatformCommission),
-                nameof(TripFinancialSettlement.RiskContribution), nameof(TripFinancialSettlement.NetOperatingRevenue)
+                nameof(TripFinancialSettlement.RiskContribution), nameof(TripFinancialSettlement.NetOperatingRevenue),
+                nameof(TripFinancialSettlement.GrossFare), nameof(TripFinancialSettlement.FareComponent),
+                nameof(TripFinancialSettlement.LongDistanceComponent), nameof(TripFinancialSettlement.SnapshotPromotionDiscount),
+                nameof(TripFinancialSettlement.AppliedPromotionDiscount), nameof(TripFinancialSettlement.DriverFareEarning),
+                nameof(TripFinancialSettlement.LongDistanceEarning), nameof(TripFinancialSettlement.LongPickupCompensation),
+                nameof(TripFinancialSettlement.DriverPayout)
             }) entity.Property(property).HasColumnType("decimal(18,2)");
             entity.Property(x => x.PlatformCommissionRate).HasColumnType("decimal(7,6)");
             entity.Property(x => x.RiskReserveRate).HasColumnType("decimal(7,6)");
@@ -166,7 +171,9 @@ internal static class RiskProtectionModelConfiguration
             entity.HasOne(x => x.PolicyVersion).WithMany().HasForeignKey(x => x.PolicyVersionId).OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(table =>
             {
-                table.HasCheckConstraint("CK_TripFinancialSettlements_NonNegative", "[CommissionBase] >= 0 AND [PromotionExpense] >= 0 AND [CustomerPayableAmount] >= 0 AND [GrossPlatformCommission] >= 0 AND [DriverEarning] >= 0 AND [RiskContribution] >= 0");
+                table.HasCheckConstraint("CK_TripFinancialSettlements_NonNegative", "[CommissionBase] >= 0 AND [PromotionExpense] >= 0 AND [CustomerPayableAmount] >= 0 AND [GrossPlatformCommission] >= 0 AND [DriverEarning] >= 0 AND [RiskContribution] >= 0 AND ([ComponentBreakdownVersion] IS NULL OR ([GrossFare] >= 0 AND [FareComponent] >= 0 AND [LongDistanceComponent] >= 0 AND [SnapshotPromotionDiscount] >= 0 AND [AppliedPromotionDiscount] >= 0 AND [DriverFareEarning] >= 0 AND [LongDistanceEarning] >= 0 AND [LongPickupCompensation] >= 0 AND [DriverPayout] >= 0))");
+                table.HasCheckConstraint("CK_TripFinancialSettlements_ComponentIdentity", "[ComponentBreakdownVersion] IS NULL OR ([ComponentBreakdownVersion] = 1 AND [GrossFare] = [FareComponent] + [LongDistanceComponent] AND [CommissionBase] = [FareComponent] AND [DriverFareEarning] = [FareComponent] - [GrossPlatformCommission] AND [LongDistanceEarning] = [LongDistanceComponent] AND [DriverPayout] = [DriverFareEarning] + [LongDistanceEarning] + [LongPickupCompensation] AND [DriverEarning] = [DriverPayout] AND [PromotionExpense] = [AppliedPromotionDiscount] AND [AppliedPromotionDiscount] <= [GrossFare] AND [AppliedPromotionDiscount] <= [SnapshotPromotionDiscount] AND [CustomerPayableAmount] = [GrossFare] - [AppliedPromotionDiscount] AND [NetPlatformCommission] = [GrossPlatformCommission] - [PromotionExpense] AND [NetOperatingRevenue] = [NetPlatformCommission] - [RiskContribution] - [LongPickupCompensation])");
+                table.HasCheckConstraint("CK_TripFinancialSettlements_ComponentNullability", "([ComponentBreakdownVersion] IS NULL AND [GrossFare] IS NULL AND [FareComponent] IS NULL AND [LongDistanceComponent] IS NULL AND [SnapshotPromotionDiscount] IS NULL AND [AppliedPromotionDiscount] IS NULL AND [DriverFareEarning] IS NULL AND [LongDistanceEarning] IS NULL AND [LongPickupCompensation] IS NULL AND [DriverPayout] IS NULL) OR ([ComponentBreakdownVersion] IS NOT NULL AND [GrossFare] IS NOT NULL AND [FareComponent] IS NOT NULL AND [LongDistanceComponent] IS NOT NULL AND [SnapshotPromotionDiscount] IS NOT NULL AND [AppliedPromotionDiscount] IS NOT NULL AND [DriverFareEarning] IS NOT NULL AND [LongDistanceEarning] IS NOT NULL AND [LongPickupCompensation] IS NOT NULL AND [DriverPayout] IS NOT NULL)");
             });
         });
     }

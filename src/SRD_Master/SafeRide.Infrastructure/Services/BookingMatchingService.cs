@@ -1,9 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
 using SafeRide.Application.Common.Realtime;
 using SafeRide.Application.Features.Bookings.DTOs;
+using SafeRide.Application.Features.Drivers.Services;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
 using SafeRide.Infrastructure.Persistence;
@@ -23,6 +25,8 @@ public sealed class BookingMatchingService : IBookingMatchingService
     private readonly IRealtimeNotificationService _realtimeNotificationService;
     private readonly IMatchingPolicyProvider _matchingPolicyProvider;
     private readonly IBookingLifecycleJobScheduler _jobScheduler;
+    private readonly IMapRoutingService _mapRoutingService;
+    private readonly DriverCompensationOptions _compensationOptions;
 
     public BookingMatchingService(
         ILogger<BookingMatchingService> logger,
@@ -33,7 +37,9 @@ public sealed class BookingMatchingService : IBookingMatchingService
         IRedisService redisService,
         IRealtimeNotificationService realtimeNotificationService,
         IMatchingPolicyProvider matchingPolicyProvider,
-        IBookingLifecycleJobScheduler jobScheduler)
+        IBookingLifecycleJobScheduler jobScheduler,
+        IMapRoutingService mapRoutingService,
+        IOptions<DriverCompensationOptions> compensationOptions)
     {
         _logger = logger;
         _dbContext = dbContext;
@@ -44,6 +50,8 @@ public sealed class BookingMatchingService : IBookingMatchingService
         _realtimeNotificationService = realtimeNotificationService;
         _matchingPolicyProvider = matchingPolicyProvider;
         _jobScheduler = jobScheduler;
+        _mapRoutingService = mapRoutingService;
+        _compensationOptions = compensationOptions.Value;
     }
 
     public async Task<BookingDriverOfferDto?> StartMatchingAsync(
@@ -140,6 +148,23 @@ public sealed class BookingMatchingService : IBookingMatchingService
                 return existingOffer;
             }
 
+            if (DriverCompensationEligibility.ExceedsMaximumTripDistance(
+                    booking,
+                    _compensationOptions))
+            {
+                _logger.LogWarning(
+                    "Matching rejected booking {BookingId}: immutable estimated distance {EstimatedDistanceKm} exceeds maximum {MaximumTripDistanceKm}.",
+                    bookingId,
+                    booking.EstimatedDistanceKm,
+                    _compensationOptions.MaximumTripDistanceKm);
+                return null;
+            }
+
+            var requiresLongDistanceOptIn =
+                DriverCompensationEligibility.RequiresLongDistanceOptIn(
+                    booking,
+                    _compensationOptions);
+
             // Flow: seed candidates from Redis GEO, then validate live Redis status and DB license eligibility.
             var redisCandidateIds = await GetRedisCandidateDriverIdsAsync(
                 booking.PickupLocation.X,
@@ -170,7 +195,9 @@ public sealed class BookingMatchingService : IBookingMatchingService
                         LicenseClass = kyc.LicenseClass!.Value,
                         kyc.VerifiedAt,
                         kyc.CreatedAt,
-                        profile.WorkStatus
+                        profile.WorkStatus,
+                        profile.AcceptLongPickupTrips,
+                        profile.AcceptLongDistanceTrips
                     });
 
             approvedDriverLicensesQuery = approvedDriverLicensesQuery
@@ -225,6 +252,14 @@ public sealed class BookingMatchingService : IBookingMatchingService
                 .Select(group => group.Key)
                 .ToList();
 
+            var driverPreferences = approvedDriverLicenses
+                .GroupBy(x => x.DriverId)
+                .ToDictionary(
+                    group => group.Key,
+                    group => new DriverMatchingPreferences(
+                        group.First().AcceptLongPickupTrips,
+                        group.First().AcceptLongDistanceTrips));
+
             var selfMatchedCount = 0;
             var eligibleDriverIds = new List<Guid>();
             foreach (var driverId in compatibleDriverIds)
@@ -235,21 +270,41 @@ public sealed class BookingMatchingService : IBookingMatchingService
                     continue;
                 }
 
-                if (!blockedDriverIds.Contains(driverId))
+                if (!blockedDriverIds.Contains(driverId)
+                    && (!requiresLongDistanceOptIn
+                        || driverPreferences[driverId].AcceptLongDistanceTrips))
                 {
                     eligibleDriverIds.Add(driverId);
                 }
             }
 
-            // Flow: acquire a per-driver Redis lock before creating an offer to avoid concurrent assignment attempts.
+            // Redis GEO remains coarse discovery only. Route exactly one lock-held candidate at a time.
             Guid eligibleDriverId = Guid.Empty;
+            PickupOfferSnapshot? pickupOfferSnapshot = null;
             foreach (var driverId in eligibleDriverIds)
             {
-                if (await TryAcquireDriverLockAsync(driverId, bookingId))
+                if (!await TryAcquireDriverLockAsync(driverId, bookingId))
                 {
-                    eligibleDriverId = driverId;
-                    break;
+                    continue;
                 }
+
+                var snapshot = await TryGetPickupOfferSnapshotAsync(
+                    driverId,
+                    booking,
+                    cancellationToken);
+                if (snapshot is null
+                    || (DriverCompensationEligibility.RequiresLongPickupOptIn(
+                            snapshot.PickupDistanceKm,
+                            _compensationOptions)
+                        && !driverPreferences[driverId].AcceptLongPickupTrips))
+                {
+                    await _redisService.RemoveAsync(RedisKeys.MatchingDriverLock(driverId));
+                    continue;
+                }
+
+                eligibleDriverId = driverId;
+                pickupOfferSnapshot = snapshot;
+                break;
             }
 
             _logger.LogInformation(
@@ -295,7 +350,9 @@ public sealed class BookingMatchingService : IBookingMatchingService
                 DriverId = eligibleDriverId,
                 OfferStatus = DriverOfferStatus.Sent,
                 OfferedAt = utcNow,
-                ExpiresAt = utcNow.AddSeconds(_matchingPolicyProvider.Current.OfferExpireSeconds)
+                ExpiresAt = utcNow.AddSeconds(_matchingPolicyProvider.Current.OfferExpireSeconds),
+                PickupDistanceKm = pickupOfferSnapshot!.PickupDistanceKm,
+                LongPickupCompensation = pickupOfferSnapshot.LongPickupCompensation
             };
 
             await _dbContext.BookingDriverOffers.AddAsync(offer, cancellationToken);
@@ -471,6 +528,76 @@ public sealed class BookingMatchingService : IBookingMatchingService
             TimeSpan.FromSeconds(_matchingPolicyProvider.Current.OfferExpireSeconds));
     }
 
+    private async Task<PickupOfferSnapshot?> TryGetPickupOfferSnapshotAsync(
+        Guid driverId,
+        Booking booking,
+        CancellationToken cancellationToken)
+    {
+        var locationJson = await _redisService.GetAsync(RedisKeys.DriverLocation(driverId));
+        if (string.IsNullOrWhiteSpace(locationJson))
+        {
+            return null;
+        }
+
+        DriverLocationCache? driverLocation;
+        try
+        {
+            driverLocation = JsonSerializer.Deserialize<DriverLocationCache>(locationJson);
+        }
+        catch (JsonException)
+        {
+            await _redisService.RemoveAsync(RedisKeys.DriverLocation(driverId));
+            return null;
+        }
+
+        if (driverLocation is null || booking.PickupLocation is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var route = await _mapRoutingService.GetRouteEstimateAsync(
+                new RouteEstimateRequest
+                {
+                    Origin = new LocationPoint(driverLocation.Latitude, driverLocation.Longitude),
+                    Destination = new LocationPoint(booking.PickupLocation.Y, booking.PickupLocation.X),
+                    Provider = MapProvider.Auto,
+                    TravelMode = MapTravelMode.Car,
+                    IncludePolyline = false,
+                    RequestSource = "DriverMatchingPickupEligibility"
+                },
+                cancellationToken);
+
+            if (double.IsNaN(route.DistanceMeters)
+                || double.IsInfinity(route.DistanceMeters)
+                || route.DistanceMeters < 0)
+            {
+                return null;
+            }
+
+            var pickupDistanceKm = decimal.Round((decimal)(route.DistanceMeters / 1000d), 3);
+            return new PickupOfferSnapshot(
+                pickupDistanceKm,
+                DriverCompensationEligibility.CalculateLongPickupCompensation(
+                    pickupDistanceKm,
+                    _compensationOptions));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Authoritative pickup route failed for driver {DriverId} and booking {BookingId}; candidate was skipped.",
+                driverId,
+                booking.BookingId);
+            return null;
+        }
+    }
+
     private Task<bool> TryAcquireBookingLockAsync(long bookingId)
     {
         var options = _matchingPolicyProvider.Current;
@@ -569,3 +696,11 @@ public sealed class BookingMatchingService : IBookingMatchingService
     }
 
 }
+
+internal sealed record DriverMatchingPreferences(
+    bool AcceptLongPickupTrips,
+    bool AcceptLongDistanceTrips);
+
+internal sealed record PickupOfferSnapshot(
+    decimal PickupDistanceKm,
+    decimal LongPickupCompensation);

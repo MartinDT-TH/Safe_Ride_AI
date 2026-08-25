@@ -305,7 +305,6 @@ class DriverDashboardProvider extends ChangeNotifier {
       _currentRequest = TripRequest(
         offerId: offer.offerId,
         bookingId: offer.bookingId,
-        expectedIncome: 0,
         pickupDistance: LocaleProvider.currentLocalizations.calculating,
         pickupTime: offer.expiresAt == null
             ? LocaleProvider.currentLocalizations.secondsRemaining(30)
@@ -313,6 +312,9 @@ class DriverDashboardProvider extends ChangeNotifier {
         pickupAddress: offer.message,
         destinationAddress:
             LocaleProvider.currentLocalizations.viewTripAfterAccept,
+        longPickupCompensation: null,
+        isLongPickup: false,
+        isLongDistanceTrip: false,
       );
       _hasNewRequest = true;
       notifyListeners();
@@ -504,7 +506,6 @@ class DriverDashboardProvider extends ChangeNotifier {
     _currentRequest = TripRequest(
       offerId: 0,
       bookingId: 0,
-      expectedIncome: 120000,
       pickupDistance: '1.5 km',
       pickupTime: LocaleProvider.currentLocalizations.minutesValue(5),
       pickupAddress: '80 Trần Duy Hưng, Cầu Giấy',
@@ -1532,7 +1533,6 @@ class DriverDashboardProvider extends ChangeNotifier {
     return TripRequest(
       offerId: request.offerId,
       bookingId: request.bookingId,
-      expectedIncome: request.expectedIncome,
       pickupDistance: _formatPickupDistance(request.pickupDistanceKm),
       pickupTime: _formatPickupTime(
         request.pickupDurationMinutes,
@@ -1542,6 +1542,9 @@ class DriverDashboardProvider extends ChangeNotifier {
       destinationAddress: request.destinationAddress.trim().isEmpty
           ? LocaleProvider.currentLocalizations.noDestination
           : request.destinationAddress,
+      longPickupCompensation: request.longPickupCompensation,
+      isLongPickup: request.isLongPickup,
+      isLongDistanceTrip: request.isLongDistanceTrip,
     );
   }
 
@@ -1750,19 +1753,23 @@ class ActiveDriverTrip {
 class TripRequest {
   final int offerId;
   final int bookingId;
-  final double expectedIncome;
   final String pickupDistance;
   final String pickupTime;
   final String pickupAddress;
   final String destinationAddress;
+  final double? longPickupCompensation;
+  final bool isLongPickup;
+  final bool isLongDistanceTrip;
 
   TripRequest({
     required this.offerId,
     required this.bookingId,
-    required this.expectedIncome,
     required this.pickupDistance,
     required this.pickupTime,
     required this.pickupAddress,
     required this.destinationAddress,
+    this.longPickupCompensation,
+    this.isLongPickup = false,
+    this.isLongDistanceTrip = false,
   });
 }

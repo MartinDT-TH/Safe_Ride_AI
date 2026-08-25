@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NetTopologySuite.Geometries;
 using SafeRide.Infrastructure.Persistence;
@@ -12,9 +13,11 @@ using SafeRide.Infrastructure.Persistence;
 namespace SafeRide.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260825050002_AddDriverMatchingCompensationEligibilityPhase3")]
+    partial class AddDriverMatchingCompensationEligibilityPhase3
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2839,14 +2842,8 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
-                    b.Property<decimal?>("AppliedPromotionDiscount")
-                        .HasColumnType("decimal(18,2)");
-
                     b.Property<decimal>("CommissionBase")
                         .HasColumnType("decimal(18,2)");
-
-                    b.Property<int?>("ComponentBreakdownVersion")
-                        .HasColumnType("int");
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
@@ -2857,32 +2854,11 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
                     b.Property<decimal>("DriverEarning")
                         .HasColumnType("decimal(18,2)");
 
-                    b.Property<decimal?>("DriverFareEarning")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal?>("DriverPayout")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal?>("FareComponent")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal?>("GrossFare")
-                        .HasColumnType("decimal(18,2)");
-
                     b.Property<decimal>("GrossPlatformCommission")
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<bool>("IsRiskContributionEligible")
                         .HasColumnType("bit");
-
-                    b.Property<decimal?>("LongDistanceComponent")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal?>("LongDistanceEarning")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal?>("LongPickupCompensation")
-                        .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal>("NetOperatingRevenue")
                         .HasColumnType("decimal(18,2)");
@@ -2914,9 +2890,6 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("SettledAtUtc")
                         .HasColumnType("datetime2");
 
-                    b.Property<decimal?>("SnapshotPromotionDiscount")
-                        .HasColumnType("decimal(18,2)");
-
                     b.Property<long>("TripId")
                         .HasColumnType("bigint");
 
@@ -2929,11 +2902,7 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
 
                     b.ToTable("TripFinancialSettlements", t =>
                         {
-                            t.HasCheckConstraint("CK_TripFinancialSettlements_ComponentIdentity", "[ComponentBreakdownVersion] IS NULL OR ([ComponentBreakdownVersion] = 1 AND [GrossFare] = [FareComponent] + [LongDistanceComponent] AND [CommissionBase] = [FareComponent] AND [DriverFareEarning] = [FareComponent] - [GrossPlatformCommission] AND [LongDistanceEarning] = [LongDistanceComponent] AND [DriverPayout] = [DriverFareEarning] + [LongDistanceEarning] + [LongPickupCompensation] AND [DriverEarning] = [DriverPayout] AND [PromotionExpense] = [AppliedPromotionDiscount] AND [AppliedPromotionDiscount] <= [GrossFare] AND [AppliedPromotionDiscount] <= [SnapshotPromotionDiscount] AND [CustomerPayableAmount] = [GrossFare] - [AppliedPromotionDiscount] AND [NetPlatformCommission] = [GrossPlatformCommission] - [PromotionExpense] AND [NetOperatingRevenue] = [NetPlatformCommission] - [RiskContribution] - [LongPickupCompensation])");
-
-                            t.HasCheckConstraint("CK_TripFinancialSettlements_ComponentNullability", "([ComponentBreakdownVersion] IS NULL AND [GrossFare] IS NULL AND [FareComponent] IS NULL AND [LongDistanceComponent] IS NULL AND [SnapshotPromotionDiscount] IS NULL AND [AppliedPromotionDiscount] IS NULL AND [DriverFareEarning] IS NULL AND [LongDistanceEarning] IS NULL AND [LongPickupCompensation] IS NULL AND [DriverPayout] IS NULL) OR ([ComponentBreakdownVersion] IS NOT NULL AND [GrossFare] IS NOT NULL AND [FareComponent] IS NOT NULL AND [LongDistanceComponent] IS NOT NULL AND [SnapshotPromotionDiscount] IS NOT NULL AND [AppliedPromotionDiscount] IS NOT NULL AND [DriverFareEarning] IS NOT NULL AND [LongDistanceEarning] IS NOT NULL AND [LongPickupCompensation] IS NOT NULL AND [DriverPayout] IS NOT NULL)");
-
-                            t.HasCheckConstraint("CK_TripFinancialSettlements_NonNegative", "[CommissionBase] >= 0 AND [PromotionExpense] >= 0 AND [CustomerPayableAmount] >= 0 AND [GrossPlatformCommission] >= 0 AND [DriverEarning] >= 0 AND [RiskContribution] >= 0 AND ([ComponentBreakdownVersion] IS NULL OR ([GrossFare] >= 0 AND [FareComponent] >= 0 AND [LongDistanceComponent] >= 0 AND [SnapshotPromotionDiscount] >= 0 AND [AppliedPromotionDiscount] >= 0 AND [DriverFareEarning] >= 0 AND [LongDistanceEarning] >= 0 AND [LongPickupCompensation] >= 0 AND [DriverPayout] >= 0))");
+                            t.HasCheckConstraint("CK_TripFinancialSettlements_NonNegative", "[CommissionBase] >= 0 AND [PromotionExpense] >= 0 AND [CustomerPayableAmount] >= 0 AND [GrossPlatformCommission] >= 0 AND [DriverEarning] >= 0 AND [RiskContribution] >= 0");
                         });
                 });
 

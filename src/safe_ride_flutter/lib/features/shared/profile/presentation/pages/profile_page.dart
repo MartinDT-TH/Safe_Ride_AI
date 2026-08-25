@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:dio/dio.dart';
 
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_strings.dart';
+import '../../../../../core/network/dio_client.dart';
 import '../../../../../core/localization/locale_provider.dart';
 import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../../core/widgets/app_dialog.dart';
@@ -29,6 +31,80 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   bool _isDarkMode = false;
+
+  Future<void> _showMatchingPreferences(AuthProvider auth) async {
+    final token = auth.token;
+    if (token == null || token.isEmpty) return;
+
+    final dio = DioClient().dio;
+    try {
+      final response = await dio.get(
+        ApiEndpoints.driverMatchingPreferences,
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+      final data = Map<String, dynamic>.from(response.data as Map);
+      var acceptLongPickup = data['acceptLongPickupTrips'] == true;
+      var acceptLongDistance = data['acceptLongDistanceTrips'] == true;
+      if (!mounted) return;
+
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Tùy chọn nhận chuyến'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Nhận chuyến có quãng đón xa'),
+                  value: acceptLongPickup,
+                  onChanged: (value) => setDialogState(
+                    () => acceptLongPickup = value,
+                  ),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Nhận chuyến đường dài'),
+                  value: acceptLongDistance,
+                  onChanged: (value) => setDialogState(
+                    () => acceptLongDistance = value,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Hủy'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  await dio.put(
+                    ApiEndpoints.driverMatchingPreferences,
+                    data: {
+                      'acceptLongPickupTrips': acceptLongPickup,
+                      'acceptLongDistanceTrips': acceptLongDistance,
+                    },
+                    options: Options(headers: {'Authorization': 'Bearer $token'}),
+                  );
+                  if (dialogContext.mounted) {
+                    Navigator.of(dialogContext).pop();
+                  }
+                },
+                child: const Text('Lưu'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } on DioException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Không thể tải tùy chọn nhận chuyến.')),
+      );
+    }
+  }
 
   @override
   void initState() {
@@ -188,6 +264,12 @@ class _ProfilePageState extends State<ProfilePage> {
                 isDriver: roleProvider.isDriver,
                 onTap: () => _navigateToDriverReviews(auth),
               ),
+              if (roleProvider.isDriver)
+                ProfileMenuTile(
+                  icon: Icons.tune_rounded,
+                  title: 'Tùy chọn nhận chuyến',
+                  onTap: () => _showMatchingPreferences(auth),
+                ),
               if (roleProvider.isDriver)
                 ProfileMenuTile(
                   icon: Icons.gavel_outlined,

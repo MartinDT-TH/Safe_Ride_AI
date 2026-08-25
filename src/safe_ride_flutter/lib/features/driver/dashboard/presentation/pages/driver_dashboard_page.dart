@@ -2307,7 +2307,9 @@ class _NewRequestCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      context.l10n.expectedIncomeUpper,
+                      request.isLongDistanceTrip
+                          ? 'CHUYẾN ĐƯỜNG DÀI'
+                          : 'THÔNG TIN CHUYẾN',
                       style: TextStyle(
                         fontSize: 10,
                         color: Colors.grey,
@@ -2315,10 +2317,15 @@ class _NewRequestCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      _formatCurrency(request.expectedIncome),
+                      request.longPickupCompensation != null &&
+                              request.longPickupCompensation! > 0
+                          ? '+ ${_formatCurrency(request.longPickupCompensation!)} đón xa'
+                          : request.isLongPickup
+                          ? 'Đón xa'
+                          : 'Chi tiết trước khi nhận',
                       style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
                         color: Color(0xFF006B70),
                       ),
                     ),

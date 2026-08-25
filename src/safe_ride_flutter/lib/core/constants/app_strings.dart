@@ -264,6 +264,7 @@ abstract final class ApiEndpoints {
   static const driverWallet = '/drivers/wallet';
   static const driverWithdrawals = '/drivers/wallet/withdrawals';
   static const driverTripRequests = '/drivers/trip-requests';
+  static const driverMatchingPreferences = '/drivers/matching-preferences';
   static const nearbyDrivers = '/drivers/nearby';
   static String acceptDriverOffer(int offerId) =>
       '/drivers/offers/$offerId/accept';

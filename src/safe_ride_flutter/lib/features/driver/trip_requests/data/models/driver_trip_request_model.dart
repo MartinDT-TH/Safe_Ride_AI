@@ -4,24 +4,28 @@ class DriverTripRequestModel {
     required this.bookingId,
     required this.offerStatus,
     required this.expiresAt,
-    required this.expectedIncome,
     required this.pickupAddress,
     required this.destinationAddress,
     this.pickupDistanceKm,
     this.pickupDurationMinutes,
     this.customerConfirmRemainingSeconds,
+    this.longPickupCompensation,
+    this.isLongPickup = false,
+    this.isLongDistanceTrip = false,
   });
 
   final int offerId;
   final int bookingId;
   final String offerStatus;
   final DateTime? expiresAt;
-  final double expectedIncome;
   final String pickupAddress;
   final String destinationAddress;
   final double? pickupDistanceKm;
   final int? pickupDurationMinutes;
   final int? customerConfirmRemainingSeconds;
+  final double? longPickupCompensation;
+  final bool isLongPickup;
+  final bool isLongDistanceTrip;
 
   bool get isSent => offerStatus == 'Sent';
   bool get isDriverAccepted => offerStatus == 'DriverAccepted';
@@ -44,7 +48,6 @@ class DriverTripRequestModel {
       expiresAt: _value(json, 'expiresAt') == null
           ? null
           : DateTime.tryParse(_value(json, 'expiresAt').toString()),
-      expectedIncome: (_value(json, 'expectedIncome') as num?)?.toDouble() ?? 0,
       pickupAddress: _value(json, 'pickupAddress')?.toString() ?? '',
       destinationAddress: _value(json, 'destinationAddress')?.toString() ?? '',
       pickupDistanceKm: (_value(json, 'pickupDistanceKm') as num?)?.toDouble(),
@@ -52,6 +55,10 @@ class DriverTripRequestModel {
           ?.toInt(),
       customerConfirmRemainingSeconds:
           (_value(json, 'customerConfirmRemainingSeconds') as num?)?.toInt(),
+      longPickupCompensation:
+          (_value(json, 'longPickupCompensation') as num?)?.toDouble(),
+      isLongPickup: _value(json, 'isLongPickup') == true,
+      isLongDistanceTrip: _value(json, 'isLongDistanceTrip') == true,
     );
   }
 

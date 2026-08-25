@@ -70,6 +70,10 @@ class PaymentStatusResult {
     this.refundObligationAmount = 0,
     this.reconciliationStatus,
     this.refundStatus,
+    this.fareEarning,
+    this.longDistanceEarning,
+    this.longPickupCompensation,
+    this.totalPayout,
   });
 
   final int tripId;
@@ -90,6 +94,10 @@ class PaymentStatusResult {
   final double refundObligationAmount;
   final String? reconciliationStatus;
   final String? refundStatus;
+  final double? fareEarning;
+  final double? longDistanceEarning;
+  final double? longPickupCompensation;
+  final double? totalPayout;
 
   bool get isSuccess => paymentStatus.toLowerCase() == 'success';
   bool get requiresPayment => remainingPayableAmount > 0;
@@ -121,6 +129,11 @@ class PaymentStatusResult {
           (json['refundObligationAmount'] as num?)?.toDouble() ?? 0,
       reconciliationStatus: json['reconciliationStatus']?.toString(),
       refundStatus: json['refundStatus']?.toString(),
+      fareEarning: (json['fareEarning'] as num?)?.toDouble(),
+      longDistanceEarning: (json['longDistanceEarning'] as num?)?.toDouble(),
+      longPickupCompensation: (json['longPickupCompensation'] as num?)
+          ?.toDouble(),
+      totalPayout: (json['totalPayout'] as num?)?.toDouble(),
     );
   }
 }

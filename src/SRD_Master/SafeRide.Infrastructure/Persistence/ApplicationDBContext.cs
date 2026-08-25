@@ -3,6 +3,7 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using System;
 using System.Collections.Generic;
 using SafeRide.Domain.Entities;
@@ -131,12 +132,20 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
             {
                 tb.HasCheckConstraint("CK_BookingDriverOffers_OfferStatus", "[OfferStatus] IN ('Sent', 'DriverAccepted', 'CustomerConfirmed', 'Rejected', 'Expired', 'Cancelled')");
                 tb.HasCheckConstraint("CK_BookingDriverOffers_ExpiresAt", "[ExpiresAt] > [OfferedAt]");
+                tb.HasCheckConstraint("CK_BookingDriverOffers_PickupDistanceKm", "[PickupDistanceKm] IS NULL OR [PickupDistanceKm] >= 0");
+                tb.HasCheckConstraint("CK_BookingDriverOffers_LongPickupCompensation", "[LongPickupCompensation] IS NULL OR ([LongPickupCompensation] >= 0 AND [LongPickupCompensation] = ROUND([LongPickupCompensation], 0))");
             });
 
             entity.Property(e => e.OfferStatus)
                 .HasConversion<string>()
                 .HasMaxLength(20);
             entity.Property(e => e.OfferedAt).HasDefaultValueSql("(getutcdate())");
+            entity.Property(e => e.PickupDistanceKm)
+                .HasColumnType("decimal(18, 3)")
+                .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
+            entity.Property(e => e.LongPickupCompensation)
+                .HasColumnType("decimal(18, 2)")
+                .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
 
             entity.HasIndex(e => e.BookingId);
             entity.HasIndex(e => e.DriverId);
@@ -246,6 +255,8 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
 
             entity.Property(e => e.DriverId).ValueGeneratedNever();
             entity.Property(e => e.ExperienceYears).HasDefaultValue(0);
+            entity.Property(e => e.AcceptLongPickupTrips).HasDefaultValue(false);
+            entity.Property(e => e.AcceptLongDistanceTrips).HasDefaultValue(false);
             entity.Property(e => e.IdentityCardNumber)
                 .HasMaxLength(20)
                 .IsUnicode(false);

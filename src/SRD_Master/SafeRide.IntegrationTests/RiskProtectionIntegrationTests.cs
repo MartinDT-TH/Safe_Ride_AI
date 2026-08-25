@@ -458,6 +458,84 @@ public sealed class RiskProtectionIntegrationTests
     }
 
     [Fact]
+    public async Task ComponentAwareSettlement_PersistsBreakdownAndCreditsOneTotalDriverPayout()
+    {
+        await using var db = CreateDbContext();
+        var graph = await SeedTripAsync(
+            db, TripStatus.COMPLETED, riskEnabled: false, componentAwarePricing: true);
+        graph.Trip.ActualFare = 100_000m;
+        graph.Trip.EndReason = TripEndReason.NORMAL_COMPLETION;
+        graph.Trip.Booking.BookingPromotions.Add(new BookingPromotion
+        {
+            BookingId = graph.Trip.BookingId,
+            PromotionId = graph.Promotion.Id,
+            DiscountAmount = 20_000m,
+            CreatedAt = DateTime.UtcNow
+        });
+        db.BookingDriverOffers.Add(new BookingDriverOffer
+        {
+            BookingId = graph.Trip.BookingId,
+            DriverId = graph.DriverId,
+            OfferStatus = DriverOfferStatus.CustomerConfirmed,
+            OfferedAt = DateTime.UtcNow.AddHours(-2),
+            ExpiresAt = DateTime.UtcNow.AddHours(-1),
+            ConfirmedAt = DateTime.UtcNow.AddHours(-1),
+            PickupDistanceKm = 8m,
+            LongPickupCompensation = 15_000m
+        });
+        await db.SaveChangesAsync();
+
+        var service = new TripFinancialSettlementService(
+            db,
+            new TripCommissionCalculator(),
+            new RiskProtectionPolicyProvider(db),
+            new RiskFundLedgerService(db));
+        await service.SettleQrDriverEarningAsync(graph.Trip, "phase4-test", CancellationToken.None);
+        await service.SettleQrDriverEarningAsync(graph.Trip, "phase4-test", CancellationToken.None);
+
+        var settlement = await db.TripFinancialSettlements.SingleAsync();
+        Assert.Equal(TripFinancialSettlement.CurrentComponentBreakdownVersion, settlement.ComponentBreakdownVersion);
+        Assert.Equal(100_000m, settlement.GrossFare);
+        Assert.Equal(80_000m, settlement.FareComponent);
+        Assert.Equal(20_000m, settlement.LongDistanceComponent);
+        Assert.Equal(20_000m, settlement.AppliedPromotionDiscount);
+        Assert.Equal(80_000m, settlement.CustomerPayableAmount);
+        Assert.Equal(80_000m, settlement.CommissionBase);
+        Assert.Equal(56_000m, settlement.DriverFareEarning);
+        Assert.Equal(20_000m, settlement.LongDistanceEarning);
+        Assert.Equal(15_000m, settlement.LongPickupCompensation);
+        Assert.Equal(91_000m, settlement.DriverPayout);
+        Assert.Equal(91_000m, settlement.DriverEarning);
+        Assert.Equal(-11_000m, settlement.NetOperatingRevenue);
+        var walletTransaction = await db.WalletTransactions.SingleAsync();
+        Assert.Equal(91_000m, walletTransaction.Amount);
+        Assert.Equal(91_000m, (await db.DriverWallets.SingleAsync()).CurrentBalance);
+    }
+
+    [Fact]
+    public async Task ComponentAwareSettlement_EarlyStopWithLongDistanceComponent_IsBlocked()
+    {
+        await using var db = CreateDbContext();
+        var graph = await SeedTripAsync(
+            db, TripStatus.WAITING_PAYMENT, riskEnabled: false, componentAwarePricing: true);
+        graph.Trip.ActualFare = 80_000m;
+        graph.Trip.EndReason = TripEndReason.CUSTOMER_REQUESTED_STOP;
+        await db.SaveChangesAsync();
+        var service = new TripFinancialSettlementService(
+            db,
+            new TripCommissionCalculator(),
+            new RiskProtectionPolicyProvider(db),
+            new RiskFundLedgerService(db));
+
+        var exception = await Assert.ThrowsAsync<BookingException>(() =>
+            service.GetOrCreateAsync(graph.Trip, safetyTerminated: false, CancellationToken.None));
+
+        Assert.Equal("settlement.component_breakdown_unavailable", exception.Code);
+        Assert.Empty(await db.TripFinancialSettlements.ToListAsync());
+        Assert.Empty(await db.WalletTransactions.ToListAsync());
+    }
+
+    [Fact]
     public async Task AdminRevenue_UsesSettledZeroPaymentTripWithoutLegacyPaymentRow()
     {
         await using var db = CreateDbContext();
@@ -1915,7 +1993,8 @@ public sealed class RiskProtectionIntegrationTests
     private static async Task<TripGraph> SeedTripAsync(
         ApplicationDbContext db,
         TripStatus status,
-        bool riskEnabled)
+        bool riskEnabled,
+        bool componentAwarePricing = false)
     {
         var customerId = Guid.NewGuid();
         var driverId = Guid.NewGuid();
@@ -1951,6 +2030,11 @@ public sealed class RiskProtectionIntegrationTests
             PickupAddress = "Pickup",
             PickupLocation = new Point(106.7, 10.8) { SRID = 4326 },
             EstimatedFare = 100_000m,
+            PricingSnapshotVersion = componentAwarePricing
+                ? Booking.CurrentPricingSnapshotVersion
+                : null,
+            SurgedFare = componentAwarePricing ? 80_000m : null,
+            LongDistanceComponent = componentAwarePricing ? 20_000m : null,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };

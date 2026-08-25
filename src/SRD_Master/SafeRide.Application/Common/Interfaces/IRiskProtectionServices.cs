@@ -8,6 +8,8 @@ namespace SafeRide.Application.Common.Interfaces;
 public interface ITripCommissionCalculator
 {
     CommissionCalculationResult Calculate(CommissionCalculationInput input);
+    ComponentAwareCommissionCalculationResult CalculateComponentAware(
+        ComponentAwareCommissionCalculationInput input);
 }
 
 public interface IClaimSettlementCalculator

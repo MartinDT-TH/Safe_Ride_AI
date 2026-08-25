@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NetTopologySuite.Geometries;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
@@ -78,12 +79,74 @@ public sealed class BookingMatchingServiceTests
         Assert.True(acquired);
     }
 
+    [Fact]
+    public async Task StartMatchingAsync_PersistsAuthoritativePickupSnapshotAndCompensation()
+    {
+        await using var fixture = await MatchingFixture.CreateAsync();
+        fixture.Route.DistanceMeters = 7_500;
+
+        await fixture.Service.StartMatchingAsync(fixture.BookingId, CancellationToken.None);
+
+        var offer = Assert.Single(fixture.DbContext.BookingDriverOffers);
+        Assert.Equal(7.5m, offer.PickupDistanceKm);
+        Assert.Equal(7_500m, offer.LongPickupCompensation);
+        Assert.Equal(1, fixture.Route.RequestCount);
+        Assert.Equal("DriverMatchingPickupEligibility", fixture.Route.LastRequest?.RequestSource);
+    }
+
+    [Fact]
+    public async Task StartMatchingAsync_LongPickupAboveOptIn_RequiresPreference()
+    {
+        await using var fixture = await MatchingFixture.CreateAsync();
+        fixture.Route.DistanceMeters = 8_001;
+
+        var result = await fixture.Service.StartMatchingAsync(fixture.BookingId, CancellationToken.None);
+
+        Assert.Null(result);
+        Assert.Empty(fixture.DbContext.BookingDriverOffers);
+
+        var profile = await fixture.DbContext.DriverProfiles.FindAsync(fixture.DriverId);
+        profile!.AcceptLongPickupTrips = true;
+        await fixture.DbContext.SaveChangesAsync();
+
+        result = await fixture.Service.StartMatchingAsync(fixture.BookingId, CancellationToken.None);
+        Assert.NotNull(result);
+        Assert.Equal(2, fixture.Route.RequestCount);
+    }
+
+    [Fact]
+    public async Task StartMatchingAsync_LongDistanceAboveOptIn_RequiresPreference_AndMaximumBlocks()
+    {
+        await using var fixture = await MatchingFixture.CreateAsync(30.001m);
+
+        Assert.Null(await fixture.Service.StartMatchingAsync(fixture.BookingId, CancellationToken.None));
+        Assert.Equal(0, fixture.Route.RequestCount);
+
+        var profile = await fixture.DbContext.DriverProfiles.FindAsync(fixture.DriverId);
+        profile!.AcceptLongDistanceTrips = true;
+        await fixture.DbContext.SaveChangesAsync();
+        Assert.NotNull(await fixture.Service.StartMatchingAsync(fixture.BookingId, CancellationToken.None));
+
+        await using var maximumFixture = await MatchingFixture.CreateAsync(50.001m);
+        Assert.Null(await maximumFixture.Service.StartMatchingAsync(maximumFixture.BookingId, CancellationToken.None));
+        Assert.Equal(0, maximumFixture.Route.RequestCount);
+    }
+
+    [Fact]
+    public async Task StartMatchingAsync_HourlyBooking_IsExemptFromTripDistanceEligibility()
+    {
+        await using var fixture = await MatchingFixture.CreateAsync(80m, isHourly: true);
+
+        Assert.NotNull(await fixture.Service.StartMatchingAsync(fixture.BookingId, CancellationToken.None));
+    }
+
     private sealed class MatchingFixture : IAsyncDisposable
     {
         private MatchingFixture(
             ApplicationDbContext dbContext,
             InMemoryRedisService redis,
             RealtimeNotificationServiceFake realtime,
+            RouteMapFake route,
             BookingMatchingService service,
             long bookingId,
             Guid driverId)
@@ -91,6 +154,7 @@ public sealed class BookingMatchingServiceTests
             DbContext = dbContext;
             Redis = redis;
             Realtime = realtime;
+            Route = route;
             Service = service;
             BookingId = bookingId;
             DriverId = driverId;
@@ -99,11 +163,14 @@ public sealed class BookingMatchingServiceTests
         public ApplicationDbContext DbContext { get; }
         public InMemoryRedisService Redis { get; }
         public RealtimeNotificationServiceFake Realtime { get; }
+        public RouteMapFake Route { get; }
         public BookingMatchingService Service { get; }
         public long BookingId { get; }
         public Guid DriverId { get; }
 
-        public static async Task<MatchingFixture> CreateAsync()
+        public static async Task<MatchingFixture> CreateAsync(
+            decimal estimatedDistanceKm = 5.2m,
+            bool isHourly = false)
         {
             var options = new DbContextOptionsBuilder<ApplicationDbContext>()
                 .UseInMemoryDatabase($"booking-matching-{Guid.NewGuid():N}")
@@ -111,9 +178,15 @@ public sealed class BookingMatchingServiceTests
             var dbContext = new ApplicationDbContext(options);
             var redis = new InMemoryRedisService();
             var realtime = new RealtimeNotificationServiceFake();
+            var route = new RouteMapFake();
             var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
             var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
-            var booking = SeedBookingGraph(dbContext, customerId, driverId);
+            var booking = SeedBookingGraph(
+                dbContext,
+                customerId,
+                driverId,
+                estimatedDistanceKm,
+                isHourly);
             await dbContext.SaveChangesAsync();
             await SeedRedisAsync(redis, driverId);
             var policyProvider = new MatchingPolicyProviderFake();
@@ -126,12 +199,24 @@ public sealed class BookingMatchingServiceTests
                 redis,
                 realtime,
                 policyProvider,
-                new BookingLifecycleJobSchedulerFake());
+                new BookingLifecycleJobSchedulerFake(),
+                route,
+                Options.Create(new DriverCompensationOptions
+                {
+                    LongPickupThresholdKm = 5,
+                    LongPickupOptInThresholdKm = 8,
+                    LongDistanceThresholdKm = 15,
+                    LongDistanceOptInThresholdKm = 30,
+                    MaximumTripDistanceKm = 50,
+                    LongPickupRatePerKm = 3_000m,
+                    LongDistanceRatePerKm = 3_000m
+                }));
 
             return new MatchingFixture(
                 dbContext,
                 redis,
                 realtime,
+                route,
                 service,
                 booking.BookingId,
                 driverId);
@@ -145,7 +230,9 @@ public sealed class BookingMatchingServiceTests
         private static Booking SeedBookingGraph(
             ApplicationDbContext dbContext,
             Guid customerId,
-            Guid driverId)
+            Guid driverId,
+            decimal estimatedDistanceKm,
+            bool isHourly)
         {
             var customer = new AspNetUser
             {
@@ -190,9 +277,11 @@ public sealed class BookingMatchingServiceTests
                 PickupLocation = new Point(106.660172, 10.762622) { SRID = 4326 },
                 DestinationAddress = "Destination",
                 DestinationLocation = new Point(106.651856, 10.818797) { SRID = 4326 },
-                EstimatedDistanceKm = 5.2m,
+                EstimatedDistanceKm = estimatedDistanceKm,
                 EstimatedDurationMinutes = 30,
                 EstimatedFare = 72_000m,
+                AcceptedPricePerKm = isHourly ? null : 10_000m,
+                AcceptedPricePerHour = isHourly ? 100_000m : null,
                 CreatedAt = UtcNow,
                 UpdatedAt = UtcNow
             };
@@ -257,6 +346,27 @@ public sealed class BookingMatchingServiceTests
     private sealed class DateTimeProviderFake(DateTime utcNow) : IDateTimeProvider
     {
         public DateTime UtcNow { get; } = utcNow;
+    }
+
+    private sealed class RouteMapFake : IMapRoutingService
+    {
+        public double DistanceMeters { get; set; } = 5_000;
+        public int RequestCount { get; private set; }
+        public RouteEstimateRequest? LastRequest { get; private set; }
+
+        public Task<RouteEstimateResult> GetRouteEstimateAsync(
+            RouteEstimateRequest request,
+            CancellationToken cancellationToken)
+        {
+            RequestCount++;
+            LastRequest = request;
+            return Task.FromResult(new RouteEstimateResult
+            {
+                Provider = MapProvider.Auto,
+                DistanceMeters = DistanceMeters,
+                DurationSeconds = 600
+            });
+        }
     }
 
     private sealed class MatchingPolicyProviderFake : IMatchingPolicyProvider
