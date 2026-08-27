@@ -947,7 +947,7 @@ public sealed class RiskProtectionIntegrationTests
             graph.Trip.Id,
             new SafetyReportRequest(
                 SafetyReportType.UNSAFE_CUSTOMER,
-                "THREATENING_BEHAVIOR",
+                "VIOLENT",
                 "Customer threatened the driver",
                 null,
                 null,
@@ -959,6 +959,37 @@ public sealed class RiskProtectionIntegrationTests
         Assert.Contains("unsafe customer", report.Subject, StringComparison.OrdinalIgnoreCase);
         Assert.Null(report.PreTripVehicleCheckId);
         Assert.Empty(await db.Sosalerts.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData(SafetyReportType.UNSAFE_CUSTOMER, "THREATENING_BEHAVIOR")]
+    [InlineData(SafetyReportType.UNSAFE_CUSTOMER, "BRAKE_FAILURE")]
+    [InlineData(SafetyReportType.VEHICLE_ISSUE, "UNSAFE_REQUEST")]
+    public async Task SafetyReport_RejectsStaleOrCrossTypeReasonCodes(
+        SafetyReportType reportType,
+        string reasonCode)
+    {
+        await using var db = CreateDbContext();
+        var graph = await SeedTripAsync(db, TripStatus.IN_PROGRESS, riskEnabled: true);
+        var service = new SafetyReportService(
+            db,
+            new CapturingAdminReportRealtimeService(),
+            NullLogger<SafetyReportService>.Instance);
+
+        var exception = await Assert.ThrowsAsync<BookingException>(() => service.CreateAsync(
+            graph.DriverId,
+            graph.Trip.Id,
+            new SafetyReportRequest(
+                reportType,
+                reasonCode,
+                "Invalid reason contract",
+                null,
+                null,
+                false),
+            CancellationToken.None));
+
+        Assert.Equal("safety_report.invalid_reason", exception.Code);
+        Assert.Empty(await db.Reports.ToListAsync());
     }
 
     [Fact]

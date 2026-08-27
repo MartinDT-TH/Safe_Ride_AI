@@ -33,7 +33,7 @@ void main() {
         'status': 'PENDING_FUNDING',
         'insuranceStatus': 'APPROVED',
         'eligibleDamageAmount': 10000000,
-        'insuranceCoveredAmount': 2000000,
+        'insuranceApprovedAmount': 2000000,
         'riskFundAdvanceAmount': 3000000,
         'driverLiabilityAmount': 800000,
         'outstandingRecoveryAmount': 800000,
@@ -44,6 +44,7 @@ void main() {
     expect(accident.evidence.single.originalFileName, 'evidence.jpg');
     expect(accident.assessment?.driverFaultPercentage, 40);
     expect(accident.claim?.status, 'PENDING_FUNDING');
+    expect(accident.claim?.insuranceApprovedAmount, 2000000);
     expect(accident.claim?.outstandingRecoveryAmount, 800000);
   });
 

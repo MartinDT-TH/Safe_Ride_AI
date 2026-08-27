@@ -41,11 +41,20 @@ const vehicleFaultTypes = <String>[
   'OTHER',
 ];
 
-String safetyReportReasonCodeForType(String reportType) => switch (reportType) {
-  'UNSAFE_CUSTOMER' => 'UNSAFE_CUSTOMER',
-  'VEHICLE_ISSUE' => 'VEHICLE_ISSUE',
-  _ => throw ArgumentError.value(reportType, 'reportType'),
-};
+const unsafeCustomerReasons = <String>[
+  'DISTRACTING',
+  'VIOLENT',
+  'INTERFERING_WITH_VEHICLE',
+  'UNSAFE_REQUEST',
+  'OTHER',
+];
+
+List<String> safetyReportReasonCodesForType(String reportType) =>
+    switch (reportType) {
+      'UNSAFE_CUSTOMER' => unsafeCustomerReasons,
+      'VEHICLE_ISSUE' => vehicleFaultTypes,
+      _ => throw ArgumentError.value(reportType, 'reportType'),
+    };
 
 class SafetyReportDialogResult {
   const SafetyReportDialogResult({
@@ -63,6 +72,7 @@ class SafetyReportDialogResult {
 
 Future<SafetyReportDialogResult?> showSafetyReportDialog(BuildContext context) {
   var reportType = 'UNSAFE_CUSTOMER';
+  var reasonCode = safetyReportReasonCodesForType(reportType).first;
   var description = '';
   var escalationRequested = false;
   return showDialog<SafetyReportDialogResult>(
@@ -88,8 +98,29 @@ Future<SafetyReportDialogResult?> showSafetyReportDialog(BuildContext context) {
                   ),
                 ],
                 selected: {reportType},
-                onSelectionChanged: (selection) =>
-                    setState(() => reportType = selection.single),
+                onSelectionChanged: (selection) => setState(() {
+                  reportType = selection.single;
+                  reasonCode = safetyReportReasonCodesForType(reportType).first;
+                }),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                key: ValueKey(reportType),
+                initialValue: reasonCode,
+                decoration: InputDecoration(
+                  labelText: context.l10n.safetyReasonCode,
+                ),
+                items: safetyReportReasonCodesForType(reportType)
+                    .map(
+                      (value) => DropdownMenuItem(
+                        value: value,
+                        child: Text(_safetyReasonLabel(context, value)),
+                      ),
+                    )
+                    .toList(growable: false),
+                onChanged: (value) {
+                  if (value != null) setState(() => reasonCode = value);
+                },
               ),
               const SizedBox(height: 12),
               TextField(
@@ -123,7 +154,7 @@ Future<SafetyReportDialogResult?> showSafetyReportDialog(BuildContext context) {
                     dialogContext,
                     SafetyReportDialogResult(
                       reportType: reportType,
-                      reasonCode: safetyReportReasonCodeForType(reportType),
+                      reasonCode: reasonCode,
                       description: description.trim(),
                       escalationRequested: escalationRequested,
                     ),
@@ -614,3 +645,12 @@ String _faultTypeLabel(BuildContext context, String value) => switch (value) {
   'ELECTRICAL_FAILURE' => context.l10n.turnSignals,
   _ => context.l10n.otherVehicleFault,
 };
+
+String _safetyReasonLabel(BuildContext context, String value) {
+  if (vehicleFaultTypes.contains(value)) return _faultTypeLabel(context, value);
+  return value
+      .toLowerCase()
+      .split('_')
+      .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+      .join(' ');
+}

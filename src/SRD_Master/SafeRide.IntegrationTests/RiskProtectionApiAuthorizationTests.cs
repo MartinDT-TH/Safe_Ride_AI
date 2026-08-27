@@ -349,7 +349,7 @@ public sealed class RiskProtectionApiAuthorizationTests
             }));
         var request = new SafetyReportRequest(
             SafetyReportType.UNSAFE_CUSTOMER,
-            "THREATENING_BEHAVIOR",
+            "VIOLENT",
             "Customer threatened the driver",
             null,
             null,

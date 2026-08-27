@@ -12,6 +12,8 @@ import {
   confirmManualRefund,
   exportRiskFundTransactions,
   fundClaim,
+  isEntireRiskFundRequestPermanent,
+  reconcilePartyCauses,
   saveLiabilityAssessment,
 } from './riskProtectionApi';
 
@@ -39,6 +41,37 @@ describe('risk protection API contracts', () => {
       method: 'POST', headers: { 'Idempotency-Key': 'fund-8' },
       body: JSON.stringify({ rowVersion: 'AQID' }),
     });
+  });
+
+  it('does not hydrate a mixed advance as an entirely permanent fund loss', () => {
+    expect(isEntireRiskFundRequestPermanent({
+      riskFundAdvanceAmount: 3000000,
+      riskFundPermanentLossAmount: 1000000,
+    })).toBe(false);
+    expect(isEntireRiskFundRequestPermanent({
+      riskFundAdvanceAmount: 0,
+      riskFundPermanentLossAmount: 1000000,
+    })).toBe(true);
+  });
+
+  it('preserves multiple causes instead of inventing a replacement allocation', () => {
+    const causes = [
+      { rootCause: 'CUSTOMER_INTERFERENCE', responsibleParty: 'CUSTOMER', percentage: 30 },
+      { rootCause: 'UNKNOWN', responsibleParty: 'CUSTOMER', percentage: 20 },
+      { rootCause: 'ROAD_CONDITION', responsibleParty: 'OBJECTIVE', percentage: 50 },
+    ];
+
+    expect(reconcilePartyCauses(causes, 'CUSTOMER', 60, 'CUSTOMER_INTERFERENCE')).toEqual(causes);
+    expect(reconcilePartyCauses(causes, 'OBJECTIVE', 40, 'UNKNOWN')).toEqual([
+      causes[0], causes[1], { ...causes[2], percentage: 40 },
+    ]);
+    expect(reconcilePartyCauses(causes, 'DRIVER', 10, 'DRIVER_ERROR')).toEqual([
+      ...causes,
+      { rootCause: 'DRIVER_ERROR', responsibleParty: 'DRIVER', percentage: 10 },
+    ]);
+    expect(reconcilePartyCauses(causes, 'CUSTOMER', 0, 'CUSTOMER_INTERFERENCE')).toEqual([
+      causes[2],
+    ]);
   });
 
   it('confirms manual refunds through the staff endpoint', async () => {

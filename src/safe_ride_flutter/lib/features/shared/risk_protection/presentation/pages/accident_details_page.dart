@@ -525,7 +525,7 @@ class _ClaimCard extends StatelessWidget {
               _Row(label: context.l10n.claimStatus, value: claim!.status),
               _Row(
                 label: context.l10n.insuranceCoverage,
-                value: _money(claim!.insuranceCoveredAmount),
+                value: _money(claim!.insuranceApprovedAmount),
               ),
               _Row(
                 label: context.l10n.riskFundCoverage,
