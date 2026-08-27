@@ -52,13 +52,15 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
                     THROW 51000, 'Phase 6.1 preflight failed: payment reconciliation identity is invalid.', 1;
                 """);
 
-            migrationBuilder.DropIndex(
-                name: "IX_Trips_DriverId",
-                table: "Trips");
-
-            migrationBuilder.DropIndex(
-                name: "IX_Payments_TripId",
-                table: "Payments");
+            // These legacy non-unique indexes may already have been removed from
+            // databases created from an earlier schema variant. They are not a
+            // prerequisite for the filtered unique indexes below, so make their
+            // cleanup idempotent.
+            migrationBuilder.Sql(
+                """
+                DROP INDEX IF EXISTS [IX_Trips_DriverId] ON [Trips];
+                DROP INDEX IF EXISTS [IX_Payments_TripId] ON [Payments];
+                """);
 
             migrationBuilder.CreateTable(
                 name: "TripEndReconciliationRequests",
