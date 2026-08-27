@@ -94,6 +94,52 @@ public sealed class TripSessionQueryService : ITripSessionQueryService
             .FirstOrDefaultAsync(cancellationToken);
     }
 
+    public async Task<BookingSessionInfo?> GetActiveBookingForUserAsync(
+        Guid userId,
+        DateTime? existedAtOrBeforeUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _dbContext.Bookings
+            .AsNoTracking()
+            .Where(booking =>
+                booking.CustomerId == userId
+                && (booking.BookingStatus == BookingStatus.Searching
+                    || booking.BookingStatus == BookingStatus.DriverAssigned));
+
+        if (existedAtOrBeforeUtc.HasValue)
+        {
+            var cutoff = existedAtOrBeforeUtc.Value;
+            query = query.Where(booking => booking.CreatedAt <= cutoff);
+        }
+
+        return await query
+            .OrderByDescending(booking => booking.CreatedAt)
+            .Select(booking => new BookingSessionInfo(
+                booking.BookingId,
+                booking.CustomerId,
+                booking.BookingStatus,
+                booking.CreatedAt))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public Task<BookingSessionInfo?> GetBookingForUserAsync(
+        Guid userId,
+        long bookingId,
+        CancellationToken cancellationToken = default)
+    {
+        return _dbContext.Bookings
+            .AsNoTracking()
+            .Where(booking =>
+                booking.BookingId == bookingId
+                && booking.CustomerId == userId)
+            .Select(booking => new BookingSessionInfo(
+                booking.BookingId,
+                booking.CustomerId,
+                booking.BookingStatus,
+                booking.CreatedAt))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public Task<bool> HasActiveTripForUserAsync(
         Guid userId,
         CancellationToken cancellationToken = default)

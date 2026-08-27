@@ -177,6 +177,13 @@ public enum WalletTransactionType
     Bonus
 }
 
+public enum WalletSettlementEffect
+{
+    QrDriverEarning,
+    CashPlatformCommission,
+    CashPromotionSubsidy
+}
+
 public enum WithdrawalRequestStatus
 {
     Pending,

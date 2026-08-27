@@ -16,15 +16,17 @@ using SafeRide.Infrastructure.Services;
 
 namespace SafeRide.IntegrationTests;
 
+[Trait(SqlServerTestDatabase.ProviderTraitName, SqlServerTestDatabase.SqlServerProvider)]
 public sealed class BookingAssignmentServiceTests
 {
     private static readonly DateTime UtcNow =
         new(2026, 8, 10, 5, 0, 0, DateTimeKind.Utc);
 
-    [Fact]
+    [SqlServerFact]
     public async Task AcceptDriverOfferAsync_NowBooking_WaitsForCustomerConfirmation()
     {
         await using var fixture = await Fixture.CreateAsync(BookingType.Now);
+        Assert.True(fixture.DbContext.Database.CreateExecutionStrategy().RetriesOnFailure);
 
         var response = await fixture.Service.AcceptDriverOfferAsync(
             fixture.DriverId,
@@ -44,7 +46,64 @@ public sealed class BookingAssignmentServiceTests
         Assert.Contains(fixture.WinningOfferId, fixture.Scheduler.ScheduledOfferIds);
     }
 
-    [Fact]
+    [SqlServerFact]
+    public async Task AcceptDriverOfferAsync_NowBooking_RetryIsIdempotent()
+    {
+        await using var fixture = await Fixture.CreateAsync(BookingType.Now);
+
+        var first = await fixture.Service.AcceptDriverOfferAsync(
+            fixture.DriverId,
+            fixture.WinningOfferId,
+            CancellationToken.None);
+        var retry = await fixture.Service.AcceptDriverOfferAsync(
+            fixture.DriverId,
+            fixture.WinningOfferId,
+            CancellationToken.None);
+
+        Assert.Equal(BookingStatus.Searching, first.BookingStatus);
+        Assert.Equal(BookingStatus.Searching, retry.BookingStatus);
+        Assert.Equal(DriverOfferStatus.DriverAccepted, retry.DriverOffer?.OfferStatus);
+        Assert.Null(retry.TripId);
+        Assert.Empty(fixture.DbContext.Trips);
+        Assert.Equal(
+            first.DriverOffer?.ExpiresAt,
+            retry.DriverOffer?.ExpiresAt);
+    }
+
+    [SqlServerFact]
+    public async Task AcceptDriverOfferAsync_ExpiredCompetingBookingOffer_DoesNotBlockAcceptance()
+    {
+        await using var fixture = await Fixture.CreateAsync(
+            BookingType.Now,
+            includeCompetingOffer: true);
+        var expiredOffer = await fixture.DbContext.BookingDriverOffers
+            .SingleAsync(x => x.Id == fixture.CompetingOfferId);
+        expiredOffer.ExpiresAt = UtcNow.AddSeconds(-1);
+        await fixture.DbContext.SaveChangesAsync();
+
+        var response = await fixture.Service.AcceptDriverOfferAsync(
+            fixture.DriverId,
+            fixture.WinningOfferId,
+            CancellationToken.None);
+
+        Assert.Equal(DriverOfferStatus.DriverAccepted, response.DriverOffer?.OfferStatus);
+    }
+
+    [SqlServerFact]
+    public async Task AcceptDriverOfferAsync_ExpiredOtherDriverOffer_DoesNotBlockAcceptance()
+    {
+        await using var fixture = await Fixture.CreateAsync(BookingType.Now);
+        await fixture.AddExpiredOfferForDriverAsync();
+
+        var response = await fixture.Service.AcceptDriverOfferAsync(
+            fixture.DriverId,
+            fixture.WinningOfferId,
+            CancellationToken.None);
+
+        Assert.Equal(DriverOfferStatus.DriverAccepted, response.DriverOffer?.OfferStatus);
+    }
+
+    [SqlServerFact]
     public async Task AcceptDriverOfferAsync_ScheduledBooking_AutoAssignsDriver()
     {
         await using var fixture = await Fixture.CreateAsync(BookingType.Scheduled);
@@ -71,7 +130,7 @@ public sealed class BookingAssignmentServiceTests
             notification => notification.Message.Contains("tự động xác nhận", StringComparison.Ordinal));
     }
 
-    [Fact]
+    [SqlServerFact]
     public async Task AcceptDriverOfferAsync_ScheduledBooking_CancelsCompetingOffers()
     {
         await using var fixture = await Fixture.CreateAsync(
@@ -93,7 +152,7 @@ public sealed class BookingAssignmentServiceTests
             notification => notification.OfferId == fixture.CompetingOfferId);
     }
 
-    [Fact]
+    [SqlServerFact]
     public async Task AcceptDriverOfferAsync_ScheduledBooking_CancelsLifecycleJobs()
     {
         await using var fixture = await Fixture.CreateAsync(BookingType.Scheduled);
@@ -107,7 +166,7 @@ public sealed class BookingAssignmentServiceTests
         Assert.Contains(fixture.WinningOfferId, fixture.Scheduler.CancelledOfferIds);
     }
 
-    [Fact]
+    [SqlServerFact]
     public async Task AcceptDriverOfferAsync_ScheduledBooking_RetryDoesNotCreateDuplicateTrip()
     {
         await using var fixture = await Fixture.CreateAsync(BookingType.Scheduled);
@@ -125,7 +184,7 @@ public sealed class BookingAssignmentServiceTests
         Assert.Single(fixture.DbContext.Trips);
     }
 
-    [Fact]
+    [SqlServerFact]
     public async Task ConcurrentScheduledDriverAcceptance_OnlyOneDriverWins()
     {
         await using var fixture = await Fixture.CreateAsync(
@@ -155,7 +214,7 @@ public sealed class BookingAssignmentServiceTests
                 .CountAsync(x => x.OfferStatus == DriverOfferStatus.CustomerConfirmed));
     }
 
-    [Fact]
+    [SqlServerFact]
     public async Task ConfirmDriverAsync_NowBooking_StillWorks()
     {
         await using var fixture = await Fixture.CreateAsync(
@@ -174,7 +233,7 @@ public sealed class BookingAssignmentServiceTests
         Assert.Single(fixture.Realtime.CustomerConfirmedOffers);
     }
 
-    [Fact]
+    [SqlServerFact]
     public async Task ConfirmDriverAsync_ScheduledBooking_DoesNotRequireCustomerConfirmation()
     {
         await using var fixture = await Fixture.CreateAsync(BookingType.Scheduled);
@@ -194,7 +253,7 @@ public sealed class BookingAssignmentServiceTests
         Assert.Single(fixture.DbContext.Trips);
     }
 
-    [Fact]
+    [SqlServerFact]
     public async Task GetActiveBookingAsync_AssignedScheduledBooking_IsRestorable()
     {
         await using var fixture = await Fixture.CreateAsync(BookingType.Scheduled);
@@ -213,7 +272,7 @@ public sealed class BookingAssignmentServiceTests
         Assert.Equal(assigned.TripId, restored.Trip?.Id);
     }
 
-    [Fact]
+    [SqlServerFact]
     public async Task GetActiveBookingAsync_PendingScheduledBooking_IsRestorable()
     {
         await using var fixture = await Fixture.CreateAsync(BookingType.Scheduled);
@@ -250,17 +309,17 @@ public sealed class BookingAssignmentServiceTests
 
     private sealed class Fixture : IAsyncDisposable
     {
-        private readonly DbContextOptions<ApplicationDbContext> _options;
+        private readonly SqlServerTestDatabase _database;
         private readonly DateTimeProviderFake _clock = new(UtcNow);
         private readonly MatchingPolicyProviderFake _matchingPolicy = new();
         private readonly RedisServiceFake _redis = new();
         private readonly BookingMatchingServiceFake _matching = new();
 
         private Fixture(
-            DbContextOptions<ApplicationDbContext> options,
+            SqlServerTestDatabase database,
             ApplicationDbContext dbContext)
         {
-            _options = options;
+            _database = database;
             DbContext = dbContext;
             Scheduler = new BookingLifecycleJobSchedulerFake();
             Realtime = new RealtimeNotificationServiceFake();
@@ -283,24 +342,24 @@ public sealed class BookingAssignmentServiceTests
             bool includeCompetingOffer = false,
             DriverOfferStatus winningOfferStatus = DriverOfferStatus.Sent)
         {
-            var databaseName = $"SafeRide_BookingAssignmentTests_{Guid.NewGuid():N}";
-            var connectionString =
-                $"Server=(localdb)\\MSSQLLocalDB;Database={databaseName};Trusted_Connection=True;TrustServerCertificate=True";
-            var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-                .UseSqlServer(
-                    connectionString,
-                    sqlServer => sqlServer.UseNetTopologySuite())
-                .Options;
-            var dbContext = new ApplicationDbContext(options);
-            await dbContext.Database.EnsureCreatedAsync();
-
-            var fixture = new Fixture(options, dbContext);
-            await fixture.SeedAsync(bookingType, includeCompetingOffer, winningOfferStatus);
-            return fixture;
+            var database = await SqlServerTestDatabase.CreateAsync("BookingAssignment");
+            var dbContext = database.CreateDbContext();
+            try
+            {
+                var fixture = new Fixture(database, dbContext);
+                await fixture.SeedAsync(bookingType, includeCompetingOffer, winningOfferStatus);
+                return fixture;
+            }
+            catch
+            {
+                await dbContext.DisposeAsync();
+                await database.DisposeAsync();
+                throw;
+            }
         }
 
         public ApplicationDbContext CreateAdditionalDbContext() =>
-            new(_options);
+            _database.CreateDbContext();
 
         public BookingAssignmentService CreateService(ApplicationDbContext dbContext) =>
             new(
@@ -313,7 +372,17 @@ public sealed class BookingAssignmentServiceTests
                 _matching,
                 _matchingPolicy,
                 Scheduler,
-                new OptionsMonitorFake<TripTrackingOptions>(new TripTrackingOptions()));
+                new OptionsMonitorFake<TripTrackingOptions>(new TripTrackingOptions()),
+                Options.Create(new DriverCompensationOptions
+                {
+                    LongPickupThresholdKm = 5,
+                    LongPickupOptInThresholdKm = 8,
+                    LongDistanceThresholdKm = 15,
+                    LongDistanceOptInThresholdKm = 30,
+                    MaximumTripDistanceKm = 50,
+                    LongPickupRatePerKm = 3_000m,
+                    LongDistanceRatePerKm = 3_000m
+                }));
 
         public BookingRepository CreateRepository() =>
             new(
@@ -321,6 +390,42 @@ public sealed class BookingAssignmentServiceTests
                 _redis,
                 _matchingPolicy,
                 new OptionsMonitorFake<TripTrackingOptions>(new TripTrackingOptions()));
+
+        public async Task AddExpiredOfferForDriverAsync()
+        {
+            var currentBooking = await DbContext.Bookings
+                .SingleAsync(x => x.BookingId == BookingId);
+            var historicalBooking = new Booking
+            {
+                CustomerId = CustomerId,
+                VehicleId = currentBooking.VehicleId,
+                ServiceTypeId = currentBooking.ServiceTypeId,
+                BookingType = BookingType.Now,
+                BookingStatus = BookingStatus.Searching,
+                BookingSource = BookingSource.Manual,
+                PickupAddress = "Historical pickup",
+                PickupLocation = new Point(106.65, 10.75) { SRID = 4326 },
+                DestinationAddress = "Historical destination",
+                DestinationLocation = new Point(106.68, 10.78) { SRID = 4326 },
+                EstimatedDistanceKm = 5m,
+                EstimatedDurationMinutes = 15,
+                EstimatedFare = 100_000m,
+                CreatedAt = UtcNow.AddHours(-2),
+                UpdatedAt = UtcNow.AddHours(-2)
+            };
+            DbContext.Bookings.Add(historicalBooking);
+            await DbContext.SaveChangesAsync();
+
+            DbContext.BookingDriverOffers.Add(new BookingDriverOffer
+            {
+                BookingId = historicalBooking.BookingId,
+                DriverId = DriverId,
+                OfferStatus = DriverOfferStatus.Sent,
+                OfferedAt = UtcNow.AddMinutes(-2),
+                ExpiresAt = UtcNow.AddSeconds(-1)
+            });
+            await DbContext.SaveChangesAsync();
+        }
 
         private async Task SeedAsync(
             BookingType bookingType,
@@ -458,8 +563,8 @@ public sealed class BookingAssignmentServiceTests
 
         public async ValueTask DisposeAsync()
         {
-            await DbContext.Database.EnsureDeletedAsync();
             await DbContext.DisposeAsync();
+            await _database.DisposeAsync();
         }
     }
 

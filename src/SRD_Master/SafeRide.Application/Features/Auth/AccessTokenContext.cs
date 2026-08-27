@@ -4,6 +4,7 @@ public sealed record AccessTokenContext
 {
     public string SessionMode { get; init; } = AuthSessionModes.Normal;
     public long? ContinuationTripId { get; init; }
+    public long? ContinuationBookingId { get; init; }
     public bool ReloginRequiredAfterTrip { get; init; }
     public DateTime? ContinuationAbsoluteExpiresAt { get; init; }
     public int? AccessTokenMinutes { get; init; }

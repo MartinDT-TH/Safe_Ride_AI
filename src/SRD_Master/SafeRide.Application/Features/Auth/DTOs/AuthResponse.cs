@@ -21,6 +21,7 @@ public class AuthResponse
     public bool ReloginRequiredAfterTrip { get; set; }
     public string SessionMode { get; set; } = AuthSessionModes.Normal;
     public long? ContinuationTripId { get; set; }
+    public long? ContinuationBookingId { get; set; }
     public DateTime? ContinuationAbsoluteExpiresAt { get; set; }
 }
 

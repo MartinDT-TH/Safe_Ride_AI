@@ -4,6 +4,7 @@ public enum TripContinuationOperation
 {
     ActiveTripRead,
     BookingRead,
+    BookingManage,
     BookingCancel,
     DriverLocation,
     TripStatusUpdate,

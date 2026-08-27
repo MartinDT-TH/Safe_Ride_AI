@@ -14,7 +14,9 @@ import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../customer/booking/domain/repositories/booking_repository.dart';
 import '../../../../customer/booking/data/models/booking_response.dart';
 import '../../../../customer/booking/presentation/pages/rebook_trip_page.dart';
+import '../../../../customer/booking/presentation/pages/customer_trip_prepayment_page.dart';
 import '../../../../customer/booking/presentation/providers/booking_provider.dart';
+import '../../../../driver/dashboard/presentation/pages/driver_trip_payment_page.dart';
 import '../../../../shared/onboarding/presentation/providers/role_provider.dart';
 import '../../../../shared/feedback/domain/repositories/feedback_repository.dart';
 import '../../../../shared/chat/presentation/pages/trip_chat_page.dart';
@@ -181,6 +183,7 @@ class _TripDetailsView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<TripDetailsProvider>(
       builder: (context, provider, child) {
+        final isDriver = context.read<RoleProvider>().isDriver;
         final data = provider.tripDetails;
         final unreadChatCount = context
             .watch<ChatUnreadProvider>()
@@ -190,6 +193,11 @@ class _TripDetailsView extends StatelessWidget {
           allowedForRole: canCancelScheduled,
           booking: booking,
         );
+        final canPaySafetyTerminatedTrip =
+            data.isSafetyTerminated &&
+            data.tripId != null &&
+            data.payment != null &&
+            data.payment!.requiresPayment;
 
         return Scaffold(
           backgroundColor: Color(0xFFFCF9F8),
@@ -279,6 +287,28 @@ class _TripDetailsView extends StatelessWidget {
                   SizedBox(height: 16),
                 ],
                 _TripPaymentCard(data: data),
+                if (canPaySafetyTerminatedTrip) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        await Navigator.of(context).push<void>(
+                          MaterialPageRoute(
+                            builder: (_) => isDriver
+                                ? DriverTripPaymentPage(tripId: data.tripId!)
+                                : CustomerTripPrepaymentPage(
+                                    tripId: data.tripId!,
+                                  ),
+                          ),
+                        );
+                        if (context.mounted) await _reload(context);
+                      },
+                      icon: const Icon(Icons.payment_rounded),
+                      label: Text(context.l10n.completePayment),
+                    ),
+                  ),
+                ],
                 SizedBox(height: 16),
                 _TripFeedbackCard(data: data),
                 if (showCancelScheduled) ...[

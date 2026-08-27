@@ -61,6 +61,8 @@ class BookingRemoteDatasource {
     required BookingLocation pickup,
     BookingLocation? destination,
     int? estimatedHours,
+    BookingType bookingType = BookingType.now,
+    DateTime? scheduledAt,
   }) async {
     try {
       final response = await _dio.post(
@@ -68,6 +70,10 @@ class BookingRemoteDatasource {
         data: {
           ApiKeys.vehicleId: vehicleId,
           ApiKeys.serviceTypeId: serviceTypeId,
+          ApiKeys.bookingType: bookingType == BookingType.now
+              ? AppValues.bookingNow
+              : AppValues.bookingScheduled,
+          ApiKeys.scheduledAt: scheduledAt?.toUtc().toIso8601String(),
           ApiKeys.pickupLatitude: pickup.latitude,
           ApiKeys.pickupLongitude: pickup.longitude,
           ApiKeys.destinationLatitude: destination?.latitude ?? pickup.latitude,
@@ -362,35 +368,6 @@ class BookingRemoteDatasource {
     }
   }
 
-  Future<void> respondToEndTripRequest(
-    String accessToken, {
-    required int tripId,
-    required bool accepted,
-  }) async {
-    try {
-      await _dio.post(
-        ApiEndpoints.respondToEndTripRequest(tripId),
-        data: {'accepted': accepted},
-        options: Options(
-          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
-        ),
-      );
-    } on DioException catch (exception) {
-      final data = exception.response?.data;
-      if (data is Map && data[ApiKeys.detail] != null) {
-        throw BookingApiException(
-          data[ApiKeys.detail].toString(),
-          code: data[ApiKeys.code]?.toString(),
-          statusCode: exception.response?.statusCode,
-        );
-      }
-      throw BookingApiException(
-        LocaleProvider.currentLocalizations.tripEndFailed,
-        statusCode: exception.response?.statusCode,
-      );
-    }
-  }
-
   Future<void> triggerSOS(
     String accessToken, {
     required int tripId,
@@ -423,6 +400,47 @@ class BookingRemoteDatasource {
       throw BookingApiException(
         LocaleProvider.currentLocalizations.sosActivationFailed,
         statusCode: statusCode,
+      );
+    }
+  }
+
+  Future<int> reportAccident(
+    String accessToken, {
+    required int tripId,
+    required String description,
+  }) async {
+    try {
+      final response = await _dio.post(
+        ApiEndpoints.tripAccidents(tripId),
+        data: {
+          'category': 'MULTIPLE',
+          'occurredAtUtc': DateTime.now().toUtc().toIso8601String(),
+          'description': description.trim(),
+        },
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+        ),
+      );
+      final data = response.data;
+      final id = data is Map ? (data['id'] as num?)?.toInt() : null;
+      if (id == null || id <= 0) {
+        throw BookingApiException(
+          LocaleProvider.currentLocalizations.genericError,
+        );
+      }
+      return id;
+    } on DioException catch (exception) {
+      final data = exception.response?.data;
+      if (data is Map && data[ApiKeys.detail] != null) {
+        throw BookingApiException(
+          data[ApiKeys.detail].toString(),
+          code: data[ApiKeys.code]?.toString(),
+          statusCode: exception.response?.statusCode,
+        );
+      }
+      throw BookingApiException(
+        LocaleProvider.currentLocalizations.genericError,
+        statusCode: exception.response?.statusCode,
       );
     }
   }

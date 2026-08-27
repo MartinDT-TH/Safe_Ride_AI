@@ -33,8 +33,6 @@ public sealed record MobileRealtimeEventsResponse(
     string CustomerConfirmedDriverOffer,
     string TripCreated,
     string TripStatusChanged,
-    string TripEndRequested,
-    string TripEndRequestResponded,
     string TripPaymentPending,
     string TripPaymentSucceeded);
 

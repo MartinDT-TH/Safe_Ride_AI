@@ -36,4 +36,26 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test('maps the accepted pricing breakdown', () {
+    final estimate = BookingFareEstimate.fromJson({
+      'estimatedDistanceKm': 20,
+      'estimatedDurationMinutes': 60,
+      'encodedPolyline': 'route',
+      'estimatedFare': 279000,
+      'normalFare': 220000,
+      'surgedFare': 264000,
+      'surgeAmount': 44000,
+      'longDistanceComponent': 15000,
+      'minimumServiceFare': 30000,
+      'surgeMultiplier': 1.2,
+    });
+
+    expect(estimate.normalFare, 220000);
+    expect(estimate.surgedFare, 264000);
+    expect(estimate.surgeAmount, 44000);
+    expect(estimate.longDistanceComponent, 15000);
+    expect(estimate.minimumServiceFare, 30000);
+    expect(estimate.surgeMultiplier, 1.2);
+  });
 }

@@ -125,6 +125,9 @@ public sealed class BookingRepository : IBookingRepository
                     .ThenInclude(returnConfirmation => returnConfirmation.Evidence)
             .Include(booking => booking.Trip)
                 .ThenInclude(trip => trip!.Payments)
+            .Include(booking => booking.Trip)
+                .ThenInclude(trip => trip!.SafetyPaymentReconciliation)!
+                    .ThenInclude(reconciliation => reconciliation!.Refund)
             .Include(booking => booking.BookingPromotions)
                 .ThenInclude(bookingPromotion => bookingPromotion.Promotion)
             .Where(booking => booking.CustomerId == customerId

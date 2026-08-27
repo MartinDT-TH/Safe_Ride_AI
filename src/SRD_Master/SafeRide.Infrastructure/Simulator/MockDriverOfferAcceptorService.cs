@@ -464,18 +464,13 @@ public sealed class MockDriverOfferAcceptorService : BackgroundService
             trip = await dbContext.Trips.AsNoTracking().FirstOrDefaultAsync(t => t.Id == trip.Id, cancellationToken);
             if (trip is null || trip.TripStatus == TripStatus.CANCELLED) return;
 
-            // 4. WAITING_RETURN_CONFIRM: Driver ends trip
+            // 4. WAITING_PAYMENT: the driver ends the trip directly.
             await tripStatusService.EndTripAsync(
                 mockDriver.DriverId,
                 trip.Id,
                 cancellationToken);
-            await tripStatusService.RespondToEndTripRequestAsync(
-                booking.CustomerId,
-                trip.Id,
-                accepted: true,
-                cancellationToken);
 
-            logger.LogInformation("Trip {TripId} reached WAITING_RETURN_CONFIRM for mock driver {DriverId}", trip.Id, mockDriver.DriverId);
+            logger.LogInformation("Trip {TripId} reached WAITING_PAYMENT for mock driver {DriverId}", trip.Id, mockDriver.DriverId);
 
             // 5. Mock payment happens before the final return confirmation/rating step.
             try

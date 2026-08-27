@@ -1,9 +1,11 @@
 using MediatR;
+using Microsoft.Extensions.Options;
 using SafeRide.Application.Common.Exceptions;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
+using SafeRide.Application.Features.Bookings.Services;
 
 
 namespace SafeRide.Application.Features.Bookings.Queries.EstimateBookingFare;
@@ -16,25 +18,32 @@ public sealed class EstimateBookingFareQueryHandler
     private readonly IFareEstimationService _fareEstimationService;
     private readonly IVehicleLicenseRequirementService _vehicleLicenseRequirementService;
     private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly DriverCompensationOptions _compensationOptions;
 
     public EstimateBookingFareQueryHandler(
         IBookingRepository bookingRepository,
         IMapRoutingService mapRoutingService,
         IFareEstimationService fareEstimationService,
         IVehicleLicenseRequirementService vehicleLicenseRequirementService,
-        IDateTimeProvider dateTimeProvider)
+        IDateTimeProvider dateTimeProvider,
+        IOptions<DriverCompensationOptions> compensationOptions)
     {
         _bookingRepository = bookingRepository;
         _mapRoutingService = mapRoutingService;
         _fareEstimationService = fareEstimationService;
         _vehicleLicenseRequirementService = vehicleLicenseRequirementService;
         _dateTimeProvider = dateTimeProvider;
+        _compensationOptions = compensationOptions.Value;
     }
 
     public async Task<EstimateBookingFareResult> Handle(
         EstimateBookingFareQuery request,
         CancellationToken cancellationToken)
     {
+        var surgeEvaluationTime = BookingScheduleRules.ResolveSurgeEvaluationTime(
+            request.BookingType,
+            request.ScheduledAt,
+            _dateTimeProvider.UtcNow);
         ValidatePickupCoordinate(request);
 
         var vehicle = await _bookingRepository.GetCustomerVehicleAsync(
@@ -64,8 +73,9 @@ public sealed class EstimateBookingFareQueryHandler
         }
 
         var activeSurgeRule = await _bookingRepository.GetActiveSurgePricingRuleAsync(
-            _dateTimeProvider.UtcNow,
+            surgeEvaluationTime,
             cancellationToken);
+        var surgeMultiplier = activeSurgeRule?.SurgeMultiplier ?? 1m;
 
         if (pricingRule.PricePerHour.HasValue)
         {
@@ -79,18 +89,24 @@ public sealed class EstimateBookingFareQueryHandler
             }
 
             var durationMinutes = estimatedHours.Value * 60;
-            var hourlyEstimatedFare = _fareEstimationService.CalculateFare(
+            var hourlyFare = _fareEstimationService.CalculateBookingFare(
                 pricingRule,
                 0m,
                 durationMinutes,
-                activeSurgeRule);
+                surgeMultiplier,
+                _compensationOptions);
 
             return new EstimateBookingFareResult(
                 0,
                 durationMinutes,
                 null,
-                hourlyEstimatedFare,
-                activeSurgeRule?.SurgeMultiplier);
+                hourlyFare.EstimatedFare,
+                hourlyFare.NormalFare,
+                hourlyFare.SurgedFare,
+                hourlyFare.SurgeAmount,
+                hourlyFare.LongDistanceComponent,
+                pricingRule.MinFare,
+                surgeMultiplier);
         }
 
         ValidateDestinationCoordinates(request);
@@ -130,22 +146,25 @@ public sealed class EstimateBookingFareQueryHandler
                 502);
         }
 
-        var distanceKm = decimal.Round(
-            (decimal)route.DistanceKm,
-            2,
-            MidpointRounding.AwayFromZero);
-        var estimatedFare = _fareEstimationService.CalculateFare(
+        var distanceKm = (decimal)route.DistanceKm;
+        var fare = _fareEstimationService.CalculateBookingFare(
             pricingRule,
             distanceKm,
             route.DurationMinutes,
-            activeSurgeRule);
+            surgeMultiplier,
+            _compensationOptions);
 
         return new EstimateBookingFareResult(
             (double)distanceKm,
             route.DurationMinutes,
             route.EncodedPolyline,
-            estimatedFare,
-            activeSurgeRule?.SurgeMultiplier);
+            fare.EstimatedFare,
+            fare.NormalFare,
+            fare.SurgedFare,
+            fare.SurgeAmount,
+            fare.LongDistanceComponent,
+            pricingRule.MinFare,
+            surgeMultiplier);
     }
 
     private static void ValidatePickupCoordinate(EstimateBookingFareQuery request)

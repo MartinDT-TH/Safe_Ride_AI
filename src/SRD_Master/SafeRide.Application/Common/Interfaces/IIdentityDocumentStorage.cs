@@ -13,5 +13,9 @@ public interface IIdentityDocumentStorage
         string contentType,
         Stream content,
         CancellationToken cancellationToken);
+    Task DeleteAsync(
+        string storageKey,
+        string contentType,
+        CancellationToken cancellationToken) => Task.CompletedTask;
 }
 

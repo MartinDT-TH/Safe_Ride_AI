@@ -1,10 +1,12 @@
 using MediatR;
+using Microsoft.Extensions.Options;
 using NetTopologySuite.Geometries;
 using SafeRide.Application.Common.Exceptions;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
 using SafeRide.Application.Common.Realtime;
 using SafeRide.Application.Features.Promotions;
+using SafeRide.Application.Features.Bookings.Services;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
 
@@ -25,6 +27,7 @@ public sealed class CreateBookingCommandHandler
     private readonly IMatchingPolicyProvider _matchingPolicyProvider;
     private readonly IBookingLifecycleJobScheduler _jobScheduler;
     private readonly IPromotionUnlockRuleStore _promotionUnlockRuleStore;
+    private readonly DriverCompensationOptions _compensationOptions;
 
     public CreateBookingCommandHandler(
         IBookingRepository bookingRepository,
@@ -38,7 +41,8 @@ public sealed class CreateBookingCommandHandler
         IPromotionRepository promotionRepository,
         IPromotionUnlockRuleStore promotionUnlockRuleStore,
         IMatchingPolicyProvider matchingPolicyProvider,
-        IBookingLifecycleJobScheduler jobScheduler)
+        IBookingLifecycleJobScheduler jobScheduler,
+        IOptions<DriverCompensationOptions> compensationOptions)
     {
         _bookingRepository = bookingRepository;
         _unitOfWork = unitOfWork;
@@ -52,6 +56,7 @@ public sealed class CreateBookingCommandHandler
         _promotionUnlockRuleStore = promotionUnlockRuleStore;
         _matchingPolicyProvider = matchingPolicyProvider;
         _jobScheduler = jobScheduler;
+        _compensationOptions = compensationOptions.Value;
     }
 
     public async Task<CreateBookingResponse> Handle(
@@ -60,7 +65,10 @@ public sealed class CreateBookingCommandHandler
     {
         var utcNow = _dateTimeProvider.UtcNow;
         // Flow: validate booking type, pickup data, and duplicate active now-booking before loading related state.
-        ValidateSchedule(request.BookingType, request.ScheduledAt, utcNow);
+        var surgeEvaluationTime = BookingScheduleRules.ResolveSurgeEvaluationTime(
+            request.BookingType,
+            request.ScheduledAt,
+            utcNow);
         ValidatePickup(request);
         await EnsureNoActiveNowBookingAsync(request, cancellationToken);
 
@@ -92,14 +100,15 @@ public sealed class CreateBookingCommandHandler
         }
 
         var activeSurgeRule = await _bookingRepository.GetActiveSurgePricingRuleAsync(
-            utcNow,
+            surgeEvaluationTime,
             cancellationToken);
+        var surgeMultiplier = activeSurgeRule?.SurgeMultiplier ?? 1m;
 
         // Flow: calculate fare from hourly duration or route distance, preserving route data for distance trips.
         var isHourly = pricingRule.PricePerHour.HasValue;
         decimal estimatedDistanceKm;
         int estimatedDurationMinutes;
-        decimal estimatedFare;
+        BookingFareBreakdown fareBreakdown;
         string? routePolyline;
         string? destinationAddress;
         Point? destinationLocation;
@@ -117,11 +126,12 @@ public sealed class CreateBookingCommandHandler
 
             estimatedDistanceKm = 0m;
             estimatedDurationMinutes = estimatedHours.Value * 60;
-            estimatedFare = _fareEstimationService.CalculateFare(
+            fareBreakdown = _fareEstimationService.CalculateBookingFare(
                 pricingRule,
                 estimatedDistanceKm,
                 estimatedDurationMinutes,
-                activeSurgeRule);
+                surgeMultiplier,
+                _compensationOptions);
             routePolyline = null;
             destinationAddress = null;
             destinationLocation = null;
@@ -154,22 +164,30 @@ public sealed class CreateBookingCommandHandler
                     502);
             }
 
-            estimatedDistanceKm = decimal.Round(
-                (decimal)route.DistanceKm,
-                2,
-                MidpointRounding.AwayFromZero);
+            if (string.IsNullOrWhiteSpace(route.EncodedPolyline))
+            {
+                throw new BookingException(
+                    "booking.route_polyline_missing",
+                    "Không thể tính tuyến đường. Vui lòng kiểm tra lại điểm đón và điểm đến.",
+                    502);
+            }
+
+            estimatedDistanceKm = (decimal)route.DistanceKm;
             estimatedDurationMinutes = route.DurationMinutes;
-            estimatedFare = _fareEstimationService.CalculateFare(
+            fareBreakdown = _fareEstimationService.CalculateBookingFare(
                 pricingRule,
                 estimatedDistanceKm,
                 estimatedDurationMinutes,
-                activeSurgeRule);
+                surgeMultiplier,
+                _compensationOptions);
             routePolyline = route.EncodedPolyline;
             destinationAddress = request.DestinationAddress!.Trim();
             destinationLocation = CreatePoint(
                 request.DestinationLatitude,
                 request.DestinationLongitude);
         }
+
+        var estimatedFare = fareBreakdown.EstimatedFare;
 
         var bookingStatus = request.BookingType == BookingType.Now
             ? BookingStatus.Searching
@@ -195,6 +213,24 @@ public sealed class CreateBookingCommandHandler
             SpecialRequest = NormalizeOptionalText(request.SpecialRequest),
             PricingRuleId = pricingRule.Id,
             SurgePricingRuleId = activeSurgeRule?.Id,
+            PricingSnapshotVersion = Booking.CurrentPricingSnapshotVersion,
+            AcceptedBaseFare = pricingRule.BaseFare,
+            AcceptedMinimumServiceFare = pricingRule.MinFare,
+            AcceptedPricePerKm = pricingRule.PricePerKm,
+            AcceptedPricePerHour = pricingRule.PricePerHour,
+            AcceptedSurgeMultiplier = surgeMultiplier,
+            SurgeEvaluationTime = surgeEvaluationTime,
+            NormalFare = fareBreakdown.NormalFare,
+            SurgedFare = fareBreakdown.SurgedFare,
+            SurgeAmount = fareBreakdown.SurgeAmount,
+            AcceptedLongDistanceThresholdKm = Convert.ToDecimal(
+                _compensationOptions.LongDistanceThresholdKm),
+            AcceptedLongDistanceOptInThresholdKm = Convert.ToDecimal(
+                _compensationOptions.LongDistanceOptInThresholdKm),
+            AcceptedMaximumTripDistanceKm = Convert.ToDecimal(
+                _compensationOptions.MaximumTripDistanceKm),
+            AcceptedLongDistanceRatePerKm = _compensationOptions.LongDistanceRatePerKm,
+            LongDistanceComponent = fareBreakdown.LongDistanceComponent,
             CreatedAt = utcNow,
             UpdatedAt = utcNow
         };
@@ -275,45 +311,6 @@ public sealed class CreateBookingCommandHandler
             ExpiresAt: matchingSnapshot.ExpiresAt,
             EstimatedRemainingSeconds: matchingSnapshot.EstimatedRemainingSeconds,
             MatchingMessage: matchingSnapshot.MatchingMessage);
-    }
-
-    private static void ValidateSchedule(
-        BookingType bookingType,
-        DateTime? scheduledAt,
-        DateTime utcNow)
-    {
-        if (!Enum.IsDefined(bookingType))
-        {
-            throw new BookingException(
-                "booking.invalid_type",
-                "Loại đặt chuyến không hợp lệ.",
-                400);
-        }
-
-        if (bookingType == BookingType.Now && scheduledAt.HasValue)
-        {
-            throw new BookingException(
-                "booking.schedule_not_allowed",
-                "Chuyến đi ngay không được có thời gian đặt trước.",
-                400);
-        }
-
-        if (bookingType == BookingType.Scheduled
-            && (!scheduledAt.HasValue || scheduledAt.Value < utcNow.AddMinutes(30)))
-        {
-            throw new BookingException(
-                "booking.invalid_schedule",
-                "Thời gian đặt trước phải cách thời điểm hiện tại ít nhất 30 phút.",
-                400);
-        }
-
-        if (scheduledAt.HasValue && scheduledAt.Value.Kind == DateTimeKind.Local)
-        {
-            throw new BookingException(
-                "booking.schedule_must_be_utc",
-                "Thời gian đặt trước phải được gửi theo múi giờ UTC.",
-                400);
-        }
     }
 
     private async Task EnsureNoActiveNowBookingAsync(

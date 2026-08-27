@@ -59,11 +59,287 @@ void main() {
       provider.dispose();
     },
   );
+
+  test('active trip reload cannot downgrade completed payment', () async {
+    var returnActiveTrip = false;
+    final socket = _FakeSocketService();
+    final dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            if (returnActiveTrip &&
+                options.path.endsWith('/drivers/trips/active')) {
+              handler.resolve(
+                Response<dynamic>(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: const <String, dynamic>{
+                    'bookingId': 101,
+                    'tripId': 202,
+                    'tripStatus': 'WAITING_RETURN_CONFIRM',
+                    'paymentCompleted': false,
+                  },
+                ),
+              );
+              return;
+            }
+
+            handler.resolve(
+              Response<dynamic>(requestOptions: options, statusCode: 204),
+            );
+          },
+        ),
+      );
+    final provider = DriverDashboardProvider(socketService: socket, dio: dio);
+    await provider.initializeRealtime('header.payload.signature');
+
+    socket.emitBooking(
+      const BookingUpdate(
+        bookingId: 101,
+        status: 'DriverAssigned',
+        tripId: 202,
+        tripStatus: 'WAITING_RETURN_CONFIRM',
+      ),
+    );
+    provider.markTripPaymentCompleted(202);
+    expect(provider.activeTrip?.paymentCompleted, isTrue);
+
+    returnActiveTrip = true;
+    await provider.loadActiveTrip();
+
+    expect(provider.activeTrip?.paymentCompleted, isTrue);
+    provider.dispose();
+  });
+
+  test(
+    'successful payment advances the driver view to return confirmation',
+    () async {
+      final socket = _FakeSocketService();
+      final dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              handler.resolve(
+                Response<dynamic>(requestOptions: options, statusCode: 204),
+              );
+            },
+          ),
+        );
+      final provider = DriverDashboardProvider(socketService: socket, dio: dio);
+      await provider.initializeRealtime('header.payload.signature');
+
+      socket.emitBooking(
+        const BookingUpdate(
+          bookingId: 101,
+          status: 'DriverAssigned',
+          tripId: 202,
+          tripStatus: 'WAITING_PAYMENT',
+        ),
+      );
+      socket.emitPayment(
+        const TripPaymentUpdate(
+          tripId: 202,
+          bookingId: 101,
+          customerId: 'customer',
+          driverId: 'driver',
+          paymentId: 303,
+          paymentMethod: 'CASH',
+          paymentStatus: 'Success',
+          amount: 62000,
+          currency: 'VND',
+          tripStatus: 'WAITING_RETURN_CONFIRM',
+          message: 'Paid',
+          eventName: 'TripPaymentSucceeded',
+        ),
+      );
+
+      expect(provider.activeTrip?.tripStatus, 'WAITING_RETURN_CONFIRM');
+      expect(provider.activeTrip?.paymentCompleted, isTrue);
+      provider.dispose();
+    },
+  );
+
+  test(
+    'return-confirmed recovery completes and clears the active trip',
+    () async {
+      String? requestedPath;
+      final socket = _FakeSocketService();
+      final dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              requestedPath = options.path;
+              handler.resolve(
+                Response<dynamic>(requestOptions: options, statusCode: 204),
+              );
+            },
+          ),
+        );
+      final provider = DriverDashboardProvider(socketService: socket, dio: dio);
+      await provider.initializeRealtime('header.payload.signature');
+      socket.emitBooking(
+        const BookingUpdate(
+          bookingId: 101,
+          status: 'DriverAssigned',
+          tripId: 202,
+          tripStatus: 'RETURN_CONFIRMED',
+        ),
+      );
+
+      expect(await provider.completeActiveTrip(), isTrue);
+      expect(requestedPath, endsWith('/trips/202/complete'));
+      expect(provider.activeTrip, isNull);
+      provider.dispose();
+    },
+  );
+
+  test(
+    'driver unable end sends its canonical reason and forces offline',
+    () async {
+      Map<String, dynamic>? endPayload;
+      var endSubmitted = false;
+      final socket = _FakeSocketService();
+      final dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              if (options.path.endsWith('/trips/202/end')) {
+                endPayload = Map<String, dynamic>.from(options.data as Map);
+                endSubmitted = true;
+                handler.resolve(
+                  Response<dynamic>(requestOptions: options, statusCode: 204),
+                );
+                return;
+              }
+              if (endSubmitted &&
+                  options.path.endsWith('/drivers/trips/active')) {
+                handler.resolve(
+                  Response<dynamic>(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: const <String, dynamic>{
+                      'bookingId': 101,
+                      'tripId': 202,
+                      'tripStatus': 'WAITING_PAYMENT',
+                      'paymentCompleted': false,
+                    },
+                  ),
+                );
+                return;
+              }
+              handler.resolve(
+                Response<dynamic>(requestOptions: options, statusCode: 204),
+              );
+            },
+          ),
+        );
+      final provider = DriverDashboardProvider(socketService: socket, dio: dio);
+      await provider.initializeRealtime('header.payload.signature');
+      await provider.goOnline(10.0, 106.0);
+      socket.emitBooking(
+        const BookingUpdate(
+          bookingId: 101,
+          status: 'DriverAssigned',
+          tripId: 202,
+          tripStatus: 'IN_PROGRESS',
+        ),
+      );
+
+      expect(
+        await provider.endTripAsync(
+          DriverTripEndReason.driverUnableToContinue,
+          canContinueWorking: true,
+        ),
+        isTrue,
+      );
+
+      expect(endPayload, {
+        'reason': 'DRIVER_UNABLE_TO_CONTINUE',
+        'canContinueWorking': false,
+      });
+      expect(provider.activeTrip?.tripStatus, 'WAITING_PAYMENT');
+      expect(provider.status, DriverStatus.offline);
+      provider.dispose();
+    },
+  );
+
+  test(
+    'accepted exceptional end shows post-trip reconciliation state',
+    () async {
+      var endSubmitted = false;
+      final socket = _FakeSocketService();
+      final dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              if (options.path.endsWith('/trips/202/end')) {
+                endSubmitted = true;
+                handler.resolve(
+                  Response<dynamic>(
+                    requestOptions: options,
+                    statusCode: 202,
+                    data: const <String, dynamic>{
+                      'message': 'Submitted for staff review.',
+                    },
+                  ),
+                );
+                return;
+              }
+              if (endSubmitted &&
+                  options.path.endsWith('/drivers/trips/active')) {
+                handler.resolve(
+                  Response<dynamic>(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: const <String, dynamic>{
+                      'bookingId': 101,
+                      'tripId': 202,
+                      'tripStatus': 'WAITING_PAYMENT',
+                      'paymentCompleted': false,
+                      'endReconciliationPending': true,
+                    },
+                  ),
+                );
+                return;
+              }
+              handler.resolve(
+                Response<dynamic>(requestOptions: options, statusCode: 204),
+              );
+            },
+          ),
+        );
+      final provider = DriverDashboardProvider(socketService: socket, dio: dio);
+      await provider.initializeRealtime('header.payload.signature');
+      socket.emitBooking(
+        const BookingUpdate(
+          bookingId: 101,
+          status: 'DriverAssigned',
+          tripId: 202,
+          tripStatus: 'IN_PROGRESS',
+        ),
+      );
+
+      expect(
+        await provider.endTripAsync(
+          DriverTripEndReason.startedByMistake,
+          canContinueWorking: false,
+        ),
+        isTrue,
+      );
+
+      expect(provider.activeTrip?.tripStatus, 'WAITING_PAYMENT');
+      expect(provider.activeTrip?.endReconciliationPending, isTrue);
+      expect(provider.status, DriverStatus.offline);
+      expect(provider.snackbarMessage, 'Submitted for staff review.');
+      provider.dispose();
+    },
+  );
 }
 
 class _FakeSocketService extends SocketService {
   void Function(BookingUpdate update)? _bookingHandler;
   void Function(TripStatusUpdate update)? _tripStatusHandler;
+  void Function(TripPaymentUpdate update)? _paymentHandler;
   final List<int> leftTripIds = [];
 
   @override
@@ -93,7 +369,9 @@ class _FakeSocketService extends SocketService {
   void onTripPaymentUpdated(
     void Function(TripPaymentUpdate update) handler, {
     String key = 'default',
-  }) {}
+  }) {
+    _paymentHandler = handler;
+  }
 
   @override
   void onBookingUpdated(
@@ -118,4 +396,6 @@ class _FakeSocketService extends SocketService {
 
   void emitTripStatus(TripStatusUpdate update) =>
       _tripStatusHandler?.call(update);
+
+  void emitPayment(TripPaymentUpdate update) => _paymentHandler?.call(update);
 }

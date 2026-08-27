@@ -13,6 +13,7 @@ using SafeRide.Infrastructure.Services;
 
 namespace SafeRide.IntegrationTests;
 
+[Trait(SqlServerTestDatabase.ProviderTraitName, SqlServerTestDatabase.InMemoryProvider)]
 public sealed class DriverRealtimeServiceTests
 {
     private static readonly DateTime UtcNow =
@@ -229,6 +230,104 @@ public sealed class DriverRealtimeServiceTests
         Assert.Empty(snapshot.PathPoints);
         Assert.Equal(0, snapshot.DistanceMeters);
         Assert.Equal(42, Assert.Single(realtime.DriverLocationNotifications).TripId);
+    }
+
+    [Fact]
+    public async Task UpdateDriverLocation_PlannedProgressNeverMovesBackward()
+    {
+        await using var dbContext = CreateDbContext();
+        var redis = new InMemoryRedisService();
+        var realtime = new RealtimeNotificationServiceFake();
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        await SeedCachedTripAsync(redis, driverId, customerId);
+        var service = CreateService(dbContext, redis, realtime);
+
+        await service.UpdateDriverLocationAsync(driverId, 43.252, -126.453);
+        await service.UpdateDriverLocationAsync(driverId, 38.5, -120.2);
+
+        var progress = await ReadMaximumPlannedProgressAsync(redis, 42);
+        Assert.Equal(1d, progress, precision: 6);
+    }
+
+    [Fact]
+    public async Task UpdateDriverLocation_UntrustedProjectionPreservesPreviousPlannedProgress()
+    {
+        await using var dbContext = CreateDbContext();
+        var redis = new InMemoryRedisService();
+        var realtime = new RealtimeNotificationServiceFake();
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        await SeedCachedTripAsync(redis, driverId, customerId);
+        await redis.SetAsync(
+            RedisKeys.TripPlannedRouteProgress(42),
+            "0.6",
+            TimeSpan.FromHours(1));
+        var service = CreateService(dbContext, redis, realtime);
+
+        await service.UpdateDriverLocationAsync(driverId, 0, 0);
+
+        var progress = await ReadMaximumPlannedProgressAsync(redis, 42);
+        Assert.Equal(0.6d, progress, precision: 6);
+    }
+
+    [Fact]
+    public async Task UpdateDriverLocation_ActiveRerouteDoesNotReplaceOriginalPricingRoute()
+    {
+        await using var dbContext = CreateDbContext();
+        var redis = new InMemoryRedisService();
+        var realtime = new RealtimeNotificationServiceFake();
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        await SeedCachedTripAsync(redis, driverId, customerId);
+        await redis.SetAsync(
+            RedisKeys.TripActiveRoute(42),
+            System.Text.Json.JsonSerializer.Serialize(new
+            {
+                EncodedPolyline = "_ulLnnqC_mqNvxq`@",
+                DistanceMeters = 1d,
+                DurationSeconds = 1d,
+                UpdatedAt = UtcNow,
+                RouteVersion = 2
+            }),
+            TimeSpan.FromHours(1));
+        var service = CreateService(dbContext, redis, realtime);
+
+        await service.UpdateDriverLocationAsync(driverId, 38.5, -120.2);
+
+        var progress = await ReadMaximumPlannedProgressAsync(redis, 42);
+        Assert.Equal(0d, progress, precision: 6);
+    }
+
+    private static async Task SeedCachedTripAsync(
+        IRedisService redis,
+        Guid driverId,
+        Guid customerId)
+    {
+        await redis.SetAsync(
+            RedisKeys.DriverActiveTrip(driverId),
+            System.Text.Json.JsonSerializer.Serialize(new DriverActiveTripCache(
+                42,
+                84,
+                driverId,
+                customerId,
+                TripStatus.IN_PROGRESS,
+                UtcNow.AddMinutes(-10),
+                "_p~iF~ps|U_ulLnnqC_mqNvxq`@",
+                43.252,
+                -126.453)),
+            TimeSpan.FromMinutes(30));
+    }
+
+    private static async Task<double> ReadMaximumPlannedProgressAsync(
+        IRedisService redis,
+        long tripId)
+    {
+        var json = await redis.GetAsync(RedisKeys.TripPlannedRouteProgress(tripId));
+        Assert.False(string.IsNullOrWhiteSpace(json));
+        return double.Parse(
+            json!,
+            System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private static DriverRealtimeService CreateService(

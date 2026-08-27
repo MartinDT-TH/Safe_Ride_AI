@@ -34,7 +34,7 @@ class DriverTripRequestRemoteDatasource {
           .toList();
     } on FormatException {
       throw DriverTripRequestApiException(
-        LocaleProvider.currentLocalizations.sessionExpired,
+        LocaleProvider.currentLocalizations.tripRequestsLoadFailed,
       );
     } on DioException catch (exception) {
       final data = exception.response?.data;

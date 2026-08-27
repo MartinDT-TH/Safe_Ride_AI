@@ -112,6 +112,18 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
                     "UpdatedAt",
                     "UpdatedByUserId"
                 },
+                columnTypes: new[]
+                {
+                    "bigint",
+                    "int",
+                    "int",
+                    "int",
+                    "int",
+                    "bit",
+                    "datetime2",
+                    "datetime2",
+                    "uniqueidentifier"
+                },
                 values: new object[]
                 {
                     1L,

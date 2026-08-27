@@ -13,6 +13,12 @@ public sealed record TripSessionInfo(
     DateTime? StartedAt,
     DateTime? CompletedAt);
 
+public sealed record BookingSessionInfo(
+    long BookingId,
+    Guid CustomerId,
+    BookingStatus BookingStatus,
+    DateTime CreatedAt);
+
 public interface ITripSessionQueryService
 {
     Task<TripSessionInfo?> GetActiveTripForUserAsync(
@@ -26,6 +32,16 @@ public interface ITripSessionQueryService
         CancellationToken cancellationToken = default);
 
     Task<TripSessionInfo?> GetTripForBookingForUserAsync(
+        Guid userId,
+        long bookingId,
+        CancellationToken cancellationToken = default);
+
+    Task<BookingSessionInfo?> GetActiveBookingForUserAsync(
+        Guid userId,
+        DateTime? existedAtOrBeforeUtc,
+        CancellationToken cancellationToken = default);
+
+    Task<BookingSessionInfo?> GetBookingForUserAsync(
         Guid userId,
         long bookingId,
         CancellationToken cancellationToken = default);

@@ -33,42 +33,111 @@ public sealed class TripContinuationAccessService : ITripContinuationAccessServi
             return true;
         }
 
-        if (!TryGetUserId(user, out var userId)
-            || !TryGetContinuationTripId(user, out var continuationTripId))
+        if (!TryGetUserId(user, out var userId))
         {
             return false;
         }
 
-        if (tripId.HasValue && tripId.Value != continuationTripId)
+        var hasContinuationTrip = TryGetContinuationTripId(
+            user,
+            out var continuationTripId);
+        var hasContinuationBooking = TryGetContinuationBookingId(
+            user,
+            out var continuationBookingId);
+        if (!hasContinuationTrip && !hasContinuationBooking)
         {
             return false;
         }
 
-        var trip = await LoadTripAsync(
+        if (hasContinuationTrip)
+        {
+            if (tripId.HasValue && tripId.Value != continuationTripId)
+            {
+                return false;
+            }
+
+            var trip = await LoadTripAsync(
+                userId,
+                continuationTripId,
+                tripId,
+                bookingId,
+                cancellationToken);
+            if (trip is null || trip.TripId != continuationTripId)
+            {
+                return false;
+            }
+
+            if (trip.CustomerId != userId && trip.DriverId != userId)
+            {
+                return false;
+            }
+
+            if (bookingId.HasValue && trip.BookingId != bookingId.Value)
+            {
+                return false;
+            }
+
+            return IsTripOperationAllowed(operation, trip, userId);
+        }
+
+        if (bookingId.HasValue && bookingId.Value != continuationBookingId)
+        {
+            return false;
+        }
+
+        if (tripId.HasValue)
+        {
+            var trip = await _tripSessionQueryService.GetTripForBookingForUserAsync(
+                userId,
+                continuationBookingId,
+                cancellationToken);
+            return trip is not null
+                && trip.TripId == tripId.Value
+                && IsTripOperationAllowed(operation, trip, userId);
+        }
+
+        var booking = await _tripSessionQueryService.GetBookingForUserAsync(
             userId,
-            continuationTripId,
-            tripId,
-            bookingId,
+            continuationBookingId,
             cancellationToken);
-        if (trip is null || trip.TripId != continuationTripId)
+        if (booking is null)
         {
             return false;
         }
 
-        if (trip.CustomerId != userId && trip.DriverId != userId)
+        if (IsActive(booking))
+        {
+            return operation is
+                TripContinuationOperation.ActiveTripRead
+                or TripContinuationOperation.BookingRead
+                or TripContinuationOperation.BookingManage
+                or TripContinuationOperation.BookingCancel
+                or TripContinuationOperation.SignalRJoinBooking;
+        }
+
+        if (operation != TripContinuationOperation.BookingRead)
         {
             return false;
         }
 
-        if (bookingId.HasValue && trip.BookingId != bookingId.Value)
-        {
-            return false;
-        }
+        var completedTrip = await _tripSessionQueryService.GetTripForBookingForUserAsync(
+            userId,
+            continuationBookingId,
+            cancellationToken);
+        return completedTrip is not null
+            && IsTripOperationAllowed(operation, completedTrip, userId);
+    }
 
+    private bool IsTripOperationAllowed(
+        TripContinuationOperation operation,
+        TripSessionInfo trip,
+        Guid userId)
+    {
         return operation switch
         {
             TripContinuationOperation.ActiveTripRead => true,
             TripContinuationOperation.BookingRead => IsActive(trip) || IsRatingGrace(trip),
+            TripContinuationOperation.BookingManage => false,
             TripContinuationOperation.BookingCancel => IsActive(trip),
             TripContinuationOperation.DriverLocation => trip.DriverId == userId && IsActive(trip),
             TripContinuationOperation.TripStatusUpdate => trip.DriverId == userId && IsActive(trip),
@@ -126,6 +195,11 @@ public sealed class TripContinuationAccessService : ITripContinuationAccessServi
         return trip.TripStatus is not TripStatus.COMPLETED and not TripStatus.CANCELLED;
     }
 
+    private static bool IsActive(BookingSessionInfo booking)
+    {
+        return booking.BookingStatus is BookingStatus.Searching or BookingStatus.DriverAssigned;
+    }
+
     private static bool TryGetUserId(ClaimsPrincipal user, out Guid userId)
     {
         return Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out userId);
@@ -140,5 +214,16 @@ public sealed class TripContinuationAccessService : ITripContinuationAccessServi
             NumberStyles.Integer,
             CultureInfo.InvariantCulture,
             out tripId);
+    }
+
+    private static bool TryGetContinuationBookingId(
+        ClaimsPrincipal user,
+        out long bookingId)
+    {
+        return long.TryParse(
+            user.FindFirstValue(AuthClaimTypes.ContinuationBookingId),
+            NumberStyles.Integer,
+            CultureInfo.InvariantCulture,
+            out bookingId);
     }
 }

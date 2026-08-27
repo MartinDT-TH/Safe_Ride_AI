@@ -4,5 +4,6 @@ public sealed record StoredIdentityDocumentFile(
     string Url,
     string FileName,
     string ContentType,
-    long SizeBytes);
+    long SizeBytes,
+    string? StorageKey = null);
 

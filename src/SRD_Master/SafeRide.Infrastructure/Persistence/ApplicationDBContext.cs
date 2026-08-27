@@ -3,6 +3,7 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using System;
 using System.Collections.Generic;
 using SafeRide.Domain.Entities;
@@ -59,6 +60,8 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
     public virtual DbSet<SystemSetting> SystemSettings { get; set; }
 
     public virtual DbSet<Trip> Trips { get; set; }
+
+    public virtual DbSet<TripEndReconciliationRequest> TripEndReconciliationRequests { get; set; }
 
     public virtual DbSet<TripReturnConfirmation> TripReturnConfirmations { get; set; }
 
@@ -122,6 +125,7 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
         modelBuilder.ApplyConfiguration(new BookingConfiguration());
         modelBuilder.ApplyConfiguration(new TripReturnConfirmationConfiguration());
         modelBuilder.ApplyConfiguration(new TripReturnEvidenceConfiguration());
+        modelBuilder.ApplyConfiguration(new TripEndReconciliationRequestConfiguration());
 
         modelBuilder.Entity<BookingDriverOffer>(entity =>
         {
@@ -131,12 +135,20 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
             {
                 tb.HasCheckConstraint("CK_BookingDriverOffers_OfferStatus", "[OfferStatus] IN ('Sent', 'DriverAccepted', 'CustomerConfirmed', 'Rejected', 'Expired', 'Cancelled')");
                 tb.HasCheckConstraint("CK_BookingDriverOffers_ExpiresAt", "[ExpiresAt] > [OfferedAt]");
+                tb.HasCheckConstraint("CK_BookingDriverOffers_PickupDistanceKm", "[PickupDistanceKm] IS NULL OR [PickupDistanceKm] >= 0");
+                tb.HasCheckConstraint("CK_BookingDriverOffers_LongPickupCompensation", "[LongPickupCompensation] IS NULL OR ([LongPickupCompensation] >= 0 AND [LongPickupCompensation] = ROUND([LongPickupCompensation], 0))");
             });
 
             entity.Property(e => e.OfferStatus)
                 .HasConversion<string>()
                 .HasMaxLength(20);
             entity.Property(e => e.OfferedAt).HasDefaultValueSql("(getutcdate())");
+            entity.Property(e => e.PickupDistanceKm)
+                .HasColumnType("decimal(18, 3)")
+                .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
+            entity.Property(e => e.LongPickupCompensation)
+                .HasColumnType("decimal(18, 2)")
+                .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
 
             entity.HasIndex(e => e.BookingId);
             entity.HasIndex(e => e.DriverId);
@@ -162,6 +174,9 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
         modelBuilder.Entity<BookingPromotion>(entity =>
         {
             entity.HasKey(e => new { e.BookingId, e.PromotionId }).HasName("PK__BookingP__96B958114224E6FD");
+            entity.HasIndex(e => e.BookingId)
+                .IsUnique()
+                .HasDatabaseName("UX_BookingPromotions_BookingId");
 
             entity.ToTable(tb =>
             {
@@ -246,6 +261,8 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
 
             entity.Property(e => e.DriverId).ValueGeneratedNever();
             entity.Property(e => e.ExperienceYears).HasDefaultValue(0);
+            entity.Property(e => e.AcceptLongPickupTrips).HasDefaultValue(false);
+            entity.Property(e => e.AcceptLongDistanceTrips).HasDefaultValue(false);
             entity.Property(e => e.IdentityCardNumber)
                 .HasMaxLength(20)
                 .IsUnicode(false);
@@ -305,6 +322,14 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
         modelBuilder.Entity<Payment>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK__Payments__3214EC076511D9DA");
+            entity.HasIndex(e => e.TripId)
+                .IsUnique()
+                .HasFilter("[PaymentMethod] = 'QR' AND [PaymentStatus] = 'Pending'")
+                .HasDatabaseName("UX_Payments_Trip_PendingQr");
+            entity.HasIndex(e => e.TransactionReference)
+                .IsUnique()
+                .HasFilter("[TransactionReference] IS NOT NULL")
+                .HasDatabaseName("UX_Payments_TransactionReference");
 
             entity.ToTable(tb =>
             {
@@ -593,8 +618,12 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
                 .HasForeignKey(d => d.CancelledByUserId)
                 .HasConstraintName("FK_Trips_CancelledBy");
 
-            // A driver can have many historical trips.
-            // The filtered unique index UX_Trips_Driver_Active already guarantees only one active trip at a time.
+            entity.HasIndex(e => e.DriverId)
+                .IsUnique()
+                .HasFilter("[TripStatus] <> 'COMPLETED' AND [TripStatus] <> 'CANCELLED'")
+                .HasDatabaseName("UX_Trips_Driver_Active");
+
+            // A driver can have many historical trips, but only one active trip.
             entity.HasOne(d => d.Driver).WithMany()
                 .HasForeignKey(d => d.DriverId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
@@ -690,6 +719,12 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
         {
             entity.HasKey(e => e.Id).HasName("PK__WalletTr__3214EC0740D81F8C");
 
+            entity.HasIndex(e => e.TripId);
+            entity.HasIndex(e => new { e.TripId, e.WalletId })
+                .IsUnique()
+                .HasFilter("[TripId] IS NOT NULL AND [SettlementEffect] IS NOT NULL")
+                .HasDatabaseName("UX_WalletTransactions_Trip_Wallet_SettlementEffect");
+
             entity.ToTable(tb =>
             {
                 tb.HasCheckConstraint("CK_WalletTransactions_TransactionType", "[TransactionType] IN ('Income', 'Withdrawal', 'Penalty', 'Bonus')");
@@ -702,6 +737,9 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
             entity.Property(e => e.TransactionType)
                 .HasConversion<string>()
                 .HasMaxLength(20);
+            entity.Property(e => e.SettlementEffect)
+                .HasConversion<string>()
+                .HasMaxLength(40);
 
             entity.HasOne(d => d.Trip).WithMany(p => p.WalletTransactions)
                 .HasForeignKey(d => d.TripId)

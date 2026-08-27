@@ -28,8 +28,6 @@ public sealed class TripTrackingOptions
 
     public double MinTrustedDistanceMeters { get; set; } = 10;
 
-    public decimal MinimumEarlyEndFare { get; set; } = 2_000m;
-
     public double RouteDeviationThresholdMeters { get; set; } = 100;
 
     public int RouteDeviationRequiredSamples { get; set; } = 3;

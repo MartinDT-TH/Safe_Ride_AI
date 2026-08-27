@@ -30,6 +30,7 @@ class RebookTripPage extends StatefulWidget {
 
 class _RebookTripPageState extends State<RebookTripPage> {
   bool _isScheduled = false;
+  DateTime? _scheduledAt;
   BookingLocation? _pickup;
   BookingLocation? _destination;
 
@@ -68,6 +69,10 @@ class _RebookTripPageState extends State<RebookTripPage> {
           serviceTypeId: service.id,
           pickup: _pickup!,
           destination: _destination!,
+          bookingType: _isScheduled
+              ? BookingType.scheduled
+              : BookingType.now,
+          scheduledAt: _scheduledAt,
         );
       }
     }
@@ -133,9 +138,7 @@ class _RebookTripPageState extends State<RebookTripPage> {
         vehicleId: vehicle.id,
         serviceTypeId: service.id,
         bookingType: _isScheduled ? BookingType.scheduled : BookingType.now,
-        scheduledAt: _isScheduled
-            ? DateTime.now().add(Duration(minutes: 35))
-            : null,
+        scheduledAt: _scheduledAt,
         pickup: pickup,
         destination: destination,
       ),
@@ -416,7 +419,13 @@ class _RebookTripPageState extends State<RebookTripPage> {
                 children: [
                   Expanded(
                     child: GestureDetector(
-                      onTap: () => setState(() => _isScheduled = false),
+                      onTap: () async {
+                        setState(() {
+                          _isScheduled = false;
+                          _scheduledAt = null;
+                        });
+                        await _loadData();
+                      },
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         decoration: BoxDecoration(
@@ -458,7 +467,15 @@ class _RebookTripPageState extends State<RebookTripPage> {
                   SizedBox(width: 12),
                   Expanded(
                     child: GestureDetector(
-                      onTap: () => setState(() => _isScheduled = true),
+                      onTap: () async {
+                        setState(() {
+                          _isScheduled = true;
+                          _scheduledAt = DateTime.now().add(
+                            Duration(minutes: 35),
+                          );
+                        });
+                        await _loadData();
+                      },
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         decoration: BoxDecoration(

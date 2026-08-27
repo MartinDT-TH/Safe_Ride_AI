@@ -62,8 +62,6 @@ public sealed class MobileConfigController : ControllerBase
                     "CustomerConfirmedDriverOffer",
                     "TripCreated",
                     "TripStatusChanged",
-                    "TripEndRequested",
-                    "TripEndRequestResponded",
                     "TripPaymentPending",
                     "TripPaymentSucceeded")),
             new MobileStatusGroupResponse(
@@ -81,9 +79,9 @@ public sealed class MobileConfigController : ControllerBase
                 Status(TripStatus.DRIVER_ARRIVING, "Tài xế đang đến"),
                 Status(TripStatus.ARRIVED, "Tài xế đã đến"),
                 Status(TripStatus.IN_PROGRESS, "Đang di chuyển"),
+                Status(TripStatus.WAITING_PAYMENT, "Chờ thanh toán"),
                 Status(TripStatus.WAITING_RETURN_CONFIRM, "Chờ xác nhận nhận lại xe"),
                 Status(TripStatus.RETURN_CONFIRMED, "Đã xác nhận nhận lại xe"),
-                Status(TripStatus.WAITING_PAYMENT, "Chờ thanh toán"),
                 Status(TripStatus.COMPLETED, "Hoàn thành"),
                 Status(TripStatus.CANCELLED, "Đã hủy")
             ]),

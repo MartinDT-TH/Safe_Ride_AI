@@ -7,6 +7,7 @@ using SafeRide.Infrastructure.Services;
 
 namespace SafeRide.IntegrationTests;
 
+[Trait(SqlServerTestDatabase.ProviderTraitName, SqlServerTestDatabase.InMemoryProvider)]
 public sealed class AdminTripManagementServiceTests
 {
     private static readonly DateTime UtcNow =

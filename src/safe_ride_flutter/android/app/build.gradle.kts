@@ -94,3 +94,10 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Native Cronet provider via Google Play Services: resolves
+    // "using the fallback Cronet Engine implementation" warning.
+    // Provides the native Cronet engine from Play Services without bundling Cronet into the APK.
+    implementation("com.google.android.gms:play-services-cronet:18.0.1")
+}

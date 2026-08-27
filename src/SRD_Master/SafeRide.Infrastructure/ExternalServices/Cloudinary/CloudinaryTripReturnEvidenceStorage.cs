@@ -42,6 +42,12 @@ public sealed class CloudinaryTripReturnEvidenceStorage : ITripReturnEvidenceSto
 
         var publicId = $"saferide/trip-return-evidence/{tripId}/photo-{displayOrder}";
 
+        // Cloudinary may close the supplied stream after upload, so capture
+        // optional metadata before handing ownership to the SDK.
+        long? sizeBytes = null;
+        try { sizeBytes = content.Length; }
+        catch (NotSupportedException) { }
+
         var upload = await cloudinary.UploadAsync(
             new ImageUploadParams
             {
@@ -61,17 +67,30 @@ public sealed class CloudinaryTripReturnEvidenceStorage : ITripReturnEvidenceSto
                 upload.Error?.Message ?? "Cloudinary did not return an image URL.");
         }
 
-        // Content length after upload; stream.Length may be unavailable for forward-only streams,
-        // so we fall back to the size reported by the upload params.
-        long? sizeBytes = null;
-        try { sizeBytes = content.Length; }
-        catch (NotSupportedException) { }
-
         return new StoredReturnEvidenceFile(
             upload.SecureUrl.ToString(),
             upload.PublicId,
             originalFileName,
             contentType,
             sizeBytes);
+    }
+
+    public async Task DeleteAsync(string publicId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(publicId)) return;
+        if (string.IsNullOrWhiteSpace(_options.CloudName)
+            || string.IsNullOrWhiteSpace(_options.ApiKey)
+            || string.IsNullOrWhiteSpace(_options.ApiSecret))
+            return;
+        var cloudinary = new global::CloudinaryDotNet.Cloudinary(new Account(
+            _options.CloudName,
+            _options.ApiKey,
+            _options.ApiSecret));
+        await cloudinary.DestroyAsync(
+            new DeletionParams(publicId)
+            {
+                ResourceType = ResourceType.Image,
+                Invalidate = true
+            });
     }
 }

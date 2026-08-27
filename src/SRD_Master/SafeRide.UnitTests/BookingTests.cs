@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.Extensions.Options;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
 using SafeRide.Application.Common.Realtime;
@@ -51,6 +53,34 @@ public sealed class BookingTests
     }
 
     [Fact]
+    public void PricingSnapshotProperties_RejectChangesAfterInsert()
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlServer(
+                "Server=(localdb)\\mssqllocaldb;Database=SafeRideModelTest;Trusted_Connection=True;",
+                sql => sql.UseNetTopologySuite())
+            .Options;
+        using var dbContext = new ApplicationDbContext(options);
+        var bookingType = dbContext.Model.FindEntityType(typeof(Booking))!;
+        string[] immutableProperties =
+        [
+            nameof(Booking.EstimatedFare),
+            nameof(Booking.EstimatedDistanceKm),
+            nameof(Booking.RoutePolyline),
+            nameof(Booking.PricingRuleId),
+            nameof(Booking.PricingSnapshotVersion),
+            nameof(Booking.AcceptedMinimumServiceFare),
+            nameof(Booking.LongDistanceComponent)
+        ];
+
+        Assert.All(
+            immutableProperties,
+            propertyName => Assert.Equal(
+                PropertySaveBehavior.Throw,
+                bookingType.FindProperty(propertyName)!.GetAfterSaveBehavior()));
+    }
+
+    [Fact]
     public void CalculateFare_PerTrip_UsesDistance()
     {
         var service = new FareEstimationService();
@@ -73,6 +103,61 @@ public sealed class BookingTests
     }
 
     [Fact]
+    public void CalculateBookingFare_DoesNotApplySurgeDirectlyToMinimumServiceFare()
+    {
+        var service = new FareEstimationService();
+        var rule = CreatePricingRule(pricePerKm: 1_000m);
+
+        var result = service.CalculateBookingFare(
+            rule,
+            0m,
+            0,
+            1.2m,
+            CreateCompensationOptions());
+
+        Assert.Equal(30_000m, result.NormalFare);
+        Assert.Equal(30_000m, result.SurgedFare);
+        Assert.Equal(0m, result.SurgeAmount);
+    }
+
+    [Fact]
+    public void CalculateBookingFare_AddsRoundedNonSurgedLongDistanceComponent()
+    {
+        var service = new FareEstimationService();
+        var rule = CreatePricingRule(pricePerKm: 10_000m);
+
+        var result = service.CalculateBookingFare(
+            rule,
+            20m,
+            60,
+            1.2m,
+            CreateCompensationOptions());
+
+        Assert.Equal(220_000m, result.NormalFare);
+        Assert.Equal(264_000m, result.SurgedFare);
+        Assert.Equal(44_000m, result.SurgeAmount);
+        Assert.Equal(15_000m, result.LongDistanceComponent);
+        Assert.Equal(279_000m, result.EstimatedFare);
+    }
+
+    [Fact]
+    public void CalculateBookingFare_DistanceAboveConfiguredMaximum_Throws()
+    {
+        var service = new FareEstimationService();
+        var rule = CreatePricingRule(pricePerKm: 10_000m);
+
+        var exception = Assert.Throws<BookingException>(() =>
+            service.CalculateBookingFare(
+                rule,
+                50.01m,
+                60,
+                1m,
+                CreateCompensationOptions()));
+
+        Assert.Equal("booking.maximum_trip_distance_exceeded", exception.Code);
+    }
+
+    [Fact]
     public async Task Handle_NowBooking_SavesAndStartsMatching()
     {
         var fixture = new HandlerFixture();
@@ -85,6 +170,12 @@ public sealed class BookingTests
         Assert.Equal(1, fixture.UnitOfWork.SaveCount);
         Assert.Equal([42L], fixture.MatchingService.BookingIds);
         Assert.Equal("polyline", fixture.Repository.AddedBooking?.RoutePolyline);
+        Assert.Equal(Booking.CurrentPricingSnapshotVersion, fixture.Repository.AddedBooking?.PricingSnapshotVersion);
+        Assert.Equal(20_000m, fixture.Repository.AddedBooking?.AcceptedBaseFare);
+        Assert.Equal(30_000m, fixture.Repository.AddedBooking?.AcceptedMinimumServiceFare);
+        Assert.Equal(1m, fixture.Repository.AddedBooking?.AcceptedSurgeMultiplier);
+        Assert.Equal(72_000m, fixture.Repository.AddedBooking?.NormalFare);
+        Assert.Equal(0m, fixture.Repository.AddedBooking?.LongDistanceComponent);
     }
 
     [Fact]
@@ -96,13 +187,16 @@ public sealed class BookingTests
             new MapServiceFake(),
             new FareEstimationService(),
             new VehicleLicenseRequirementService(),
-            new DateTimeProviderFake(UtcNow));
+            new DateTimeProviderFake(UtcNow),
+            Options.Create(CreateCompensationOptions()));
 
         var result = await handler.Handle(
             new EstimateBookingFareQuery(
                 HandlerFixture.CustomerId,
                 1,
                 2,
+                BookingType.Now,
+                null,
                 10.762622,
                 106.660172,
                 10.818797,
@@ -117,6 +211,43 @@ public sealed class BookingTests
     }
 
     [Fact]
+    public async Task EstimateFare_ScheduledBooking_EvaluatesSurgeAtScheduledTime()
+    {
+        var fixture = new HandlerFixture();
+        fixture.Repository.SurgeRule = new SurgePricingRule
+        {
+            Id = 9,
+            SurgeMultiplier = 1.2m
+        };
+        var scheduledAt = UtcNow.AddHours(2);
+        var handler = new EstimateBookingFareQueryHandler(
+            fixture.Repository,
+            new MapServiceFake(),
+            new FareEstimationService(),
+            new VehicleLicenseRequirementService(),
+            new DateTimeProviderFake(UtcNow),
+            Options.Create(CreateCompensationOptions()));
+
+        var result = await handler.Handle(
+            new EstimateBookingFareQuery(
+                HandlerFixture.CustomerId,
+                1,
+                2,
+                BookingType.Scheduled,
+                scheduledAt,
+                10.762622,
+                106.660172,
+                10.818797,
+                106.651856,
+                null),
+            CancellationToken.None);
+
+        Assert.Equal(scheduledAt, fixture.Repository.LastSurgeEvaluationTime);
+        Assert.Equal(1.2m, result.SurgeMultiplier);
+        Assert.Equal(86_400m, result.EstimatedFare);
+    }
+
+    [Fact]
     public async Task Handle_ScheduledBooking_DoesNotStartMatchingImmediately()
     {
         var fixture = new HandlerFixture();
@@ -128,6 +259,8 @@ public sealed class BookingTests
         Assert.Equal(BookingStatus.PendingSchedule, result.BookingStatus);
         Assert.Equal(scheduledAt, result.ScheduledAt);
         Assert.Empty(fixture.MatchingService.BookingIds);
+        Assert.Equal(scheduledAt, fixture.Repository.LastSurgeEvaluationTime);
+        Assert.Equal(scheduledAt, fixture.Repository.AddedBooking?.SurgeEvaluationTime);
     }
 
     [Fact]
@@ -315,6 +448,19 @@ public sealed class BookingTests
         };
     }
 
+    private static DriverCompensationOptions CreateCompensationOptions() =>
+        new()
+        {
+            LongPickupThresholdKm = 5,
+            LongPickupOptInThresholdKm = 5,
+            LongDistanceThresholdKm = 15,
+            LongDistanceOptInThresholdKm = 15,
+            MaximumTripDistanceKm = 50,
+            LongPickupRatePerKm = 3_000m,
+            LongDistanceRatePerKm = 3_000m,
+            DestinationReachedThresholdMeters = 250
+        };
+
     private sealed class HandlerFixture
     {
         public HandlerFixture()
@@ -345,7 +491,8 @@ public sealed class BookingTests
                 Repository,
                 new PromotionUnlockRuleStoreFake(),
                 new MatchingPolicyProviderFake(),
-                new BookingLifecycleJobSchedulerFake());
+                new BookingLifecycleJobSchedulerFake(),
+                Options.Create(CreateCompensationOptions()));
         }
 
         public static readonly Guid CustomerId =
@@ -407,6 +554,8 @@ public sealed class BookingTests
         public Vehicle? Vehicle { get; init; }
         public PricingRule? PricingRule { get; init; }
         public Promotion? Promotion { get; init; }
+        public SurgePricingRule? SurgeRule { get; set; }
+        public DateTime? LastSurgeEvaluationTime { get; private set; }
         public Booking? ActiveNowBooking { get; set; }
         public Booking? CustomerBooking { get; set; }
         public Booking? AddedBooking { get; private set; }
@@ -528,7 +677,8 @@ public sealed class BookingTests
             DateTime currentUtcTime,
             CancellationToken cancellationToken)
         {
-            return Task.FromResult<SurgePricingRule?>(null);
+            LastSurgeEvaluationTime = currentUtcTime;
+            return Task.FromResult(SurgeRule);
         }
 
         public Task<IReadOnlyList<Booking>> GetScheduledBookingsReadyForMatchingAsync(

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using SafeRide.API.Controllers;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
+using SafeRide.Application.Features.Drivers.DTOs;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
 using SafeRide.Contracts.Requests.Drivers;
 
@@ -62,13 +63,34 @@ public sealed class DriversControllerTests
             x.MemberNames.Contains(nameof(UpdateDriverLocationRequest.Latitude)));
     }
 
+    [Fact]
+    public async Task UpdateMatchingPreferences_UsesAuthenticatedDriverOnly()
+    {
+        var driverId = Guid.NewGuid();
+        var preferences = new DriverMatchingPreferencesServiceFake();
+        var controller = CreateController(new DriverRealtimeServiceFake(), preferences);
+        controller.ControllerContext = CreateControllerContext(driverId.ToString());
+
+        var result = await controller.UpdateMatchingPreferences(
+            new UpdateDriverMatchingPreferencesRequest(true, false),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<SafeRide.Contracts.Responses.Drivers.DriverMatchingPreferencesResponse>(ok.Value);
+        Assert.Equal(driverId, preferences.UpdatedDriverId);
+        Assert.True(response.AcceptLongPickupTrips);
+        Assert.False(response.AcceptLongDistanceTrips);
+    }
+
     private static DriversController CreateController(
-        IDriverRealtimeService driverRealtimeService)
+        IDriverRealtimeService driverRealtimeService,
+        IDriverMatchingPreferencesService? preferencesService = null)
     {
         return new DriversController(
             new SenderFake(),
             new BookingAssignmentServiceFake(),
-            driverRealtimeService);
+            driverRealtimeService,
+            preferencesService ?? new DriverMatchingPreferencesServiceFake());
     }
 
     private static ControllerContext CreateControllerContext(string userId)
@@ -188,5 +210,24 @@ public sealed class DriversControllerTests
             long offerId,
             CancellationToken cancellationToken) =>
             throw new NotImplementedException();
+    }
+
+    private sealed class DriverMatchingPreferencesServiceFake : IDriverMatchingPreferencesService
+    {
+        public Guid? UpdatedDriverId { get; private set; }
+        public Task<DriverMatchingPreferencesDto> GetAsync(Guid driverId, CancellationToken cancellationToken) =>
+            Task.FromResult(new DriverMatchingPreferencesDto(false, false));
+
+        public Task<DriverMatchingPreferencesDto> UpdateAsync(
+            Guid driverId,
+            bool acceptLongPickupTrips,
+            bool acceptLongDistanceTrips,
+            CancellationToken cancellationToken)
+        {
+            UpdatedDriverId = driverId;
+            return Task.FromResult(new DriverMatchingPreferencesDto(
+                acceptLongPickupTrips,
+                acceptLongDistanceTrips));
+        }
     }
 }

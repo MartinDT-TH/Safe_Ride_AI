@@ -17,6 +17,7 @@ export const ADMIN_SIDEBAR_IDS = [
   'revenue',
   'notifications',
   'reports',
+  'risk-fund',
 ];
 
 export const STAFF_SIDEBAR_IDS = [
@@ -26,6 +27,7 @@ export const STAFF_SIDEBAR_IDS = [
   'staff-payments',
   'staff-driver-ratings',
   'staff-notifications',
+  'staff-accidents',
 ];
 
 export function getCurrentManagementRole(user) {

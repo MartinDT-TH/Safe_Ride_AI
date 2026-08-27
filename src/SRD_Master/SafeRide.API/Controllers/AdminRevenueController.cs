@@ -1,8 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using SafeRide.Domain.Enums;
-using SafeRide.Infrastructure.Persistence;
+using SafeRide.Application.Features.Admin.Revenue;
 using System.Globalization;
 using System.IO.Compression;
 using System.Security;
@@ -15,10 +13,10 @@ namespace SafeRide.API.Controllers;
 [Route("api/admin/revenue")]
 public sealed class AdminRevenueController : ControllerBase
 {
-    private const decimal PlatformShareRate = 0.30m;
-    private readonly ApplicationDbContext _db;
+    private readonly IAdminRevenueQueryService _revenueQuery;
 
-    public AdminRevenueController(ApplicationDbContext db) => _db = db;
+    public AdminRevenueController(IAdminRevenueQueryService revenueQuery) =>
+        _revenueQuery = revenueQuery;
 
     [HttpGet]
     public async Task<ActionResult<AdminRevenueResponse>> GetRevenue(
@@ -31,40 +29,21 @@ public sealed class AdminRevenueController : ControllerBase
         if (endDate.DayNumber - startDate.DayNumber > 365)
             return BadRequest(new { message = "Khoảng thời gian tối đa là 366 ngày." });
 
-        var start = startDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var endExclusive = endDate.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         var days = endDate.DayNumber - startDate.DayNumber + 1;
-        var previousStart = start.AddDays(-days);
-        var payments = _db.Payments.AsNoTracking()
-            .Where(x => x.PaymentStatus == PaymentStatus.Success && x.PaidAt != null);
-
-        var currentRows = await payments
-            .Where(x => x.PaidAt >= start && x.PaidAt < endExclusive)
-            .Select(x => new RevenueRow(x.TripId, x.Amount, x.PaidAt!.Value.Date,
-                x.Trip.Booking.ServiceType.ServiceName))
-            .ToListAsync(cancellationToken);
-        var previousRevenue = await payments
-            .Where(x => x.PaidAt >= previousStart && x.PaidAt < start)
-            .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
-        var previousTrips = await payments
-            .Where(x => x.PaidAt >= previousStart && x.PaidAt < start)
-            .Select(x => x.TripId).Distinct().CountAsync(cancellationToken);
-
-        var totalRevenue = currentRows.Sum(x => x.Amount);
-        var successfulTrips = currentRows.Select(x => x.TripId).Distinct().Count();
-        var byDate = currentRows.GroupBy(x => DateOnly.FromDateTime(x.PaidDate))
-            .ToDictionary(x => x.Key, x => x.Sum(row => row.Amount));
+        var result = await _revenueQuery.GetAsync(startDate, endDate, cancellationToken);
         var timeline = Enumerable.Range(0, days).Select(startDate.AddDays)
-            .Select(date => new RevenueTimelinePoint(date, byDate.GetValueOrDefault(date))).ToArray();
-        var services = currentRows.GroupBy(x => x.ServiceName)
-            .Select(group => new RevenueServiceBreakdown(group.Key, group.Sum(x => x.Amount),
-                group.Select(x => x.TripId).Distinct().Count(),
-                totalRevenue == 0 ? 0 : Math.Round(group.Sum(x => x.Amount) / totalRevenue * 100m, 2)))
-            .OrderByDescending(x => x.Revenue).ToArray();
+            .Select(date => new RevenueTimelinePoint(
+                date, result.RevenueByDate.GetValueOrDefault(date))).ToArray();
+        var services = result.Services.Select(item => new RevenueServiceBreakdown(
+            item.ServiceName, item.Revenue, item.Trips,
+            result.TotalRevenue == 0
+                ? 0
+                : Math.Round(item.Revenue / result.TotalRevenue * 100m, 2))).ToArray();
 
-        return Ok(new AdminRevenueResponse(startDate, endDate, totalRevenue, successfulTrips,
-            Math.Round(totalRevenue * PlatformShareRate, 0),
-            CalculateGrowth(totalRevenue, previousRevenue), CalculateGrowth(successfulTrips, previousTrips),
+        return Ok(new AdminRevenueResponse(startDate, endDate, result.TotalRevenue, result.SuccessfulTrips,
+            result.PlatformRevenue,
+            CalculateGrowth(result.TotalRevenue, result.PreviousRevenue),
+            CalculateGrowth(result.SuccessfulTrips, result.PreviousTrips),
             timeline, services));
     }
 
@@ -87,15 +66,7 @@ public sealed class AdminRevenueController : ControllerBase
         if (endDate.DayNumber - startDate.DayNumber > 365)
             return BadRequest(new { message = "Khoảng thời gian tối đa là 366 ngày." });
 
-        var start = startDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var endExclusive = endDate.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var rows = await _db.Payments.AsNoTracking()
-            .Where(x => x.PaymentStatus == PaymentStatus.Success && x.PaidAt >= start && x.PaidAt < endExclusive)
-            .OrderByDescending(x => x.PaidAt)
-            .Select(x => new RevenueExportRow(x.PaidAt!.Value, x.TripId,
-                x.Trip.Booking.ServiceType.ServiceName, x.PaymentMethod.ToString(), x.Amount,
-                Math.Round(x.Amount * PlatformShareRate, 0)))
-            .ToListAsync(cancellationToken);
+        var rows = await _revenueQuery.GetExportAsync(startDate, endDate, cancellationToken);
 
         var fileName = $"Bao_cao_doanh_thu_{startDate:yyyyMMdd}_{endDate:yyyyMMdd}.{format}";
         if (format == "csv")
@@ -107,24 +78,20 @@ public sealed class AdminRevenueController : ControllerBase
     private static decimal? CalculateGrowth(decimal current, decimal previous) =>
         previous == 0 ? current == 0 ? 0 : null : Math.Round((current - previous) / previous * 100m, 2);
 
-    private sealed record RevenueRow(long TripId, decimal Amount, DateTime PaidDate, string ServiceName);
-    private sealed record RevenueExportRow(DateTime PaidAt, long TripId, string ServiceName,
-        string PaymentMethod, decimal Revenue, decimal PlatformFee);
-
-    private static byte[] BuildCsv(IReadOnlyCollection<RevenueExportRow> rows)
+    private static byte[] BuildCsv(IReadOnlyCollection<AdminRevenueExportItem> rows)
     {
         var csv = new StringBuilder("Ngày thanh toán,Mã chuyến,Dịch vụ,Phương thức,Tổng doanh thu,Phí nền tảng\r\n");
         foreach (var row in rows)
             csv.Append(Csv(row.PaidAt.ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture))).Append(',')
                 .Append("TRP-").Append(row.TripId).Append(',').Append(Csv(row.ServiceName)).Append(',')
                 .Append(Csv(row.PaymentMethod)).Append(',').Append(row.Revenue.ToString(CultureInfo.InvariantCulture)).Append(',')
-                .Append(row.PlatformFee.ToString(CultureInfo.InvariantCulture)).Append("\r\n");
+                .Append(row.PlatformRevenue.ToString(CultureInfo.InvariantCulture)).Append("\r\n");
         return new UTF8Encoding(true).GetBytes(csv.ToString());
     }
 
     private static string Csv(string value) => $"\"{value.Replace("\"", "\"\"")}\"";
 
-    private static byte[] BuildXlsx(IReadOnlyList<RevenueExportRow> rows, DateOnly from, DateOnly to)
+    private static byte[] BuildXlsx(IReadOnlyList<AdminRevenueExportItem> rows, DateOnly from, DateOnly to)
     {
         using var stream = new MemoryStream();
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, true))
@@ -139,14 +106,14 @@ public sealed class AdminRevenueController : ControllerBase
         return stream.ToArray();
     }
 
-    private static string BuildSheet(IReadOnlyList<RevenueExportRow> rows, DateOnly from, DateOnly to)
+    private static string BuildSheet(IReadOnlyList<AdminRevenueExportItem> rows, DateOnly from, DateOnly to)
     {
         var xml = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"2\" topLeftCell=\"A3\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews><cols><col min=\"1\" max=\"1\" width=\"21\" customWidth=\"1\"/><col min=\"2\" max=\"4\" width=\"19\" customWidth=\"1\"/><col min=\"5\" max=\"6\" width=\"18\" customWidth=\"1\"/></cols><sheetData>");
         AddRow(xml, 1, new[] { $"BÁO CÁO DOANH THU SAFERIDE ({from:dd/MM/yyyy} - {to:dd/MM/yyyy})" }, 1);
         AddRow(xml, 2, new[] { "Ngày thanh toán", "Mã chuyến", "Dịch vụ", "Phương thức", "Tổng doanh thu (VND)", "Phí nền tảng (VND)" }, 1);
         var index = 3;
         foreach (var row in rows)
-            AddRow(xml, index++, new[] { row.PaidAt.ToString("dd/MM/yyyy HH:mm"), $"TRP-{row.TripId}", row.ServiceName, row.PaymentMethod, row.Revenue.ToString("0", CultureInfo.InvariantCulture), row.PlatformFee.ToString("0", CultureInfo.InvariantCulture) }, 0);
+            AddRow(xml, index++, new[] { row.PaidAt.ToString("dd/MM/yyyy HH:mm"), $"TRP-{row.TripId}", row.ServiceName, row.PaymentMethod, row.Revenue.ToString("0", CultureInfo.InvariantCulture), row.PlatformRevenue.ToString("0", CultureInfo.InvariantCulture) }, 0);
         xml.Append("</sheetData><autoFilter ref=\"A2:F").Append(Math.Max(2, index - 1)).Append("\"/></worksheet>");
         return xml.ToString();
     }

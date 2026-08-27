@@ -311,128 +311,135 @@ public sealed class AuthService : IAuthService
     {
         var tokenHash = _jwtTokenService.HashToken(request.RefreshToken);
         var oldCacheKey = RedisKeys.RefreshToken(Convert.ToHexString(tokenHash));
-        var utcNow = DateTime.UtcNow;
         var isContinuationRefreshToken = IsContinuationRefreshToken(request.RefreshToken);
 
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync(
-            IsolationLevel.Serializable);
-
-        var refreshToken = await _dbContext.RefreshTokens
-            .Include(x => x.User)
-            .FirstOrDefaultAsync(x => x.TokenHash == tokenHash);
-
-        if (refreshToken == null)
+        var strategy = _dbContext.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            throw new AuthException(
-                AuthErrorCodes.InvalidRefreshToken,
-                "Phiên đăng nhập không hợp lệ.",
-                StatusCodes.Status401Unauthorized);
-        }
+            // A retrying SQL Server execution strategy cannot run a user-created
+            // transaction unless it owns the complete transactional operation.
+            _dbContext.ChangeTracker.Clear();
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable);
+            var utcNow = DateTime.UtcNow;
 
-        if (refreshToken.RevokedAt != null)
-        {
-            await RevokeSessionTokensAsync(refreshToken.SessionId);
-            await transaction.CommitAsync();
-            await TryRemoveCacheAsync(oldCacheKey);
-            throw new AuthException(
-                AuthErrorCodes.RefreshTokenReused,
-                "Refresh token đã được sử dụng lại. Phiên hiện tại đã bị thu hồi.",
-                StatusCodes.Status401Unauthorized);
-        }
+            var refreshToken = await _dbContext.RefreshTokens
+                .Include(x => x.User)
+                .FirstOrDefaultAsync(x => x.TokenHash == tokenHash);
 
-        var accountRestriction = await _accountRestrictionService.CheckAccountAccessAsync(
-            refreshToken.UserId,
-            releaseExpiredTemporaryBans: true,
-            CancellationToken.None);
-        if (!accountRestriction.IsAllowed)
-        {
-            await RevokeSessionTokensAsync(refreshToken.SessionId);
-            await transaction.CommitAsync();
-            await TryRemoveCacheAsync(oldCacheKey);
-            throw CreateAccountRestrictionException(accountRestriction);
-        }
-        if (!refreshToken.User.IsActive)
-        {
-            await _dbContext.Entry(refreshToken.User).ReloadAsync();
-        }
-
-        if (!refreshToken.User.IsActive)
-        {
-            await RevokeSessionTokensAsync(refreshToken.SessionId);
-            await transaction.CommitAsync();
-            await TryRemoveCacheAsync(oldCacheKey);
-            throw CreateInactiveAccountException();
-        }
-
-        if (await _userManager.IsLockedOutAsync(refreshToken.User))
-        {
-            await RevokeSessionTokensAsync(refreshToken.SessionId);
-            await transaction.CommitAsync();
-            await TryRemoveCacheAsync(oldCacheKey);
-            throw new AuthException(
-                AuthErrorCodes.AccountLocked,
-                "Tài khoản đang bị khóa tạm thời.",
-                StatusCodes.Status403Forbidden);
-        }
-
-        if (refreshToken.ExpiresAt <= utcNow || isContinuationRefreshToken)
-        {
-            var continuation = await TryRotateContinuationRefreshTokenAsync(
-                refreshToken,
-                request,
-                isContinuationRefreshToken,
-                utcNow);
-            if (continuation is not null)
+            if (refreshToken == null)
             {
+                throw new AuthException(
+                    AuthErrorCodes.InvalidRefreshToken,
+                    "Phiên đăng nhập không hợp lệ.",
+                    StatusCodes.Status401Unauthorized);
+            }
+
+            if (refreshToken.RevokedAt != null)
+            {
+                await RevokeSessionTokensAsync(refreshToken.SessionId);
                 await transaction.CommitAsync();
                 await TryRemoveCacheAsync(oldCacheKey);
-                await TryCacheRefreshTokenAsync(continuation.RefreshToken);
-                return continuation.Response;
+                throw new AuthException(
+                    AuthErrorCodes.RefreshTokenReused,
+                    "Refresh token đã được sử dụng lại. Phiên hiện tại đã bị thu hồi.",
+                    StatusCodes.Status401Unauthorized);
             }
-        }
 
-        if (refreshToken.ExpiresAt <= utcNow)
-        {
-            refreshToken.RevokedAt = utcNow;
+            var accountRestriction = await _accountRestrictionService.CheckAccountAccessAsync(
+                refreshToken.UserId,
+                releaseExpiredTemporaryBans: true,
+                CancellationToken.None);
+            if (!accountRestriction.IsAllowed)
+            {
+                await RevokeSessionTokensAsync(refreshToken.SessionId);
+                await transaction.CommitAsync();
+                await TryRemoveCacheAsync(oldCacheKey);
+                throw CreateAccountRestrictionException(accountRestriction);
+            }
+            if (!refreshToken.User.IsActive)
+            {
+                await _dbContext.Entry(refreshToken.User).ReloadAsync();
+            }
+
+            if (!refreshToken.User.IsActive)
+            {
+                await RevokeSessionTokensAsync(refreshToken.SessionId);
+                await transaction.CommitAsync();
+                await TryRemoveCacheAsync(oldCacheKey);
+                throw CreateInactiveAccountException();
+            }
+
+            if (await _userManager.IsLockedOutAsync(refreshToken.User))
+            {
+                await RevokeSessionTokensAsync(refreshToken.SessionId);
+                await transaction.CommitAsync();
+                await TryRemoveCacheAsync(oldCacheKey);
+                throw new AuthException(
+                    AuthErrorCodes.AccountLocked,
+                    "Tài khoản đang bị khóa tạm thời.",
+                    StatusCodes.Status403Forbidden);
+            }
+
+            if (refreshToken.ExpiresAt <= utcNow || isContinuationRefreshToken)
+            {
+                var continuation = await TryRotateContinuationRefreshTokenAsync(
+                    refreshToken,
+                    request,
+                    isContinuationRefreshToken,
+                    utcNow);
+                if (continuation is not null)
+                {
+                    await transaction.CommitAsync();
+                    await TryRemoveCacheAsync(oldCacheKey);
+                    await TryCacheRefreshTokenAsync(continuation.RefreshToken);
+                    return continuation.Response;
+                }
+            }
+
+            if (refreshToken.ExpiresAt <= utcNow)
+            {
+                refreshToken.RevokedAt = utcNow;
+                await _dbContext.SaveChangesAsync();
+                await transaction.CommitAsync();
+                await TryRemoveCacheAsync(oldCacheKey);
+                throw new AuthException(
+                    AuthErrorCodes.RefreshTokenExpired,
+                    "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
+                    StatusCodes.Status401Unauthorized);
+            }
+
+            var roles = await _userManager.GetRolesAsync(refreshToken.User);
+            var accessToken = await _jwtTokenService.GenerateAccessTokenAsync(
+                refreshToken.User,
+                roles);
+            var newRawRefreshToken = _jwtTokenService.GenerateRawRefreshToken();
+            var newRefreshTokenHash = _jwtTokenService.HashToken(newRawRefreshToken);
+
+            refreshToken.RevokedAt = DateTime.UtcNow;
+            refreshToken.ReplacedByTokenHash = newRefreshTokenHash;
+
+            var newRefreshToken = new RefreshToken
+            {
+                Id = Guid.NewGuid(),
+                UserId = refreshToken.UserId,
+                SessionId = refreshToken.SessionId,
+                TokenHash = newRefreshTokenHash,
+                JwtId = accessToken.JwtId,
+                DeviceId = NormalizeDeviceMetadata(request.DeviceId) ?? refreshToken.DeviceId,
+                DeviceName = refreshToken.DeviceName,
+                CreatedAt = utcNow,
+                ExpiresAt = utcNow.AddDays(_jwtOptions.RefreshTokenDays)
+            };
+
+            _dbContext.RefreshTokens.Add(newRefreshToken);
             await _dbContext.SaveChangesAsync();
             await transaction.CommitAsync();
+
             await TryRemoveCacheAsync(oldCacheKey);
-            throw new AuthException(
-                AuthErrorCodes.RefreshTokenExpired,
-                "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
-                StatusCodes.Status401Unauthorized);
-        }
-
-        var roles = await _userManager.GetRolesAsync(refreshToken.User);
-        var accessToken = await _jwtTokenService.GenerateAccessTokenAsync(
-            refreshToken.User,
-            roles);
-        var newRawRefreshToken = _jwtTokenService.GenerateRawRefreshToken();
-        var newRefreshTokenHash = _jwtTokenService.HashToken(newRawRefreshToken);
-
-        refreshToken.RevokedAt = DateTime.UtcNow;
-        refreshToken.ReplacedByTokenHash = newRefreshTokenHash;
-
-        var newRefreshToken = new RefreshToken
-        {
-            Id = Guid.NewGuid(),
-            UserId = refreshToken.UserId,
-            SessionId = refreshToken.SessionId,
-            TokenHash = newRefreshTokenHash,
-            JwtId = accessToken.JwtId,
-            DeviceId = NormalizeDeviceMetadata(request.DeviceId) ?? refreshToken.DeviceId,
-            DeviceName = refreshToken.DeviceName,
-            CreatedAt = utcNow,
-            ExpiresAt = utcNow.AddDays(_jwtOptions.RefreshTokenDays)
-        };
-
-        _dbContext.RefreshTokens.Add(newRefreshToken);
-        await _dbContext.SaveChangesAsync();
-        await transaction.CommitAsync();
-
-        await TryRemoveCacheAsync(oldCacheKey);
-        await TryCacheRefreshTokenAsync(newRefreshToken);
-        return CreateResponse(refreshToken.User, roles, accessToken, newRawRefreshToken);
+            await TryCacheRefreshTokenAsync(newRefreshToken);
+            return CreateResponse(refreshToken.User, roles, accessToken, newRawRefreshToken);
+        });
     }
 
     public async Task LogoutAsync(LogoutRequest request)
@@ -509,7 +516,12 @@ public sealed class AuthService : IAuthService
         var trip = await _tripSessionQueryService.GetActiveTripForUserAsync(
             refreshToken.UserId,
             existedBefore);
-        if (trip is null)
+        var booking = trip is null
+            ? await _tripSessionQueryService.GetActiveBookingForUserAsync(
+                refreshToken.UserId,
+                existedBefore)
+            : null;
+        if (trip is null && booking is null)
         {
             return isContinuationRefreshToken
                 ? throw CreateTripContinuationExpiredException()
@@ -518,7 +530,10 @@ public sealed class AuthService : IAuthService
 
         EnsureContinuationDeviceMatches(refreshToken, request);
 
-        var absoluteExpiresAt = GetContinuationAbsoluteExpiresAt(trip);
+        var continuationBookingId = trip?.BookingId ?? booking!.BookingId;
+        var absoluteExpiresAt = trip is not null
+            ? GetContinuationAbsoluteExpiresAt(trip)
+            : GetContinuationAbsoluteExpiresAt(booking!);
         if (absoluteExpiresAt <= utcNow)
         {
             throw CreateTripContinuationExpiredException();
@@ -539,7 +554,8 @@ public sealed class AuthService : IAuthService
             new AccessTokenContext
             {
                 SessionMode = AuthSessionModes.TripContinuation,
-                ContinuationTripId = trip.TripId,
+                ContinuationTripId = trip?.TripId,
+                ContinuationBookingId = continuationBookingId,
                 ReloginRequiredAfterTrip = true,
                 ContinuationAbsoluteExpiresAt = absoluteExpiresAt,
                 AccessTokenMinutes = _tripContinuationOptions.AccessTokenMinutes
@@ -575,7 +591,8 @@ public sealed class AuthService : IAuthService
                 newRawRefreshToken,
                 sessionMode: AuthSessionModes.TripContinuation,
                 reloginRequiredAfterTrip: true,
-                continuationTripId: trip.TripId,
+                continuationTripId: trip?.TripId,
+                continuationBookingId: continuationBookingId,
                 continuationAbsoluteExpiresAt: absoluteExpiresAt),
             newRefreshToken);
     }
@@ -603,6 +620,12 @@ public sealed class AuthService : IAuthService
     {
         var anchor = trip.StartedAt ?? trip.DriverAssignedAt ?? trip.CreatedAt;
         return anchor.AddHours(_tripContinuationOptions.AbsoluteMaxHoursFromTripStart);
+    }
+
+    private DateTime GetContinuationAbsoluteExpiresAt(BookingSessionInfo booking)
+    {
+        return booking.CreatedAt.AddHours(
+            _tripContinuationOptions.AbsoluteMaxHoursFromBookingCreation);
     }
 
     private string GenerateContinuationRawRefreshToken()
@@ -1210,6 +1233,7 @@ public sealed class AuthService : IAuthService
         string sessionMode = AuthSessionModes.Normal,
         bool reloginRequiredAfterTrip = false,
         long? continuationTripId = null,
+        long? continuationBookingId = null,
         DateTime? continuationAbsoluteExpiresAt = null)
     {
         return new AuthResponse
@@ -1228,6 +1252,7 @@ public sealed class AuthService : IAuthService
             SessionMode = sessionMode,
             ReloginRequiredAfterTrip = reloginRequiredAfterTrip,
             ContinuationTripId = continuationTripId,
+            ContinuationBookingId = continuationBookingId,
             ContinuationAbsoluteExpiresAt = continuationAbsoluteExpiresAt
         };
     }

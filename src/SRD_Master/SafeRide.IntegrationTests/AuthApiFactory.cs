@@ -40,7 +40,8 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
                 ["GoogleMaps:RoutesApiUrl"] = "https://routes.googleapis.com/v2:computeRoutes",
                 ["GoogleMaps:GeocodingApiUrl"] = "https://maps.googleapis.com/maps/api/geocode/json",
                 ["OpenRouteService:DirectionsApiUrl"] = "https://api.openrouteservice.org/v2/directions/driving-car",
-                ["OpenRouteService:MatrixApiUrl"] = "https://api.openrouteservice.org/v2/matrix/driving-car"
+                ["OpenRouteService:MatrixApiUrl"] = "https://api.openrouteservice.org/v2/matrix/driving-car",
+                ["TripSharing:AppLinkBaseUrl"] = "https://example.test/trips"
             });
         });
 
@@ -256,6 +257,29 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
                 CreatedAt TEXT NOT NULL
             );
             CREATE INDEX IX_Vehicles_OwnerUserId ON Vehicles (OwnerUserId);
+            CREATE TABLE VehicleInsurancePolicies (
+                Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                VehicleId INTEGER NOT NULL,
+                InsuranceType TEXT NOT NULL,
+                Provider TEXT NOT NULL,
+                PolicyNumber TEXT NOT NULL,
+                EffectiveFromUtc TEXT NOT NULL,
+                ExpiresAtUtc TEXT NOT NULL,
+                CoverageAmount TEXT NOT NULL,
+                Deductible TEXT NOT NULL,
+                DocumentUrl TEXT NULL,
+                VerificationStatus TEXT NOT NULL,
+                ReviewedByUserId TEXT NULL,
+                ReviewedAtUtc TEXT NULL,
+                IsDeleted INTEGER NOT NULL DEFAULT 0,
+                CreatedAtUtc TEXT NOT NULL,
+                UpdatedAtUtc TEXT NULL
+            );
+            CREATE INDEX IX_VehicleInsurancePolicies_VehicleId
+                ON VehicleInsurancePolicies (VehicleId);
+            CREATE UNIQUE INDEX IX_VehicleInsurancePolicies_Provider_PolicyNumber
+                ON VehicleInsurancePolicies (Provider, PolicyNumber)
+                WHERE IsDeleted = 0;
             CREATE TABLE ServiceTypes (
                 Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
                 ServiceName TEXT NOT NULL

@@ -1,6 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Features.Drivers.DTOs;
+using SafeRide.Application.Features.Drivers.Services;
+using SafeRide.Application.Features.RiskProtection;
 using SafeRide.Application.Features.Trips.DTOs;
 using SafeRide.Contracts.Responses.Drivers;
 using SafeRide.Domain.Enums;
@@ -13,20 +16,24 @@ namespace SafeRide.Infrastructure.Services;
 
 public sealed class DriverQueryService : IDriverQueryService
 {
-    private const decimal DriverShareRate = 0.70m;
-
     private readonly ApplicationDbContext _dbContext;
     private readonly IRedisService _redisService;
     private readonly IMapRoutingService _mapRoutingService;
+    private readonly ITripCommissionCalculator _commissionCalculator;
+    private readonly DriverCompensationOptions _compensationOptions;
 
     public DriverQueryService(
         ApplicationDbContext dbContext,
         IRedisService redisService,
-        IMapRoutingService mapRoutingService)
+        IMapRoutingService mapRoutingService,
+        ITripCommissionCalculator commissionCalculator,
+        IOptions<DriverCompensationOptions> compensationOptions)
     {
         _dbContext = dbContext;
         _redisService = redisService;
         _mapRoutingService = mapRoutingService;
+        _commissionCalculator = commissionCalculator;
+        _compensationOptions = compensationOptions.Value;
     }
 
     public async Task<IReadOnlyList<NearbyDriverResponse>> GetNearbyDriversAsync(
@@ -124,6 +131,16 @@ public sealed class DriverQueryService : IDriverQueryService
             }
         }
 
+        var fareIsUnresolved = trip.TripStatus == TripStatus.WAITING_PAYMENT
+            && (!trip.ActualFare.HasValue || !trip.FinalFare.HasValue);
+        var endReconciliationPending = await _dbContext.TripEndReconciliationRequests
+            .AsNoTracking()
+            .AnyAsync(
+                x => x.TripId == trip.Id
+                    && (x.Status == TripEndReconciliationStatus.PENDING
+                        || fareIsUnresolved),
+                cancellationToken);
+
         return new ActiveDriverTripDto(
             trip.BookingId,
             trip.Id,
@@ -157,7 +174,9 @@ public sealed class DriverQueryService : IDriverQueryService
                             evidence.DisplayOrder))
                         .ToList()),
             arrivalPolyline,
-            trip.Payments.Any(payment => payment.PaymentStatus == PaymentStatus.Success));
+            trip.FinalFare is <= 0m
+                || trip.Payments.Any(payment => payment.PaymentStatus == PaymentStatus.Success),
+            endReconciliationPending);
     }
 
     public async Task<IReadOnlyList<DriverTripRequestDto>> GetOpenTripRequestsAsync(
@@ -181,72 +200,32 @@ public sealed class DriverQueryService : IDriverQueryService
             return [];
         }
 
-        LocationPoint? driverLocation = null;
-        var locationJson = await _redisService.GetAsync(RedisKeys.DriverLocation(driverId));
-        if (!string.IsNullOrWhiteSpace(locationJson))
-        {
-            try
-            {
-                var cache = JsonSerializer.Deserialize<DriverLocationCache>(locationJson);
-                if (cache is not null)
-                {
-                    driverLocation = new LocationPoint(cache.Latitude, cache.Longitude);
-                }
-            }
-            catch (JsonException)
-            {
-                await _redisService.RemoveAsync(RedisKeys.DriverLocation(driverId));
-            }
-        }
-
         var tripRequests = new List<DriverTripRequestDto>(openOffers.Count);
         foreach (var offer in openOffers)
         {
-            double? pickupDistanceKm = null;
-            int? pickupDurationMinutes = null;
-
-            if (driverLocation is not null)
-            {
-                try
-                {
-                    var route = await _mapRoutingService.GetRouteEstimateAsync(
-                        new RouteEstimateRequest
-                        {
-                            Origin = driverLocation,
-                            Destination = new LocationPoint(
-                                offer.Booking.PickupLocation.Y,
-                                offer.Booking.PickupLocation.X),
-                            Provider = MapProvider.Auto,
-                            TravelMode = MapTravelMode.Car,
-                            IncludePolyline = false,
-                            RequestSource = "DriverTripRequest"
-                        },
-                        cancellationToken);
-
-                    pickupDistanceKm = route.DistanceKm;
-                    pickupDurationMinutes = route.DurationMinutes;
-                }
-                catch
-                {
-                    // Ignore routing errors so the request list still loads.
-                }
-            }
-
             tripRequests.Add(new DriverTripRequestDto(
                 offer.Id,
                 offer.BookingId,
                 offer.OfferStatus,
                 offer.ExpiresAt,
-                offer.Booking.EstimatedFare,
                 offer.Booking.PickupAddress,
                 offer.Booking.DestinationAddress,
-                pickupDistanceKm,
-                pickupDurationMinutes,
+                offer.PickupDistanceKm.HasValue ? (double)offer.PickupDistanceKm.Value : null,
+                null,
                 offer.OfferStatus == DriverOfferStatus.DriverAccepted
                     ? Math.Max(
                         0,
                         (int)Math.Ceiling((offer.ExpiresAt - utcNow).TotalSeconds))
-                    : null));
+                    : null,
+                offer.LongPickupCompensation,
+                offer.PickupDistanceKm.HasValue
+                    && offer.PickupDistanceKm.Value
+                        > (decimal)_compensationOptions.LongPickupThresholdKm,
+                offer.Booking.AcceptedPricePerHour is not > 0m
+                    && offer.Booking.EstimatedDistanceKm.HasValue
+                    && offer.Booking.AcceptedLongDistanceThresholdKm.HasValue
+                    && offer.Booking.EstimatedDistanceKm.Value
+                        > offer.Booking.AcceptedLongDistanceThresholdKm.Value));
         }
 
         return tripRequests;
@@ -309,6 +288,7 @@ public sealed class DriverQueryService : IDriverQueryService
             .Where(x => x.WalletId == wallet.Id
                 && (x.TransactionType == WalletTransactionType.Income
                     || x.TransactionType == WalletTransactionType.Bonus)
+                && x.SettlementEffect != WalletSettlementEffect.CashPromotionSubsidy
                 && x.CreatedAt >= queryStartUtc
                 && x.CreatedAt < queryEndUtc)
             .Select(x => new WalletIncomeRow(x.Amount, x.CreatedAt))
@@ -324,17 +304,49 @@ public sealed class DriverQueryService : IDriverQueryService
                 && x.PaidAt < queryEndUtc)
             .Select(x => new
             {
+                x.TripId,
                 Fare = x.Trip.ActualFare ?? x.Trip.Booking.EstimatedFare,
                 PaidAt = x.PaidAt!.Value
             })
             .ToListAsync(cancellationToken);
 
-        incomeTransactions.AddRange(cashIncome.Select(x => new WalletIncomeRow(
-            decimal.Round(
-                x.Fare * DriverShareRate,
-                0,
-                MidpointRounding.AwayFromZero),
-            x.PaidAt)));
+        var cashTripIds = cashIncome.Select(x => x.TripId).ToArray();
+        var settlementEarnings = await _dbContext.TripFinancialSettlements
+            .AsNoTracking()
+            .Where(x => cashTripIds.Contains(x.TripId))
+            .ToDictionaryAsync(x => x.TripId, x => x.DriverEarning, cancellationToken);
+        var legacyCommissionRate = await _dbContext.RiskProtectionPolicyVersions
+            .AsNoTracking()
+            .OrderBy(x => x.EffectiveFromUtc)
+            .Select(x => x.BasePlatformCommissionRate)
+            .FirstAsync(cancellationToken);
+
+        incomeTransactions.AddRange(cashIncome.Select(x =>
+        {
+            var driverEarning = settlementEarnings.TryGetValue(x.TripId, out var snapshotEarning)
+                ? snapshotEarning
+                : _commissionCalculator.Calculate(new CommissionCalculationInput(
+                    x.Fare,
+                    PromotionExpense: 0m,
+                    legacyCommissionRate,
+                    RiskReserveRate: 0m,
+                    IsRiskContributionEligible: false)).DriverEarning;
+            return new WalletIncomeRow(driverEarning, x.PaidAt);
+        }));
+
+        var zeroPayCashIncome = await _dbContext.TripFinancialSettlements
+            .AsNoTracking()
+            .Where(x => x.Trip.DriverId == driverId
+                && x.SettledAtUtc >= queryStartUtc
+                && x.SettledAtUtc < queryEndUtc
+                && x.Trip.WalletTransactions.Any(transaction =>
+                    transaction.SettlementEffect == WalletSettlementEffect.CashPromotionSubsidy)
+                && !x.Trip.Payments.Any(payment =>
+                    payment.PaymentMethod == PaymentMethod.CASH
+                    && payment.PaymentStatus == PaymentStatus.Success))
+            .Select(x => new WalletIncomeRow(x.DriverEarning, x.SettledAtUtc!.Value))
+            .ToListAsync(cancellationToken);
+        incomeTransactions.AddRange(zeroPayCashIncome);
 
         var recentTransactions = await _dbContext.WalletTransactions
             .AsNoTracking()

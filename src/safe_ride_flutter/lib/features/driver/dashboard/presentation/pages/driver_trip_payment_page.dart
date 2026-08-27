@@ -18,7 +18,7 @@ import '../../data/models/payment_models.dart';
 enum _DriverPaymentMode { qr, cash }
 
 class DriverTripPaymentPage extends StatefulWidget {
-  DriverTripPaymentPage({super.key, required this.tripId});
+  const DriverTripPaymentPage({super.key, required this.tripId});
 
   final int tripId;
 
@@ -62,12 +62,13 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
   @override
   Widget build(BuildContext context) {
     final qrData = _qrPayment?.qrCode ?? _qrPayment?.checkoutUrl;
-    final statusFinalFare = _paymentStatus?.finalFare;
-    final amount = statusFinalFare != null && statusFinalFare > 0
-        ? statusFinalFare
+    final remaining = _paymentStatus?.remainingPayableAmount ?? 0;
+    final amount = remaining > 0
+        ? remaining
         : _paymentStatus?.amount ?? _qrPayment?.amount ?? 0;
-    final isPaid =
-        _paymentStatus?.isSuccess == true || _qrPayment?.isSuccess == true;
+    final isPaid = _paymentStatus != null
+        ? _paymentStatus!.isSuccess
+        : _qrPayment?.isSuccess == true;
 
     return PopScope(
       canPop: isPaid,
@@ -155,6 +156,10 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
                       fontWeight: FontWeight.w900,
                     ),
                   ),
+                if (_paymentStatus != null) ...[
+                  const SizedBox(height: 16),
+                  _PaymentReconciliationSummary(status: _paymentStatus!),
+                ],
                 SizedBox(height: 38),
                 Expanded(
                   child: Center(
@@ -608,8 +613,49 @@ class _DriverTripPaymentPageState extends State<DriverTripPaymentPage> {
   }
 }
 
+class _PaymentReconciliationSummary extends StatelessWidget {
+  const _PaymentReconciliationSummary({required this.status});
+
+  final PaymentStatusResult status;
+
+  @override
+  Widget build(BuildContext context) {
+    String money(double value) => NumberFormat.currency(
+      locale: LocaleProvider.currentLocale.toLanguageTag(),
+      symbol: 'VND',
+      decimalDigits: 0,
+    ).format(value);
+
+    Widget row(String label, double value) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [Text(label), Text(money(value))],
+      ),
+    );
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFD8E2E3)),
+      ),
+      child: Column(
+        children: [
+          row(context.l10n.customerPaymentAmount, status.finalFare),
+          row(context.l10n.paidAmount, status.successfulPaymentAmount),
+          row(context.l10n.outstandingAmount, status.remainingPayableAmount),
+          if (status.refundObligationAmount > 0)
+            row('Refund pending', status.refundObligationAmount),
+        ],
+      ),
+    );
+  }
+}
+
 class _PaymentChoicePanel extends StatelessWidget {
-  _PaymentChoicePanel({
+  const _PaymentChoicePanel({
     super.key,
     required this.onQrPressed,
     required this.onCashPressed,
