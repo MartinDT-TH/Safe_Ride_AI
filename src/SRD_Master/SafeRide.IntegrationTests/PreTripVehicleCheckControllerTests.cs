@@ -407,7 +407,8 @@ public sealed class PreTripVehicleCheckControllerTests
             Guid driverId,
             long tripId,
             CancellationToken cancellationToken,
-            TripEndReason reason = TripEndReason.NORMAL_COMPLETION) => Task.CompletedTask;
+            TripEndReason reason = TripEndReason.NORMAL_COMPLETION,
+            bool canContinueWorking = true) => Task.CompletedTask;
         public Task ConfirmReturnByCustomerAsync(Guid customerId, long tripId, bool vehicleReturnedConfirmed, CancellationToken cancellationToken, int? ratingScore = null, string? comment = null) => Task.CompletedTask;
         public Task ConfirmReturnByDriverAsync(Guid driverId, long tripId, IReadOnlyList<SafeRide.Application.Features.Trips.DTOs.ReturnEvidenceItem> evidence, string? note, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task CompleteTripAsync(Guid userId, long tripId, CancellationToken cancellationToken) => Task.CompletedTask;

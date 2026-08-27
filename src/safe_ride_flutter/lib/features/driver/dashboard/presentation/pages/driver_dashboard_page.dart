@@ -1465,7 +1465,9 @@ class _ActiveTripCard extends StatelessWidget {
             else if (isReturnConfirmed)
               _buildReturnConfirmedSection(context, isUpdating)
             else if (isWaitingPayment)
-              _buildWaitingPaymentSection(context, trip.tripId),
+              trip.endReconciliationPending
+                  ? _buildEndReconciliationPendingSection(context)
+                  : _buildWaitingPaymentSection(context, trip.tripId),
             if (canCancel) ...[
               const SizedBox(height: 10),
               SizedBox(
@@ -1586,9 +1588,7 @@ class _ActiveTripCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: Color(0xFFE8F7F0),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: Color(0xFF0A8F62).withValues(alpha: 0.3),
-            ),
+            border: Border.all(color: Color(0xFF0A8F62).withValues(alpha: 0.3)),
           ),
           child: Row(
             children: [
@@ -1684,6 +1684,35 @@ class _ActiveTripCard extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  static Widget _buildEndReconciliationPendingSection(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF4E5),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: const Color(0xFFE58A00).withValues(alpha: 0.4),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.rule_rounded, color: Color(0xFF9A5A00), size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              '${context.l10n.startedByMistakeReason}: ${context.l10n.waitingConfirmation}',
+              style: const TextStyle(
+                color: Color(0xFF7A4700),
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1814,9 +1843,38 @@ class _ActiveTripCard extends StatelessWidget {
       ),
     );
     if (!context.mounted || reason == null) return;
+    final bool canContinueWorking;
+    if (reason.forcesDriverOffline) {
+      canContinueWorking = false;
+    } else {
+      final selection = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(context.l10n.endTrip),
+          content: Text(context.l10n.startReceivingTrips),
+          actions: [
+            TextButton.icon(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              icon: const Icon(Icons.offline_bolt_outlined),
+              label: Text(context.l10n.statusOffline),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              icon: const Icon(Icons.online_prediction_rounded),
+              label: Text(context.l10n.statusOnline),
+            ),
+          ],
+        ),
+      );
+      if (!context.mounted || selection == null) return;
+      canContinueWorking = selection;
+    }
     await _runTripAction(
       context,
-      () => context.read<DriverDashboardProvider>().endTripAsync(reason),
+      () => context.read<DriverDashboardProvider>().endTripAsync(
+        reason,
+        canContinueWorking: canContinueWorking,
+      ),
     );
   }
 

@@ -349,7 +349,8 @@ public sealed class TripStatusService : ITripStatusService
         Guid driverId,
         long tripId,
         CancellationToken cancellationToken,
-        TripEndReason reason = TripEndReason.NORMAL_COMPLETION)
+        TripEndReason reason = TripEndReason.NORMAL_COMPLETION,
+        bool canContinueWorking = true)
     {
         ValidateDriverEndReason(reason);
         var trip = await _dbContext.Trips
@@ -400,7 +401,8 @@ public sealed class TripStatusService : ITripStatusService
             trip,
             TripStatus.WAITING_PAYMENT,
             driverId,
-            cancellationToken);
+            cancellationToken,
+            keepDriverOffline: !canContinueWorking);
 
         if (await HasPaymentSucceededAsync(trip, cancellationToken))
         {
@@ -417,23 +419,20 @@ public sealed class TripStatusService : ITripStatusService
         Guid driverId,
         long tripId,
         TripEndReason reason,
+        bool canContinueWorking,
         CancellationToken cancellationToken)
     {
-        if (reason is not TripEndReason.DRIVER_UNABLE_TO_CONTINUE
-            and not TripEndReason.STARTED_BY_MISTAKE)
+        if (reason is not TripEndReason.STARTED_BY_MISTAKE)
             throw new BookingException(
                 "trip.end_reconciliation_reason_not_allowed",
                 "This end reason cannot be submitted for staff reconciliation.", 400);
 
-        var trip = await _dbContext.Trips.AsNoTracking().FirstOrDefaultAsync(
+        var trip = await _dbContext.Trips
+            .Include(x => x.Booking)
+            .FirstOrDefaultAsync(
             x => x.Id == tripId && x.DriverId == driverId, cancellationToken);
         if (trip is null)
             throw new BookingException("trip.not_found", "Trip not found.", 404);
-        if (trip.TripStatus != TripStatus.IN_PROGRESS)
-            throw new BookingException(
-                "trip.invalid_status_transition",
-                "Only an in-progress trip can request end reconciliation.", 409);
-
         var existing = await _dbContext.TripEndReconciliationRequests.AsNoTracking()
             .OrderByDescending(x => x.RequestedAtUtc)
             .FirstOrDefaultAsync(
@@ -443,11 +442,40 @@ public sealed class TripStatusService : ITripStatusService
         if (existing is not null)
         {
             if (existing.RequestedReason == reason)
+            {
+                if (trip.TripStatus == TripStatus.IN_PROGRESS)
+                {
+                    await CaptureOperationalTripEndAsync(trip, cancellationToken);
+                    await ApplyTripStatusAsync(
+                        trip,
+                        TripStatus.WAITING_PAYMENT,
+                        driverId,
+                        cancellationToken,
+                        keepDriverOffline: !canContinueWorking,
+                        deferFareFinalization: true);
+                }
+                else if (trip.TripStatus != TripStatus.WAITING_PAYMENT)
+                {
+                    throw new BookingException(
+                        "trip.invalid_status_transition",
+                        "The trip is not in an operational end state.", 409);
+                }
                 return ToEndReconciliationResult(existing);
+            }
             throw new BookingException(
                 "trip.end_reconciliation_conflict",
                 "A different end-reason reconciliation is already pending.", 409);
         }
+
+        var canStartRequest = trip.TripStatus == TripStatus.IN_PROGRESS
+            || trip.TripStatus == TripStatus.WAITING_PAYMENT
+                && !trip.ActualFare.HasValue
+                && !trip.FinalFare.HasValue;
+        if (!canStartRequest)
+            throw new BookingException(
+                "trip.invalid_status_transition",
+                "Only an in-progress or financially unresolved ended trip can request end reconciliation.",
+                409);
 
         var request = new Domain.Entities.TripEndReconciliationRequest
         {
@@ -457,9 +485,19 @@ public sealed class TripStatusService : ITripStatusService
             RequestedAtUtc = _dateTimeProvider.UtcNow
         };
         _dbContext.TripEndReconciliationRequests.Add(request);
+        if (trip.TripStatus == TripStatus.IN_PROGRESS)
+        {
+            await CaptureOperationalTripEndAsync(trip, cancellationToken);
+        }
         try
         {
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            await ApplyTripStatusAsync(
+                trip,
+                TripStatus.WAITING_PAYMENT,
+                driverId,
+                cancellationToken,
+                keepDriverOffline: !canContinueWorking,
+                deferFareFinalization: true);
         }
         catch (DbUpdateException exception) when (
             IsEndReconciliationUniqueConstraintViolation(exception))
@@ -530,10 +568,12 @@ public sealed class TripStatusService : ITripStatusService
             await _dbContext.SaveChangesAsync(cancellationToken);
             return ToEndReconciliationResult(request);
         }
-        if (request.Trip.TripStatus != TripStatus.IN_PROGRESS)
+        if (request.Trip.TripStatus != TripStatus.WAITING_PAYMENT
+            || request.Trip.ActualFare.HasValue
+            || request.Trip.FinalFare.HasValue)
             throw new BookingException(
                 "trip.end_reconciliation_invalid_status",
-                "The trip is no longer in progress.", 409);
+                "The trip is not awaiting end-trip financial reconciliation.", 409);
 
         await FinalizeTripAsync(
             request.Trip, staffUserId, cancellationToken, request.RequestedReason);
@@ -1092,7 +1132,9 @@ public sealed class TripStatusService : ITripStatusService
         Domain.Entities.Trip trip,
         TripStatus tripStatus,
         Guid changedByUserId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool keepDriverOffline = false,
+        bool deferFareFinalization = false)
     {
         if (!CanTransition(trip.TripStatus, tripStatus))
         {
@@ -1106,6 +1148,17 @@ public sealed class TripStatusService : ITripStatusService
         var previousTripStatus = trip.TripStatus;
         var previousBookingStatus = trip.Booking.BookingStatus;
         Domain.Entities.Payment? pendingPaymentNotification = null;
+        if (keepDriverOffline)
+        {
+            var driverProfile = await _dbContext.DriverProfiles
+                .FirstOrDefaultAsync(x => x.DriverId == trip.DriverId, cancellationToken);
+            if (driverProfile is not null)
+            {
+                driverProfile.WorkStatus = DriverWorkStatus.Offline;
+                driverProfile.LastActiveAt = utcNow;
+                driverProfile.UpdatedAt = utcNow;
+            }
+        }
         if (tripStatus == TripStatus.IN_PROGRESS && previousTripStatus != TripStatus.IN_PROGRESS)
         {
             await _preTripVehicleCheckService.EnsureCanStartAndActivateCoverageAsync(
@@ -1159,8 +1212,11 @@ public sealed class TripStatusService : ITripStatusService
                 break;
             case TripStatus.WAITING_PAYMENT:
                 trip.StartedAt ??= utcNow;
-                EnsureTripFare(trip);
-                pendingPaymentNotification = UpsertPendingPayment(trip, utcNow);
+                if (!deferFareFinalization)
+                {
+                    EnsureTripFare(trip);
+                    pendingPaymentNotification = UpsertPendingPayment(trip, utcNow);
+                }
                 break;
             case TripStatus.COMPLETED:
                 trip.StartedAt ??= utcNow;
@@ -1191,6 +1247,10 @@ public sealed class TripStatusService : ITripStatusService
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        if (keepDriverOffline)
+        {
+            await RemoveDriverFromMatchingAsync(trip.DriverId, cancellationToken);
+        }
         await _tripSharingService.HandleTripLifecycleAsync(
             trip.Id,
             tripStatus,
@@ -1444,6 +1504,43 @@ public sealed class TripStatusService : ITripStatusService
         trip.FinalFare = fare.FinalFare;
     }
 
+    private async Task CaptureOperationalTripEndAsync(
+        Domain.Entities.Trip trip,
+        CancellationToken cancellationToken)
+    {
+        var endedAtUtc = _dateTimeProvider.UtcNow;
+        await RecordCurrentDriverLocationForTripAsync(
+            trip,
+            endedAtUtc,
+            cancellationToken);
+        var snapshot = await _redisService.GetTripTrackingSnapshotAsync(
+            trip.Id,
+            cancellationToken);
+        trip.EndedAt ??= endedAtUtc;
+        trip.ActualDurationMinutes ??= CalculateActualDurationMinutes(
+            trip.StartedAt ?? snapshot.TrackingStartedAtUtc ?? trip.EndedAt.Value,
+            trip.EndedAt.Value);
+        var routeEstimate = await TryGetFallbackRouteEstimateAsync(
+            snapshot,
+            cancellationToken);
+        trip.ActualDistanceKm ??= ResolveActualDistanceKm(
+            trip,
+            snapshot,
+            routeEstimate);
+        trip.RoutePolyline = ResolveActualPolyline(snapshot, routeEstimate);
+        if (snapshot.LastAcceptedPoint is not null)
+        {
+            trip.FinalizationLatitude ??= decimal.Round(
+                (decimal)snapshot.LastAcceptedPoint.Latitude,
+                6,
+                MidpointRounding.AwayFromZero);
+            trip.FinalizationLongitude ??= decimal.Round(
+                (decimal)snapshot.LastAcceptedPoint.Longitude,
+                6,
+                MidpointRounding.AwayFromZero);
+        }
+    }
+
     private async Task FinalizeTripAsync(
         Domain.Entities.Trip trip,
         Guid actorId,
@@ -1557,8 +1654,12 @@ public sealed class TripStatusService : ITripStatusService
             return;
         }
 
-        if (reason is TripEndReason.DRIVER_UNABLE_TO_CONTINUE
-            or TripEndReason.STARTED_BY_MISTAKE)
+        if (reason is TripEndReason.DRIVER_UNABLE_TO_CONTINUE)
+        {
+            return;
+        }
+
+        if (reason is TripEndReason.STARTED_BY_MISTAKE)
         {
             throw new BookingException(
                 "trip.end_reconciliation_required",
@@ -1703,7 +1804,8 @@ public sealed class TripStatusService : ITripStatusService
     {
         var profile = await _dbContext.DriverProfiles
             .FirstOrDefaultAsync(x => x.DriverId == driverId, cancellationToken);
-        if (profile is not null)
+        var shouldReturnOnline = profile?.WorkStatus == DriverWorkStatus.Busy;
+        if (profile?.WorkStatus == DriverWorkStatus.Busy)
         {
             profile.WorkStatus = DriverWorkStatus.Online;
             profile.LastActiveAt = utcNow;
@@ -1711,15 +1813,66 @@ public sealed class TripStatusService : ITripStatusService
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        await _redisService.SetAsync(
-            RedisKeys.DriverOnline(driverId),
-            "1",
-            TimeSpan.FromMinutes(_options.CurrentValue.DriverStatusTtlMinutes));
-        await _redisService.SetAsync(
-            RedisKeys.DriverStatus(driverId),
-            DriverWorkStatus.Online.ToString(),
-            TimeSpan.FromMinutes(_options.CurrentValue.DriverStatusTtlMinutes));
+        if (shouldReturnOnline)
+        {
+            await _redisService.SetAsync(
+                RedisKeys.DriverOnline(driverId),
+                "1",
+                TimeSpan.FromMinutes(_options.CurrentValue.DriverStatusTtlMinutes));
+            await _redisService.SetAsync(
+                RedisKeys.DriverStatus(driverId),
+                DriverWorkStatus.Online.ToString(),
+                TimeSpan.FromMinutes(_options.CurrentValue.DriverStatusTtlMinutes));
+        }
+        else
+        {
+            await RemoveDriverFromMatchingAsync(driverId, cancellationToken);
+        }
+
         await _redisService.RemoveAsync(RedisKeys.DriverActiveTrip(driverId));
+    }
+
+    private async Task RemoveDriverFromMatchingAsync(
+        Guid driverId,
+        CancellationToken cancellationToken)
+    {
+        var keys = new[]
+        {
+            RedisKeys.DriverOnline(driverId),
+            RedisKeys.DriverStatus(driverId),
+            RedisKeys.DriverLocation(driverId),
+            RedisKeys.DriverHeartbeatThrottle(driverId)
+        };
+        foreach (var key in keys)
+        {
+            try
+            {
+                await _redisService.RemoveAsync(key);
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "Failed to remove Redis driver availability key {RedisKey} for driver {DriverId}.",
+                    key,
+                    driverId);
+            }
+        }
+
+        try
+        {
+            await _redisService.GeoRemoveAsync(
+                RedisKeys.OnlineDriversGeo,
+                driverId.ToString(),
+                cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Failed to remove offline driver {DriverId} from the online-driver GEO set.",
+                driverId);
+        }
     }
 
     private static void IncrementPromotionUsage(Domain.Entities.Booking booking)
@@ -1925,10 +2078,10 @@ public sealed class TripStatusService : ITripStatusService
             request.RequestedAtUtc,
             request.ResolvedAtUtc,
             request.Status == TripEndReconciliationStatus.PENDING
-                ? "The request was submitted for staff review; fare has not been finalized."
+                ? "The trip ended operationally; fare is awaiting staff review."
                 : request.Status == TripEndReconciliationStatus.APPROVED
                     ? "Staff approved and finalized the reconciled end reason."
-                    : "Staff rejected the request; the trip remains active.");
+                    : "Staff rejected the request; the trip remains operationally ended and fare is unresolved.");
 
     private static int CalculateActualDurationMinutes(
         DateTime startedAtUtc,

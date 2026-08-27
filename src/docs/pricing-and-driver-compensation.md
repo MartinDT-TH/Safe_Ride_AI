@@ -81,11 +81,22 @@ IN_PROGRESS
 
 Promotion usage is incremented only on the first transition to `COMPLETED`.
 
-Important unresolved case: SafeRide still permits QR prepayment before a trip
-starts. If a later customer-requested stop reduces `GrossFare`, current code does
-not reconcile a successful prepayment amount against the finalized
-`CustomerPayable`. A business-approved normal-trip refund/reconciliation policy
-is required before that path is capstone-ready.
+SafeRide permits PayOS QR prepayment before a trip starts. A pending provider
+payment is not treated as money received: after trip end the lifecycle remains
+at `WAITING_PAYMENT`. A successful payment is authoritative only after the
+signed PayOS callback (or the explicit demo-only confirmation path) records it.
+After fare finalization, the payment reconciliation service compares the total
+successful payment amount with the durable `CustomerPayable`:
+
+- underpayment leaves the trip at `WAITING_PAYMENT` with the remainder payable;
+- exact payment permits `WAITING_RETURN_CONFIRM`;
+- overpayment persists a refund obligation before lifecycle advance, and Staff
+  confirms the manual refund with evidence through the existing refund flow.
+
+The current QR flow does not ask the customer to upload a transfer screenshot
+or ask Staff to verify payment proof. Staff participates only in the existing
+manual-refund and exceptional-reconciliation paths; the PayOS callback is the
+ordinary QR payment authority.
 
 ## Long pickup
 
@@ -100,10 +111,10 @@ LongPickupCompensation = RoundVnd(
 
 Pickup compensation does not alter `Booking.EstimatedFare`, `GrossFare`, or
 `CustomerPayable`. It is non-commissionable and platform-funded when payable.
-The offer snapshot does not, by itself, define the payable event. Current
-settlement pays it only for `NORMAL_COMPLETION`; eligibility for early stop,
-failed start, cancellation, and no-show still requires an approved business
-decision.
+The accepted offer snapshot does not, by itself, define the payable event.
+`Trip.StartedAt` is the durable earning boundary: once the trip has reached
+`IN_PROGRESS`, an otherwise-valid customer-requested early stop preserves the
+accepted long-pickup compensation. A trip that never starts does not earn it.
 
 ## Driver settlement
 
@@ -140,9 +151,9 @@ deducted from the driver wallet.
 | Reason | Current financial direction |
 |---|---|
 | `NORMAL_COMPLETION` | Locked V1 `Booking.EstimatedFare` after destination validation; hourly bookings use their locked duration-based estimate. |
-| `CUSTOMER_REQUESTED_STOP` | Original-route progress with `AcceptedMinimumServiceFare` floor. |
-| `DRIVER_UNABLE_TO_CONTINUE` | Current client-selectable path produces zero fare; evidence/authorized reconciliation is not yet implemented. |
-| `STARTED_BY_MISTAKE` | Current client-selectable path produces zero fare; controlled authorization/rollback is not yet implemented. |
+| `CUSTOMER_REQUESTED_STOP` | Deterministic original-route progress with `AcceptedMinimumServiceFare` floor; ends directly in `WAITING_PAYMENT` without Staff approval. |
+| `DRIVER_UNABLE_TO_CONTINUE` | Deterministic zero-fare operational end; goes directly to `WAITING_PAYMENT`, forces the driver offline, and does not require Staff approval. |
+| `STARTED_BY_MISTAKE` | Operationally ends immediately in `WAITING_PAYMENT`, but leaves fare fields null and creates a pending Staff reconciliation request. Payment and settlement stay blocked until Staff approves the existing zero-fare rule. |
 | `SYSTEM_ERROR` | Rejected with reconciliation-required conflict; no staff reconciliation endpoint is currently present. |
 | `VEHICLE_SAFETY_ISSUE` | Must use the Safety/Risk Protection termination workflow. |
 | `SAFETY_TERMINATION` | Delegates to the existing Safety/Risk Protection reconciliation subsystem. |
@@ -150,6 +161,26 @@ deducted from the driver wallet.
 `TripEndReason` is the detailed end-reason taxonomy. The broader
 `TripTerminationCategory` remains only as the standard-versus-safety lifecycle
 classification used by Risk Protection compatibility.
+
+Trip lifecycle, fare authority, exceptional reconciliation, and driver
+availability are separate concerns. `CanContinueWorking` is an availability
+choice on the end-trip request, not a substitute trip-end reason. When false,
+the server persists `DriverWorkStatus.Offline` and removes the driver from Redis
+online/status/location and GEO matching state. That offline choice survives the
+later payment, return-confirmation, and `COMPLETED` transitions. When true, the
+driver remains `Busy` until normal completion releases them back to `Online`.
+`DRIVER_UNABLE_TO_CONTINUE` remains an explicit end reason: the driver client
+sends that reason and forces `CanContinueWorking = false`, so ending near the
+pickup does not accidentally use `NORMAL_COMPLETION` destination validation.
+Choosing Offline after another valid end reason changes availability only; it
+does not rewrite the financial end reason.
+
+A pending exceptional reconciliation never keeps the trip `IN_PROGRESS`.
+Operational timestamps and tracking evidence are captured at the request time,
+while the authoritative fare remains unset. A rejected request also remains
+financially unresolved: payment code refuses to fall back to an estimate or
+advance settlement while the ended trip has no finalized fare. The driver may
+submit a new reconciliation request without reactivating the trip.
 
 ## Driver opt-in and maximum-distance rules
 

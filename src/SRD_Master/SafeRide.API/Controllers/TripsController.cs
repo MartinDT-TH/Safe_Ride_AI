@@ -155,21 +155,27 @@ public sealed class TripsController : ControllerBase
             });
         }
 
-        if (request.Reason is SafeRide.Domain.Enums.TripEndReason.DRIVER_UNABLE_TO_CONTINUE
-            or SafeRide.Domain.Enums.TripEndReason.STARTED_BY_MISTAKE)
+        if (request.Reason is SafeRide.Domain.Enums.TripEndReason.STARTED_BY_MISTAKE)
         {
             return Accepted(await _tripStatusService.RequestEndTripReconciliationAsync(
                 driverId,
                 tripId,
                 request.Reason,
+                request.CanContinueWorking,
                 cancellationToken));
         }
+
+        var canContinueWorking = request.Reason is
+            SafeRide.Domain.Enums.TripEndReason.DRIVER_UNABLE_TO_CONTINUE
+                ? false
+                : request.CanContinueWorking;
 
         await _tripStatusService.EndTripAsync(
             driverId,
             tripId,
             cancellationToken,
-            request.Reason);
+            request.Reason,
+            canContinueWorking);
 
         return NoContent();
     }

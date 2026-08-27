@@ -16,12 +16,14 @@ public interface ITripStatusService
         Guid driverId,
         long tripId,
         CancellationToken cancellationToken,
-        TripEndReason reason = TripEndReason.NORMAL_COMPLETION);
+        TripEndReason reason = TripEndReason.NORMAL_COMPLETION,
+        bool canContinueWorking = true);
 
     Task<TripEndReconciliationResult> RequestEndTripReconciliationAsync(
         Guid driverId,
         long tripId,
         TripEndReason reason,
+        bool canContinueWorking,
         CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 

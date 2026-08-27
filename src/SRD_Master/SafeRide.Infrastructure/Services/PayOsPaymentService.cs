@@ -686,6 +686,8 @@ public sealed class PayOsPaymentService : IPaymentService
                 StatusCodes.Status409Conflict);
         }
 
+        await EnsureEndReconciliationResolvedAsync(trip, cancellationToken);
+
         return trip;
     }
 
@@ -719,6 +721,8 @@ public sealed class PayOsPaymentService : IPaymentService
                 "Chuyến đi chưa sẵn sàng để kiểm tra thanh toán.",
                 StatusCodes.Status409Conflict);
         }
+
+        await EnsureEndReconciliationResolvedAsync(trip, cancellationToken);
 
         return trip;
     }
@@ -794,6 +798,11 @@ public sealed class PayOsPaymentService : IPaymentService
         CancellationToken cancellationToken,
         string? providerReference = null)
     {
+        if (await HasUnresolvedEndReconciliationAsync(trip, cancellationToken))
+        {
+            return;
+        }
+
         if (_dbContext.Database.IsRelational()
             && _dbContext.Database.CurrentTransaction is null)
         {
@@ -1047,6 +1056,36 @@ public sealed class PayOsPaymentService : IPaymentService
                 "Chỉ có thể thu tiền sau khi tài xế kết thúc chuyến đi.",
                 StatusCodes.Status409Conflict);
         }
+    }
+
+    private async Task EnsureEndReconciliationResolvedAsync(
+        Trip trip,
+        CancellationToken cancellationToken)
+    {
+        if (await HasUnresolvedEndReconciliationAsync(trip, cancellationToken))
+        {
+            throw new BookingException(
+                "trip.end_reconciliation_pending",
+                "The trip has ended, but its financial result is awaiting staff reconciliation.",
+                StatusCodes.Status409Conflict);
+        }
+    }
+
+    private async Task<bool> HasUnresolvedEndReconciliationAsync(
+        Trip trip,
+        CancellationToken cancellationToken)
+    {
+        // An operationally ended exceptional trip must never fall back to an
+        // estimate while its authoritative fare is still awaiting a decision.
+        // Legacy/compatibility payment fixtures may legitimately populate fare
+        // later, so null fare alone is not evidence of reconciliation.
+        var fareIsUnresolved = trip.TripStatus == TripStatus.WAITING_PAYMENT
+            && (!trip.ActualFare.HasValue || !trip.FinalFare.HasValue);
+        return await _dbContext.TripEndReconciliationRequests.AsNoTracking().AnyAsync(
+            x => x.TripId == trip.Id
+                && (x.Status == TripEndReconciliationStatus.PENDING
+                    || fareIsUnresolved),
+            cancellationToken);
     }
 
     private static string BuildPaymentMessage(

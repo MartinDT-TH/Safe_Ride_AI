@@ -31,6 +31,11 @@ enum DriverTripEndReason {
   const DriverTripEndReason(this.apiValue);
 
   final String apiValue;
+
+  bool get forcesDriverOffline => this == driverUnableToContinue;
+
+  bool effectiveCanContinueWorking(bool requestedValue) =>
+      forcesDriverOffline ? false : requestedValue;
 }
 
 String imageContentTypeForEvidence(XFile file) {
@@ -1100,8 +1105,11 @@ class DriverDashboardProvider extends ChangeNotifier {
     }
   }
 
-  /// Ends an IN_PROGRESS trip and advances it to the payment stage.
-  Future<bool> endTripAsync(DriverTripEndReason reason) async {
+  /// Ends an IN_PROGRESS trip and records whether the driver remains available.
+  Future<bool> endTripAsync(
+    DriverTripEndReason reason, {
+    required bool canContinueWorking,
+  }) async {
     final trip = _activeTrip;
     final token = _accessToken;
     if (trip == null || token == null || _isUpdatingTrip) {
@@ -1111,16 +1119,28 @@ class DriverDashboardProvider extends ChangeNotifier {
     _isUpdatingTrip = true;
     notifyListeners();
     try {
+      final effectiveCanContinueWorking = reason.effectiveCanContinueWorking(
+        canContinueWorking,
+      );
       // Make the latest queued GPS points visible to fare finalization before
       // the backend closes the trip tracking snapshot.
       await _flushPendingLocationUpdates();
       final response = await _dio.post(
         ApiEndpoints.endTrip(trip.tripId),
-        data: {'reason': reason.apiValue},
+        data: {
+          'reason': reason.apiValue,
+          'canContinueWorking': effectiveCanContinueWorking,
+        },
         options: Options(
           headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
         ),
       );
+      if (!effectiveCanContinueWorking) {
+        _status = DriverStatus.offline;
+        _hasNewRequest = false;
+        _currentRequest = null;
+        _openTripRequests.clear();
+      }
       await loadActiveTrip();
       if (response.statusCode == 202) {
         final body = response.data;
@@ -1134,6 +1154,9 @@ class DriverDashboardProvider extends ChangeNotifier {
             LocaleProvider.currentLocalizations.waitingForPayment;
       }
       return true;
+    } on DioException catch (error) {
+      _captureTripActionError(error);
+      rethrow;
     } catch (e) {
       debugPrint('Failed to end trip: $e');
       rethrow;
@@ -1229,6 +1252,9 @@ class DriverDashboardProvider extends ChangeNotifier {
         final paymentCompleted =
             data['paymentCompleted'] == true ||
             data['PaymentCompleted'] == true;
+        final endReconciliationPending =
+            data['endReconciliationPending'] == true ||
+            data['EndReconciliationPending'] == true;
         if (bookingId != null && tripId != null && tripStatus != null) {
           if (_isTerminalTripStatus(tripStatus)) {
             _clearActiveTrip();
@@ -1252,6 +1278,7 @@ class DriverDashboardProvider extends ChangeNotifier {
             paymentCompleted:
                 paymentCompleted ||
                 (sameTrip && oldTrip?.paymentCompleted == true),
+            endReconciliationPending: endReconciliationPending,
           );
           _socketService.joinTrip(tripIdValue);
           if (!_hasActiveTripDetails(tripIdValue)) {
@@ -1722,6 +1749,7 @@ class ActiveDriverTrip {
     this.encodedPolyline,
     this.arrivalPolyline,
     this.paymentCompleted = false,
+    this.endReconciliationPending = false,
   });
 
   final int bookingId;
@@ -1734,6 +1762,7 @@ class ActiveDriverTrip {
   final String? encodedPolyline;
   final String? arrivalPolyline;
   final bool paymentCompleted;
+  final bool endReconciliationPending;
 
   ActiveDriverTrip copyWith({
     String? tripStatus,
@@ -1744,6 +1773,7 @@ class ActiveDriverTrip {
     String? encodedPolyline,
     String? arrivalPolyline,
     bool? paymentCompleted,
+    bool? endReconciliationPending,
   }) {
     return ActiveDriverTrip(
       bookingId: bookingId,
@@ -1756,6 +1786,8 @@ class ActiveDriverTrip {
       encodedPolyline: encodedPolyline ?? this.encodedPolyline,
       arrivalPolyline: arrivalPolyline ?? this.arrivalPolyline,
       paymentCompleted: paymentCompleted ?? this.paymentCompleted,
+      endReconciliationPending:
+          endReconciliationPending ?? this.endReconciliationPending,
     );
   }
 }

@@ -131,6 +131,16 @@ public sealed class DriverQueryService : IDriverQueryService
             }
         }
 
+        var fareIsUnresolved = trip.TripStatus == TripStatus.WAITING_PAYMENT
+            && (!trip.ActualFare.HasValue || !trip.FinalFare.HasValue);
+        var endReconciliationPending = await _dbContext.TripEndReconciliationRequests
+            .AsNoTracking()
+            .AnyAsync(
+                x => x.TripId == trip.Id
+                    && (x.Status == TripEndReconciliationStatus.PENDING
+                        || fareIsUnresolved),
+                cancellationToken);
+
         return new ActiveDriverTripDto(
             trip.BookingId,
             trip.Id,
@@ -165,7 +175,8 @@ public sealed class DriverQueryService : IDriverQueryService
                         .ToList()),
             arrivalPolyline,
             trip.FinalFare is <= 0m
-                || trip.Payments.Any(payment => payment.PaymentStatus == PaymentStatus.Success));
+                || trip.Payments.Any(payment => payment.PaymentStatus == PaymentStatus.Success),
+            endReconciliationPending);
     }
 
     public async Task<IReadOnlyList<DriverTripRequestDto>> GetOpenTripRequestsAsync(

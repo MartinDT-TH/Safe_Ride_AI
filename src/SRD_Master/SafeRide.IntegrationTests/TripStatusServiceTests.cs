@@ -91,6 +91,150 @@ public sealed class TripStatusServiceTests
     }
 
     [Fact]
+    public async Task EndTrip_WithPendingQrPrepayment_WaitsForProviderVerification()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(
+            TripStatus.IN_PROGRESS,
+            pricingSnapshotV1: true);
+        fixture.Redis.SetTripTrackingSnapshot(
+            CreateV1RouteSnapshot(fixture.TripId, 43.252, -126.453, 14_000));
+        fixture.DbContext.Payments.Add(new Payment
+        {
+            TripId = fixture.TripId,
+            PaymentMethod = PaymentMethod.QR,
+            TransactionReference = $"{fixture.TripId}456",
+            Amount = 62_000m,
+            Currency = "VND",
+            PaymentStatus = PaymentStatus.Pending,
+            CreatedAt = UtcNow
+        });
+        await fixture.DbContext.SaveChangesAsync();
+
+        await fixture.Service.EndTripAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            CancellationToken.None);
+
+        var trip = await fixture.DbContext.Trips.Include(x => x.Payments).SingleAsync();
+        Assert.Equal(TripStatus.WAITING_PAYMENT, trip.TripStatus);
+        Assert.Equal(PaymentStatus.Pending, Assert.Single(trip.Payments).PaymentStatus);
+        Assert.Empty(await fixture.DbContext.WalletTransactions.ToListAsync());
+    }
+
+    [Fact]
+    public async Task EndTrip_WithVerifiedQrPrepayment_ReconcilesAndAdvances()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(
+            TripStatus.IN_PROGRESS,
+            pricingSnapshotV1: true);
+        fixture.Redis.SetTripTrackingSnapshot(
+            CreateV1RouteSnapshot(fixture.TripId, 43.252, -126.453, 14_000));
+        await fixture.AddSuccessfulPaymentAsync(62_000m);
+
+        await fixture.Service.EndTripAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            CancellationToken.None);
+
+        var trip = await fixture.DbContext.Trips.SingleAsync();
+        var reconciliation = await fixture.DbContext.SafetyPaymentReconciliations.SingleAsync();
+        Assert.Equal(TripStatus.WAITING_RETURN_CONFIRM, trip.TripStatus);
+        Assert.Equal(SafetyPaymentReconciliationStatus.PAID, reconciliation.Status);
+        Assert.Equal(0m, reconciliation.RemainingPayableAmount);
+    }
+
+    [Fact]
+    public async Task EndTrip_CanContinue_CompletesAndReturnsDriverOnline()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(
+            TripStatus.IN_PROGRESS,
+            pricingSnapshotV1: true);
+        fixture.Redis.SetTripTrackingSnapshot(
+            CreateV1RouteSnapshot(fixture.TripId, 43.252, -126.453, 14_000));
+
+        await fixture.Service.EndTripAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            CancellationToken.None,
+            TripEndReason.NORMAL_COMPLETION,
+            canContinueWorking: true);
+        await fixture.AddSuccessfulPaymentAsync(62_000m);
+        await fixture.Service.AdvanceAfterSuccessfulPaymentAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            CancellationToken.None);
+        await fixture.Service.ConfirmReturnByCustomerAsync(
+            fixture.CustomerId,
+            fixture.TripId,
+            vehicleReturnedConfirmed: true,
+            CancellationToken.None,
+            ratingScore: 5);
+
+        var trip = await fixture.DbContext.Trips.SingleAsync();
+        var driver = await fixture.DbContext.DriverProfiles.SingleAsync();
+        Assert.Equal(TripStatus.COMPLETED, trip.TripStatus);
+        Assert.Equal(DriverWorkStatus.Online, driver.WorkStatus);
+        Assert.Equal(DriverWorkStatus.Online.ToString(), fixture.Redis.DriverStatusValue);
+    }
+
+    [Fact]
+    public async Task EndTrip_CannotContinue_PersistsOfflineThroughCompletionAndRemovesMatchingEligibility()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(
+            TripStatus.IN_PROGRESS,
+            pricingSnapshotV1: true);
+        fixture.Redis.SetTripTrackingSnapshot(
+            CreateV1RouteSnapshot(fixture.TripId, 43.252, -126.453, 14_000));
+        await fixture.Redis.SetAsync(
+            RedisKeys.DriverOnline(fixture.DriverId),
+            "1",
+            TimeSpan.FromMinutes(5));
+        await fixture.Redis.SetAsync(
+            RedisKeys.DriverStatus(fixture.DriverId),
+            DriverWorkStatus.Busy.ToString(),
+            TimeSpan.FromMinutes(5));
+
+        await fixture.Service.EndTripAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            CancellationToken.None,
+            TripEndReason.NORMAL_COMPLETION,
+            canContinueWorking: false);
+
+        var endedTrip = await fixture.DbContext.Trips.SingleAsync();
+        var offlineDriver = await fixture.DbContext.DriverProfiles.SingleAsync();
+        Assert.Equal(TripStatus.WAITING_PAYMENT, endedTrip.TripStatus);
+        Assert.Equal(TripEndReason.NORMAL_COMPLETION, endedTrip.EndReason);
+        Assert.Equal(DriverWorkStatus.Offline, offlineDriver.WorkStatus);
+        Assert.Null(fixture.Redis.DriverStatusValue);
+        Assert.Contains(RedisKeys.DriverOnline(fixture.DriverId), fixture.Redis.RemovedKeys);
+        Assert.Contains(RedisKeys.DriverStatus(fixture.DriverId), fixture.Redis.RemovedKeys);
+        Assert.Contains(
+            (RedisKeys.OnlineDriversGeo, fixture.DriverId.ToString()),
+            fixture.Redis.GeoRemovedMembers);
+        Assert.DoesNotContain(fixture.DriverActiveTripKey, fixture.Redis.RemovedKeys);
+
+        await fixture.AddSuccessfulPaymentAsync(62_000m);
+        await fixture.Service.AdvanceAfterSuccessfulPaymentAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            CancellationToken.None);
+        await fixture.Service.ConfirmReturnByCustomerAsync(
+            fixture.CustomerId,
+            fixture.TripId,
+            vehicleReturnedConfirmed: true,
+            CancellationToken.None,
+            ratingScore: 5);
+
+        var completedTrip = await fixture.DbContext.Trips.SingleAsync();
+        var completedDriver = await fixture.DbContext.DriverProfiles.SingleAsync();
+        Assert.Equal(TripStatus.COMPLETED, completedTrip.TripStatus);
+        Assert.Equal(DriverWorkStatus.Offline, completedDriver.WorkStatus);
+        Assert.Null(fixture.Redis.DriverStatusValue);
+        Assert.Contains(fixture.DriverActiveTripKey, fixture.Redis.RemovedKeys);
+    }
+
+    [Fact]
     public async Task EndTrip_V1HourlyBooking_CompletesWithoutDestinationGeofence()
     {
         using var fixture = await TripStatusFixture.CreateAsync(
@@ -177,11 +321,33 @@ public sealed class TripStatusServiceTests
             (await fixture.DbContext.Trips.SingleAsync()).TripStatus);
     }
 
-    [Theory]
-    [InlineData(TripEndReason.DRIVER_UNABLE_TO_CONTINUE)]
-    [InlineData(TripEndReason.STARTED_BY_MISTAKE)]
-    public async Task EndTrip_SensitiveReason_RequiresStaffApprovalBeforeZeroFare(
-        TripEndReason reason)
+    [Fact]
+    public async Task EndTrip_DriverUnableToContinue_EndsOperationallyWithoutStaffAndGoesOffline()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(
+            TripStatus.IN_PROGRESS,
+            pricingSnapshotV1: true);
+
+        await fixture.Service.EndTripAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            CancellationToken.None,
+            TripEndReason.DRIVER_UNABLE_TO_CONTINUE,
+            canContinueWorking: false);
+
+        var trip = await fixture.DbContext.Trips.SingleAsync();
+        var driver = await fixture.DbContext.DriverProfiles.SingleAsync();
+        Assert.Equal(TripStatus.WAITING_PAYMENT, trip.TripStatus);
+        Assert.Equal(0m, trip.ActualFare);
+        Assert.Equal(0m, trip.FinalFare);
+        Assert.Equal(TripEndReason.DRIVER_UNABLE_TO_CONTINUE, trip.EndReason);
+        Assert.Equal(TripTerminationCategory.STANDARD, trip.TerminationCategory);
+        Assert.Equal(DriverWorkStatus.Offline, driver.WorkStatus);
+        Assert.Empty(await fixture.DbContext.TripEndReconciliationRequests.ToListAsync());
+    }
+
+    [Fact]
+    public async Task EndTrip_StartedByMistake_EndsOperationallyWhileFareAwaitsStaff()
     {
         using var fixture = await TripStatusFixture.CreateAsync(
             TripStatus.IN_PROGRESS,
@@ -192,18 +358,30 @@ public sealed class TripStatusServiceTests
                 fixture.DriverId,
                 fixture.TripId,
                 CancellationToken.None,
-                reason));
+                TripEndReason.STARTED_BY_MISTAKE));
         Assert.Equal("trip.end_reconciliation_required", direct.Code);
 
         var request = await fixture.Service.RequestEndTripReconciliationAsync(
             fixture.DriverId,
             fixture.TripId,
-            reason,
-            CancellationToken.None);
+            TripEndReason.STARTED_BY_MISTAKE,
+            canContinueWorking: false,
+            cancellationToken: CancellationToken.None);
         var pendingTrip = await fixture.DbContext.Trips.SingleAsync();
-        Assert.Equal(TripStatus.IN_PROGRESS, pendingTrip.TripStatus);
+        var offlineDriver = await fixture.DbContext.DriverProfiles.SingleAsync();
+        Assert.Equal(TripStatus.WAITING_PAYMENT, pendingTrip.TripStatus);
+        Assert.Equal(UtcNow, pendingTrip.EndedAt);
         Assert.Null(pendingTrip.ActualFare);
+        Assert.Null(pendingTrip.FinalFare);
+        Assert.Equal(DriverWorkStatus.Offline, offlineDriver.WorkStatus);
         Assert.Equal(TripEndReconciliationStatus.PENDING, request.Status);
+
+        var paymentException = await Assert.ThrowsAsync<BookingException>(() =>
+            fixture.CreatePaymentService().GetDriverTripPaymentStatusAsync(
+                fixture.DriverId,
+                fixture.TripId,
+                CancellationToken.None));
+        Assert.Equal("trip.end_reconciliation_pending", paymentException.Code);
 
         await fixture.Service.ResolveEndTripReconciliationAsync(
             Guid.NewGuid(),
@@ -217,8 +395,49 @@ public sealed class TripStatusServiceTests
         Assert.Equal(TripStatus.WAITING_PAYMENT, trip.TripStatus);
         Assert.Equal(0m, trip.ActualFare);
         Assert.Equal(0m, trip.FinalFare);
-        Assert.Equal(reason, trip.EndReason);
+        Assert.Equal(TripEndReason.STARTED_BY_MISTAKE, trip.EndReason);
         Assert.Equal(TripTerminationCategory.STANDARD, trip.TerminationCategory);
+    }
+
+    [Fact]
+    public async Task EndTrip_RejectedExceptionalRequest_CanBeResubmittedWithoutReactivatingTrip()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(
+            TripStatus.IN_PROGRESS,
+            pricingSnapshotV1: true);
+        var first = await fixture.Service.RequestEndTripReconciliationAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            TripEndReason.STARTED_BY_MISTAKE,
+            canContinueWorking: true,
+            cancellationToken: CancellationToken.None);
+        await fixture.Service.ResolveEndTripReconciliationAsync(
+            Guid.NewGuid(),
+            fixture.TripId,
+            first.RequestId,
+            approved: false,
+            resolutionNote: "Insufficient evidence",
+            cancellationToken: CancellationToken.None);
+
+        var paymentException = await Assert.ThrowsAsync<BookingException>(() =>
+            fixture.CreatePaymentService().GetDriverTripPaymentStatusAsync(
+                fixture.DriverId,
+                fixture.TripId,
+                CancellationToken.None));
+        var second = await fixture.Service.RequestEndTripReconciliationAsync(
+            fixture.DriverId,
+            fixture.TripId,
+            TripEndReason.STARTED_BY_MISTAKE,
+            canContinueWorking: true,
+            cancellationToken: CancellationToken.None);
+
+        var trip = await fixture.DbContext.Trips.SingleAsync();
+        Assert.Equal("trip.end_reconciliation_pending", paymentException.Code);
+        Assert.NotEqual(first.RequestId, second.RequestId);
+        Assert.Equal(TripEndReconciliationStatus.PENDING, second.Status);
+        Assert.Equal(TripStatus.WAITING_PAYMENT, trip.TripStatus);
+        Assert.Null(trip.ActualFare);
+        Assert.Null(trip.FinalFare);
     }
 
     [Fact]
@@ -233,6 +452,9 @@ public sealed class TripStatusServiceTests
             fixture.TripId,
             CancellationToken.None,
             TripEndReason.CUSTOMER_REQUESTED_STOP);
+        var endedTrip = await fixture.DbContext.Trips.SingleAsync();
+        Assert.Equal(TripStatus.WAITING_PAYMENT, endedTrip.TripStatus);
+        Assert.Empty(await fixture.DbContext.TripEndReconciliationRequests.ToListAsync());
         var paymentResult = await fixture.CreatePaymentService().ConfirmCashPaymentAsync(
             fixture.DriverId,
             fixture.TripId,
@@ -401,6 +623,7 @@ public sealed class TripStatusServiceTests
         Assert.Equal(40_000m, trip.FinalFare);
         Assert.Equal(20_000m, trip.Booking.LongDistanceComponent);
         Assert.Equal(TripEndReason.CUSTOMER_REQUESTED_STOP, trip.EndReason);
+        Assert.Empty(await fixture.DbContext.TripEndReconciliationRequests.ToListAsync());
     }
 
     [Fact]
@@ -2509,6 +2732,7 @@ public sealed class TripStatusServiceTests
 
         public List<string> RemovedKeys { get; } = [];
         public List<string> SetKeys { get; } = [];
+        public List<(string Key, string Member)> GeoRemovedMembers { get; } = [];
         public List<TripTrackingPoint> RecordedTrackingPoints { get; } = [];
         public string? DriverStatusValue { get; private set; }
 
@@ -2564,6 +2788,10 @@ public sealed class TripStatusServiceTests
         {
             _values.Remove(key);
             RemovedKeys.Add(key);
+            if (key.StartsWith("sr:driver:status:", StringComparison.Ordinal))
+            {
+                DriverStatusValue = null;
+            }
             return Task.CompletedTask;
         }
 
@@ -2603,8 +2831,11 @@ public sealed class TripStatusServiceTests
         public Task GeoRemoveAsync(
             string key,
             string member,
-            CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
+            CancellationToken cancellationToken = default)
+        {
+            GeoRemovedMembers.Add((key, member));
+            return Task.CompletedTask;
+        }
 
         public Task<IReadOnlyList<string>> GeoRadiusAsync(
             string key,
