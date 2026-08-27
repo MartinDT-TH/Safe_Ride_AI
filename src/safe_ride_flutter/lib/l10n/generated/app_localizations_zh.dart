@@ -2614,4 +2614,151 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get startedByMistakeReason => '误开始行程';
+
+  @override
+  String get riskStatusReported => '已受理';
+
+  @override
+  String get riskStatusEvidenceCollection => '正在收集证据';
+
+  @override
+  String get riskStatusUnderReview => '审核中';
+
+  @override
+  String get riskStatusLiabilityPending => '等待责任认定';
+
+  @override
+  String get riskStatusSettlement => '正在处理保障';
+
+  @override
+  String get riskStatusClosed => '已关闭';
+
+  @override
+  String get riskStatusRejected => '已拒绝';
+
+  @override
+  String get riskCategoryDriverInjury => '司机受伤';
+
+  @override
+  String get riskCategoryCustomerVehicleDamage => '客户车辆损失';
+
+  @override
+  String get riskCategoryThirdPartyDamage => '第三方损失';
+
+  @override
+  String get riskCategoryMultiple => '多种损失';
+
+  @override
+  String get riskFaultNoFault => '无过错';
+
+  @override
+  String get riskFaultOrdinary => '一般过失';
+
+  @override
+  String get riskFaultGross => '重大过失';
+
+  @override
+  String get riskFaultIntentional => '故意行为';
+
+  @override
+  String get riskAssessmentDraft => '草稿';
+
+  @override
+  String get riskAssessmentPendingConfirmation => '等待确认';
+
+  @override
+  String get riskAssessmentConfirmed => '已确认';
+
+  @override
+  String get riskAssessmentDisputed => '重新审核中';
+
+  @override
+  String get riskClaimApproved => '已批准';
+
+  @override
+  String get riskClaimPendingFunding => '等待拨款';
+
+  @override
+  String get riskClaimFunded => '已拨款';
+
+  @override
+  String get riskClaimRecovery => '追偿中';
+
+  @override
+  String get riskClaimSettled => '已对账';
+
+  @override
+  String get riskLiabilityPartiallyPaid => '已部分支付';
+
+  @override
+  String get riskLiabilityPaid => '已支付';
+
+  @override
+  String get riskLiabilityWaived => '已豁免';
+
+  @override
+  String get riskRoleDriver => '司机';
+
+  @override
+  String get riskRoleCustomer => '客户';
+
+  @override
+  String get riskRoleThirdParty => '第三方';
+
+  @override
+  String get riskRoleVehicle => '车辆';
+
+  @override
+  String get riskRoleObjective => '客观因素';
+
+  @override
+  String get riskReasonDistracting => '造成分心';
+
+  @override
+  String get riskReasonViolent => '暴力行为';
+
+  @override
+  String get riskReasonInterferingVehicle => '干扰车辆操控';
+
+  @override
+  String get riskReasonUnsafeRequest => '不安全要求';
+
+  @override
+  String get riskReasonOther => '其他原因';
+
+  @override
+  String get riskInsurancePending => '等待员工验证';
+
+  @override
+  String get riskInsuranceVerified => '已验证';
+
+  @override
+  String get riskInsuranceExpired => '已过期';
+
+  @override
+  String get riskInsuranceOther => '其他保险';
+
+  @override
+  String get riskIncidentInformation => '事故信息';
+
+  @override
+  String get riskResponsibilityResult => '责任认定结果';
+
+  @override
+  String get riskProtectionOutcome => '保障处理结果';
+
+  @override
+  String get riskEligibleDamage => '符合条件的损失';
+
+  @override
+  String get mandatoryTplExplanation => '强制第三方责任险主要保障第三方，并不自动承保客户车辆损失。';
+
+  @override
+  String get physicalDamageExplanation => '车辆损失险可根据已验证的保单条款用于客户车辆损失。';
+
+  @override
+  String get insurerNoGuarantee => '保存保单不代表保险公司保证批准赔付。';
+
+  @override
+  String get documentUrlDeferredHint => '目前仅保存文件链接。请使用可信链接；待安全共享存储可用后再提供直接上传。';
 }

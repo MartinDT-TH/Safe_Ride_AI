@@ -2723,4 +2723,155 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get startedByMistakeReason => 'Bắt đầu chuyến do nhầm lẫn';
+
+  @override
+  String get riskStatusReported => 'Đã tiếp nhận';
+
+  @override
+  String get riskStatusEvidenceCollection => 'Đang thu thập bằng chứng';
+
+  @override
+  String get riskStatusUnderReview => 'Đang xem xét';
+
+  @override
+  String get riskStatusLiabilityPending => 'Chờ xác định trách nhiệm';
+
+  @override
+  String get riskStatusSettlement => 'Đang xử lý quyền lợi';
+
+  @override
+  String get riskStatusClosed => 'Đã đóng';
+
+  @override
+  String get riskStatusRejected => 'Đã từ chối';
+
+  @override
+  String get riskCategoryDriverInjury => 'Chấn thương tài xế';
+
+  @override
+  String get riskCategoryCustomerVehicleDamage => 'Thiệt hại xe khách hàng';
+
+  @override
+  String get riskCategoryThirdPartyDamage => 'Thiệt hại bên thứ ba';
+
+  @override
+  String get riskCategoryMultiple => 'Nhiều loại thiệt hại';
+
+  @override
+  String get riskFaultNoFault => 'Không có lỗi';
+
+  @override
+  String get riskFaultOrdinary => 'Sơ suất thông thường';
+
+  @override
+  String get riskFaultGross => 'Sơ suất nghiêm trọng';
+
+  @override
+  String get riskFaultIntentional => 'Hành vi cố ý';
+
+  @override
+  String get riskAssessmentDraft => 'Bản nháp';
+
+  @override
+  String get riskAssessmentPendingConfirmation => 'Chờ xác nhận';
+
+  @override
+  String get riskAssessmentConfirmed => 'Đã xác nhận';
+
+  @override
+  String get riskAssessmentDisputed => 'Đang được xem xét lại';
+
+  @override
+  String get riskClaimApproved => 'Đã phê duyệt';
+
+  @override
+  String get riskClaimPendingFunding => 'Chờ cấp kinh phí';
+
+  @override
+  String get riskClaimFunded => 'Đã cấp kinh phí';
+
+  @override
+  String get riskClaimRecovery => 'Đang thu hồi';
+
+  @override
+  String get riskClaimSettled => 'Đã đối soát';
+
+  @override
+  String get riskLiabilityPartiallyPaid => 'Đã thanh toán một phần';
+
+  @override
+  String get riskLiabilityPaid => 'Đã thanh toán';
+
+  @override
+  String get riskLiabilityWaived => 'Đã miễn';
+
+  @override
+  String get riskRoleDriver => 'Tài xế';
+
+  @override
+  String get riskRoleCustomer => 'Khách hàng';
+
+  @override
+  String get riskRoleThirdParty => 'Bên thứ ba';
+
+  @override
+  String get riskRoleVehicle => 'Phương tiện';
+
+  @override
+  String get riskRoleObjective => 'Yếu tố khách quan';
+
+  @override
+  String get riskReasonDistracting => 'Gây mất tập trung';
+
+  @override
+  String get riskReasonViolent => 'Có hành vi bạo lực';
+
+  @override
+  String get riskReasonInterferingVehicle => 'Can thiệp việc điều khiển xe';
+
+  @override
+  String get riskReasonUnsafeRequest => 'Yêu cầu không an toàn';
+
+  @override
+  String get riskReasonOther => 'Lý do khác';
+
+  @override
+  String get riskInsurancePending => 'Chờ nhân viên xác minh';
+
+  @override
+  String get riskInsuranceVerified => 'Đã xác minh';
+
+  @override
+  String get riskInsuranceExpired => 'Đã hết hạn';
+
+  @override
+  String get riskInsuranceOther => 'Bảo hiểm khác';
+
+  @override
+  String get riskIncidentInformation => 'Thông tin sự cố';
+
+  @override
+  String get riskResponsibilityResult => 'Kết quả trách nhiệm';
+
+  @override
+  String get riskProtectionOutcome => 'Kết quả hỗ trợ bảo vệ';
+
+  @override
+  String get riskEligibleDamage => 'Thiệt hại đủ điều kiện';
+
+  @override
+  String get mandatoryTplExplanation =>
+      'Bảo hiểm trách nhiệm dân sự bắt buộc chủ yếu bảo vệ bên thứ ba; không mặc định chi trả thiệt hại vật chất của xe khách hàng.';
+
+  @override
+  String get physicalDamageExplanation =>
+      'Bảo hiểm thiệt hại vật chất có thể được xem xét cho hư hỏng xe khách hàng theo hợp đồng đã xác minh.';
+
+  @override
+  String get insurerNoGuarantee =>
+      'Việc lưu hợp đồng không bảo đảm doanh nghiệp bảo hiểm sẽ chấp thuận chi trả.';
+
+  @override
+  String get documentUrlDeferredHint =>
+      'Hiện hệ thống chỉ lưu liên kết tài liệu. Chỉ dùng liên kết tin cậy; tải tệp trực tiếp sẽ được bổ sung khi có kho lưu trữ an toàn dùng chung.';
 }

@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 import babel from '@rolldown/plugin-babel';
 
-const apiTarget = 'http://demotripshare.runasp.net';
+const apiTarget = 'http://192.168.100.116:5026';
 
 // https://vite.dev/config/
 export default defineConfig({

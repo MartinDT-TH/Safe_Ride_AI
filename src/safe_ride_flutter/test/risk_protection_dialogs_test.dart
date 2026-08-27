@@ -72,10 +72,10 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('pre-trip evidence uses camera and shows the captured photo', (
+  testWidgets('pre-trip keeps camera primary and gallery available', (
     tester,
   ) async {
-    ImageSource? requestedSource;
+    final requestedSources = <ImageSource>[];
     final evidence = XFile.fromData(
       base64Decode(
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
@@ -95,7 +95,7 @@ void main() {
               onPressed: () => showPreTripSafetyCheckDialog(
                 context,
                 pickEvidenceImage: (source) async {
-                  requestedSource = source;
+                  requestedSources.add(source);
                   return evidence;
                 },
               ),
@@ -108,7 +108,7 @@ void main() {
 
     await tester.tap(find.text('open pre-trip'));
     await tester.pumpAndSettle();
-    final captureButton = find.widgetWithText(OutlinedButton, 'Chụp ảnh');
+    final captureButton = find.text('Chụp ảnh', skipOffstage: false);
     await tester.dragUntilVisible(
       captureButton,
       find.byType(SingleChildScrollView),
@@ -117,9 +117,18 @@ void main() {
     await tester.tap(captureButton);
     await tester.pumpAndSettle();
 
-    expect(requestedSource, ImageSource.camera);
+    expect(requestedSources, [ImageSource.camera]);
     expect(find.byType(Image, skipOffstage: false), findsOneWidget);
     expect(find.text('Chụp lại', skipOffstage: false), findsOneWidget);
+
+    final galleryButton = find.widgetWithText(
+      OutlinedButton,
+      'Chọn từ thư viện',
+    );
+    await tester.ensureVisible(galleryButton);
+    await tester.tap(galleryButton);
+    await tester.pumpAndSettle();
+    expect(requestedSources, [ImageSource.camera, ImageSource.gallery]);
     expect(tester.takeException(), isNull);
   });
 
@@ -218,7 +227,7 @@ void main() {
     expect(find.text('1 / 3 ảnh', skipOffstage: false), findsOneWidget);
     expect(find.text('Chụp ảnh', skipOffstage: false), findsOneWidget);
 
-    final addPhotoButton = find.widgetWithText(OutlinedButton, 'Chụp ảnh');
+    final addPhotoButton = find.text('Chụp ảnh', skipOffstage: false);
     await tester.ensureVisible(addPhotoButton);
     await tester.pumpAndSettle();
     await tester.tap(addPhotoButton);

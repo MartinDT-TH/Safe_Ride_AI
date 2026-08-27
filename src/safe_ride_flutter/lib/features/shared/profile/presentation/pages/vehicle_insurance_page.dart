@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../../core/utils/currency_formatter.dart';
+import '../../../risk_protection/presentation/risk_protection_labels.dart';
 import '../../data/models/vehicle_model.dart';
 import '../providers/vehicle_provider.dart';
 
@@ -138,8 +139,10 @@ class _VehicleInsurancePageState extends State<VehicleInsurancePage> {
             )
           : _items.isEmpty
           ? ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
               children: [
-                const SizedBox(height: 120),
+                const _InsuranceGuideCard(),
+                const SizedBox(height: 36),
                 const Icon(
                   Icons.verified_user_outlined,
                   size: 56,
@@ -151,20 +154,21 @@ class _VehicleInsurancePageState extends State<VehicleInsurancePage> {
             )
           : ListView.builder(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-              itemCount: _items.length,
+              itemCount: _items.length + 1,
               itemBuilder: (context, index) {
-                final item = _items[index];
+                if (index == 0) return const _InsuranceGuideCard();
+                final item = _items[index - 1];
                 return Card(
                   child: ListTile(
                     leading: const Icon(Icons.health_and_safety_outlined),
                     title: Text('${item.provider} · ${item.policyNumber}'),
                     subtitle: Text(
-                      '${item.insuranceType}\n${DateFormat('dd/MM/yyyy').format(item.effectiveFromUtc.toLocal())} – ${DateFormat('dd/MM/yyyy').format(item.expiresAtUtc.toLocal())}\n${context.l10n.insuranceCoverageLimit} ${formatVnd(item.coverageAmount)} · ${context.l10n.insuranceDeductible} ${formatVnd(item.deductible)}',
+                      '${insuranceTypeLabel(context.l10n, item.insuranceType)}\n${DateFormat('dd/MM/yyyy').format(item.effectiveFromUtc.toLocal())} – ${DateFormat('dd/MM/yyyy').format(item.expiresAtUtc.toLocal())}\n${context.l10n.insuranceCoverageLimit} ${formatVnd(item.coverageAmount)} · ${context.l10n.insuranceDeductible} ${formatVnd(item.deductible)}',
                     ),
                     isThreeLine: true,
                     trailing: PopupMenuButton<String>(
                       tooltip:
-                          '${context.l10n.statusLabel}: ${item.verificationStatus}',
+                          '${context.l10n.statusLabel}: ${insuranceStatusLabel(context.l10n, item.verificationStatus)}',
                       onSelected: (value) =>
                           value == 'edit' ? _edit(item) : _delete(item),
                       itemBuilder: (_) => [
@@ -177,7 +181,14 @@ class _VehicleInsurancePageState extends State<VehicleInsurancePage> {
                           child: Text(context.l10n.delete),
                         ),
                       ],
-                      child: Chip(label: Text(item.verificationStatus)),
+                      child: Chip(
+                        label: Text(
+                          insuranceStatusLabel(
+                            context.l10n,
+                            item.verificationStatus,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 );
@@ -236,6 +247,18 @@ Future<VehicleInsurancePolicyModel?> _showPolicyDialog(
                 ],
                 onChanged: (value) => setState(() => type = value ?? type),
               ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  type == 'MANDATORY_TPL'
+                      ? context.l10n.mandatoryTplExplanation
+                      : type == 'PHYSICAL_DAMAGE'
+                      ? context.l10n.physicalDamageExplanation
+                      : context.l10n.insurerNoGuarantee,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
               TextFormField(
                 initialValue: provider,
                 decoration: InputDecoration(
@@ -285,7 +308,9 @@ Future<VehicleInsurancePolicyModel?> _showPolicyDialog(
                 onChanged: (value) => documentUrl = value,
               ),
               const SizedBox(height: 8),
-              Text(context.l10n.optionalInsuranceHint),
+              Text(context.l10n.documentUrlDeferredHint),
+              const SizedBox(height: 8),
+              Text(context.l10n.insurerNoGuarantee),
             ],
           ),
         ),
@@ -321,6 +346,41 @@ Future<VehicleInsurancePolicyModel?> _showPolicyDialog(
                     ),
                   ),
             child: Text(context.l10n.saveChanges),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _InsuranceGuideCard extends StatelessWidget {
+  const _InsuranceGuideCard();
+
+  @override
+  Widget build(BuildContext context) => Card(
+    color: Theme.of(context).colorScheme.surfaceContainerLow,
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            context.l10n.mandatoryTplInsurance,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 4),
+          Text(context.l10n.mandatoryTplExplanation),
+          const Divider(height: 24),
+          Text(
+            context.l10n.physicalDamageInsurance,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 4),
+          Text(context.l10n.physicalDamageExplanation),
+          const SizedBox(height: 10),
+          Text(
+            context.l10n.insurerNoGuarantee,
+            style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
       ),

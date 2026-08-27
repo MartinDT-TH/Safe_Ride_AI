@@ -2733,4 +2733,155 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get startedByMistakeReason => 'Trip started by mistake';
+
+  @override
+  String get riskStatusReported => 'Reported';
+
+  @override
+  String get riskStatusEvidenceCollection => 'Collecting evidence';
+
+  @override
+  String get riskStatusUnderReview => 'Under review';
+
+  @override
+  String get riskStatusLiabilityPending => 'Awaiting responsibility assessment';
+
+  @override
+  String get riskStatusSettlement => 'Processing protection outcome';
+
+  @override
+  String get riskStatusClosed => 'Closed';
+
+  @override
+  String get riskStatusRejected => 'Rejected';
+
+  @override
+  String get riskCategoryDriverInjury => 'Driver injury';
+
+  @override
+  String get riskCategoryCustomerVehicleDamage => 'Customer vehicle damage';
+
+  @override
+  String get riskCategoryThirdPartyDamage => 'Third-party damage';
+
+  @override
+  String get riskCategoryMultiple => 'Multiple damage types';
+
+  @override
+  String get riskFaultNoFault => 'No fault';
+
+  @override
+  String get riskFaultOrdinary => 'Ordinary negligence';
+
+  @override
+  String get riskFaultGross => 'Gross negligence';
+
+  @override
+  String get riskFaultIntentional => 'Intentional misconduct';
+
+  @override
+  String get riskAssessmentDraft => 'Draft';
+
+  @override
+  String get riskAssessmentPendingConfirmation => 'Awaiting confirmation';
+
+  @override
+  String get riskAssessmentConfirmed => 'Confirmed';
+
+  @override
+  String get riskAssessmentDisputed => 'Under reconsideration';
+
+  @override
+  String get riskClaimApproved => 'Approved';
+
+  @override
+  String get riskClaimPendingFunding => 'Awaiting funding';
+
+  @override
+  String get riskClaimFunded => 'Funded';
+
+  @override
+  String get riskClaimRecovery => 'Recovery in progress';
+
+  @override
+  String get riskClaimSettled => 'Reconciled';
+
+  @override
+  String get riskLiabilityPartiallyPaid => 'Partially paid';
+
+  @override
+  String get riskLiabilityPaid => 'Paid';
+
+  @override
+  String get riskLiabilityWaived => 'Waived';
+
+  @override
+  String get riskRoleDriver => 'Driver';
+
+  @override
+  String get riskRoleCustomer => 'Customer';
+
+  @override
+  String get riskRoleThirdParty => 'Third party';
+
+  @override
+  String get riskRoleVehicle => 'Vehicle';
+
+  @override
+  String get riskRoleObjective => 'Objective factor';
+
+  @override
+  String get riskReasonDistracting => 'Causing distraction';
+
+  @override
+  String get riskReasonViolent => 'Violent behavior';
+
+  @override
+  String get riskReasonInterferingVehicle => 'Interfering with vehicle control';
+
+  @override
+  String get riskReasonUnsafeRequest => 'Unsafe request';
+
+  @override
+  String get riskReasonOther => 'Other reason';
+
+  @override
+  String get riskInsurancePending => 'Awaiting Staff verification';
+
+  @override
+  String get riskInsuranceVerified => 'Verified';
+
+  @override
+  String get riskInsuranceExpired => 'Expired';
+
+  @override
+  String get riskInsuranceOther => 'Other insurance';
+
+  @override
+  String get riskIncidentInformation => 'Incident information';
+
+  @override
+  String get riskResponsibilityResult => 'Responsibility result';
+
+  @override
+  String get riskProtectionOutcome => 'Protection outcome';
+
+  @override
+  String get riskEligibleDamage => 'Eligible damage';
+
+  @override
+  String get mandatoryTplExplanation =>
+      'Mandatory third-party liability insurance mainly protects third parties; it does not automatically cover damage to the customer\'s vehicle.';
+
+  @override
+  String get physicalDamageExplanation =>
+      'Physical damage insurance may cover customer vehicle damage under a verified policy.';
+
+  @override
+  String get insurerNoGuarantee =>
+      'Saving a policy does not guarantee that the insurer will approve payment.';
+
+  @override
+  String get documentUrlDeferredHint =>
+      'The app currently stores a document link only. Use a trusted link; direct upload will be added when shared secure storage is available.';
 }

@@ -2633,4 +2633,154 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get startedByMistakeReason => '실수로 운행 시작';
+
+  @override
+  String get riskStatusReported => '접수됨';
+
+  @override
+  String get riskStatusEvidenceCollection => '증거 수집 중';
+
+  @override
+  String get riskStatusUnderReview => '검토 중';
+
+  @override
+  String get riskStatusLiabilityPending => '책임 판정 대기';
+
+  @override
+  String get riskStatusSettlement => '보호 처리 중';
+
+  @override
+  String get riskStatusClosed => '종료됨';
+
+  @override
+  String get riskStatusRejected => '거절됨';
+
+  @override
+  String get riskCategoryDriverInjury => '기사 부상';
+
+  @override
+  String get riskCategoryCustomerVehicleDamage => '고객 차량 손해';
+
+  @override
+  String get riskCategoryThirdPartyDamage => '제3자 손해';
+
+  @override
+  String get riskCategoryMultiple => '복수 손해';
+
+  @override
+  String get riskFaultNoFault => '과실 없음';
+
+  @override
+  String get riskFaultOrdinary => '일반 과실';
+
+  @override
+  String get riskFaultGross => '중과실';
+
+  @override
+  String get riskFaultIntentional => '고의 행위';
+
+  @override
+  String get riskAssessmentDraft => '초안';
+
+  @override
+  String get riskAssessmentPendingConfirmation => '확인 대기';
+
+  @override
+  String get riskAssessmentConfirmed => '확인됨';
+
+  @override
+  String get riskAssessmentDisputed => '재검토 중';
+
+  @override
+  String get riskClaimApproved => '승인됨';
+
+  @override
+  String get riskClaimPendingFunding => '자금 지급 대기';
+
+  @override
+  String get riskClaimFunded => '자금 지급됨';
+
+  @override
+  String get riskClaimRecovery => '회수 진행 중';
+
+  @override
+  String get riskClaimSettled => '정산됨';
+
+  @override
+  String get riskLiabilityPartiallyPaid => '일부 납부됨';
+
+  @override
+  String get riskLiabilityPaid => '납부됨';
+
+  @override
+  String get riskLiabilityWaived => '면제됨';
+
+  @override
+  String get riskRoleDriver => '기사';
+
+  @override
+  String get riskRoleCustomer => '고객';
+
+  @override
+  String get riskRoleThirdParty => '제3자';
+
+  @override
+  String get riskRoleVehicle => '차량';
+
+  @override
+  String get riskRoleObjective => '객관적 요인';
+
+  @override
+  String get riskReasonDistracting => '주의 산만 유발';
+
+  @override
+  String get riskReasonViolent => '폭력적 행동';
+
+  @override
+  String get riskReasonInterferingVehicle => '차량 조작 방해';
+
+  @override
+  String get riskReasonUnsafeRequest => '안전하지 않은 요구';
+
+  @override
+  String get riskReasonOther => '기타 사유';
+
+  @override
+  String get riskInsurancePending => '직원 확인 대기';
+
+  @override
+  String get riskInsuranceVerified => '확인됨';
+
+  @override
+  String get riskInsuranceExpired => '만료됨';
+
+  @override
+  String get riskInsuranceOther => '기타 보험';
+
+  @override
+  String get riskIncidentInformation => '사고 정보';
+
+  @override
+  String get riskResponsibilityResult => '책임 판정 결과';
+
+  @override
+  String get riskProtectionOutcome => '보호 처리 결과';
+
+  @override
+  String get riskEligibleDamage => '보호 대상 손해';
+
+  @override
+  String get mandatoryTplExplanation =>
+      '의무 제3자 책임보험은 주로 제3자를 보호하며 고객 차량 손해를 자동으로 보장하지 않습니다.';
+
+  @override
+  String get physicalDamageExplanation =>
+      '차량 손해보험은 확인된 계약 조건에 따라 고객 차량 손해에 적용될 수 있습니다.';
+
+  @override
+  String get insurerNoGuarantee => '계약 저장이 보험사의 지급 승인을 보장하지는 않습니다.';
+
+  @override
+  String get documentUrlDeferredHint =>
+      '현재는 문서 링크만 저장합니다. 신뢰할 수 있는 링크를 사용하세요. 안전한 공용 저장소가 마련되면 직접 업로드를 추가합니다.';
 }
