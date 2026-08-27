@@ -10,58 +10,99 @@ import {
   formatVnd,
   fundClaim,
   getAccident,
+  isEntireRiskFundRequestPermanent,
+  reconcilePartyCauses,
   recordClaimRecovery,
   reviewMockInsurance,
   saveLiabilityAssessment,
   staffAccidentsPath,
   writeOffClaimAdvance,
 } from '../../features/riskProtection/riskProtectionApi';
+import {
+  confirmRiskAction,
+  responsibilityTotal,
+  riskProtectionLabel,
+  SettlementRecommendation,
+} from '../../features/riskProtection/riskProtectionPresentation';
 import '../admin/risk-fund/AdminRiskFundPage.css';
 
 const allocations = [
-  ['driverFaultPercentage', 'Lỗi tài xế', 'DRIVER', 'DRIVER_ERROR'],
-  ['customerFaultPercentage', 'Lỗi khách hàng', 'CUSTOMER', 'CUSTOMER_INTERFERENCE'],
-  ['thirdPartyFaultPercentage', 'Lỗi bên thứ ba', 'THIRD_PARTY', 'THIRD_PARTY_ERROR'],
-  ['vehicleFailurePercentage', 'Lỗi phương tiện', 'VEHICLE', 'VEHICLE_MECHANICAL_FAILURE'],
-  ['objectiveCausePercentage', 'Khách quan/không lỗi', 'OBJECTIVE', 'UNKNOWN'],
+  ['driverFaultPercentage', 'Tài xế', 'DRIVER', 'DRIVER_ERROR'],
+  ['customerFaultPercentage', 'Khách hàng', 'CUSTOMER', 'CUSTOMER_INTERFERENCE'],
+  ['thirdPartyFaultPercentage', 'Bên thứ ba', 'THIRD_PARTY', 'THIRD_PARTY_ERROR'],
+  ['vehicleFailurePercentage', 'Phương tiện', 'VEHICLE', 'VEHICLE_MECHANICAL_FAILURE'],
+  ['objectiveCausePercentage', 'Khách quan / không lỗi', 'OBJECTIVE', 'UNKNOWN'],
 ];
+const accidentStatuses = ['REPORTED', 'EVIDENCE_COLLECTION', 'UNDER_REVIEW', 'LIABILITY_PENDING', 'SETTLEMENT', 'CLOSED', 'REJECTED'];
+const accidentCategories = ['DRIVER_INJURY', 'CUSTOMER_VEHICLE_DAMAGE', 'THIRD_PARTY_DAMAGE', 'MULTIPLE'];
+const driverFaultLevels = ['NO_FAULT', 'ORDINARY_NEGLIGENCE', 'GROSS_NEGLIGENCE', 'INTENTIONAL_MISCONDUCT'];
+const awarenessValues = ['UNKNOWN', 'CUSTOMER_KNEW', 'DRIVER_KNEW', 'BOTH_KNEW', 'NEITHER_COULD_REASONABLY_KNOW'];
+const rootCauses = ['DRIVER_ERROR', 'CUSTOMER_INTERFERENCE', 'THIRD_PARTY_ERROR', 'VEHICLE_MECHANICAL_FAILURE', 'VEHICLE_PRE_EXISTING_DEFECT', 'ROAD_CONDITION', 'WEATHER', 'FORCE_MAJEURE', 'UNKNOWN'];
+const responsibleParties = ['DRIVER', 'CUSTOMER', 'THIRD_PARTY', 'VEHICLE', 'OBJECTIVE'];
+const recoverySources = ['DRIVER', 'CUSTOMER', 'THIRD_PARTY', 'INSURANCE'];
 const initialAssessment = {
-  driverFaultPercentage: 0, customerFaultPercentage: 0, thirdPartyFaultPercentage: 0,
-  vehicleFailurePercentage: 0, objectiveCausePercentage: 100,
-  driverFaultLevel: 'NO_FAULT', vehicleDefectAwareness: 'UNKNOWN',
-  causes: [{ rootCause: 'UNKNOWN', responsibleParty: 'OBJECTIVE', percentage: 100 }], rowVersion: null,
+  driverFaultPercentage: 0,
+  customerFaultPercentage: 0,
+  thirdPartyFaultPercentage: 0,
+  vehicleFailurePercentage: 0,
+  objectiveCausePercentage: 100,
+  driverFaultLevel: 'NO_FAULT',
+  vehicleDefectAwareness: 'UNKNOWN',
+  causes: [{ rootCause: 'UNKNOWN', responsibleParty: 'OBJECTIVE', percentage: 100 }],
+  rowVersion: null,
 };
-const initialSettlement = { totalDamageAmount: '', eligibleDamageAmount: '', requestedInsuranceAmount: '0', requestedRiskFundAmount: '0', isPermanentRiskFundLoss: false, insurancePaymentDestination: 'DIRECT_TO_CLAIMANT' };
+const initialSettlement = {
+  totalDamageAmount: '',
+  eligibleDamageAmount: '',
+  requestedInsuranceAmount: '0',
+  requestedRiskFundAmount: '0',
+  isPermanentRiskFundLoss: false,
+  insurancePaymentDestination: 'DIRECT_TO_CLAIMANT',
+};
+const initialRecovery = { sourceType: 'DRIVER', payerReference: '', amount: '', paymentReference: '', evidence: null };
+const initialWriteOff = { amount: '', reason: '', evidence: null };
 
 function StaffAccidentsPage() {
   const [filters, setFilters] = useState({ status: '', category: '', tripId: '', fromUtc: '', toUtc: '' });
   const queuePath = useMemo(() => buildQueryPath(staffAccidentsPath, {
-    status: filters.status, category: filters.category, tripId: filters.tripId,
-    fromUtc: toUtc(filters.fromUtc), toUtc: toUtc(filters.toUtc), limit: 200,
+    status: filters.status,
+    category: filters.category,
+    tripId: filters.tripId,
+    fromUtc: toUtc(filters.fromUtc),
+    toUtc: toUtc(filters.toUtc),
+    limit: 200,
   }), [filters]);
   const queue = useFetch(queuePath);
   const [selectedId, setSelectedId] = useState(null);
   const [accident, setAccident] = useState(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState('');
   const [claim, setClaim] = useState(null);
-  const claimId = claim?.id ?? accident?.claim?.id ?? accident?.claimId;
-  const audits = useFetch(claimId ? `/staff/claims/${claimId}/mock-insurance/audits` : null);
   const [assessment, setAssessment] = useState(initialAssessment);
   const [settlement, setSettlement] = useState(initialSettlement);
-  const [recovery, setRecovery] = useState({ sourceType: 'DRIVER', payerReference: '', amount: '', paymentReference: '', evidence: null });
-  const [writeOff, setWriteOff] = useState({ amount: '', reason: '', evidence: null });
+  const [recovery, setRecovery] = useState(initialRecovery);
+  const [writeOff, setWriteOff] = useState(initialWriteOff);
   const [insurance, setInsurance] = useState({ approvedAmount: '', reference: '', reason: '', insurancePaymentDestination: 'DIRECT_TO_CLAIMANT' });
+  const [fundingKey, setFundingKey] = useState(() => createIdempotencyKey('fund'));
+  const [recoveryKey, setRecoveryKey] = useState(() => createIdempotencyKey('recovery'));
+  const [writeOffKey, setWriteOffKey] = useState(() => createIdempotencyKey('write-off'));
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState('');
   const [feedback, setFeedback] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const claimId = claim?.id ?? accident?.claim?.id ?? accident?.claimId;
+  const currentClaim = claim ?? accident?.claim;
+  const fundingAllowed = ['APPROVED', 'PENDING_FUNDING'].includes(currentClaim?.status);
+  const audits = useFetch(claimId ? `/staff/claims/${claimId}/mock-insurance/audits` : null);
   const accidents = Array.isArray(queue.data) ? queue.data : [];
+  const total = responsibilityTotal(assessment);
+  const causeTotal = assessment.causes.reduce((sum, cause) => sum + Number(cause.percentage), 0);
+  const assessmentConfirmed = accident?.liabilityAssessment?.status === 'CONFIRMED';
+
   const hydrateAccident = (loaded) => {
     setAccident(loaded);
     setClaim(loaded.claim ?? null);
     const current = loaded.liabilityAssessment;
-    if (current) {
-      setAssessment({
+    setAssessment(current ? {
       driverFaultPercentage: current.driverFaultPercentage,
       customerFaultPercentage: current.customerFaultPercentage,
       thirdPartyFaultPercentage: current.thirdPartyFaultPercentage,
@@ -71,188 +112,372 @@ function StaffAccidentsPage() {
       vehicleDefectAwareness: current.vehicleDefectAwareness,
       causes: current.causes?.length ? current.causes : initialAssessment.causes,
       rowVersion: current.rowVersion,
-      });
-    }
-    else setAssessment(initialAssessment);
+    } : initialAssessment);
     const currentClaim = loaded.claim;
     setSettlement(currentClaim ? {
       totalDamageAmount: String(currentClaim.totalDamageAmount ?? ''),
       eligibleDamageAmount: String(currentClaim.eligibleDamageAmount ?? ''),
       requestedInsuranceAmount: String(currentClaim.insuranceRequestedAmount ?? 0),
       requestedRiskFundAmount: String(Number(currentClaim.riskFundAdvanceAmount ?? 0) + Number(currentClaim.riskFundPermanentLossAmount ?? 0)),
-      isPermanentRiskFundLoss: Number(currentClaim.riskFundPermanentLossAmount ?? 0) > 0,
+      isPermanentRiskFundLoss: isEntireRiskFundRequestPermanent(currentClaim),
       insurancePaymentDestination: currentClaim.insurancePaymentDestination ?? 'DIRECT_TO_CLAIMANT',
     } : initialSettlement);
   };
 
   const openAccident = async (accidentId) => {
-    setSelectedId(accidentId); setDetailLoading(true); setDetailError(''); setError(''); setFeedback('');
-    try { hydrateAccident(await getAccident(accidentId)); }
-    catch (caught) { setDetailError(caught.message); setAccident(null); }
-    finally { setDetailLoading(false); }
+    setSelectedId(accidentId);
+    setDetailLoading(true);
+    setDetailError('');
+    setError('');
+    setFeedback('');
+    try {
+      hydrateAccident(await getAccident(accidentId));
+    } catch (caught) {
+      setDetailError(caught.message);
+      setAccident(null);
+    } finally {
+      setDetailLoading(false);
+    }
   };
 
   const refreshDetail = async () => {
     if (!selectedId) return;
-    try { hydrateAccident(await getAccident(selectedId)); setDetailError(''); }
-    catch (caught) { setDetailError(caught.message); }
+    try {
+      hydrateAccident(await getAccident(selectedId));
+      setDetailError('');
+    } catch (caught) {
+      setDetailError(caught.message);
+    }
   };
 
   const run = async (action, message, { refreshAccident = true } = {}) => {
-    setBusy(true); setError(''); setFeedback('');
+    if (busy) return null;
+    setBusy(true);
+    setError('');
+    setFeedback('');
     try {
       const result = await action();
       if (result?.id) setClaim(result);
-      setFeedback(message); queue.refetch();
+      setFeedback(message);
+      queue.refetch();
       if (refreshAccident) await refreshDetail();
       if (claimId) audits.refetch();
       return result;
     } catch (caught) {
       if (caught.status === 409) {
         await refreshDetail();
-        setError('Dữ liệu đã được người khác cập nhật. Hồ sơ mới nhất đã được tải lại.');
+        setError('Dữ liệu đã được người khác cập nhật. Hồ sơ mới nhất đã được tải lại để tránh ghi đè.');
       } else {
         setError(caught.message);
       }
       return null;
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const submitAssessment = (event, confirm) => {
+  const submitAssessment = async (event, confirm) => {
     event.preventDefault();
+    if (confirm && !confirmRiskAction('Xác nhận kết quả trách nhiệm? Sau bước này assessment không thể bị ghi đè trực tiếp.')) return;
     const payload = { ...assessment, rowVersion: assessment.rowVersion || undefined };
-    run(
+    await run(
       () => confirm ? confirmLiabilityAssessment(selectedId, payload) : saveLiabilityAssessment(selectedId, payload),
-      confirm ? 'Đã xác nhận phân bổ trách nhiệm và cập nhật claim.' : 'Đã lưu bản nháp đánh giá trách nhiệm.',
+      confirm ? 'Đã xác nhận trách nhiệm và chuyển hồ sơ sang bước xử lý quyền lợi.' : 'Đã lưu bản nháp đánh giá trách nhiệm.',
     );
   };
-  const submitSettlement = (event) => {
+
+  const submitSettlement = async (event) => {
     event.preventDefault();
     const payload = {
-      ...Object.fromEntries(Object.entries(settlement).map(([key, value]) => [key, key === 'isPermanentRiskFundLoss' || key === 'insurancePaymentDestination' ? value : Number(value)])),
+      ...Object.fromEntries(Object.entries(settlement).map(([key, value]) => [
+        key,
+        key === 'isPermanentRiskFundLoss' || key === 'insurancePaymentDestination' ? value : Number(value),
+      ])),
       rowVersion: claim?.rowVersion ?? accident?.claim?.rowVersion,
     };
-    run(() => calculateClaim(claimId, payload), 'Đã tính lại claim theo policy snapshot.');
+    await run(() => calculateClaim(claimId, payload), 'Máy chủ đã tính lại đề xuất từ policy và coverage snapshot.');
   };
-  const submitRecovery = (event) => {
+
+  const submitFunding = async () => {
+    if (!confirmRiskAction('Cấp kinh phí cho toàn bộ khoản Quỹ rủi ro đã được máy chủ xác định? Thao tác này ghi giảm số dư quỹ.')) return;
+    const result = await run(
+      () => fundClaim(claimId, fundingKey, claim?.rowVersion ?? accident?.claim?.rowVersion),
+      'Đã xử lý cấp kinh phí; nếu quỹ chưa đủ, hồ sơ vẫn ở trạng thái chờ cấp kinh phí.',
+    );
+    if (result) setFundingKey(createIdempotencyKey('fund'));
+  };
+
+  const submitRecovery = async (event) => {
     event.preventDefault();
-    run(() => recordClaimRecovery(claimId, {
+    if (!confirmRiskAction('Ghi nhận khoản tiền đã thực nhận và hoàn vào Quỹ rủi ro? Hãy kiểm tra số tiền, nguồn và bằng chứng.')) return;
+    const result = await run(() => recordClaimRecovery(claimId, {
       ...recovery,
       amount: Number(recovery.amount),
       rowVersion: claim?.rowVersion ?? accident?.claim?.rowVersion,
-      idempotencyKey: createIdempotencyKey('recovery'),
-    }), 'Đã ghi nhận khoản thu hồi thủ công.');
+      idempotencyKey: recoveryKey,
+    }), 'Đã ghi nhận khoản thu hồi có bằng chứng.');
+    if (result) {
+      setRecovery(initialRecovery);
+      setRecoveryKey(createIdempotencyKey('recovery'));
+    }
   };
-  const submitInsurance = (event, approve) => {
+
+  const submitInsurance = async (event, approve) => {
     event.preventDefault();
-    run(() => reviewMockInsurance(claimId, approve, {
+    if (!confirmRiskAction(approve
+      ? 'Xác nhận kết quả bảo hiểm mô phỏng và số tiền được duyệt?'
+      : 'Từ chối kết quả bảo hiểm mô phỏng này?')) return;
+    await run(() => reviewMockInsurance(claimId, approve, {
       approvedAmount: approve ? Number(insurance.approvedAmount) : 0,
-      reference: insurance.reference, reason: insurance.reason,
+      reference: insurance.reference,
+      reason: insurance.reason,
       rowVersion: claim?.rowVersion ?? accident?.claim?.rowVersion,
       insurancePaymentDestination: insurance.insurancePaymentDestination,
     }), approve ? 'Đã phê duyệt kết quả bảo hiểm mô phỏng.' : 'Đã từ chối kết quả bảo hiểm mô phỏng.');
   };
 
+  const submitWriteOff = async (event) => {
+    event.preventDefault();
+    if (!confirmRiskAction('Ghi nhận khoản ứng này không thể thu hồi? Thao tác tạo bản ghi đối soát có kiểm toán và không ghi giảm quỹ lần hai.')) return;
+    const result = await run(() => writeOffClaimAdvance(claimId, {
+      ...writeOff,
+      amount: Number(writeOff.amount),
+      rowVersion: claim?.rowVersion ?? accident?.claim?.rowVersion,
+      idempotencyKey: writeOffKey,
+    }), 'Đã ghi nhận khoản ứng không thể thu hồi.');
+    if (result) {
+      setWriteOff(initialWriteOff);
+      setWriteOffKey(createIdempotencyKey('write-off'));
+    }
+  };
+
+  const closeCurrentClaim = async () => {
+    if (!confirmRiskAction('Đóng hồ sơ yêu cầu bảo vệ? Máy chủ chỉ cho phép khi funding, thu hồi, bảo hiểm và đối soát đã cân bằng.')) return;
+    await run(() => closeClaim(claimId, claim?.rowVersion ?? accident?.claim?.rowVersion), 'Đã đóng hồ sơ yêu cầu bảo vệ và hồ sơ sự cố.');
+  };
+
   const setAllocation = (key, value) => {
     const next = { ...assessment, [key]: Number(value) };
-    if (key === 'driverFaultPercentage') next.driverFaultLevel = Number(value) === 0 ? 'NO_FAULT' : (assessment.driverFaultLevel === 'NO_FAULT' ? 'ORDINARY_NEGLIGENCE' : assessment.driverFaultLevel);
-    next.causes = allocations
-      .filter(([allocationKey]) => Number(next[allocationKey]) > 0)
-      .map(([allocationKey, , party, defaultCause]) => {
-        const existing = assessment.causes.find((cause) => cause.responsibleParty === party);
-        return { rootCause: existing?.rootCause ?? defaultCause, responsibleParty: party, percentage: Number(next[allocationKey]) };
-      });
+    if (key === 'driverFaultPercentage') {
+      next.driverFaultLevel = Number(value) === 0
+        ? 'NO_FAULT'
+        : assessment.driverFaultLevel === 'NO_FAULT' ? 'ORDINARY_NEGLIGENCE' : assessment.driverFaultLevel;
+    }
+    const [, , party, defaultCause] = allocations.find(([allocationKey]) => allocationKey === key);
+    next.causes = reconcilePartyCauses(assessment.causes, party, Number(value), defaultCause);
     setAssessment(next);
   };
 
+  const addCause = () => setAssessment({
+    ...assessment,
+    causes: [...assessment.causes, { rootCause: 'UNKNOWN', responsibleParty: 'OBJECTIVE', percentage: 1 }],
+  });
+
   return (
-    <AdminLayout><div className="risk-page">
-      <header className="risk-page__header"><div><h1>Tai nạn & Trách nhiệm</h1><p>Điều tra, đánh giá trách nhiệm, bảo hiểm mô phỏng, cấp vốn toàn phần và thu hồi thủ công.</p></div></header>
-      {(queue.error || detailError || error) && <div className="risk-alert risk-alert--error">{error || detailError || queue.error}</div>}
-      {feedback && <div className="risk-alert risk-alert--success">{feedback}</div>}
-      <section className="risk-card">
-        <div className="risk-card__title"><h2>Hàng đợi tai nạn</h2><button type="button" onClick={queue.refetch}>Tải lại</button></div>
-        <div className="risk-filters">
-          <Field label="Trạng thái"><select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}><option value="">Tất cả</option>{['REPORTED','EVIDENCE_COLLECTION','UNDER_REVIEW','LIABILITY_PENDING','SETTLEMENT','CLOSED','REJECTED'].map((x) => <option key={x}>{x}</option>)}</select></Field>
-          <Field label="Loại"><select value={filters.category} onChange={(e) => setFilters({ ...filters, category: e.target.value })}><option value="">Tất cả</option>{['DRIVER_INJURY','CUSTOMER_VEHICLE_DAMAGE','THIRD_PARTY_DAMAGE','MULTIPLE'].map((x) => <option key={x}>{x}</option>)}</select></Field>
-          <Field label="Trip ID"><input type="number" min="1" value={filters.tripId} onChange={(e) => setFilters({ ...filters, tripId: e.target.value })} /></Field>
-          <Field label="Từ ngày"><input type="datetime-local" value={filters.fromUtc} onChange={(e) => setFilters({ ...filters, fromUtc: e.target.value })} /></Field>
-          <Field label="Đến ngày"><input type="datetime-local" value={filters.toUtc} onChange={(e) => setFilters({ ...filters, toUtc: e.target.value })} /></Field>
-        </div>
-        <div className="risk-table-wrap"><table className="risk-table"><thead><tr><th>Mã</th><th>Trip</th><th>Loại</th><th>Trạng thái</th><th>Thời điểm</th><th>Claim</th><th></th></tr></thead><tbody>
-          {accidents.map((item) => <tr key={item.id}><td>#{item.id}</td><td>#{item.tripId}</td><td>{item.category}</td><td><span className="risk-badge">{item.status}</span></td><td>{formatDate(item.occurredAtUtc)}</td><td>{item.claimId ? `#${item.claimId} · ${item.claimStatus}` : '—'}</td><td><button type="button" onClick={() => openAccident(item.id)}>Mở hồ sơ</button></td></tr>)}
-          {!queue.isLoading && accidents.length === 0 && <tr><td colSpan="7">Không có hồ sơ phù hợp bộ lọc.</td></tr>}
-        </tbody></table></div>
-      </section>
+    <AdminLayout>
+      <div className="risk-page">
+        <header className="risk-page__header">
+          <div>
+            <h1>Hồ sơ sự cố & bảo vệ</h1>
+            <p>Quy trình theo từng bước; trách nhiệm và nguồn chi trả luôn được xử lý riêng.</p>
+          </div>
+        </header>
+        {(queue.error || detailError || error) && <div className="risk-alert risk-alert--error">{error || detailError || queue.error}</div>}
+        {feedback && <div className="risk-alert risk-alert--success">{feedback}</div>}
 
-      {selectedId && <section className="risk-grid">
-        <div className="risk-card"><div className="risk-card__title"><h2>Hồ sơ #{selectedId}</h2>{detailLoading && <span>Đang tải...</span>}</div>
-          {accident && <><ul className="risk-detail-list"><li><b>Trip:</b> #{accident.tripId}</li><li><b>Loại:</b> {accident.category}</li><li><b>Trạng thái:</b> {accident.status}</li><li><b>Thời điểm:</b> {formatDate(accident.occurredAtUtc)}</li><li><b>Mô tả:</b> {accident.description}</li><li><b>Biên bản công an:</b> {accident.policeReportReference || '—'}</li></ul><hr className="risk-divider"/><h3>Bằng chứng ({accident.evidence?.length ?? 0})</h3><div className="risk-evidence">{accident.evidence?.map((item) => <a key={item.id} href={item.fileUrl} target="_blank" rel="noreferrer">{item.evidenceType}: {item.originalFileName ?? `Tệp #${item.id}`}</a>)}</div></>}
-        </div>
-        <ClaimSummary claim={claim ?? accident?.claim} />
-      </section>}
+        <section className="risk-card">
+          <div className="risk-card__title"><h2>Hàng đợi tai nạn</h2><button type="button" onClick={queue.refetch}>Tải lại</button></div>
+          <div className="risk-filters">
+            <Field label="Trạng thái"><select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}><option value="">Tất cả</option>{accidentStatuses.map((value) => <option key={value} value={value}>{riskProtectionLabel(value)}</option>)}</select></Field>
+            <Field label="Loại sự cố"><select value={filters.category} onChange={(event) => setFilters({ ...filters, category: event.target.value })}><option value="">Tất cả</option>{accidentCategories.map((value) => <option key={value} value={value}>{riskProtectionLabel(value)}</option>)}</select></Field>
+            <Field label="Trip ID"><input type="number" min="1" value={filters.tripId} onChange={(event) => setFilters({ ...filters, tripId: event.target.value })} /></Field>
+            <Field label="Từ ngày"><input type="datetime-local" value={filters.fromUtc} onChange={(event) => setFilters({ ...filters, fromUtc: event.target.value })} /></Field>
+            <Field label="Đến ngày"><input type="datetime-local" value={filters.toUtc} onChange={(event) => setFilters({ ...filters, toUtc: event.target.value })} /></Field>
+          </div>
+          <div className="risk-table-wrap">
+            <table className="risk-table">
+              <thead><tr><th>Mã</th><th>Chuyến</th><th>Loại</th><th>Trạng thái</th><th>Thời điểm</th><th>Yêu cầu bảo vệ</th><th /></tr></thead>
+              <tbody>
+                {accidents.map((item) => <tr key={item.id}><td>#{item.id}</td><td>#{item.tripId}</td><td>{riskProtectionLabel(item.category)}</td><td><span className="risk-badge">{riskProtectionLabel(item.status)}</span></td><td>{formatDate(item.occurredAtUtc)}</td><td>{item.claimId ? `#${item.claimId} · ${riskProtectionLabel(item.claimStatus)}` : 'Chưa tạo'}</td><td><button type="button" onClick={() => openAccident(item.id)}>Mở hồ sơ</button></td></tr>)}
+                {!queue.isLoading && accidents.length === 0 && <tr><td colSpan="7">Không có hồ sơ phù hợp bộ lọc.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
-      {accident && <section className="risk-grid">
-        <form className="risk-card risk-form" onSubmit={(event) => submitAssessment(event, true)}>
-          <div className="risk-card__title"><h2>Liability assessment</h2><span>Tổng: {allocationTotal(assessment)}%</span></div>
-          <div className="risk-form__columns">{allocations.map(([key, label]) => <Field key={key} label={label}><input required type="number" min="0" max="100" value={assessment[key]} onChange={(e) => setAllocation(key, e.target.value)} /></Field>)}</div>
-          <div className="risk-form__columns"><Field label="Mức lỗi tài xế"><select value={assessment.driverFaultLevel} onChange={(e) => setAssessment({ ...assessment, driverFaultLevel: e.target.value })}>{['NO_FAULT','ORDINARY_NEGLIGENCE','GROSS_NEGLIGENCE','INTENTIONAL_MISCONDUCT'].map((x) => <option key={x}>{x}</option>)}</select></Field><Field label="Nhận thức về lỗi xe"><select value={assessment.vehicleDefectAwareness} onChange={(e) => setAssessment({ ...assessment, vehicleDefectAwareness: e.target.value })}>{['UNKNOWN','CUSTOMER_KNEW','DRIVER_KNEW','BOTH_KNEW','NEITHER_COULD_REASONABLY_KNOW'].map((x) => <option key={x}>{x}</option>)}</select></Field></div>
-          <h3>Nguyên nhân gốc</h3>
-          {assessment.causes.map((cause, index) => <CauseRow key={`${cause.responsibleParty}-${index}`} cause={cause} onChange={(next) => setAssessment({ ...assessment, causes: assessment.causes.map((item, position) => position === index ? next : item) })} onRemove={() => setAssessment({ ...assessment, causes: assessment.causes.filter((_, position) => position !== index) })} />)}
-          <p className="risk-form__hint">Tổng nguyên nhân: {assessment.causes.reduce((sum, cause) => sum + Number(cause.percentage), 0)}%. Phân bổ theo từng bên phải khớp tỷ lệ ở trên.</p>
-          <div className="risk-actions"><button className="risk-secondary" disabled={busy} type="button" onClick={(event) => submitAssessment(event, false)}>Lưu nháp</button><button disabled={busy || allocationTotal(assessment) !== 100} type="submit">Xác nhận assessment</button></div>
-        </form>
+        {selectedId && <div className="risk-workflow">
+          <WorkflowHeading step="1" title="Bằng chứng & thông tin sự cố" description="Đọc hồ sơ và bằng chứng trước khi đánh giá nguyên nhân." />
+          <section className="risk-grid">
+            <div className="risk-card">
+              <div className="risk-card__title"><h2>Hồ sơ #{selectedId}</h2>{detailLoading && <span>Đang tải...</span>}</div>
+              {accident && <ul className="risk-detail-list">
+                <li><b>Chuyến đi:</b> #{accident.tripId}</li>
+                <li><b>Loại sự cố:</b> {riskProtectionLabel(accident.category)}</li>
+                <li><b>Trạng thái:</b> {riskProtectionLabel(accident.status)}</li>
+                <li><b>Thời điểm:</b> {formatDate(accident.occurredAtUtc)}</li>
+                <li><b>Mô tả:</b> {accident.description}</li>
+                <li><b>Biên bản công an:</b> {accident.policeReportReference || 'Chưa có'}</li>
+              </ul>}
+            </div>
+            <div className="risk-card">
+              <div className="risk-card__title"><h2>Bằng chứng ({accident?.evidence?.length ?? 0})</h2></div>
+              <div className="risk-evidence">{accident?.evidence?.length
+                ? accident.evidence.map((item) => <a key={item.id} href={item.fileUrl} target="_blank" rel="noreferrer"><b>{riskProtectionLabel(item.evidenceType)}</b> · {item.originalFileName ?? `Tệp #${item.id}`} · {formatDate(item.createdAtUtc)}</a>)
+                : <p>Chưa có bằng chứng.</p>}</div>
+            </div>
+          </section>
 
-        <form className="risk-card risk-form" onSubmit={submitSettlement}>
-          <div className="risk-card__title"><h2>Tính claim</h2><span>Dùng policy snapshot phía server</span></div>
-          <div className="risk-form__columns">{Object.keys(settlement).filter((key) => key !== 'isPermanentRiskFundLoss' && key !== 'insurancePaymentDestination').map((key) => <Field key={key} label={claimFieldLabel(key)}><input required type="number" min="0" value={settlement[key]} onChange={(e) => setSettlement({ ...settlement, [key]: e.target.value })} /></Field>)}</div>
-          <Field label="Hạch toán bảo hiểm"><select value={settlement.insurancePaymentDestination} onChange={(e) => setSettlement({ ...settlement, insurancePaymentDestination: e.target.value })}><option value="DIRECT_TO_CLAIMANT">Trả trực tiếp claimant</option><option value="REIMBURSE_RISK_FUND">Hoàn Risk Fund</option></select></Field>
-          <label className="risk-check"><input type="checkbox" checked={settlement.isPermanentRiskFundLoss} onChange={(e) => setSettlement({ ...settlement, isPermanentRiskFundLoss: e.target.checked })} /> Khoản Risk Fund là chi phí cuối cùng</label>
-          <button disabled={busy || !claimId} type="submit">Tính settlement</button>
-          <button disabled={busy || !claimId} type="button" onClick={() => run(() => fundClaim(claimId, createIdempotencyKey('fund'), claim?.rowVersion ?? accident?.claim?.rowVersion), 'Đã xử lý cấp vốn; claim sẽ chờ cấp vốn nếu quỹ chưa đủ.')}>Cấp toàn bộ / thử lại cấp vốn</button>
-        </form>
-      </section>}
+          {accident && <form className="risk-card risk-form" onSubmit={(event) => submitAssessment(event, true)}>
+            <WorkflowHeading step="2" title="Nguyên nhân" description="Chọn nguyên nhân, mức lỗi tài xế và khả năng nhận biết khiếm khuyết phương tiện." compact />
+            <div className="risk-form__columns">
+              <Field label="Mức lỗi tài xế"><select value={assessment.driverFaultLevel} onChange={(event) => setAssessment({ ...assessment, driverFaultLevel: event.target.value })}>{driverFaultLevels.map((value) => <option key={value} value={value}>{riskProtectionLabel(value)}</option>)}</select></Field>
+              <Field label="Khả năng nhận biết lỗi phương tiện"><select value={assessment.vehicleDefectAwareness} onChange={(event) => setAssessment({ ...assessment, vehicleDefectAwareness: event.target.value })}>{awarenessValues.map((value) => <option key={value} value={value}>{riskProtectionLabel(value)}</option>)}</select></Field>
+            </div>
+            <div className="risk-card__title"><h3>Nguyên nhân gốc</h3><button type="button" onClick={addCause}>Thêm nguyên nhân</button></div>
+            {assessment.causes.map((cause, index) => <CauseRow key={`${cause.responsibleParty}-${index}`} cause={cause} onChange={(next) => setAssessment({ ...assessment, causes: assessment.causes.map((item, position) => position === index ? next : item) })} onRemove={() => setAssessment({ ...assessment, causes: assessment.causes.filter((_, position) => position !== index) })} />)}
+            <p className="risk-form__hint">Tổng tỷ lệ nguyên nhân: {causeTotal}%. Mỗi bên phải khớp với tỷ lệ trách nhiệm ở bước 3.</p>
 
-      {claimId && <section className="risk-grid">
-        <form className="risk-card risk-form" onSubmit={(event) => submitInsurance(event, true)}>
-          <div className="risk-card__title"><h2>Bảo hiểm mô phỏng</h2><span>{(claim ?? accident?.claim)?.insuranceStatus}</span></div>
-          <Field label="Số tiền duyệt"><input required type="number" min="0" value={insurance.approvedAmount} onChange={(e) => setInsurance({ ...insurance, approvedAmount: e.target.value })} /></Field>
-          <Field label="Mã tham chiếu"><input required value={insurance.reference} onChange={(e) => setInsurance({ ...insurance, reference: e.target.value })} /></Field>
-          <Field label="Lý do"><textarea required value={insurance.reason} onChange={(e) => setInsurance({ ...insurance, reason: e.target.value })} /></Field>
-          <Field label="Hạch toán"><select value={insurance.insurancePaymentDestination} onChange={(e) => setInsurance({ ...insurance, insurancePaymentDestination: e.target.value })}><option value="DIRECT_TO_CLAIMANT">Trả trực tiếp claimant</option><option value="REIMBURSE_RISK_FUND">Hoàn Risk Fund</option></select></Field>
-          <div className="risk-actions"><button disabled={busy} type="submit">Phê duyệt</button><button className="risk-secondary" disabled={busy} type="button" onClick={(event) => submitInsurance(event, false)}>Từ chối</button></div>
-          <hr className="risk-divider"/><h3>Audit provider</h3>{(audits.data ?? []).map((item) => <p key={item.id} className="risk-form__hint">{formatDate(item.createdAtUtc)} · {item.operation} · {item.resultStatus} · {formatVnd(item.approvedAmount)} · {item.providerReference}</p>)}
-        </form>
-        <form className="risk-card risk-form" onSubmit={submitRecovery}>
-          <div className="risk-card__title"><h2>Thu hồi thủ công</h2><span>Không trừ DriverWallet</span></div>
-          <Field label="Nguồn"><select value={recovery.sourceType} onChange={(e) => setRecovery({ ...recovery, sourceType: e.target.value })}>{['DRIVER','CUSTOMER','THIRD_PARTY','INSURANCE'].map((x) => <option key={x}>{x}</option>)}</select></Field>
-          <Field label="Payer"><input required value={recovery.payerReference} onChange={(e) => setRecovery({ ...recovery, payerReference: e.target.value })} /></Field>
-          <Field label="Số tiền"><input required type="number" min="1" value={recovery.amount} onChange={(e) => setRecovery({ ...recovery, amount: e.target.value })} /></Field>
-          <Field label="Tham chiếu thanh toán"><input required value={recovery.paymentReference} onChange={(e) => setRecovery({ ...recovery, paymentReference: e.target.value })} /></Field>
-          <Field label="Bằng chứng tin cậy"><input required type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => setRecovery({ ...recovery, evidence: e.target.files?.[0] ?? null })} /></Field>
-          <button disabled={busy} type="submit">Ghi nhận thu hồi</button>
-        </form>
-      </section>}
-      {claimId && <section className="risk-grid">
-        <form className="risk-card risk-form" onSubmit={(event) => { event.preventDefault(); run(() => writeOffClaimAdvance(claimId, { ...writeOff, amount: Number(writeOff.amount), rowVersion: claim?.rowVersion ?? accident?.claim?.rowVersion, idempotencyKey: createIdempotencyKey('write-off') }), 'Đã ghi nhận write-off có audit.'); }}>
-          <div className="risk-card__title"><h2>Reconcile / write-off</h2><span>Không debit Risk Fund lần hai</span></div>
-          <Field label="Số tiền"><input required type="number" min="1" value={writeOff.amount} onChange={(e) => setWriteOff({ ...writeOff, amount: e.target.value })} /></Field>
-          <Field label="Lý do"><textarea required value={writeOff.reason} onChange={(e) => setWriteOff({ ...writeOff, reason: e.target.value })} /></Field>
-          <Field label="Bằng chứng"><input required type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => setWriteOff({ ...writeOff, evidence: e.target.files?.[0] ?? null })} /></Field>
-          <button disabled={busy} type="submit">Ghi write-off</button>
-        </form>
-        <div className="risk-card risk-form"><div className="risk-card__title"><h2>Đóng claim</h2><span>Chỉ khi reconciliation cân bằng</span></div><button disabled={busy} type="button" onClick={() => run(() => closeClaim(claimId, claim?.rowVersion ?? accident?.claim?.rowVersion), 'Đã đóng claim và accident.')}>Đóng claim</button></div>
-      </section>}
-    </div></AdminLayout>
+            <WorkflowHeading step="3" title="Phân bổ trách nhiệm" description="Đây là tỷ lệ trách nhiệm, không phải tỷ lệ chi trả. Tổng bắt buộc bằng 100%." compact />
+            <div className="risk-form__columns">{allocations.map(([key, label]) => <Field key={key} label={label}><input required type="number" min="0" max="100" value={assessment[key]} onChange={(event) => setAllocation(key, event.target.value)} /></Field>)}</div>
+            <div className={`risk-total ${total === 100 && causeTotal === 100 ? 'risk-total--valid' : 'risk-total--invalid'}`}><strong>Tổng trách nhiệm: {total}%</strong><span>Tổng nguyên nhân: {causeTotal}%</span></div>
+
+            <div className="risk-section-title">
+              <h3>Kiểm tra trước khi xác nhận trách nhiệm</h3>
+              <p>Xác nhận sẽ khóa assessment hiện tại và cho phép máy chủ tính đề xuất xử lý quyền lợi.</p>
+            </div>
+            <ResponsibilityReview assessment={assessment} />
+            <div className="risk-actions">
+              <button className="risk-secondary" disabled={busy || assessmentConfirmed} type="button" onClick={(event) => submitAssessment(event, false)}>Lưu bản nháp</button>
+              <button disabled={busy || assessmentConfirmed || total !== 100 || causeTotal !== 100} type="submit">Xác nhận trách nhiệm</button>
+            </div>
+          </form>}
+
+          {accident && <section className="risk-grid risk-grid--settlement">
+            <form className="risk-card risk-form" onSubmit={submitSettlement}>
+              <WorkflowHeading step="4" title="Đề xuất xử lý quyền lợi" description="Nhập dữ liệu thiệt hại để máy chủ tính theo policy và coverage snapshot." compact />
+              <div className="risk-form__columns">{Object.keys(settlement).filter((key) => key !== 'isPermanentRiskFundLoss' && key !== 'insurancePaymentDestination').map((key) => <Field key={key} label={claimFieldLabel(key)}><input required type="number" min="0" value={settlement[key]} onChange={(event) => setSettlement({ ...settlement, [key]: event.target.value })} /></Field>)}</div>
+              <details className="risk-advanced">
+                <summary>Tùy chọn hạch toán nâng cao</summary>
+                <p className="risk-form__hint">Chỉ thay đổi khi hồ sơ thực tế yêu cầu. Máy chủ vẫn kiểm tra toàn bộ giới hạn.</p>
+                <Field label="Nơi nhận khoản bảo hiểm"><select value={settlement.insurancePaymentDestination} onChange={(event) => setSettlement({ ...settlement, insurancePaymentDestination: event.target.value })}><option value="DIRECT_TO_CLAIMANT">{riskProtectionLabel('DIRECT_TO_CLAIMANT')}</option><option value="REIMBURSE_RISK_FUND">{riskProtectionLabel('REIMBURSE_RISK_FUND')}</option></select></Field>
+                <label className="risk-check"><input type="checkbox" checked={settlement.isPermanentRiskFundLoss} onChange={(event) => setSettlement({ ...settlement, isPermanentRiskFundLoss: event.target.checked })} /> Toàn bộ khoản Quỹ rủi ro là hỗ trợ cuối cùng, không phải khoản ứng có thể thu hồi</label>
+              </details>
+              {!assessmentConfirmed && <div className="risk-alert risk-alert--info">Cần xác nhận trách nhiệm ở bước 3 trước khi máy chủ có thể tính đề xuất.</div>}
+              <button disabled={busy || !claimId || !assessmentConfirmed} type="submit">Yêu cầu máy chủ tính đề xuất</button>
+            </form>
+            <div className="risk-card"><SettlementRecommendation claim={claim ?? accident.claim} /></div>
+          </section>}
+
+          {claimId && <section className="risk-card risk-form">
+            <WorkflowHeading step="5" title="Rà soát & thực hiện" description="Kiểm tra đề xuất máy chủ trước khi cấp kinh phí. Thao tác ghi giảm quỹ luôn yêu cầu xác nhận." compact />
+            <div>
+              <strong>Nguyên nhân đã ghi nhận</strong>
+              <ul className="risk-detail-list">
+                {assessment.causes.map((cause, index) => <li key={`${cause.responsibleParty}-${cause.rootCause}-${index}`}>{riskProtectionLabel(cause.responsibleParty)} · {riskProtectionLabel(cause.rootCause)} · {Number(cause.percentage)}%</li>)}
+              </ul>
+            </div>
+            <div className="risk-review-grid">
+              <ReviewItem label="Trạng thái hồ sơ" value={riskProtectionLabel((claim ?? accident.claim)?.status)} />
+              <ReviewItem label="Thiệt hại đủ điều kiện" value={formatVnd((claim ?? accident.claim)?.eligibleDamageAmount)} />
+              <ReviewItem label="Bảo hiểm đã duyệt" value={formatVnd((claim ?? accident.claim)?.insuranceApprovedAmount)} />
+              <ReviewItem label="Trách nhiệm tài xế" value={formatVnd((claim ?? accident.claim)?.driverLiabilityAmount)} />
+              <ReviewItem label="Trách nhiệm khách hàng" value={formatVnd((claim ?? accident.claim)?.customerLiabilityAmount)} />
+              <ReviewItem label="Khoản dự kiến thu hồi từ bên thứ ba" value={formatVnd((claim ?? accident.claim)?.thirdPartyLiabilityAmount)} />
+              <ReviewItem label="Khoản ứng từ Quỹ rủi ro" value={formatVnd((claim ?? accident.claim)?.riskFundAdvanceAmount)} />
+              <ReviewItem label="Hỗ trợ cuối cùng từ Quỹ rủi ro" value={formatVnd((claim ?? accident.claim)?.riskFundPermanentLossAmount)} />
+              <ReviewItem label="Đã thu hồi" value={formatVnd((claim ?? accident.claim)?.recoveredAmount)} />
+              <ReviewItem label="Còn phải thu hồi" value={formatVnd((claim ?? accident.claim)?.outstandingRecoveryAmount)} />
+              <ReviewItem label="Phần Quỹ rủi ro đang chịu thực tế" value={formatVnd((claim ?? accident.claim)?.actualRecoverableFundExposure)} />
+            </div>
+            {(claim ?? accident.claim)?.status === 'PENDING_FUNDING' && <div className="risk-alert risk-alert--info">Quỹ hiện chưa đủ để xử lý toàn bộ đề xuất. Hồ sơ vẫn giữ trạng thái chờ cấp kinh phí; không tự động thay đổi phân bổ trách nhiệm.</div>}
+            {accident.liabilityAssessment?.status === 'DISPUTED' && <div className="risk-alert risk-alert--info">Kết quả trách nhiệm đang được xem xét lại. Không thực hiện cấp kinh phí cho đến khi máy chủ cho phép.</div>}
+            <button disabled={busy || !fundingAllowed} type="button" onClick={submitFunding}>Cấp kinh phí / thử lại cấp kinh phí</button>
+          </section>}
+
+          {claimId && <details className="risk-card risk-advanced risk-advanced--panel">
+            <summary>Thao tác kế toán nâng cao & kiểm toán</summary>
+            <p>Các thao tác dưới đây dùng cho hồ sơ ngoại lệ. Mọi thay đổi vẫn được máy chủ kiểm tra, ghi audit và bảo vệ bằng concurrency token nội bộ.</p>
+            <section className="risk-grid">
+              <form className="risk-form" onSubmit={(event) => submitInsurance(event, true)}>
+                <h3>Bảo hiểm mô phỏng · {riskProtectionLabel((claim ?? accident.claim)?.insuranceStatus)}</h3>
+                <Field label="Số tiền duyệt"><input required type="number" min="0" value={insurance.approvedAmount} onChange={(event) => setInsurance({ ...insurance, approvedAmount: event.target.value })} /></Field>
+                <Field label="Mã tham chiếu"><input required value={insurance.reference} onChange={(event) => setInsurance({ ...insurance, reference: event.target.value })} /></Field>
+                <Field label="Lý do"><textarea required value={insurance.reason} onChange={(event) => setInsurance({ ...insurance, reason: event.target.value })} /></Field>
+                <Field label="Nơi nhận khoản bảo hiểm"><select value={insurance.insurancePaymentDestination} onChange={(event) => setInsurance({ ...insurance, insurancePaymentDestination: event.target.value })}><option value="DIRECT_TO_CLAIMANT">{riskProtectionLabel('DIRECT_TO_CLAIMANT')}</option><option value="REIMBURSE_RISK_FUND">{riskProtectionLabel('REIMBURSE_RISK_FUND')}</option></select></Field>
+                <div className="risk-actions"><button disabled={busy} type="submit">Phê duyệt</button><button className="risk-secondary" disabled={busy} type="button" onClick={(event) => submitInsurance(event, false)}>Từ chối</button></div>
+                <details><summary>Lịch sử trao đổi với bảo hiểm mô phỏng</summary>{(audits.data ?? []).map((item) => <p key={item.id} className="risk-form__hint">{formatDate(item.createdAtUtc)} · {riskProtectionLabel(item.operation)} · {riskProtectionLabel(item.resultStatus)} · {formatVnd(item.approvedAmount)} · {item.providerReference}</p>)}</details>
+              </form>
+              <form className="risk-form" onSubmit={submitRecovery}>
+                <h3>Ghi nhận khoản thu hồi</h3>
+                <p className="risk-form__hint">Chỉ ghi nhận tiền đã thực nhận. Không tự động trừ ví tài xế.</p>
+                <Field label="Nguồn thu hồi"><select value={recovery.sourceType} onChange={(event) => setRecovery({ ...recovery, sourceType: event.target.value })}>{recoverySources.map((value) => <option key={value} value={value}>{riskProtectionLabel(value)}</option>)}</select></Field>
+                <Field label="Bên thanh toán"><input required value={recovery.payerReference} onChange={(event) => setRecovery({ ...recovery, payerReference: event.target.value })} /></Field>
+                <Field label="Số tiền thực nhận"><input required type="number" min="1" value={recovery.amount} onChange={(event) => setRecovery({ ...recovery, amount: event.target.value })} /></Field>
+                <Field label="Tham chiếu thanh toán"><input required value={recovery.paymentReference} onChange={(event) => setRecovery({ ...recovery, paymentReference: event.target.value })} /></Field>
+                <Field label="Bằng chứng"><input required type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => setRecovery({ ...recovery, evidence: event.target.files?.[0] ?? null })} /></Field>
+                <button disabled={busy} type="submit">Ghi nhận tiền đã thu hồi</button>
+              </form>
+              <form className="risk-form" onSubmit={submitWriteOff}>
+                <h3>Ghi nhận khoản ứng không thể thu hồi</h3>
+                <p className="risk-form__hint">Đây là bản ghi đối soát; không ghi giảm Quỹ rủi ro lần thứ hai.</p>
+                <Field label="Số tiền"><input required type="number" min="1" value={writeOff.amount} onChange={(event) => setWriteOff({ ...writeOff, amount: event.target.value })} /></Field>
+                <Field label="Lý do"><textarea required value={writeOff.reason} onChange={(event) => setWriteOff({ ...writeOff, reason: event.target.value })} /></Field>
+                <Field label="Bằng chứng"><input required type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => setWriteOff({ ...writeOff, evidence: event.target.files?.[0] ?? null })} /></Field>
+                <button disabled={busy} type="submit">Ghi nhận không thể thu hồi</button>
+              </form>
+              <div className="risk-form">
+                <h3>Đóng hồ sơ</h3>
+                <p className="risk-form__hint">Chỉ thực hiện khi funding, bảo hiểm, thu hồi và write-off đã cân bằng.</p>
+                <button disabled={busy} type="button" onClick={closeCurrentClaim}>Đóng hồ sơ đã đối soát</button>
+              </div>
+            </section>
+          </details>}
+        </div>}
+      </div>
+    </AdminLayout>
   );
 }
 
-function CauseRow({ cause, onChange, onRemove }) { return <div className="risk-cause-row"><Field label="Nguyên nhân"><select value={cause.rootCause} onChange={(e) => onChange({ ...cause, rootCause: e.target.value })}>{['DRIVER_ERROR','CUSTOMER_INTERFERENCE','THIRD_PARTY_ERROR','VEHICLE_MECHANICAL_FAILURE','VEHICLE_PRE_EXISTING_DEFECT','ROAD_CONDITION','WEATHER','FORCE_MAJEURE','UNKNOWN'].map((x) => <option key={x}>{x}</option>)}</select></Field><Field label="Bên liên quan"><select value={cause.responsibleParty} onChange={(e) => onChange({ ...cause, responsibleParty: e.target.value })}>{['DRIVER','CUSTOMER','THIRD_PARTY','VEHICLE','OBJECTIVE'].map((x) => <option key={x}>{x}</option>)}</select></Field><Field label="Tỷ lệ %"><input type="number" min="1" max="100" value={cause.percentage} onChange={(e) => onChange({ ...cause, percentage: Number(e.target.value) })} /></Field><button type="button" onClick={onRemove}>Xóa</button></div>; }
-function ClaimSummary({ claim }) { return <div className="risk-card"><div className="risk-card__title"><h2>Claim</h2><span className="risk-badge">{claim?.status ?? 'CHƯA TẠO'}</span></div>{claim ? <ul className="risk-detail-list"><li><b>Mã:</b> #{claim.id}</li><li><b>Thiệt hại đủ điều kiện:</b> {formatVnd(claim.eligibleDamageAmount)}</li><li><b>Bảo hiểm duyệt:</b> {formatVnd(claim.insuranceApprovedAmount)} ({claim.insuranceStatus})</li><li><b>Bảo hiểm trả claimant:</b> {formatVnd(claim.insurancePaidDirectToClaimant)}</li><li><b>Bảo hiểm hoàn Risk Fund:</b> {formatVnd(claim.insuranceReimbursedToRiskFund)}</li><li><b>Risk Fund ứng có thể thu hồi:</b> {formatVnd(claim.riskFundAdvanceAmount)}</li><li><b>SafeRide payout cuối cùng:</b> {formatVnd(claim.riskFundPermanentLossAmount)}</li><li><b>Advance đã write-off:</b> {formatVnd(claim.writtenOffAdvanceAmount)}</li><li><b>Trách nhiệm tài xế:</b> {formatVnd(claim.driverLiabilityAmount)}</li><li><b>Đã thu hồi:</b> {formatVnd(claim.recoveredAmount)}</li><li><b>Còn phải thu:</b> {formatVnd(claim.outstandingRecoveryAmount)}</li><li><b>Exposure có thể thu hồi:</b> {formatVnd(claim.actualRecoverableFundExposure)}</li><li><b>Reconciled:</b> {claim.isReconciled ? 'Có' : 'Không'}</li></ul> : <p>Hãy xác nhận liability assessment để tạo claim.</p>}</div>; }
-function Field({ label, children }) { return <label className="risk-field"><span>{label}</span>{children}</label>; }
-function allocationTotal(value) { return allocations.reduce((sum, [key]) => sum + Number(value[key]), 0); }
-function toUtc(value) { return value ? new Date(value).toISOString() : ''; }
-function formatDate(value) { return value ? new Date(value).toLocaleString('vi-VN') : '—'; }
-function claimFieldLabel(key) { return ({ totalDamageAmount: 'Tổng thiệt hại', eligibleDamageAmount: 'Thiệt hại đủ điều kiện', requestedInsuranceAmount: 'Yêu cầu bảo hiểm', requestedRiskFundAmount: 'Yêu cầu Risk Fund' })[key] ?? key; }
+function WorkflowHeading({ step, title, description, compact = false }) {
+  return <div className={`risk-step-heading ${compact ? 'risk-step-heading--compact' : ''}`}><span>{step}</span><div><h2>{title}</h2><p>{description}</p></div></div>;
+}
+
+function CauseRow({ cause, onChange, onRemove }) {
+  return <div className="risk-cause-row">
+    <Field label="Nguyên nhân"><select value={cause.rootCause} onChange={(event) => onChange({ ...cause, rootCause: event.target.value })}>{rootCauses.map((value) => <option key={value} value={value}>{riskProtectionLabel(value)}</option>)}</select></Field>
+    <Field label="Bên liên quan"><select value={cause.responsibleParty} onChange={(event) => onChange({ ...cause, responsibleParty: event.target.value })}>{responsibleParties.map((value) => <option key={value} value={value}>{riskProtectionLabel(value)}</option>)}</select></Field>
+    <Field label="Tỷ lệ %"><input type="number" min="1" max="100" value={cause.percentage} onChange={(event) => onChange({ ...cause, percentage: Number(event.target.value) })} /></Field>
+    <button type="button" onClick={onRemove}>Xóa</button>
+  </div>;
+}
+
+function ResponsibilityReview({ assessment }) {
+  return <div className="risk-review-grid">{allocations.map(([key, label]) => <ReviewItem key={key} label={label} value={`${Number(assessment[key])}%`} />)}<ReviewItem label="Mức lỗi tài xế" value={riskProtectionLabel(assessment.driverFaultLevel)} /></div>;
+}
+
+function ReviewItem({ label, value }) {
+  return <div className="risk-review-item"><span>{label}</span><strong>{value}</strong></div>;
+}
+
+function Field({ label, children }) {
+  return <label className="risk-field"><span>{label}</span>{children}</label>;
+}
+
+function toUtc(value) {
+  return value ? new Date(value).toISOString() : '';
+}
+
+function formatDate(value) {
+  return value ? new Date(value).toLocaleString('vi-VN') : '—';
+}
+
+function claimFieldLabel(key) {
+  return ({
+    totalDamageAmount: 'Tổng thiệt hại ghi nhận',
+    eligibleDamageAmount: 'Thiệt hại đủ điều kiện',
+    requestedInsuranceAmount: 'Số tiền đề nghị bảo hiểm xem xét',
+    requestedRiskFundAmount: 'Số tiền đề nghị Quỹ rủi ro xử lý',
+  })[key] ?? key;
+}
 
 export default StaffAccidentsPage;

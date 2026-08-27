@@ -117,3 +117,31 @@ export function formatVnd(value) {
 export function createIdempotencyKey(prefix) {
   return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`;
 }
+
+export function isEntireRiskFundRequestPermanent(claim) {
+  const advanceAmount = Number(claim?.riskFundAdvanceAmount ?? 0);
+  const permanentLossAmount = Number(claim?.riskFundPermanentLossAmount ?? 0);
+  return permanentLossAmount > 0 && advanceAmount === 0;
+}
+
+export function reconcilePartyCauses(causes, responsibleParty, percentage, defaultCause) {
+  const normalizedPercentage = Number(percentage);
+  const currentCauses = Array.isArray(causes) ? causes : [];
+  const partyCauses = currentCauses.filter((cause) => cause.responsibleParty === responsibleParty);
+  if (normalizedPercentage === 0) {
+    return currentCauses.filter((cause) => cause.responsibleParty !== responsibleParty);
+  }
+  if (partyCauses.length === 0) {
+    return [...currentCauses, {
+      rootCause: defaultCause,
+      responsibleParty,
+      percentage: normalizedPercentage,
+    }];
+  }
+  if (partyCauses.length === 1) {
+    return currentCauses.map((cause) => cause.responsibleParty === responsibleParty
+      ? { ...cause, percentage: normalizedPercentage }
+      : cause);
+  }
+  return currentCauses;
+}

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../../core/localization/localization_extensions.dart';
+import '../../../../shared/risk_protection/presentation/risk_protection_labels.dart';
 
 typedef EvidenceImagePicker = Future<XFile?> Function(ImageSource source);
 
@@ -41,11 +42,20 @@ const vehicleFaultTypes = <String>[
   'OTHER',
 ];
 
-String safetyReportReasonCodeForType(String reportType) => switch (reportType) {
-  'UNSAFE_CUSTOMER' => 'UNSAFE_CUSTOMER',
-  'VEHICLE_ISSUE' => 'VEHICLE_ISSUE',
-  _ => throw ArgumentError.value(reportType, 'reportType'),
-};
+const unsafeCustomerReasons = <String>[
+  'DISTRACTING',
+  'VIOLENT',
+  'INTERFERING_WITH_VEHICLE',
+  'UNSAFE_REQUEST',
+  'OTHER',
+];
+
+List<String> safetyReportReasonCodesForType(String reportType) =>
+    switch (reportType) {
+      'UNSAFE_CUSTOMER' => unsafeCustomerReasons,
+      'VEHICLE_ISSUE' => vehicleFaultTypes,
+      _ => throw ArgumentError.value(reportType, 'reportType'),
+    };
 
 class SafetyReportDialogResult {
   const SafetyReportDialogResult({
@@ -63,6 +73,7 @@ class SafetyReportDialogResult {
 
 Future<SafetyReportDialogResult?> showSafetyReportDialog(BuildContext context) {
   var reportType = 'UNSAFE_CUSTOMER';
+  var reasonCode = safetyReportReasonCodesForType(reportType).first;
   var description = '';
   var escalationRequested = false;
   return showDialog<SafetyReportDialogResult>(
@@ -88,8 +99,29 @@ Future<SafetyReportDialogResult?> showSafetyReportDialog(BuildContext context) {
                   ),
                 ],
                 selected: {reportType},
-                onSelectionChanged: (selection) =>
-                    setState(() => reportType = selection.single),
+                onSelectionChanged: (selection) => setState(() {
+                  reportType = selection.single;
+                  reasonCode = safetyReportReasonCodesForType(reportType).first;
+                }),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                key: ValueKey(reportType),
+                initialValue: reasonCode,
+                decoration: InputDecoration(
+                  labelText: context.l10n.safetyReasonCode,
+                ),
+                items: safetyReportReasonCodesForType(reportType)
+                    .map(
+                      (value) => DropdownMenuItem(
+                        value: value,
+                        child: Text(safetyReasonLabel(context.l10n, value)),
+                      ),
+                    )
+                    .toList(growable: false),
+                onChanged: (value) {
+                  if (value != null) setState(() => reasonCode = value);
+                },
               ),
               const SizedBox(height: 12),
               TextField(
@@ -123,7 +155,7 @@ Future<SafetyReportDialogResult?> showSafetyReportDialog(BuildContext context) {
                     dialogContext,
                     SafetyReportDialogResult(
                       reportType: reportType,
-                      reasonCode: safetyReportReasonCodeForType(reportType),
+                      reasonCode: reasonCode,
                       description: description.trim(),
                       escalationRequested: escalationRequested,
                     ),
@@ -170,6 +202,43 @@ Future<PreTripCheckDialogResult?> showPreTripSafetyCheckDialog(
     builder: (dialogContext) => StatefulBuilder(
       builder: (context, setState) {
         final allPassed = values.every((value) => value);
+        Future<void> selectEvidence(ImageSource source) async {
+          setState(() => mediaError = null);
+          try {
+            final picked = await picker(source);
+            if (picked == null || !context.mounted) return;
+            Uint8List? previewBytes;
+            try {
+              previewBytes = await picked.readAsBytes();
+            } catch (_) {
+              previewBytes = null;
+            }
+            if (!context.mounted) return;
+            setState(() {
+              evidence = picked;
+              evidenceBytes = previewBytes;
+            });
+          } on PlatformException {
+            if (!context.mounted) return;
+            setState(
+              () => mediaError = context.l10n.mediaAccessFailed(
+                source == ImageSource.camera
+                    ? context.l10n.camera
+                    : context.l10n.gallery,
+              ),
+            );
+          } catch (_) {
+            if (!context.mounted) return;
+            setState(
+              () => mediaError = context.l10n.mediaAccessFailed(
+                source == ImageSource.camera
+                    ? context.l10n.camera
+                    : context.l10n.gallery,
+              ),
+            );
+          }
+        }
+
         return AlertDialog(
           title: Text(context.l10n.preTripSafetyTitle),
           content: SizedBox(
@@ -265,45 +334,25 @@ Future<PreTripCheckDialogResult?> showPreTripSafetyCheckDialog(
                     ),
                     const SizedBox(height: 8),
                   ],
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      setState(() => mediaError = null);
-                      try {
-                        final picked = await picker(ImageSource.camera);
-                        if (picked == null || !context.mounted) return;
-                        Uint8List? previewBytes;
-                        try {
-                          previewBytes = await picked.readAsBytes();
-                        } catch (_) {
-                          previewBytes = null;
-                        }
-                        if (!context.mounted) return;
-                        setState(() {
-                          evidence = picked;
-                          evidenceBytes = previewBytes;
-                        });
-                      } on PlatformException {
-                        if (!context.mounted) return;
-                        setState(
-                          () => mediaError = context.l10n.mediaAccessFailed(
-                            context.l10n.camera,
-                          ),
-                        );
-                      } catch (_) {
-                        if (!context.mounted) return;
-                        setState(
-                          () => mediaError = context.l10n.mediaAccessFailed(
-                            context.l10n.camera,
-                          ),
-                        );
-                      }
-                    },
-                    icon: const Icon(Icons.camera_alt_outlined),
-                    label: Text(
-                      evidence == null
-                          ? context.l10n.takePhoto
-                          : context.l10n.retakePhoto,
-                    ),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton.tonalIcon(
+                        onPressed: () => selectEvidence(ImageSource.camera),
+                        icon: const Icon(Icons.camera_alt_outlined),
+                        label: Text(
+                          evidence == null
+                              ? context.l10n.takePhoto
+                              : context.l10n.retakePhoto,
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () => selectEvidence(ImageSource.gallery),
+                        icon: const Icon(Icons.photo_library_outlined),
+                        label: Text(context.l10n.chooseFromGallery),
+                      ),
+                    ],
                   ),
                   if (mediaError != null) ...[
                     const SizedBox(height: 8),
@@ -371,183 +420,208 @@ Future<SafetyTerminationDialogResult?> showSafetyTerminationDialog(
   return showDialog<SafetyTerminationDialogResult>(
     context: context,
     builder: (dialogContext) => StatefulBuilder(
-      builder: (context, setState) => AlertDialog(
-        title: Text(context.l10n.safetyTermination),
-        content: SizedBox(
-          width: 420,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(context.l10n.safetyTerminationDescription),
-                const SizedBox(height: 14),
-                TextField(
-                  autofocus: true,
-                  maxLines: 4,
-                  onChanged: (value) => setState(() => reason = value),
-                  decoration: InputDecoration(
-                    hintText: context.l10n.safetyTerminationReasonHint,
+      builder: (context, setState) {
+        Future<void> addEvidence(ImageSource source) async {
+          setState(() => mediaError = null);
+          try {
+            final picked = await picker(source);
+            if (picked == null || !context.mounted) return;
+            Uint8List? previewBytes;
+            try {
+              previewBytes = await picked.readAsBytes();
+            } catch (_) {
+              previewBytes = null;
+            }
+            if (!context.mounted) return;
+            setState(() {
+              evidence.add((file: picked, bytes: previewBytes));
+            });
+          } on PlatformException {
+            if (!context.mounted) return;
+            setState(
+              () => mediaError = context.l10n.mediaAccessFailed(
+                source == ImageSource.camera
+                    ? context.l10n.camera
+                    : context.l10n.gallery,
+              ),
+            );
+          } catch (_) {
+            if (!context.mounted) return;
+            setState(
+              () => mediaError = context.l10n.mediaAccessFailed(
+                source == ImageSource.camera
+                    ? context.l10n.camera
+                    : context.l10n.gallery,
+              ),
+            );
+          }
+        }
+
+        return AlertDialog(
+          title: Text(context.l10n.safetyTermination),
+          content: SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(context.l10n.safetyTerminationDescription),
+                  const SizedBox(height: 14),
+                  TextField(
+                    autofocus: true,
+                    maxLines: 4,
+                    onChanged: (value) => setState(() => reason = value),
+                    decoration: InputDecoration(
+                      hintText: context.l10n.safetyTerminationReasonHint,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                if (evidence.isNotEmpty) ...[
-                  Text(
-                    context.l10n.photoCount(evidence.length, maxEvidencePhotos),
-                    style: Theme.of(context).textTheme.labelLarge,
-                  ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
+                  if (evidence.isNotEmpty) ...[
+                    Text(
+                      context.l10n.photoCount(
+                        evidence.length,
+                        maxEvidencePhotos,
+                      ),
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (var index = 0; index < evidence.length; index++)
+                          SizedBox(
+                            width: 112,
+                            child: Column(
+                              children: [
+                                Stack(
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: evidence[index].bytes == null
+                                          ? Container(
+                                              height: 96,
+                                              width: 112,
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.surfaceContainer,
+                                              alignment: Alignment.center,
+                                              child: const Icon(
+                                                Icons.image_outlined,
+                                                size: 36,
+                                              ),
+                                            )
+                                          : Image.memory(
+                                              evidence[index].bytes!,
+                                              height: 96,
+                                              width: 112,
+                                              fit: BoxFit.cover,
+                                              errorBuilder:
+                                                  (
+                                                    context,
+                                                    error,
+                                                    stackTrace,
+                                                  ) => Container(
+                                                    height: 96,
+                                                    width: 112,
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .surfaceContainer,
+                                                    alignment: Alignment.center,
+                                                    child: const Icon(
+                                                      Icons
+                                                          .broken_image_outlined,
+                                                    ),
+                                                  ),
+                                            ),
+                                    ),
+                                    Positioned(
+                                      right: 2,
+                                      top: 2,
+                                      child: IconButton.filled(
+                                        visualDensity: VisualDensity.compact,
+                                        tooltip: context.l10n.removePhoto,
+                                        onPressed: () => setState(
+                                          () => evidence.removeAt(index),
+                                        ),
+                                        icon: const Icon(Icons.close, size: 18),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  context.l10n.photoNumber(index + 1),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      for (var index = 0; index < evidence.length; index++)
-                        SizedBox(
-                          width: 112,
-                          child: Column(
-                            children: [
-                              Stack(
-                                children: [
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: evidence[index].bytes == null
-                                        ? Container(
-                                            height: 96,
-                                            width: 112,
-                                            color: Theme.of(
-                                              context,
-                                            ).colorScheme.surfaceContainer,
-                                            alignment: Alignment.center,
-                                            child: const Icon(
-                                              Icons.image_outlined,
-                                              size: 36,
-                                            ),
-                                          )
-                                        : Image.memory(
-                                            evidence[index].bytes!,
-                                            height: 96,
-                                            width: 112,
-                                            fit: BoxFit.cover,
-                                            errorBuilder:
-                                                (
-                                                  context,
-                                                  error,
-                                                  stackTrace,
-                                                ) => Container(
-                                                  height: 96,
-                                                  width: 112,
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .surfaceContainer,
-                                                  alignment: Alignment.center,
-                                                  child: const Icon(
-                                                    Icons.broken_image_outlined,
-                                                  ),
-                                                ),
-                                          ),
-                                  ),
-                                  Positioned(
-                                    right: 2,
-                                    top: 2,
-                                    child: IconButton.filled(
-                                      visualDensity: VisualDensity.compact,
-                                      tooltip: context.l10n.removePhoto,
-                                      onPressed: () => setState(
-                                        () => evidence.removeAt(index),
-                                      ),
-                                      icon: const Icon(Icons.close, size: 18),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                context.l10n.photoNumber(index + 1),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
-                          ),
+                      FilledButton.tonalIcon(
+                        onPressed: evidence.length >= maxEvidencePhotos
+                            ? null
+                            : () => addEvidence(ImageSource.camera),
+                        icon: const Icon(Icons.camera_alt_outlined),
+                        label: Text(
+                          evidence.isEmpty
+                              ? context.l10n.captureSafetyEvidence
+                              : context.l10n.takePhoto,
                         ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: evidence.length >= maxEvidencePhotos
+                            ? null
+                            : () => addEvidence(ImageSource.gallery),
+                        icon: const Icon(Icons.photo_library_outlined),
+                        label: Text(context.l10n.chooseFromGallery),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                ],
-                OutlinedButton.icon(
-                  onPressed: evidence.length >= maxEvidencePhotos
-                      ? null
-                      : () async {
-                          setState(() => mediaError = null);
-                          try {
-                            final picked = await picker(ImageSource.camera);
-                            if (picked == null || !context.mounted) return;
-                            Uint8List? previewBytes;
-                            try {
-                              previewBytes = await picked.readAsBytes();
-                            } catch (_) {
-                              previewBytes = null;
-                            }
-                            if (!context.mounted) return;
-                            setState(() {
-                              evidence.add((file: picked, bytes: previewBytes));
-                            });
-                          } on PlatformException {
-                            if (!context.mounted) return;
-                            setState(
-                              () => mediaError = context.l10n.mediaAccessFailed(
-                                context.l10n.camera,
-                              ),
-                            );
-                          } catch (_) {
-                            if (!context.mounted) return;
-                            setState(
-                              () => mediaError = context.l10n.mediaAccessFailed(
-                                context.l10n.camera,
-                              ),
-                            );
-                          }
-                        },
-                  icon: const Icon(Icons.camera_alt_outlined),
-                  label: Text(
-                    evidence.isEmpty
-                        ? context.l10n.captureSafetyEvidence
-                        : context.l10n.takePhoto,
-                  ),
-                ),
-                if (mediaError != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    mediaError!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(context.l10n.cancel),
-          ),
-          FilledButton(
-            onPressed: reason.trim().isEmpty
-                ? null
-                : () => Navigator.of(dialogContext).pop(
-                    SafetyTerminationDialogResult(
-                      reason: reason.trim(),
-                      evidence: List.unmodifiable(
-                        evidence.map((item) => item.file),
+                  if (mediaError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      mediaError!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
                       ),
                     ),
-                  ),
-            child: Text(context.l10n.safetyTermination),
+                  ],
+                ],
+              ),
+            ),
           ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(context.l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: reason.trim().isEmpty
+                  ? null
+                  : () => Navigator.of(dialogContext).pop(
+                      SafetyTerminationDialogResult(
+                        reason: reason.trim(),
+                        evidence: List.unmodifiable(
+                          evidence.map((item) => item.file),
+                        ),
+                      ),
+                    ),
+              child: Text(context.l10n.safetyTermination),
+            ),
+          ],
+        );
+      },
     ),
   );
 }
@@ -605,12 +679,5 @@ Future<String?> _showReasonDialog(
   );
 }
 
-String _faultTypeLabel(BuildContext context, String value) => switch (value) {
-  'BRAKE_FAILURE' => context.l10n.brakeResponse,
-  'LIGHT_FAILURE' => context.l10n.frontRearLights,
-  'TIRE_FAILURE' => context.l10n.visibleTires,
-  'STEERING_FAILURE' => context.l10n.otherVehicleFault,
-  'ENGINE_FAILURE' => context.l10n.dashboardWarning,
-  'ELECTRICAL_FAILURE' => context.l10n.turnSignals,
-  _ => context.l10n.otherVehicleFault,
-};
+String _faultTypeLabel(BuildContext context, String value) =>
+    safetyReasonLabel(context.l10n, value);

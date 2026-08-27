@@ -195,6 +195,9 @@ public sealed class RiskProtectionIntegrationTests
         await service.EnsureCanStartAndActivateCoverageAsync(
             graph.DriverId, graph.Trip, DateTime.UtcNow, CancellationToken.None);
         await db.SaveChangesAsync();
+        await service.EnsureCanStartAndActivateCoverageAsync(
+            graph.DriverId, graph.Trip, DateTime.UtcNow, CancellationToken.None);
+        await db.SaveChangesAsync();
 
         var coverage = await db.TripProtectionCoverages.SingleAsync();
         Assert.Equal(PreTripCheckResult.PASS, pass.Result);
@@ -947,7 +950,7 @@ public sealed class RiskProtectionIntegrationTests
             graph.Trip.Id,
             new SafetyReportRequest(
                 SafetyReportType.UNSAFE_CUSTOMER,
-                "THREATENING_BEHAVIOR",
+                "VIOLENT",
                 "Customer threatened the driver",
                 null,
                 null,
@@ -959,6 +962,37 @@ public sealed class RiskProtectionIntegrationTests
         Assert.Contains("unsafe customer", report.Subject, StringComparison.OrdinalIgnoreCase);
         Assert.Null(report.PreTripVehicleCheckId);
         Assert.Empty(await db.Sosalerts.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData(SafetyReportType.UNSAFE_CUSTOMER, "THREATENING_BEHAVIOR")]
+    [InlineData(SafetyReportType.UNSAFE_CUSTOMER, "BRAKE_FAILURE")]
+    [InlineData(SafetyReportType.VEHICLE_ISSUE, "UNSAFE_REQUEST")]
+    public async Task SafetyReport_RejectsStaleOrCrossTypeReasonCodes(
+        SafetyReportType reportType,
+        string reasonCode)
+    {
+        await using var db = CreateDbContext();
+        var graph = await SeedTripAsync(db, TripStatus.IN_PROGRESS, riskEnabled: true);
+        var service = new SafetyReportService(
+            db,
+            new CapturingAdminReportRealtimeService(),
+            NullLogger<SafetyReportService>.Instance);
+
+        var exception = await Assert.ThrowsAsync<BookingException>(() => service.CreateAsync(
+            graph.DriverId,
+            graph.Trip.Id,
+            new SafetyReportRequest(
+                reportType,
+                reasonCode,
+                "Invalid reason contract",
+                null,
+                null,
+                false),
+            CancellationToken.None));
+
+        Assert.Equal("safety_report.invalid_reason", exception.Code);
+        Assert.Empty(await db.Reports.ToListAsync());
     }
 
     [Fact]
@@ -1060,6 +1094,253 @@ public sealed class RiskProtectionIntegrationTests
         var exception = await Assert.ThrowsAsync<BookingException>(() => secondService.SaveAssessmentAsync(
             Guid.NewGuid(), secondGraph.Accident.Id, inconsistent, true, CancellationToken.None));
         Assert.Equal("risk_protection.invalid_request", exception.Code);
+    }
+
+    [Fact]
+    public async Task BusinessScenarioA_OrdinaryDriverNegligence_AppliesSnapshotRateAndCapWithoutWalletDeduction()
+    {
+        await using var db = CreateDbContext();
+        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
+        var wallet = new DriverWallet
+        {
+            DriverId = graph.TripGraph.DriverId,
+            CurrentBalance = 750_000m
+        };
+        db.DriverWallets.Add(wallet);
+        await db.SaveChangesAsync();
+        var service = CreateAccidentService(db);
+        var claim = await service.SaveAssessmentAsync(
+            Guid.NewGuid(),
+            graph.Accident.Id,
+            new LiabilityAssessmentRequest(
+                100m, 0m, 0m, 0m, 0m,
+                DriverFaultLevel.ORDINARY_NEGLIGENCE,
+                VehicleDefectAwareness.UNKNOWN,
+                [new LiabilityCauseRequest(
+                    AccidentRootCause.DRIVER_ERROR,
+                    ResponsiblePartyType.DRIVER,
+                    100m)]),
+            true,
+            CancellationToken.None);
+
+        var result = await service.CalculateClaimAsync(
+            Guid.NewGuid(),
+            claim.Id,
+            new CalculateClaimRequest(
+                50_000_000m,
+                50_000_000m,
+                0m,
+                10_000_000m,
+                false),
+            CancellationToken.None);
+
+        Assert.Equal(50_000_000m, (await db.DriverLiabilities.SingleAsync()).DriverAttributableEligibleDamage);
+        Assert.Equal(2_000_000m, result.DriverLiabilityAmount);
+        Assert.Equal(2_000_000m, result.RiskFundAdvanceAmount);
+        Assert.Equal(8_000_000m, result.RiskFundPermanentLossAmount);
+        Assert.Equal(750_000m, wallet.CurrentBalance);
+        Assert.Empty(await db.WalletTransactions.ToListAsync());
+    }
+
+    [Fact]
+    public async Task BusinessScenarioB_CustomerInterference_CanBeRecoveredFromCustomerWithoutDriverLiability()
+    {
+        await using var db = CreateDbContext();
+        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
+        var service = CreateAccidentService(db);
+        var staffId = Guid.NewGuid();
+        var claim = await service.SaveAssessmentAsync(
+            staffId,
+            graph.Accident.Id,
+            new LiabilityAssessmentRequest(
+                0m, 100m, 0m, 0m, 0m,
+                DriverFaultLevel.NO_FAULT,
+                VehicleDefectAwareness.UNKNOWN,
+                [new LiabilityCauseRequest(
+                    AccidentRootCause.CUSTOMER_INTERFERENCE,
+                    ResponsiblePartyType.CUSTOMER,
+                    100m)]),
+            true,
+            CancellationToken.None);
+        var calculated = await service.CalculateClaimAsync(
+            staffId,
+            claim.Id,
+            new CalculateClaimRequest(10_000_000m, 10_000_000m, 0m, 10_000_000m, false),
+            CancellationToken.None);
+
+        Assert.Equal(0m, calculated.DriverLiabilityAmount);
+        Assert.Equal(10_000_000m, calculated.CustomerLiabilityAmount);
+        Assert.Equal(10_000_000m, calculated.RiskFundAdvanceAmount);
+        await new RiskFundLedgerService(db).ApplyOpeningBalanceAsync(
+            staffId,
+            Mutation("scenario-b-opening") with { Amount = 10_000_000m },
+            CancellationToken.None);
+        await service.FundClaimAsync(staffId, claim.Id, "scenario-b-funding", CancellationToken.None);
+        var recovered = await service.RecordRecoveryAsync(
+            staffId,
+            claim.Id,
+            new ClaimRecoveryRequest(
+                RecoverySourceType.CUSTOMER,
+                graph.TripGraph.Trip.Booking.CustomerId.ToString(),
+                10_000_000m,
+                "CUSTOMER-SCENARIO-B",
+                ClaimEvidence("https://evidence.test/scenario-b.pdf"),
+                "scenario-b-recovery",
+                string.Empty),
+            CancellationToken.None);
+
+        Assert.Equal(ProtectionClaimStatus.SETTLED, recovered.Status);
+        Assert.Single(await db.RiskFundTransactions.Where(x =>
+            x.TransactionType == RiskFundTransactionType.CUSTOMER_RECOVERY).ToListAsync());
+        Assert.Empty(await db.WalletTransactions.ToListAsync());
+    }
+
+    [Fact]
+    public async Task BusinessScenarioC_PassiveCustomerIntoxication_CannotCreateFaultAndThirdPartyCanBeFullyResponsible()
+    {
+        await using var db = CreateDbContext();
+        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
+        var service = CreateAccidentService(db);
+
+        Assert.DoesNotContain("CUSTOMER_INTOXICATION", Enum.GetNames<AccidentRootCause>());
+        var claim = await service.SaveAssessmentAsync(
+            Guid.NewGuid(),
+            graph.Accident.Id,
+            new LiabilityAssessmentRequest(
+                0m, 0m, 100m, 0m, 0m,
+                DriverFaultLevel.NO_FAULT,
+                VehicleDefectAwareness.UNKNOWN,
+                [new LiabilityCauseRequest(
+                    AccidentRootCause.THIRD_PARTY_ERROR,
+                    ResponsiblePartyType.THIRD_PARTY,
+                    100m)]),
+            true,
+            CancellationToken.None);
+        var result = await service.CalculateClaimAsync(
+            Guid.NewGuid(),
+            claim.Id,
+            new CalculateClaimRequest(10_000_000m, 10_000_000m, 0m, 0m, false),
+            CancellationToken.None);
+
+        Assert.Equal(0m, result.DriverLiabilityAmount);
+        Assert.Equal(0m, result.CustomerLiabilityAmount);
+        Assert.Equal(10_000_000m, result.ThirdPartyLiabilityAmount);
+    }
+
+    [Fact]
+    public async Task BusinessScenarioD_ThirdPartyFault_RiskFundAdvanceIsRecoverableAndReplenishedExactlyOnce()
+    {
+        await using var db = CreateDbContext();
+        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
+        var service = CreateAccidentService(db);
+        var staffId = Guid.NewGuid();
+        var claim = await service.SaveAssessmentAsync(
+            staffId,
+            graph.Accident.Id,
+            new LiabilityAssessmentRequest(
+                0m, 0m, 100m, 0m, 0m,
+                DriverFaultLevel.NO_FAULT,
+                VehicleDefectAwareness.UNKNOWN,
+                [new LiabilityCauseRequest(
+                    AccidentRootCause.THIRD_PARTY_ERROR,
+                    ResponsiblePartyType.THIRD_PARTY,
+                    100m)]),
+            true,
+            CancellationToken.None);
+        var calculated = await service.CalculateClaimAsync(
+            staffId,
+            claim.Id,
+            new CalculateClaimRequest(12_000_000m, 12_000_000m, 0m, 12_000_000m, false),
+            CancellationToken.None);
+
+        Assert.Equal(12_000_000m, calculated.RiskFundAdvanceAmount);
+        Assert.Equal(0m, calculated.RiskFundPermanentLossAmount);
+        await new RiskFundLedgerService(db).ApplyOpeningBalanceAsync(
+            staffId,
+            Mutation("scenario-d-opening") with { Amount = 12_000_000m },
+            CancellationToken.None);
+        await service.FundClaimAsync(staffId, claim.Id, "scenario-d-funding", CancellationToken.None);
+        var request = new ClaimRecoveryRequest(
+            RecoverySourceType.THIRD_PARTY,
+            "THIRD-PARTY-SCENARIO-D",
+            12_000_000m,
+            "THIRD-PARTY-PAYMENT-D",
+            ClaimEvidence("https://evidence.test/scenario-d.pdf"),
+            "scenario-d-recovery",
+            string.Empty);
+        var recovered = await service.RecordRecoveryAsync(
+            staffId, claim.Id, request, CancellationToken.None);
+        var replay = await service.RecordRecoveryAsync(
+            staffId, claim.Id, request, CancellationToken.None);
+
+        Assert.Equal(recovered, replay);
+        Assert.Equal(12_000_000m, (await db.RiskFundAccounts.SingleAsync()).CurrentBalance);
+        Assert.Single(await db.RiskFundTransactions.Where(x =>
+            x.TransactionType == RiskFundTransactionType.THIRD_PARTY_RECOVERY).ToListAsync());
+    }
+
+    [Fact]
+    public async Task BusinessScenarioE_LatentBrakeDefect_AssignsVehicleWithoutInventingHumanFault()
+    {
+        await using var db = CreateDbContext();
+        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
+        var service = CreateAccidentService(db);
+        var claim = await service.SaveAssessmentAsync(
+            Guid.NewGuid(),
+            graph.Accident.Id,
+            new LiabilityAssessmentRequest(
+                0m, 0m, 0m, 100m, 0m,
+                DriverFaultLevel.NO_FAULT,
+                VehicleDefectAwareness.NEITHER_COULD_REASONABLY_KNOW,
+                [new LiabilityCauseRequest(
+                    AccidentRootCause.VEHICLE_PRE_EXISTING_DEFECT,
+                    ResponsiblePartyType.VEHICLE,
+                    100m)]),
+            true,
+            CancellationToken.None);
+        var result = await service.CalculateClaimAsync(
+            Guid.NewGuid(),
+            claim.Id,
+            new CalculateClaimRequest(10_000_000m, 10_000_000m, 0m, 10_000_000m, false),
+            CancellationToken.None);
+
+        Assert.Equal(0m, result.DriverLiabilityAmount);
+        Assert.Equal(0m, result.CustomerLiabilityAmount);
+        Assert.Equal(0m, result.ThirdPartyLiabilityAmount);
+        Assert.Equal(0m, result.RiskFundAdvanceAmount);
+        Assert.Equal(10_000_000m, result.RiskFundPermanentLossAmount);
+    }
+
+    [Fact]
+    public async Task BusinessScenarioF_ConcealedKnownDefect_AssignsCustomerWithoutBlamingDriver()
+    {
+        await using var db = CreateDbContext();
+        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
+        var service = CreateAccidentService(db);
+        var claim = await service.SaveAssessmentAsync(
+            Guid.NewGuid(),
+            graph.Accident.Id,
+            new LiabilityAssessmentRequest(
+                0m, 100m, 0m, 0m, 0m,
+                DriverFaultLevel.NO_FAULT,
+                VehicleDefectAwareness.CUSTOMER_KNEW,
+                [new LiabilityCauseRequest(
+                    AccidentRootCause.VEHICLE_PRE_EXISTING_DEFECT,
+                    ResponsiblePartyType.CUSTOMER,
+                    100m)]),
+            true,
+            CancellationToken.None);
+        var result = await service.CalculateClaimAsync(
+            Guid.NewGuid(),
+            claim.Id,
+            new CalculateClaimRequest(10_000_000m, 10_000_000m, 0m, 10_000_000m, false),
+            CancellationToken.None);
+
+        Assert.Equal(0m, result.DriverLiabilityAmount);
+        Assert.Equal(10_000_000m, result.CustomerLiabilityAmount);
+        Assert.Equal(10_000_000m, result.RiskFundAdvanceAmount);
+        Assert.Equal(10_000_000m, result.OutstandingRecoveryAmount);
+        Assert.Empty(await db.WalletTransactions.ToListAsync());
     }
 
     [Fact]

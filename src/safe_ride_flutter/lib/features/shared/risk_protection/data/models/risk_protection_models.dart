@@ -132,7 +132,7 @@ class ProtectionClaimSummary {
     required this.status,
     this.insuranceStatus = '',
     this.eligibleDamageAmount = 0,
-    this.insuranceCoveredAmount = 0,
+    this.insuranceApprovedAmount = 0,
     this.riskFundAdvanceAmount = 0,
     this.riskFundPermanentLossAmount = 0,
     this.driverLiabilityAmount = 0,
@@ -147,7 +147,7 @@ class ProtectionClaimSummary {
   final String status;
   final String insuranceStatus;
   final double eligibleDamageAmount;
-  final double insuranceCoveredAmount;
+  final double insuranceApprovedAmount;
   final double riskFundAdvanceAmount;
   final double riskFundPermanentLossAmount;
   final double driverLiabilityAmount;
@@ -163,7 +163,7 @@ class ProtectionClaimSummary {
         status: json['status']?.toString() ?? '',
         insuranceStatus: json['insuranceStatus']?.toString() ?? '',
         eligibleDamageAmount: _asDouble(json['eligibleDamageAmount']),
-        insuranceCoveredAmount: _asDouble(json['insuranceCoveredAmount']),
+        insuranceApprovedAmount: _asDouble(json['insuranceApprovedAmount']),
         riskFundAdvanceAmount: _asDouble(json['riskFundAdvanceAmount']),
         riskFundPermanentLossAmount: _asDouble(
           json['riskFundPermanentLossAmount'],

@@ -20,9 +20,15 @@ void main() {
     ]);
   });
 
-  test('safety report reason codes are generated from the selected type', () {
-    expect(safetyReportReasonCodeForType('UNSAFE_CUSTOMER'), 'UNSAFE_CUSTOMER');
-    expect(safetyReportReasonCodeForType('VEHICLE_ISSUE'), 'VEHICLE_ISSUE');
+  test('safety report reason codes match each backend enum contract', () {
+    expect(safetyReportReasonCodesForType('UNSAFE_CUSTOMER'), const [
+      'DISTRACTING',
+      'VIOLENT',
+      'INTERFERING_WITH_VEHICLE',
+      'UNSAFE_REQUEST',
+      'OTHER',
+    ]);
+    expect(safetyReportReasonCodesForType('VEHICLE_ISSUE'), vehicleFaultTypes);
   });
 
   test(
@@ -66,10 +72,10 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('pre-trip evidence uses camera and shows the captured photo', (
+  testWidgets('pre-trip keeps camera primary and gallery available', (
     tester,
   ) async {
-    ImageSource? requestedSource;
+    final requestedSources = <ImageSource>[];
     final evidence = XFile.fromData(
       base64Decode(
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
@@ -89,7 +95,7 @@ void main() {
               onPressed: () => showPreTripSafetyCheckDialog(
                 context,
                 pickEvidenceImage: (source) async {
-                  requestedSource = source;
+                  requestedSources.add(source);
                   return evidence;
                 },
               ),
@@ -102,7 +108,7 @@ void main() {
 
     await tester.tap(find.text('open pre-trip'));
     await tester.pumpAndSettle();
-    final captureButton = find.widgetWithText(OutlinedButton, 'Chụp ảnh');
+    final captureButton = find.text('Chụp ảnh', skipOffstage: false);
     await tester.dragUntilVisible(
       captureButton,
       find.byType(SingleChildScrollView),
@@ -111,12 +117,18 @@ void main() {
     await tester.tap(captureButton);
     await tester.pumpAndSettle();
 
-    expect(requestedSource, ImageSource.camera);
-    expect(
-      find.text('pretrip-camera.png', skipOffstage: false),
-      findsOneWidget,
-    );
+    expect(requestedSources, [ImageSource.camera]);
+    expect(find.byType(Image, skipOffstage: false), findsOneWidget);
     expect(find.text('Chụp lại', skipOffstage: false), findsOneWidget);
+
+    final galleryButton = find.widgetWithText(
+      OutlinedButton,
+      'Chọn từ thư viện',
+    );
+    await tester.ensureVisible(galleryButton);
+    await tester.tap(galleryButton);
+    await tester.pumpAndSettle();
+    expect(requestedSources, [ImageSource.camera, ImageSource.gallery]);
     expect(tester.takeException(), isNull);
   });
 
@@ -212,15 +224,24 @@ void main() {
     await tester.tap(find.text('Chụp ảnh bằng chứng (tùy chọn)'));
     await tester.pumpAndSettle();
 
-    expect(find.text('1/3 ảnh', skipOffstage: false), findsOneWidget);
+    expect(find.text('1 / 3 ảnh', skipOffstage: false), findsOneWidget);
     expect(find.text('Chụp ảnh', skipOffstage: false), findsOneWidget);
 
-    await tester.tap(find.text('Chụp ảnh', skipOffstage: false));
+    final addPhotoButton = find.text('Chụp ảnh', skipOffstage: false);
+    await tester.ensureVisible(addPhotoButton);
+    await tester.pumpAndSettle();
+    await tester.tap(addPhotoButton);
     await tester.pumpAndSettle();
 
-    expect(find.text('2/3 ảnh', skipOffstage: false), findsOneWidget);
+    expect(find.text('2 / 3 ảnh', skipOffstage: false), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Kết thúc vì an toàn'));
+    final submitButton = find.widgetWithText(
+      FilledButton,
+      'Kết thúc vì an toàn',
+    );
+    await tester.ensureVisible(submitButton);
+    await tester.pumpAndSettle();
+    await tester.tap(submitButton);
     await tester.pumpAndSettle();
 
     expect(result?.evidence, hasLength(2));

@@ -2628,4 +2628,154 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get startedByMistakeReason => '誤って開始した';
+
+  @override
+  String get riskStatusReported => '受付済み';
+
+  @override
+  String get riskStatusEvidenceCollection => '証拠を収集中';
+
+  @override
+  String get riskStatusUnderReview => '審査中';
+
+  @override
+  String get riskStatusLiabilityPending => '責任判定待ち';
+
+  @override
+  String get riskStatusSettlement => '補償処理中';
+
+  @override
+  String get riskStatusClosed => '終了';
+
+  @override
+  String get riskStatusRejected => '却下';
+
+  @override
+  String get riskCategoryDriverInjury => '運転者の負傷';
+
+  @override
+  String get riskCategoryCustomerVehicleDamage => 'お客様車両の損害';
+
+  @override
+  String get riskCategoryThirdPartyDamage => '第三者損害';
+
+  @override
+  String get riskCategoryMultiple => '複数の損害';
+
+  @override
+  String get riskFaultNoFault => '過失なし';
+
+  @override
+  String get riskFaultOrdinary => '通常の過失';
+
+  @override
+  String get riskFaultGross => '重大な過失';
+
+  @override
+  String get riskFaultIntentional => '故意の不正行為';
+
+  @override
+  String get riskAssessmentDraft => '下書き';
+
+  @override
+  String get riskAssessmentPendingConfirmation => '確認待ち';
+
+  @override
+  String get riskAssessmentConfirmed => '確認済み';
+
+  @override
+  String get riskAssessmentDisputed => '再審査中';
+
+  @override
+  String get riskClaimApproved => '承認済み';
+
+  @override
+  String get riskClaimPendingFunding => '資金提供待ち';
+
+  @override
+  String get riskClaimFunded => '資金提供済み';
+
+  @override
+  String get riskClaimRecovery => '回収中';
+
+  @override
+  String get riskClaimSettled => '照合済み';
+
+  @override
+  String get riskLiabilityPartiallyPaid => '一部支払済み';
+
+  @override
+  String get riskLiabilityPaid => '支払済み';
+
+  @override
+  String get riskLiabilityWaived => '免除済み';
+
+  @override
+  String get riskRoleDriver => '運転者';
+
+  @override
+  String get riskRoleCustomer => 'お客様';
+
+  @override
+  String get riskRoleThirdParty => '第三者';
+
+  @override
+  String get riskRoleVehicle => '車両';
+
+  @override
+  String get riskRoleObjective => '客観的要因';
+
+  @override
+  String get riskReasonDistracting => '注意をそらす行為';
+
+  @override
+  String get riskReasonViolent => '暴力行為';
+
+  @override
+  String get riskReasonInterferingVehicle => '車両操作への干渉';
+
+  @override
+  String get riskReasonUnsafeRequest => '危険な要求';
+
+  @override
+  String get riskReasonOther => 'その他の理由';
+
+  @override
+  String get riskInsurancePending => 'スタッフ確認待ち';
+
+  @override
+  String get riskInsuranceVerified => '確認済み';
+
+  @override
+  String get riskInsuranceExpired => '期限切れ';
+
+  @override
+  String get riskInsuranceOther => 'その他の保険';
+
+  @override
+  String get riskIncidentInformation => '事故情報';
+
+  @override
+  String get riskResponsibilityResult => '責任判定結果';
+
+  @override
+  String get riskProtectionOutcome => '補償結果';
+
+  @override
+  String get riskEligibleDamage => '対象損害額';
+
+  @override
+  String get mandatoryTplExplanation =>
+      '自賠責保険は主に第三者を保護するもので、お客様車両の損害を自動的に補償するものではありません。';
+
+  @override
+  String get physicalDamageExplanation =>
+      '車両損害保険は、確認済みの契約条件に基づき、お客様車両の損害に適用される場合があります。';
+
+  @override
+  String get insurerNoGuarantee => '契約を保存しても、保険会社による支払い承認を保証するものではありません。';
+
+  @override
+  String get documentUrlDeferredHint =>
+      '現在は書類リンクのみ保存します。信頼できるリンクを使用してください。安全な共通ストレージ導入後に直接アップロードを追加します。';
 }
