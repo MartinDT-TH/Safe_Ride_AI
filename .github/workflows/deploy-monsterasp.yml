@@ -4,14 +4,20 @@ on:
   push:
     branches:
       - main_demo_project # CHANGE ME: nhánh source cần theo dõi
+      - main_demo_project
 
   workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: monsterasp-deploy
+  cancel-in-progress: false
+
 env:
   DOTNET_VERSION: "10.0.203" # CHANGE ME nếu project không dùng .NET 8
+  DOTNET_VERSION: "8.0.x"
 
   API_PROJECT: "./src/SRD_Master/SafeRide.API/SafeRide.API.csproj"
   # CHANGE ME nếu đường dẫn API khác
@@ -68,8 +74,9 @@ jobs:
     name: Publish to Deploy Branch
     runs-on: windows-latest
 
-    # Không có needs: test
-    # Vì vậy publish vẫn chạy dù test bị fail.
+    # Nếu muốn chỉ deploy khi test PASS thì bỏ comment 2 dòng dưới:
+    # needs: test
+    # if: success()
 
     steps:
       - name: Checkout source
@@ -125,21 +132,49 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Push publish output to deploy branch
+      # Quan trọng:
+      # Checkout branch deploy hiện tại để GIỮ lịch sử Git.
+      - name: Checkout deploy branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.DEPLOY_BRANCH }}
+          path: deploy-repo
+          fetch-depth: 0
+
+      - name: Update deploy branch
         shell: powershell
         run: |
-          cd "${{ env.PUBLISH_DIRECTORY }}"
+          $publishDir = (Resolve-Path "${{ env.PUBLISH_DIRECTORY }}").Path
+          $deployDir = "${{ github.workspace }}\deploy-repo"
 
-          git init
+          Write-Host "Publish directory: $publishDir"
+          Write-Host "Deploy directory: $deployDir"
+
+          # Xóa publish cũ nhưng GIỮ .git
+          Get-ChildItem -Path $deployDir -Force |
+            Where-Object { $_.Name -ne ".git" } |
+            Remove-Item -Recurse -Force
+
+          # Copy publish mới vào deploy branch
+          Get-ChildItem -Path $publishDir -Force |
+            Copy-Item -Destination $deployDir -Recurse -Force
+
+          Set-Location $deployDir
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git checkout -b "${{ env.DEPLOY_BRANCH }}"
-
           git add --all
+
+          # Không tạo commit rỗng nếu publish không thay đổi
+          git diff --cached --quiet
+
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "No deploy changes detected."
+            exit 0
+          }
+
           git commit -m "Deploy ${{ github.sha }}"
 
-          git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
-
-          git push origin "${{ env.DEPLOY_BRANCH }}" --force
+          # KHÔNG dùng --force
+          git push origin "${{ env.DEPLOY_BRANCH }}"
