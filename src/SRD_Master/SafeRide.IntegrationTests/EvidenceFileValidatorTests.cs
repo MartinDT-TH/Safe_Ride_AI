@@ -86,7 +86,7 @@ public sealed class EvidenceFileValidatorTests
     [Theory]
     [InlineData("Development", typeof(NonProductionFileSafetyScanner))]
     [InlineData("Testing", typeof(NonProductionFileSafetyScanner))]
-    [InlineData("Production", typeof(UnconfiguredFileSafetyScanner))]
+    [InlineData("Production", typeof(RemoteHttpFileSafetyScanner))]
     public void InfrastructureRegistration_GuardsNonProductionScanner(
         string environmentName,
         Type expectedScannerType)

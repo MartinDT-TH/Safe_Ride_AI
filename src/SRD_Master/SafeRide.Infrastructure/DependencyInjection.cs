@@ -65,6 +65,26 @@ public static class DependencyInjection
         var backgroundJobsEnabled = configuration.GetValue<bool>("BackgroundJobs:Enabled");
 
         services
+            .AddOptions<EvidenceFileSafetyOptions>()
+            .Bind(configuration.GetSection(EvidenceFileSafetyOptions.SectionName));
+
+        services.AddHttpClient<RemoteHttpFileSafetyScanner>((provider, client) =>
+        {
+            var options = provider
+                .GetRequiredService<IOptions<EvidenceFileSafetyOptions>>()
+                .Value;
+            if (Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out var baseUri))
+            {
+                client.BaseAddress = baseUri;
+            }
+
+            if (options.TimeoutSeconds > 0)
+            {
+                client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+            }
+        });
+
+        services
             .AddOptions<AiChatOptions>()
             .Bind(configuration.GetSection(AiChatOptions.SectionName))
             .PostConfigure(options =>
@@ -315,7 +335,8 @@ public static class DependencyInjection
         }
         else
         {
-            services.AddSingleton<IFileSafetyScanner, UnconfiguredFileSafetyScanner>();
+            services.AddSingleton<IFileSafetyScanner>(provider =>
+                provider.GetRequiredService<RemoteHttpFileSafetyScanner>());
         }
         services.AddSingleton<IEvidenceFileValidator, EvidenceFileValidator>();
         services.AddSingleton<IPreTripVehicleCheckEvidenceStorage, CloudinaryPreTripVehicleCheckEvidenceStorage>();
