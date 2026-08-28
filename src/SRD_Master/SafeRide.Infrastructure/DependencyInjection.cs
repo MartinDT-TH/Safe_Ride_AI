@@ -68,20 +68,17 @@ public static class DependencyInjection
             .AddOptions<EvidenceFileSafetyOptions>()
             .Bind(configuration.GetSection(EvidenceFileSafetyOptions.SectionName));
 
+        services.AddHttpClient<PublicDemoFileSafetyScanner>((provider, client) =>
+        {
+            ConfigureFileSafetyClient(
+                client,
+                provider.GetRequiredService<IOptions<EvidenceFileSafetyOptions>>().Value);
+        });
         services.AddHttpClient<RemoteHttpFileSafetyScanner>((provider, client) =>
         {
-            var options = provider
-                .GetRequiredService<IOptions<EvidenceFileSafetyOptions>>()
-                .Value;
-            if (Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out var baseUri))
-            {
-                client.BaseAddress = baseUri;
-            }
-
-            if (options.TimeoutSeconds > 0)
-            {
-                client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
-            }
+            ConfigureFileSafetyClient(
+                client,
+                provider.GetRequiredService<IOptions<EvidenceFileSafetyOptions>>().Value);
         });
 
         services
@@ -329,15 +326,50 @@ public static class DependencyInjection
         services.AddSingleton<IIdentityDocumentStorage, CloudinaryIdentityDocumentStorage>();
         services.AddSingleton<ITripReturnEvidenceStorage, CloudinaryTripReturnEvidenceStorage>();
         services.AddSingleton<IAccidentEvidenceStorage, CloudinaryAccidentEvidenceStorage>();
-        if (environment.IsDevelopment() || environment.IsEnvironment("Testing"))
+        services.AddSingleton<NonProductionFileSafetyScanner>();
+        services.AddSingleton<UnconfiguredFileSafetyScanner>();
+        services.AddSingleton<IFileSafetyScanner>(provider =>
         {
-            services.AddSingleton<IFileSafetyScanner, NonProductionFileSafetyScanner>();
-        }
-        else
-        {
-            services.AddSingleton<IFileSafetyScanner>(provider =>
-                provider.GetRequiredService<RemoteHttpFileSafetyScanner>());
-        }
+            if (environment.IsDevelopment())
+            {
+                return provider.GetRequiredService<NonProductionFileSafetyScanner>();
+            }
+
+            var options = provider
+                .GetRequiredService<IOptions<EvidenceFileSafetyOptions>>()
+                .Value;
+            var logger = provider
+                .GetRequiredService<ILoggerFactory>()
+                .CreateLogger("SafeRide.Infrastructure.FileSafety");
+
+            if (!options.Enabled)
+            {
+                return provider.GetRequiredService<UnconfiguredFileSafetyScanner>();
+            }
+
+            if (string.Equals(options.ScannerType, "PublicDemo", StringComparison.OrdinalIgnoreCase)
+                && options.AllowPublicDemo)
+            {
+                logger.LogWarning(
+                    "Evidence file scanning is using PublicDemo mode. PublicDemo must not be used with real accident evidence.");
+                return provider.GetRequiredService<PublicDemoFileSafetyScanner>();
+            }
+
+            if (string.Equals(options.ScannerType, "Demo", StringComparison.OrdinalIgnoreCase)
+                && options.AllowDemo)
+            {
+                logger.LogWarning(
+                    "Evidence file scanning is using Demo mode. NonProductionFileSafetyScanner does not provide production malware protection.");
+                return provider.GetRequiredService<NonProductionFileSafetyScanner>();
+            }
+
+            if (string.Equals(options.ScannerType, "RemoteHttp", StringComparison.OrdinalIgnoreCase))
+            {
+                return provider.GetRequiredService<RemoteHttpFileSafetyScanner>();
+            }
+
+            return provider.GetRequiredService<UnconfiguredFileSafetyScanner>();
+        });
         services.AddSingleton<IEvidenceFileValidator, EvidenceFileValidator>();
         services.AddSingleton<IPreTripVehicleCheckEvidenceStorage, CloudinaryPreTripVehicleCheckEvidenceStorage>();
         services.AddSingleton<ISafetyTerminationEvidenceStorage, CloudinarySafetyTerminationEvidenceStorage>();
@@ -619,6 +651,21 @@ public static class DependencyInjection
 
         services.AddAuthorization();
         return services;
+    }
+
+    private static void ConfigureFileSafetyClient(
+        HttpClient client,
+        EvidenceFileSafetyOptions options)
+    {
+        if (Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out var baseUri))
+        {
+            client.BaseAddress = baseUri;
+        }
+
+        if (options.TimeoutSeconds > 0)
+        {
+            client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+        }
     }
 
 }

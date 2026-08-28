@@ -65,28 +65,25 @@ public sealed class EvidenceFileValidatorTests
     }
 
     [Fact]
-    public async Task NonProductionBypass_IsAcceptedOnlyOutsideProduction()
+    public async Task NonProductionBypass_IsAcceptedForExplicitDemoSelection()
     {
         var request = Request([0xFF, 0xD8, 0xFF]);
         var testing = TestEvidenceValidation.Create(new SafeRide.Infrastructure.Services.NonProductionFileSafetyScanner());
+        var validated = await testing.ValidateAsync(request, CancellationToken.None);
+        await validated.Content.DisposeAsync();
         var production = TestEvidenceValidation.Create(
             new SafeRide.Infrastructure.Services.NonProductionFileSafetyScanner(),
             "Production");
-
-        var validated = await testing.ValidateAsync(request, CancellationToken.None);
-        await validated.Content.DisposeAsync();
-        var exception = await Assert.ThrowsAsync<BookingException>(() => production.ValidateAsync(
+        var productionValidated = await production.ValidateAsync(
             request with { Content = new MemoryStream([0xFF, 0xD8, 0xFF]) },
-            CancellationToken.None));
-
-        Assert.Equal("test.evidence_scanner_unavailable", exception.Code);
-        Assert.Equal(503, exception.StatusCode);
+            CancellationToken.None);
+        await productionValidated.Content.DisposeAsync();
     }
 
     [Theory]
     [InlineData("Development", typeof(NonProductionFileSafetyScanner))]
-    [InlineData("Testing", typeof(NonProductionFileSafetyScanner))]
-    [InlineData("Production", typeof(RemoteHttpFileSafetyScanner))]
+    [InlineData("Testing", typeof(UnconfiguredFileSafetyScanner))]
+    [InlineData("Production", typeof(UnconfiguredFileSafetyScanner))]
     public void InfrastructureRegistration_GuardsNonProductionScanner(
         string environmentName,
         Type expectedScannerType)

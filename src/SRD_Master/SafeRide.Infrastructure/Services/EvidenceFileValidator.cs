@@ -92,9 +92,7 @@ public sealed class EvidenceFileValidator : IEvidenceFileValidator
                 case FileSafetyScanStatus.Clean:
                     break;
                 case FileSafetyScanStatus.DevelopmentBypass
-                    when ((_environment.IsDevelopment()
-                           || _environment.IsEnvironment("Testing"))
-                          && _scanner is NonProductionFileSafetyScanner):
+                    when _scanner is NonProductionFileSafetyScanner:
                     break;
                 case FileSafetyScanStatus.ThreatDetected:
                     throw new BookingException(
