@@ -6,6 +6,7 @@ import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../../dependency_injection/injection.dart';
 import '../../data/models/risk_protection_models.dart';
 import '../providers/risk_protection_provider.dart';
+import '../risk_protection_labels.dart';
 import 'accident_details_page.dart';
 
 class DriverLiabilitiesPage extends StatelessWidget {
@@ -90,10 +91,16 @@ class _LiabilityCard extends StatelessWidget {
                   ),
                 ),
               ),
-              Chip(label: Text(item.status)),
+              Chip(
+                label: Text(
+                  driverLiabilityStatusLabel(context.l10n, item.status),
+                ),
+              ),
             ],
           ),
-          Text('${context.l10n.claimStatus}: ${item.claimStatus ?? '—'}'),
+          Text(
+            '${context.l10n.claimStatus}: ${claimStatusLabel(context.l10n, item.claimStatus)}',
+          ),
           const Divider(height: 24),
           _AmountRow(
             label: context.l10n.attributableDamage,
@@ -110,7 +117,10 @@ class _LiabilityCard extends StatelessWidget {
             emphasize: true,
           ),
           const SizedBox(height: 6),
-          Text(item.faultLevel, style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            driverFaultLevelLabel(context.l10n, item.faultLevel),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
           if (item.recoveries.isNotEmpty) ...[
             const Divider(height: 24),
             Text(

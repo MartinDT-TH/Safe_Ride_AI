@@ -9,6 +9,7 @@ import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../../dependency_injection/injection.dart';
 import '../../data/models/risk_protection_models.dart';
 import '../providers/risk_protection_provider.dart';
+import '../risk_protection_labels.dart';
 
 class AccidentDetailsPage extends StatelessWidget {
   const AccidentDetailsPage({required this.accidentId, super.key});
@@ -359,12 +360,23 @@ class _AccidentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _SectionCard(
-    title: '#${accident.id} · Trip #${accident.tripId}',
+    title: context.l10n.riskIncidentInformation,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _Row(label: context.l10n.accidentStatus, value: accident.status),
-        _Row(label: context.l10n.accidentCategory, value: accident.category),
+        _Row(
+          label: context.l10n.riskProtectionCaseTitle,
+          value: '#${accident.id}',
+        ),
+        _Row(label: context.l10n.tripCode, value: '#${accident.tripId}'),
+        _Row(
+          label: context.l10n.accidentStatus,
+          value: accidentStatusLabel(context.l10n, accident.status),
+        ),
+        _Row(
+          label: context.l10n.accidentCategory,
+          value: accidentCategoryLabel(context.l10n, accident.category),
+        ),
         _Row(
           label: context.l10n.accidentOccurredAt,
           value: DateFormat('dd/MM/yyyy HH:mm').format(accident.occurredAt),
@@ -410,13 +422,16 @@ class _EvidenceCard extends StatelessWidget {
                                   const Icon(Icons.broken_image_outlined),
                             ),
                           ),
-                    title: Text(item.originalFileName ?? item.type),
+                    title: Text(
+                      item.originalFileName ??
+                          context.l10n.riskProtectionEvidence,
+                    ),
                     subtitle: Text(
-                      item.description?.isNotEmpty == true
-                          ? item.description!
-                          : DateFormat(
-                              'dd/MM/yyyy HH:mm',
-                            ).format(item.createdAt),
+                      [
+                        DateFormat('dd/MM/yyyy HH:mm').format(item.createdAt),
+                        if (item.description?.isNotEmpty == true)
+                          item.description!,
+                      ].join(' · '),
                     ),
                   ),
                 )
@@ -433,7 +448,7 @@ class _AssessmentCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final assessment = accident.assessment;
     return _SectionCard(
-      title: context.l10n.riskProtectionAssessment,
+      title: context.l10n.riskResponsibilityResult,
       action: assessment?.status == 'CONFIRMED'
           ? TextButton(
               onPressed: () => _dispute(context, accident),
@@ -444,29 +459,32 @@ class _AssessmentCard extends StatelessWidget {
           ? Text(context.l10n.statusPending)
           : Column(
               children: [
-                _Row(label: context.l10n.statusLabel, value: assessment.status),
                 _Row(
-                  label: 'Driver',
-                  value:
-                      '${assessment.driverFaultPercentage.toStringAsFixed(0)}% · ${assessment.driverFaultLevel}',
+                  label: context.l10n.statusLabel,
+                  value: assessmentStatusLabel(context.l10n, assessment.status),
                 ),
                 _Row(
-                  label: 'Customer',
+                  label: participantLabel(context.l10n, 'DRIVER'),
+                  value:
+                      '${assessment.driverFaultPercentage.toStringAsFixed(0)}% · ${driverFaultLevelLabel(context.l10n, assessment.driverFaultLevel)}',
+                ),
+                _Row(
+                  label: participantLabel(context.l10n, 'CUSTOMER'),
                   value:
                       '${assessment.customerFaultPercentage.toStringAsFixed(0)}%',
                 ),
                 _Row(
-                  label: 'Third party',
+                  label: participantLabel(context.l10n, 'THIRD_PARTY'),
                   value:
                       '${assessment.thirdPartyFaultPercentage.toStringAsFixed(0)}%',
                 ),
                 _Row(
-                  label: 'Vehicle',
+                  label: participantLabel(context.l10n, 'VEHICLE'),
                   value:
                       '${assessment.vehicleFailurePercentage.toStringAsFixed(0)}%',
                 ),
                 _Row(
-                  label: 'Objective',
+                  label: participantLabel(context.l10n, 'OBJECTIVE'),
                   value:
                       '${assessment.objectiveCausePercentage.toStringAsFixed(0)}%',
                 ),
@@ -517,15 +535,22 @@ class _ClaimCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _SectionCard(
-    title: context.l10n.riskProtectionClaim,
+    title: context.l10n.riskProtectionOutcome,
     child: claim == null
         ? Text(context.l10n.noProtectionClaim)
         : Column(
             children: [
-              _Row(label: context.l10n.claimStatus, value: claim!.status),
+              _Row(
+                label: context.l10n.claimStatus,
+                value: claimStatusLabel(context.l10n, claim!.status),
+              ),
+              _Row(
+                label: context.l10n.riskEligibleDamage,
+                value: _money(claim!.eligibleDamageAmount),
+              ),
               _Row(
                 label: context.l10n.insuranceCoverage,
-                value: _money(claim!.insuranceCoveredAmount),
+                value: _money(claim!.insuranceApprovedAmount),
               ),
               _Row(
                 label: context.l10n.riskFundCoverage,
@@ -537,10 +562,6 @@ class _ClaimCard extends StatelessWidget {
               _Row(
                 label: context.l10n.paidAmount,
                 value: _money(claim!.totalPaidToClaimant),
-              ),
-              _Row(
-                label: context.l10n.outstandingAmount,
-                value: _money(claim!.outstandingRecoveryAmount),
               ),
             ],
           ),

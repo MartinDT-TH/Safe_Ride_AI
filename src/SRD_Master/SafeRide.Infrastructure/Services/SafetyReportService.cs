@@ -35,6 +35,12 @@ public sealed class SafetyReportService : ISafetyReportService
             || request.ReportType == SafetyReportType.GENERAL || string.IsNullOrWhiteSpace(request.ReasonCode)
             || string.IsNullOrWhiteSpace(request.Description))
             throw new BookingException("safety_report.invalid", "Loại, lý do và nội dung báo cáo an toàn là bắt buộc.", StatusCodes.Status400BadRequest);
+        var reasonCode = request.ReasonCode.Trim();
+        if (!IsValidReasonCode(request.ReportType, reasonCode))
+            throw new BookingException(
+                "safety_report.invalid_reason",
+                "Lý do báo cáo không phù hợp với loại sự cố an toàn đã chọn.",
+                StatusCodes.Status400BadRequest);
         if (request.Latitude.HasValue != request.Longitude.HasValue
             || request.Latitude is < -90m or > 90m
             || request.Longitude is < -180m or > 180m)
@@ -71,7 +77,7 @@ public sealed class SafetyReportService : ISafetyReportService
             Description = request.Description.Trim(),
             Status = ReportStatus.Pending,
             ReportType = request.ReportType,
-            ReasonCode = request.ReasonCode.Trim(),
+            ReasonCode = reasonCode,
             OccurredAtUtc = now,
             Latitude = request.Latitude,
             Longitude = request.Longitude,
@@ -103,7 +109,7 @@ public sealed class SafetyReportService : ISafetyReportService
                     {
                         SRID = 4326
                     },
-                    EmergencyMessage = $"Safety report {request.ReportType}: {request.ReasonCode.Trim()}",
+                    EmergencyMessage = $"Safety report {request.ReportType}: {reasonCode}",
                     SOSStatus = SOSStatus.Active,
                     CreatedAt = now
                 };
@@ -133,4 +139,14 @@ public sealed class SafetyReportService : ISafetyReportService
             escalation?.Id,
             now);
     }
+
+    private static bool IsValidReasonCode(SafetyReportType reportType, string reasonCode) =>
+        reportType switch
+        {
+            SafetyReportType.UNSAFE_CUSTOMER => Enum.GetNames<UnsafeCustomerReason>()
+                .Contains(reasonCode, StringComparer.Ordinal),
+            SafetyReportType.VEHICLE_ISSUE => Enum.GetNames<VehicleFaultType>()
+                .Contains(reasonCode, StringComparer.Ordinal),
+            _ => false
+        };
 }
