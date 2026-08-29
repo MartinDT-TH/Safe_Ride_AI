@@ -10,6 +10,7 @@ import '../../../../../core/localization/locale_provider.dart';
 import '../../../../../core/constants/app_strings.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
 import '../../../../../core/widgets/app_loading_screen.dart';
+import '../../../../../core/widgets/motorbike_feature_notice.dart';
 import '../../../../../core/widgets/server_error_card.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../shared/profile/data/models/vehicle_model.dart';
@@ -87,7 +88,9 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
     if (catalog != null) {
       setState(() {
         _service = _selectInitialService(catalog.services);
-        _vehicle = catalog.vehicles.firstOrNull;
+        _vehicle = catalog.vehicles
+            .where((vehicle) => !vehicle.isMotorbike)
+            .firstOrNull;
         if (widget.showSchedule) {
           _scheduledAt = DateTime.now().add(Duration(minutes: 31));
         }
@@ -192,6 +195,10 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
         vehicle == null) {
       return;
     }
+    if (vehicle.isMotorbike) {
+      context.read<BookingProvider>().clearFareEstimate();
+      return;
+    }
     if (service.mode == BookingServiceMode.perTrip && _destination == null) {
       context.read<BookingProvider>().clearFareEstimate();
       return;
@@ -228,6 +235,10 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
     }
     if (service == null || vehicle == null) {
       _showMessage(context.l10n.selectServiceAndVehicle);
+      return;
+    }
+    if (vehicle.isMotorbike) {
+      await MotorbikeFeatureNotice.show(context);
       return;
     }
     if (!_isHourly && _destination == null) {
@@ -404,7 +415,13 @@ class _BookingOptionsPageState extends State<BookingOptionsPage> {
                       (vehicle) => _VehicleCard(
                         vehicle: vehicle,
                         selected: vehicle.id == _vehicle?.id,
-                        onTap: () => Navigator.pop(context, vehicle),
+                        onTap: () {
+                          if (vehicle.isMotorbike) {
+                            MotorbikeFeatureNotice.show(context);
+                            return;
+                          }
+                          Navigator.pop(context, vehicle);
+                        },
                       ),
                     ),
                   ],
