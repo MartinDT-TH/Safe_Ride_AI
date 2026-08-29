@@ -259,7 +259,11 @@ public sealed class TripStatusServiceTests
     private static CustomerNoShowReportingService CreateNoShowReportingService(TripStatusFixture fixture) =>
         new(fixture.DbContext, new DateTimeProviderFake(UtcNow),
             new OptionsMonitorFake<CustomerNoShowOptions>(new CustomerNoShowOptions()),
-            new NoOpBookingLifecycleJobScheduler(), fixture.Redis);
+            new NoOpBookingLifecycleJobScheduler(), fixture.Redis,
+            new CustomerBookingPrivilegeService(
+                fixture.DbContext,
+                new DateTimeProviderFake(UtcNow),
+                new OptionsMonitorFake<CustomerNoShowOptions>(new CustomerNoShowOptions())));
 
     [Fact]
     public async Task DriverArrival_VerifiesFreshLocationAndStoresSnapshot()

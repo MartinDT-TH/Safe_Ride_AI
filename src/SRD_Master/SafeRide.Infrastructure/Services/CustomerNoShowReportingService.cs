@@ -19,16 +19,19 @@ public sealed class CustomerNoShowReportingService : ICustomerNoShowReportingSer
     private readonly IOptionsMonitor<CustomerNoShowOptions> _options;
     private readonly IBookingLifecycleJobScheduler _jobScheduler;
     private readonly IRedisService _redisService;
+    private readonly ICustomerBookingPrivilegeService _customerBookingPrivilegeService;
 
     public CustomerNoShowReportingService(ApplicationDbContext dbContext, IDateTimeProvider dateTimeProvider,
         IOptionsMonitor<CustomerNoShowOptions> options, IBookingLifecycleJobScheduler jobScheduler,
-        IRedisService redisService)
+        IRedisService redisService,
+        ICustomerBookingPrivilegeService customerBookingPrivilegeService)
     {
         _dbContext = dbContext;
         _dateTimeProvider = dateTimeProvider;
         _options = options;
         _jobScheduler = jobScheduler;
         _redisService = redisService;
+        _customerBookingPrivilegeService = customerBookingPrivilegeService;
     }
 
     public async Task<CustomerNoShowReportResponse> ReportAsync(Guid driverId, long tripId, CancellationToken cancellationToken)
@@ -168,6 +171,10 @@ public sealed class CustomerNoShowReportingService : ICustomerNoShowReportingSer
         trip.Driver.LastActiveAt = now;
         trip.Driver.UpdatedAt = now;
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await _customerBookingPrivilegeService.RecalculateAsync(
+            trip.Booking.CustomerId,
+            cancellationToken);
 
         await _jobScheduler.CancelJobsForBookingAsync(trip.BookingId, cancellationToken);
         await _redisService.RemoveAsync(RedisKeys.DriverActiveTrip(driverId));

@@ -492,7 +492,8 @@ public sealed class BookingTests
                 new PromotionUnlockRuleStoreFake(),
                 new MatchingPolicyProviderFake(),
                 new BookingLifecycleJobSchedulerFake(),
-                Options.Create(CreateCompensationOptions()));
+                Options.Create(CreateCompensationOptions()),
+                new CustomerBookingPrivilegeServiceFake());
         }
 
         public static readonly Guid CustomerId =
@@ -989,6 +990,20 @@ public sealed class BookingTests
 
         public Task RemoveAsync(
             string promotionCode,
+            CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class CustomerBookingPrivilegeServiceFake : ICustomerBookingPrivilegeService
+    {
+        public Task<CustomerBookingPrivilege> RecalculateAsync(
+            Guid customerId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new CustomerBookingPrivilege { CustomerId = customerId });
+
+        public Task EnsureCanCreateAsync(
+            Guid customerId,
+            BookingType bookingType,
+            DateTime utcNow,
             CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

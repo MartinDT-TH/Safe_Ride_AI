@@ -27,6 +27,7 @@ public sealed class CreateBookingCommandHandler
     private readonly IMatchingPolicyProvider _matchingPolicyProvider;
     private readonly IBookingLifecycleJobScheduler _jobScheduler;
     private readonly IPromotionUnlockRuleStore _promotionUnlockRuleStore;
+    private readonly ICustomerBookingPrivilegeService _customerBookingPrivilegeService;
     private readonly DriverCompensationOptions _compensationOptions;
 
     public CreateBookingCommandHandler(
@@ -42,7 +43,8 @@ public sealed class CreateBookingCommandHandler
         IPromotionUnlockRuleStore promotionUnlockRuleStore,
         IMatchingPolicyProvider matchingPolicyProvider,
         IBookingLifecycleJobScheduler jobScheduler,
-        IOptions<DriverCompensationOptions> compensationOptions)
+        IOptions<DriverCompensationOptions> compensationOptions,
+        ICustomerBookingPrivilegeService customerBookingPrivilegeService)
     {
         _bookingRepository = bookingRepository;
         _unitOfWork = unitOfWork;
@@ -57,6 +59,7 @@ public sealed class CreateBookingCommandHandler
         _matchingPolicyProvider = matchingPolicyProvider;
         _jobScheduler = jobScheduler;
         _compensationOptions = compensationOptions.Value;
+        _customerBookingPrivilegeService = customerBookingPrivilegeService;
     }
 
     public async Task<CreateBookingResponse> Handle(
@@ -64,6 +67,11 @@ public sealed class CreateBookingCommandHandler
         CancellationToken cancellationToken)
     {
         var utcNow = _dateTimeProvider.UtcNow;
+        await _customerBookingPrivilegeService.EnsureCanCreateAsync(
+            request.CustomerId,
+            request.BookingType,
+            utcNow,
+            cancellationToken);
         // Flow: validate booking type, pickup data, and duplicate active now-booking before loading related state.
         var surgeEvaluationTime = BookingScheduleRules.ResolveSurgeEvaluationTime(
             request.BookingType,

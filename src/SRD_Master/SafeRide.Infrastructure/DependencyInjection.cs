@@ -388,6 +388,7 @@ public static class DependencyInjection
         services.AddScoped<ITripCustomerNoShowReminderService, TripCustomerNoShowReminderService>();
         services.AddScoped<ICustomerNoShowEligibilityService, CustomerNoShowEligibilityService>();
         services.AddScoped<ICustomerNoShowReportingService, CustomerNoShowReportingService>();
+        services.AddScoped<ICustomerBookingPrivilegeService, CustomerBookingPrivilegeService>();
         services.AddScoped<ITripSharingService, TripSharingService>();
         services.AddScoped<ITripChatService, TripChatService>();
         services.AddSingleton<ITripChatContentFilter, TripChatContentFilter>();
