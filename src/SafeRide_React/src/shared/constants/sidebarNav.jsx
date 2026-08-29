@@ -105,6 +105,7 @@ SIDEBAR_NAV_ITEMS.push(
     label: "Tai nạn & Trách nhiệm",
     icon: <FontAwesomeIcon icon={faClipboardList} />,
   },
+  { id: "staff-customer-no-shows", label: "Duyệt no-show", icon: <FontAwesomeIcon icon={faClipboardCheck} /> },
 );
 export const SIDEBAR_FOOTER_DEFS = [
   {
