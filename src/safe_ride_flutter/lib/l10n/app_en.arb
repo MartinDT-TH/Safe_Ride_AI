@@ -267,4 +267,5 @@
   ,"riskInsurancePending":"Awaiting Staff verification","riskInsuranceVerified":"Verified","riskInsuranceExpired":"Expired","riskInsuranceOther":"Other insurance"
   ,"riskIncidentInformation":"Incident information","riskResponsibilityResult":"Responsibility result","riskProtectionOutcome":"Protection outcome","riskEligibleDamage":"Eligible damage"
   ,"mandatoryTplExplanation":"Mandatory third-party liability insurance mainly protects third parties; it does not automatically cover damage to the customer's vehicle.","physicalDamageExplanation":"Physical damage insurance may cover customer vehicle damage under a verified policy.","insurerNoGuarantee":"Saving a policy does not guarantee that the insurer will approve payment.","documentUrlDeferredHint":"The app currently stores a document link only. Use a trusted link; direct upload will be added when shared secure storage is available."
+  ,"motorbikeFeatureSuspendedTitle":"Motorbike service temporarily unavailable","motorbikeFeatureSuspendedMessage":"Since August 20, this feature has been temporarily unavailable.","acknowledge":"Got it"
 }

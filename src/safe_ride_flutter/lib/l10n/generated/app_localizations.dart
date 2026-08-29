@@ -5377,6 +5377,24 @@ abstract class AppLocalizations {
   /// In vi, this message translates to:
   /// **'Hiện hệ thống chỉ lưu liên kết tài liệu. Chỉ dùng liên kết tin cậy; tải tệp trực tiếp sẽ được bổ sung khi có kho lưu trữ an toàn dùng chung.'**
   String get documentUrlDeferredHint;
+
+  /// No description provided for @motorbikeFeatureSuspendedTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Dịch vụ xe máy tạm ngừng'**
+  String get motorbikeFeatureSuspendedTitle;
+
+  /// No description provided for @motorbikeFeatureSuspendedMessage.
+  ///
+  /// In vi, this message translates to:
+  /// **'Từ ngày 20/8, chức năng đã tạm ngừng.'**
+  String get motorbikeFeatureSuspendedMessage;
+
+  /// No description provided for @acknowledge.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đã hiểu'**
+  String get acknowledge;
 }
 
 class _AppLocalizationsDelegate

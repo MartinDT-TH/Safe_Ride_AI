@@ -2778,4 +2778,13 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get documentUrlDeferredHint =>
       '現在は書類リンクのみ保存します。信頼できるリンクを使用してください。安全な共通ストレージ導入後に直接アップロードを追加します。';
+
+  @override
+  String get motorbikeFeatureSuspendedTitle => 'バイクサービスを一時停止';
+
+  @override
+  String get motorbikeFeatureSuspendedMessage => '8月20日より、この機能は一時停止しています。';
+
+  @override
+  String get acknowledge => '了解';
 }
