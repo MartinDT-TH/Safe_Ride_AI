@@ -267,4 +267,5 @@
   ,"riskInsurancePending":"等待员工验证","riskInsuranceVerified":"已验证","riskInsuranceExpired":"已过期","riskInsuranceOther":"其他保险"
   ,"riskIncidentInformation":"事故信息","riskResponsibilityResult":"责任认定结果","riskProtectionOutcome":"保障处理结果","riskEligibleDamage":"符合条件的损失"
   ,"mandatoryTplExplanation":"强制第三方责任险主要保障第三方，并不自动承保客户车辆损失。","physicalDamageExplanation":"车辆损失险可根据已验证的保单条款用于客户车辆损失。","insurerNoGuarantee":"保存保单不代表保险公司保证批准赔付。","documentUrlDeferredHint":"目前仅保存文件链接。请使用可信链接；待安全共享存储可用后再提供直接上传。"
+  ,"motorbikeFeatureSuspendedTitle":"摩托车服务暂停","motorbikeFeatureSuspendedMessage":"自8月20日起，此功能已暂时停用。","acknowledge":"知道了"
 }

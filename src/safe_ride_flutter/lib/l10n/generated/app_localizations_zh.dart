@@ -2761,4 +2761,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get documentUrlDeferredHint => '目前仅保存文件链接。请使用可信链接；待安全共享存储可用后再提供直接上传。';
+
+  @override
+  String get motorbikeFeatureSuspendedTitle => '摩托车服务暂停';
+
+  @override
+  String get motorbikeFeatureSuspendedMessage => '自8月20日起，此功能已暂时停用。';
+
+  @override
+  String get acknowledge => '知道了';
 }

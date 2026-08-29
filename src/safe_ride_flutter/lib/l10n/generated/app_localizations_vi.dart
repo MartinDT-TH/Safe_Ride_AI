@@ -2874,4 +2874,14 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get documentUrlDeferredHint =>
       'Hiện hệ thống chỉ lưu liên kết tài liệu. Chỉ dùng liên kết tin cậy; tải tệp trực tiếp sẽ được bổ sung khi có kho lưu trữ an toàn dùng chung.';
+
+  @override
+  String get motorbikeFeatureSuspendedTitle => 'Dịch vụ xe máy tạm ngừng';
+
+  @override
+  String get motorbikeFeatureSuspendedMessage =>
+      'Từ ngày 20/8, chức năng đã tạm ngừng.';
+
+  @override
+  String get acknowledge => 'Đã hiểu';
 }

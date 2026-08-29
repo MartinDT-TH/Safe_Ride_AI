@@ -2884,4 +2884,15 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get documentUrlDeferredHint =>
       'The app currently stores a document link only. Use a trusted link; direct upload will be added when shared secure storage is available.';
+
+  @override
+  String get motorbikeFeatureSuspendedTitle =>
+      'Motorbike service temporarily unavailable';
+
+  @override
+  String get motorbikeFeatureSuspendedMessage =>
+      'Since August 20, this feature has been temporarily unavailable.';
+
+  @override
+  String get acknowledge => 'Got it';
 }

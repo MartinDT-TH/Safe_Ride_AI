@@ -2783,4 +2783,13 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get documentUrlDeferredHint =>
       '현재는 문서 링크만 저장합니다. 신뢰할 수 있는 링크를 사용하세요. 안전한 공용 저장소가 마련되면 직접 업로드를 추가합니다.';
+
+  @override
+  String get motorbikeFeatureSuspendedTitle => '오토바이 서비스 일시 중단';
+
+  @override
+  String get motorbikeFeatureSuspendedMessage => '8월 20일부터 이 기능이 일시 중단되었습니다.';
+
+  @override
+  String get acknowledge => '확인';
 }

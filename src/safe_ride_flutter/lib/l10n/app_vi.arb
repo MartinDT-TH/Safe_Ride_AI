@@ -284,4 +284,5 @@
   ,"riskInsurancePending":"Chờ nhân viên xác minh","riskInsuranceVerified":"Đã xác minh","riskInsuranceExpired":"Đã hết hạn","riskInsuranceOther":"Bảo hiểm khác"
   ,"riskIncidentInformation":"Thông tin sự cố","riskResponsibilityResult":"Kết quả trách nhiệm","riskProtectionOutcome":"Kết quả hỗ trợ bảo vệ","riskEligibleDamage":"Thiệt hại đủ điều kiện"
   ,"mandatoryTplExplanation":"Bảo hiểm trách nhiệm dân sự bắt buộc chủ yếu bảo vệ bên thứ ba; không mặc định chi trả thiệt hại vật chất của xe khách hàng.","physicalDamageExplanation":"Bảo hiểm thiệt hại vật chất có thể được xem xét cho hư hỏng xe khách hàng theo hợp đồng đã xác minh.","insurerNoGuarantee":"Việc lưu hợp đồng không bảo đảm doanh nghiệp bảo hiểm sẽ chấp thuận chi trả.","documentUrlDeferredHint":"Hiện hệ thống chỉ lưu liên kết tài liệu. Chỉ dùng liên kết tin cậy; tải tệp trực tiếp sẽ được bổ sung khi có kho lưu trữ an toàn dùng chung."
+  ,"motorbikeFeatureSuspendedTitle":"Dịch vụ xe máy tạm ngừng","motorbikeFeatureSuspendedMessage":"Từ ngày 20/8, chức năng đã tạm ngừng.","acknowledge":"Đã hiểu"
 }

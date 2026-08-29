@@ -267,4 +267,5 @@
   ,"riskInsurancePending":"スタッフ確認待ち","riskInsuranceVerified":"確認済み","riskInsuranceExpired":"期限切れ","riskInsuranceOther":"その他の保険"
   ,"riskIncidentInformation":"事故情報","riskResponsibilityResult":"責任判定結果","riskProtectionOutcome":"補償結果","riskEligibleDamage":"対象損害額"
   ,"mandatoryTplExplanation":"自賠責保険は主に第三者を保護するもので、お客様車両の損害を自動的に補償するものではありません。","physicalDamageExplanation":"車両損害保険は、確認済みの契約条件に基づき、お客様車両の損害に適用される場合があります。","insurerNoGuarantee":"契約を保存しても、保険会社による支払い承認を保証するものではありません。","documentUrlDeferredHint":"現在は書類リンクのみ保存します。信頼できるリンクを使用してください。安全な共通ストレージ導入後に直接アップロードを追加します。"
+  ,"motorbikeFeatureSuspendedTitle":"バイクサービスを一時停止","motorbikeFeatureSuspendedMessage":"8月20日より、この機能は一時停止しています。","acknowledge":"了解"
 }

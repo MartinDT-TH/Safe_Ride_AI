@@ -9,6 +9,7 @@ import 'package:record/record.dart';
 import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../../core/localization/locale_provider.dart';
 import '../../../../../core/utils/api_date_time.dart';
+import '../../../../../core/widgets/motorbike_feature_notice.dart';
 
 import '../../../../../core/maps/models/map_models.dart';
 import '../../../../../core/maps/polyline_decoder.dart';
@@ -289,7 +290,27 @@ class _AiChatSheetState extends State<AiChatSheet> {
 
     final catalog = bookingProvider.catalog;
     final vehicles = catalog?.vehicles ?? <BookingVehicleOption>[];
-    final matchingVehicles = _matchingVehicles(vehicles, draft);
+    final draftMatches = _matchingVehicles(vehicles, draft);
+    final hasVehicleQuery = draft.vehicleQuery?.trim().isNotEmpty == true;
+    final requestedMotorbike =
+        draft.vehicleType == 'motorbike' ||
+        (hasVehicleQuery &&
+            draftMatches.isNotEmpty &&
+            draftMatches.every((vehicle) => vehicle.isMotorbike));
+    if (requestedMotorbike) {
+      setState(() {
+        _selectedVehicle = null;
+        _selectedService = null;
+        _bookingNotice = context.l10n.motorbikeFeatureSuspendedMessage;
+        _preparingBooking = false;
+      });
+      await MotorbikeFeatureNotice.show(context);
+      return;
+    }
+    final matchingVehicles = _matchingVehicles(
+      vehicles.where((vehicle) => !vehicle.isMotorbike).toList(),
+      draft,
+    );
     final promotions = bookingProvider.availablePromotions;
     setState(() {
       _selectedVehicle = matchingVehicles.firstOrNull;
@@ -327,7 +348,8 @@ class _AiChatSheetState extends State<AiChatSheet> {
           });
       setState(() => _selectedPromo = bestPromotion);
     }
-    final canAutoBook = allowAutoBook &&
+    final canAutoBook =
+        allowAutoBook &&
         draft.autoBook &&
         _selectedVehicle != null &&
         _selectedService != null &&
@@ -378,6 +400,11 @@ class _AiChatSheetState extends State<AiChatSheet> {
         token == null ||
         _creatingBooking)
       return;
+
+    if (vehicle.isMotorbike) {
+      await MotorbikeFeatureNotice.show(context);
+      return;
+    }
 
     setState(() {
       _creatingBooking = true;
@@ -691,8 +718,7 @@ double _promotionDiscount(PromoModel promo, double fare) {
   var discount = promo.discountType.toLowerCase().contains('percent')
       ? fare * promo.discountValue / 100
       : promo.discountValue;
-  if (promo.maximumDiscountValue > 0 &&
-      discount > promo.maximumDiscountValue) {
+  if (promo.maximumDiscountValue > 0 && discount > promo.maximumDiscountValue) {
     discount = promo.maximumDiscountValue;
   }
   return discount.clamp(0, fare).toDouble();
@@ -816,10 +842,7 @@ class _ConversationHistorySheetState extends State<_ConversationHistorySheet> {
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
-                    _error!,
-                    style: TextStyle(color: Colors.red),
-                  ),
+                  child: Text(_error!, style: TextStyle(color: Colors.red)),
                 ),
                 TextButton(
                   onPressed: _load,
@@ -1082,10 +1105,7 @@ class _SummaryRow extends StatelessWidget {
           child: Text(label, style: TextStyle(color: Color(0xFF666666))),
         ),
         Expanded(
-          child: Text(
-            value,
-            style: TextStyle(fontWeight: FontWeight.w600),
-          ),
+          child: Text(value, style: TextStyle(fontWeight: FontWeight.w600)),
         ),
       ],
     ),
@@ -1166,11 +1186,7 @@ class _ChatRouteMapState extends State<_ChatRouteMap> {
         ),
       },
       polylines: {
-        AppPolyline(
-          id: 'route',
-          points: _route,
-          color: Color(0xFF006B70),
-        ),
+        AppPolyline(id: 'route', points: _route, color: Color(0xFF006B70)),
       },
       onMapCreated: (controller) {
         _controller = controller;
@@ -1250,9 +1266,7 @@ class _BubbleState extends State<_Bubble> {
           ? Text(
               widget.message.content,
               style: TextStyle(
-                color: widget.message.isUser
-                    ? Colors.white
-                    : Color(0xFF222222),
+                color: widget.message.isUser ? Colors.white : Color(0xFF222222),
                 height: 1.4,
               ),
             )
