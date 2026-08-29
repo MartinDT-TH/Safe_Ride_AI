@@ -109,4 +109,16 @@ class DriverWalletProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  Future<Map<String, dynamic>?> createTopUp(String? token, num amount) async {
+    if (token == null || token.isEmpty) return null;
+    try { return await _repository.createTopUp(token, amount: amount); }
+    on DriverWalletApiException catch (e) { _errorMessage = e.message; notifyListeners(); return null; }
+  }
+
+  Future<Map<String, dynamic>?> getTopUpStatus(String? token, int id) async {
+    if (token == null || token.isEmpty) return null;
+    try { return await _repository.getTopUpStatus(token, id); }
+    on DriverWalletApiException catch (e) { _errorMessage = e.message; notifyListeners(); return null; }
+  }
 }

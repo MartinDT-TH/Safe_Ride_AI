@@ -12,10 +12,32 @@ namespace SafeRide.API.Controllers;
 public sealed class PaymentsController : ControllerBase
 {
     private readonly IPaymentService _paymentService;
+    private readonly IDriverWalletTopUpService _walletTopUpService;
 
-    public PaymentsController(IPaymentService paymentService)
+    public PaymentsController(IPaymentService paymentService, IDriverWalletTopUpService walletTopUpService)
     {
         _paymentService = paymentService;
+        _walletTopUpService = walletTopUpService;
+    }
+
+    [Authorize]
+    [HttpPost("driver/wallet/top-ups")]
+    [ProducesResponseType<WalletTopUpResult>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<WalletTopUpResult>> CreateWalletTopUp(
+        [FromBody] CreateWalletTopUpRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var driverId)) return Unauthorized();
+        return Ok(await _walletTopUpService.CreateAsync(driverId, request.Amount, request.ReturnUrl, request.CancelUrl, cancellationToken));
+    }
+
+    [Authorize]
+    [HttpGet("driver/wallet/top-ups/{topUpId:long}")]
+    [ProducesResponseType<WalletTopUpResult>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<WalletTopUpResult>> GetWalletTopUpStatus(long topUpId, CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var driverId)) return Unauthorized();
+        return Ok(await _walletTopUpService.GetStatusAsync(driverId, topUpId, cancellationToken));
     }
 
     [Authorize]
@@ -150,6 +172,8 @@ public sealed class PaymentsController : ControllerBase
         [FromBody] PayOsWebhookRequest request,
         CancellationToken cancellationToken)
     {
+        if (await _walletTopUpService.TryHandleWebhookAsync(request, cancellationToken))
+            return Ok(new { success = true });
         await _paymentService.HandlePayOsWebhookAsync(request, cancellationToken);
         return Ok(new { success = true });
     }
@@ -176,3 +200,4 @@ public sealed class PaymentsController : ControllerBase
 }
 
 public sealed record CreateQrPaymentRequest(string? ReturnUrl, string? CancelUrl);
+public sealed record CreateWalletTopUpRequest(decimal Amount, string? ReturnUrl, string? CancelUrl);

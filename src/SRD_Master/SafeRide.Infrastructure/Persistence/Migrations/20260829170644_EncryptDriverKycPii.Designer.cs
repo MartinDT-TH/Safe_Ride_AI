@@ -3,18 +3,21 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NetTopologySuite.Geometries;
 using SafeRide.Infrastructure.Persistence;
 
 #nullable disable
 
-namespace SafeRide.Infrastructure.Migrations
+namespace SafeRide.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260829170644_EncryptDriverKycPii")]
+    partial class EncryptDriverKycPii
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -785,7 +788,11 @@ namespace SafeRide.Infrastructure.Migrations
 
                             t.HasCheckConstraint("CK_DriverKyc_DocumentType", "[DocumentType] IN ('ID_CARD', 'DRIVING_LICENSE', 'CRIMINAL_RECORD')");
 
+                            t.HasCheckConstraint("CK_DriverKyc_DrivingLicense", "[DocumentType] <> 'DRIVING_LICENSE' OR ([DocumentNumber] IS NOT NULL AND [LicenseClass] IS NOT NULL)");
+
                             t.HasCheckConstraint("CK_DriverKyc_KycStatus", "[KycStatus] IN ('Pending', 'Approved', 'Rejected')");
+
+                            t.HasCheckConstraint("CK_DriverKyc_LicenseClass", "[LicenseClass] IS NULL OR [LicenseClass] IN ('Old_A1', 'Old_A2', 'Old_B1', 'Old_B2', 'A1', 'A', 'B')");
                         });
                 });
 
@@ -861,55 +868,6 @@ namespace SafeRide.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_DriverWallets_CurrentBalance", "[CurrentBalance] >= 0");
                         });
-                });
-
-            modelBuilder.Entity("SafeRide.Domain.Entities.DriverWalletTopUp", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("decimal(18, 2)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<long>("OrderCode")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTime?>("PaidAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("PaymentLinkId")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("ProviderReference")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<long>("WalletId")
-                        .HasColumnType("bigint");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("OrderCode")
-                        .IsUnique();
-
-                    b.HasIndex("WalletId");
-
-                    b.ToTable("DriverWalletTopUps");
                 });
 
             modelBuilder.Entity("SafeRide.Domain.Entities.Notification", b =>
@@ -1880,7 +1838,7 @@ namespace SafeRide.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_WalletTransactions_Amount", "[Amount] > 0");
 
-                            t.HasCheckConstraint("CK_WalletTransactions_TransactionType", "[TransactionType] IN ('Income', 'Withdrawal', 'Penalty', 'Bonus', 'TopUp')");
+                            t.HasCheckConstraint("CK_WalletTransactions_TransactionType", "[TransactionType] IN ('Income', 'Withdrawal', 'Penalty', 'Bonus')");
                         });
                 });
 
@@ -2187,16 +2145,6 @@ namespace SafeRide.Infrastructure.Migrations
                         .HasConstraintName("FK_Wallet_Driver");
 
                     b.Navigation("Driver");
-                });
-
-            modelBuilder.Entity("SafeRide.Domain.Entities.DriverWalletTopUp", b =>
-                {
-                    b.HasOne("SafeRide.Domain.Entities.DriverWallet", "Wallet")
-                        .WithMany("TopUps")
-                        .HasForeignKey("WalletId")
-                        .IsRequired();
-
-                    b.Navigation("Wallet");
                 });
 
             modelBuilder.Entity("SafeRide.Domain.Entities.Notification", b =>
@@ -2509,8 +2457,6 @@ namespace SafeRide.Infrastructure.Migrations
 
             modelBuilder.Entity("SafeRide.Domain.Entities.DriverWallet", b =>
                 {
-                    b.Navigation("TopUps");
-
                     b.Navigation("WalletTransactions");
 
                     b.Navigation("WithdrawalRequests");

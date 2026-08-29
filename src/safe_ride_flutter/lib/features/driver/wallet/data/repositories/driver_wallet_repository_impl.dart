@@ -30,4 +30,10 @@ class DriverWalletRepositoryImpl implements DriverWalletRepository {
     bankAccountNumber: bankAccountNumber,
     bankAccountName: bankAccountName,
   );
+
+  @override
+  Future<Map<String, dynamic>> createTopUp(String token, {required num amount}) => _remoteDatasource.createTopUp(token, amount: amount);
+
+  @override
+  Future<Map<String, dynamic>> getTopUpStatus(String token, int id) => _remoteDatasource.getTopUpStatus(token, id);
 }

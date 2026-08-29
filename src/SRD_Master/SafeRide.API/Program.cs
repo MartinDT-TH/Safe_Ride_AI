@@ -127,6 +127,16 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 await app.Services.ApplyDevelopmentMigrationsAsync(app.Environment);
+
+if (args.Contains("--backfill-driver-kyc", StringComparer.OrdinalIgnoreCase))
+{
+    using var backfillScope = app.Services.CreateScope();
+    var backfill = backfillScope.ServiceProvider
+        .GetRequiredService<SafeRide.Infrastructure.Services.DriverKycBackfillService>();
+    var updatedRows = await backfill.RunAsync();
+    Console.WriteLine($"DriverKyc backfill completed. Updated rows: {updatedRows}");
+    return;
+}
 await app.Services.SeedAdminIdentityAsync();
 await app.Services.SeedIdentityAsync();
 await app.Services.SeedCustomerIdentityAsync();

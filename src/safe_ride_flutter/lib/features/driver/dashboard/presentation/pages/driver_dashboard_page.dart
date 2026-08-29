@@ -14,6 +14,7 @@ import '../../../../../core/services/map_api_service.dart';
 import '../../../../../core/services/connectivity_service.dart';
 import '../../../../../core/services/socket_service.dart';
 import '../../../../../core/widgets/current_location_button.dart';
+import '../../../../../core/widgets/app_dialog.dart';
 import '../../../../../dependency_injection/injection.dart';
 
 import '../providers/driver_dashboard_provider.dart';
@@ -156,6 +157,20 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
       if (token != null) {
         _provider.initializeRealtime(token);
         await context.read<NotificationProvider>().initialize(token);
+        final license = await _provider.getLicenseStatus();
+        final days = license?['daysRemaining'];
+        if (mounted && days is num && days >= 1 && days <= 3) {
+          await showDialog<void>(
+            context: context,
+            builder: (_) => AppDialog(
+              icon: Icons.warning_amber_rounded,
+              title: 'Bằng lái sắp hết hạn',
+              description: 'Bằng lái của bạn còn $days ngày nữa sẽ hết hạn. Vui lòng cập nhật bằng lái mới.',
+              confirmText: 'Đã hiểu',
+              onConfirm: () => Navigator.of(context).pop(),
+            ),
+          );
+        }
       }
       unawaited(
         getIt<TripShareDeepLinkCoordinator>().processPendingAfterNavigation(),
@@ -518,6 +533,28 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
   }
 
   Future<void> _publishInitialLocation() async {
+    final provider = context.read<DriverDashboardProvider>();
+    final canGoOnline = await provider.hasMinimumOnlineWalletBalance();
+    if (!mounted) return;
+    if (!canGoOnline) {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Ví tài xế chưa đủ số dư'),
+          content: const Text(
+            'Ví tài xế cần tối thiểu 500.000VND để có thể nhận chuyến.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Đã hiểu'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     try {
       final locationService = getIt<LocationService>();
       final location = await locationService.getCurrentLocation();
@@ -531,7 +568,6 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
         _driverPosition = newPos;
       });
 
-      final provider = context.read<DriverDashboardProvider>();
       await provider.goOnline(location.latitude, location.longitude);
 
       _startLocationUpdates();
