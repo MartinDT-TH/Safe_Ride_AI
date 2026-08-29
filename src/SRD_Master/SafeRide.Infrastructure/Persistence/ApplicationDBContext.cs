@@ -602,6 +602,7 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
             entity.Property(e => e.ArrivalLatitude).HasColumnType("decimal(9, 6)");
             entity.Property(e => e.ArrivalLongitude).HasColumnType("decimal(9, 6)");
             entity.Property(e => e.ArrivalDistanceMeters).HasColumnType("decimal(18, 3)");
+            entity.Property(e => e.CustomerNoShowReminderSentAt);
             entity.Property(e => e.FinalFare).HasColumnType("decimal(18, 2)");
             entity.Property(e => e.IsSOSActivated)
                 .HasDefaultValue(false)

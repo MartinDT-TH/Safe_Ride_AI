@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using SafeRide.API.Authorization;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Common.Models;
 using SafeRide.Application.Features.Auth;
 using SafeRide.Application.Features.Ratings.Commands.SubmitTripRating;
 using SafeRide.Application.Features.Safety.Commands.TriggerSOS;
@@ -22,6 +23,8 @@ public sealed class TripsController : ControllerBase
 {
     private readonly ITripStatusService _tripStatusService;
     private readonly ITripArrivalVerificationService _tripArrivalVerificationService;
+    private readonly ITripCustomerNoShowReminderService _tripCustomerNoShowReminderService;
+    private readonly ICustomerNoShowEligibilityService _customerNoShowEligibilityService;
     private readonly ITripChatService _tripChatService;
     private readonly IHubContext<TripChatHub> _tripChatHubContext;
     private readonly ISender _sender;
@@ -30,6 +33,8 @@ public sealed class TripsController : ControllerBase
     public TripsController(
         ITripStatusService tripStatusService,
         ITripArrivalVerificationService tripArrivalVerificationService,
+        ITripCustomerNoShowReminderService tripCustomerNoShowReminderService,
+        ICustomerNoShowEligibilityService customerNoShowEligibilityService,
         ISender sender,
         ITripSharingService tripSharingService,
         ITripChatService tripChatService,
@@ -37,6 +42,8 @@ public sealed class TripsController : ControllerBase
     {
         _tripStatusService = tripStatusService;
         _tripArrivalVerificationService = tripArrivalVerificationService;
+        _tripCustomerNoShowReminderService = tripCustomerNoShowReminderService;
+        _customerNoShowEligibilityService = customerNoShowEligibilityService;
         _tripChatService = tripChatService;
         _tripChatHubContext = tripChatHubContext;
         _sender = sender;
@@ -167,7 +174,23 @@ public sealed class TripsController : ControllerBase
         await _tripArrivalVerificationService.VerifyAndRecordAsync(driverId, tripId, cancellationToken);
         await _tripStatusService.UpdateDriverTripStatusAsync(
             driverId, tripId, SafeRide.Domain.Enums.TripStatus.ARRIVED, cancellationToken);
+        await _tripCustomerNoShowReminderService.RecordIfNeededAsync(tripId, cancellationToken);
         return NoContent();
+    }
+
+    [HttpGet("{tripId:long}/customer-no-show/eligibility")]
+    [Authorize(Roles = "Driver")]
+    [AllowTripContinuation(TripContinuationOperation.TripStatusUpdate)]
+    [ProducesResponseType<CustomerNoShowEligibilityResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<CustomerNoShowEligibilityResponse>> GetCustomerNoShowEligibility(
+        long tripId, CancellationToken cancellationToken)
+    {
+        if (!TryGetDriverId(out var driverId))
+            return Unauthorized(new ProblemDetails { Status = 401, Title = "Unauthorized", Detail = "Cannot resolve authenticated driver account." });
+        return Ok(await _customerNoShowEligibilityService.GetAsync(driverId, tripId, cancellationToken));
     }
 
     [HttpPost("{tripId:long}/end")]
