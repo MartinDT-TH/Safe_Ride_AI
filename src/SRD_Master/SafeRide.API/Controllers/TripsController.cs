@@ -21,6 +21,7 @@ namespace SafeRide.API.Controllers;
 public sealed class TripsController : ControllerBase
 {
     private readonly ITripStatusService _tripStatusService;
+    private readonly ITripArrivalVerificationService _tripArrivalVerificationService;
     private readonly ITripChatService _tripChatService;
     private readonly IHubContext<TripChatHub> _tripChatHubContext;
     private readonly ISender _sender;
@@ -28,12 +29,14 @@ public sealed class TripsController : ControllerBase
 
     public TripsController(
         ITripStatusService tripStatusService,
+        ITripArrivalVerificationService tripArrivalVerificationService,
         ISender sender,
         ITripSharingService tripSharingService,
         ITripChatService tripChatService,
         IHubContext<TripChatHub> tripChatHubContext)
     {
         _tripStatusService = tripStatusService;
+        _tripArrivalVerificationService = tripArrivalVerificationService;
         _tripChatService = tripChatService;
         _tripChatHubContext = tripChatHubContext;
         _sender = sender;
@@ -122,12 +125,48 @@ public sealed class TripsController : ControllerBase
             });
         }
 
+        if (request.TripStatus == SafeRide.Domain.Enums.TripStatus.ARRIVED)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "GPS verification required",
+                Detail = "Hãy dùng endpoint xác nhận đã đến điểm đón để hệ thống kiểm tra GPS."
+            });
+        }
+
         await _tripStatusService.UpdateDriverTripStatusAsync(
             driverId,
             tripId,
             request.TripStatus,
             cancellationToken);
 
+        return NoContent();
+    }
+
+    [HttpPost("{tripId:long}/arrive")]
+    [Authorize(Roles = "Driver")]
+    [AllowTripContinuation(TripContinuationOperation.TripStatusUpdate)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Arrive(long tripId, CancellationToken cancellationToken)
+    {
+        if (!TryGetDriverId(out var driverId))
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Unauthorized",
+                Detail = "Cannot resolve authenticated driver account."
+            });
+        }
+
+        await _tripArrivalVerificationService.VerifyAndRecordAsync(driverId, tripId, cancellationToken);
+        await _tripStatusService.UpdateDriverTripStatusAsync(
+            driverId, tripId, SafeRide.Domain.Enums.TripStatus.ARRIVED, cancellationToken);
         return NoContent();
     }
 
