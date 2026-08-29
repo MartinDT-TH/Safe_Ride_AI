@@ -101,6 +101,55 @@ public sealed class CustomerNoShowReportingService : ICustomerNoShowReportingSer
         };
         _dbContext.CustomerBehaviorEvents.Add(behaviorEvent);
 
+        var acceptedOffer = await _dbContext.BookingDriverOffers
+            .Where(x => x.BookingId == trip.BookingId
+                && x.DriverId == driverId
+                && x.OfferStatus == DriverOfferStatus.CustomerConfirmed)
+            .OrderByDescending(x => x.ConfirmedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+        var pickupDistanceKm = acceptedOffer?.PickupDistanceKm;
+        var supportEligible = pickupDistanceKm.HasValue
+            && pickupDistanceKm.Value > (decimal)_options.CurrentValue.DriverSupportMinPickupDistanceKm;
+        var supportAmount = supportEligible ? _options.CurrentValue.DriverNoShowSupportAmount : 0m;
+        DriverNoShowSupport? support = null;
+        if (supportEligible)
+        {
+            var wallet = await _dbContext.DriverWallets
+                .SingleOrDefaultAsync(x => x.DriverId == driverId, cancellationToken);
+            if (wallet is null)
+            {
+                wallet = new DriverWallet { DriverId = driverId, CurrentBalance = 0m };
+                _dbContext.DriverWallets.Add(wallet);
+            }
+
+            var walletTransaction = new WalletTransaction
+            {
+                Wallet = wallet,
+                TripId = trip.Id,
+                TransactionType = WalletTransactionType.Bonus,
+                SettlementEffect = null,
+                Amount = supportAmount,
+                Description = $"Hỗ trợ no-show cho tài xế, chuyến #{trip.Id}.",
+                CreatedAt = now
+            };
+            wallet.CurrentBalance += supportAmount;
+            _dbContext.WalletTransactions.Add(walletTransaction);
+            support = new DriverNoShowSupport
+            {
+                Trip = trip,
+                Booking = trip.Booking,
+                Driver = trip.Driver,
+                CustomerBehaviorEvent = behaviorEvent,
+                AcceptedPickupDistanceKm = pickupDistanceKm!.Value,
+                SupportAmount = supportAmount,
+                Status = DriverNoShowSupportStatus.CREDITED,
+                WalletTransaction = walletTransaction,
+                CreatedAt = now,
+                PaidAt = now
+            };
+            _dbContext.DriverNoShowSupports.Add(support);
+        }
+
         trip.TripStatus = TripStatus.CANCELLED;
         trip.CancellationReason = CancellationReason;
         trip.CancelledByUserId = driverId;
@@ -125,7 +174,11 @@ public sealed class CustomerNoShowReportingService : ICustomerNoShowReportingSer
         await _redisService.RemoveAsync(RedisKeys.TripLive(trip.Id));
         await _redisService.SetAsync(RedisKeys.DriverStatus(driverId), DriverWorkStatus.Online.ToString(), TimeSpan.FromMinutes(5));
 
-        return new CustomerNoShowReportResponse(behaviorEvent.Id, trip.Id, trip.BookingId, 0m, null,
-            "Đã ghi nhận khách không xuất hiện. Khách hàng không bị thu phí.");
+        var message = supportEligible
+            ? "Đã ghi nhận khách không xuất hiện. Khách hàng không bị thu phí; hỗ trợ tài xế đã được cộng vào ví."
+            : "Đã ghi nhận khách không xuất hiện. Khách hàng không bị thu phí; chuyến đi chưa đủ điều kiện hỗ trợ tài xế.";
+        return new CustomerNoShowReportResponse(
+            behaviorEvent.Id, trip.Id, trip.BookingId, 0m, supportEligible,
+            support?.SupportAmount ?? 0m, support?.Status, message);
     }
 }

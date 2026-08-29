@@ -166,6 +166,51 @@ public sealed class TripStatusServiceTests
         Assert.Empty(await fixture.DbContext.WalletTransactions.ToListAsync());
     }
 
+    [Theory]
+    [InlineData(4.8, false)]
+    [InlineData(5.0, false)]
+    [InlineData(5.3, true)]
+    public async Task CustomerNoShowReport_AppliesDriverSupportOnlyAbovePickupDistanceThreshold(
+        double pickupDistanceKm, bool expectedEligible)
+    {
+        using var fixture = await PrepareArrivedTripAsync(UtcNow.AddMinutes(-20), reminderSent: true);
+        await AddConfirmedOfferAsync(fixture, (decimal)pickupDistanceKm);
+
+        var result = await CreateNoShowReportingService(fixture).ReportAsync(
+            fixture.DriverId, fixture.TripId, CancellationToken.None);
+
+        Assert.Equal(0m, result.CustomerCharge);
+        Assert.Equal(expectedEligible, result.DriverSupportEligible);
+        Assert.Equal(expectedEligible ? 10_000m : 0m, result.DriverSupportAmount);
+        Assert.Equal(
+            expectedEligible ? DriverNoShowSupportStatus.CREDITED : null,
+            result.DriverSupportStatus);
+        Assert.Equal(expectedEligible ? 1 : 0,
+            await fixture.DbContext.DriverNoShowSupports.CountAsync());
+        Assert.Equal(expectedEligible ? 1 : 0,
+            await fixture.DbContext.WalletTransactions.CountAsync());
+        Assert.Equal(expectedEligible ? 10_000m : 0m,
+            (await fixture.DbContext.DriverWallets.SingleOrDefaultAsync())?.CurrentBalance ?? 0m);
+    }
+
+    [Fact]
+    public async Task CustomerNoShowReport_DoesNotDoubleCreditDriverSupportOnReplay()
+    {
+        using var fixture = await PrepareArrivedTripAsync(UtcNow.AddMinutes(-20), reminderSent: true);
+        await AddConfirmedOfferAsync(fixture, 5.3m);
+
+        var service = CreateNoShowReportingService(fixture);
+        var first = await service.ReportAsync(fixture.DriverId, fixture.TripId, CancellationToken.None);
+        var exception = await Assert.ThrowsAsync<BookingException>(() => service.ReportAsync(
+            fixture.DriverId, fixture.TripId, CancellationToken.None));
+
+        Assert.Equal(10_000m, first.DriverSupportAmount);
+        Assert.Equal(409, exception.StatusCode);
+        Assert.Single(await fixture.DbContext.DriverNoShowSupports.ToListAsync());
+        Assert.Single(await fixture.DbContext.WalletTransactions.ToListAsync());
+        Assert.Equal(10_000m, (await fixture.DbContext.DriverWallets.SingleAsync()).CurrentBalance);
+    }
+
     [Fact]
     public async Task CustomerNoShowReport_RejectsDuplicateEvent()
     {
@@ -188,6 +233,21 @@ public sealed class TripStatusServiceTests
         trip.CustomerNoShowReminderSentAt = reminderSent ? UtcNow : null;
         await fixture.DbContext.SaveChangesAsync();
         return fixture;
+    }
+
+    private static async Task AddConfirmedOfferAsync(TripStatusFixture fixture, decimal pickupDistanceKm)
+    {
+        fixture.DbContext.BookingDriverOffers.Add(new BookingDriverOffer
+        {
+            BookingId = (await GetTripAsync(fixture)).BookingId,
+            DriverId = fixture.DriverId,
+            OfferStatus = DriverOfferStatus.CustomerConfirmed,
+            OfferedAt = UtcNow.AddHours(-1),
+            ConfirmedAt = UtcNow.AddMinutes(-30),
+            ExpiresAt = UtcNow.AddHours(1),
+            PickupDistanceKm = pickupDistanceKm
+        });
+        await fixture.DbContext.SaveChangesAsync();
     }
 
     private static async Task<Trip> GetTripAsync(TripStatusFixture fixture) =>
