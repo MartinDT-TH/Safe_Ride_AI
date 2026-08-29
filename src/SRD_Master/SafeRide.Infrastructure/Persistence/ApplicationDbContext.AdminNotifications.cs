@@ -33,12 +33,18 @@ public partial class ApplicationDbContext
     public virtual DbSet<SafetyTerminationEvidence> SafetyTerminationEvidence { get; set; }
     public virtual DbSet<SafetyPaymentReconciliation> SafetyPaymentReconciliations { get; set; }
     public virtual DbSet<ManualPaymentRefund> ManualPaymentRefunds { get; set; }
+    public virtual DbSet<CustomerBehaviorEvent> CustomerBehaviorEvents { get; set; }
+    public virtual DbSet<CustomerBookingPrivilege> CustomerBookingPrivileges { get; set; }
+    public virtual DbSet<DriverNoShowSupport> DriverNoShowSupports { get; set; }
 
     partial void OnModelCreatingPartial(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfiguration(new AccountBanConfigurationConfiguration());
         modelBuilder.ApplyConfiguration(new AccountBanHistoryConfiguration());
         modelBuilder.ApplyConfiguration(new AdminNotificationConfiguration());
+        modelBuilder.ApplyConfiguration(new CustomerBehaviorEventConfiguration());
+        modelBuilder.ApplyConfiguration(new CustomerBookingPrivilegeConfiguration());
+        modelBuilder.ApplyConfiguration(new DriverNoShowSupportConfiguration());
         RiskProtectionModelConfiguration.Configure(modelBuilder);
     }
 }

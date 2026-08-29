@@ -197,6 +197,20 @@ public static class DependencyInjection
             .ValidateOnStart();
 
         services
+            .AddOptions<CustomerNoShowOptions>()
+            .Bind(configuration.GetSection(CustomerNoShowOptions.SectionName))
+            .Validate(options => options.NoShowWaitMinutes > 0, "CustomerNoShow:NoShowWaitMinutes must be greater than zero.")
+            .Validate(options => options.ArrivalRadiusMeters > 0, "CustomerNoShow:ArrivalRadiusMeters must be greater than zero.")
+            .Validate(options => options.DriverLocationFreshnessSeconds > 0, "CustomerNoShow:DriverLocationFreshnessSeconds must be greater than zero.")
+            .Validate(options => options.DriverSupportMinPickupDistanceKm > 0, "CustomerNoShow:DriverSupportMinPickupDistanceKm must be greater than zero.")
+            .Validate(options => options.DriverNoShowSupportAmount >= 0, "CustomerNoShow:DriverNoShowSupportAmount must be non-negative.")
+            .Validate(options => options.BehaviorWindowDays > 0, "CustomerNoShow:BehaviorWindowDays must be greater than zero.")
+            .Validate(options => options.ScheduleRestrictionDaysFirst > 0, "CustomerNoShow:ScheduleRestrictionDaysFirst must be greater than zero.")
+            .Validate(options => options.ScheduleRestrictionDaysPersistent > 0, "CustomerNoShow:ScheduleRestrictionDaysPersistent must be greater than zero.")
+            .Validate(options => options.InstantCooldownHoursPersistent > 0, "CustomerNoShow:InstantCooldownHoursPersistent must be greater than zero.")
+            .ValidateOnStart();
+
+        services
             .AddOptions<ExpandSearchingRadiusJobOptions>()
             .Bind(configuration.GetSection(ExpandSearchingRadiusJobOptions.SectionName))
             .Validate(options => options.RadiusExpandedNotificationTtlMinutes > 0, "BackgroundJobs:ExpandSearchingRadius:RadiusExpandedNotificationTtlMinutes must be greater than zero.")
