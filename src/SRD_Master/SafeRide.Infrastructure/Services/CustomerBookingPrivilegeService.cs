@@ -144,6 +144,23 @@ public sealed class CustomerBookingPrivilegeService : ICustomerBookingPrivilegeS
         }
     }
 
+    public async Task<CustomerBookingPrivilege> ClearRestrictionsAsync(Guid customerId, CancellationToken cancellationToken)
+    {
+        var privilege = await _dbContext.CustomerBookingPrivileges
+            .SingleOrDefaultAsync(x => x.CustomerId == customerId, cancellationToken)
+            ?? new CustomerBookingPrivilege { CustomerId = customerId };
+        privilege.ScheduledBookingAllowed = true;
+        privilege.ScheduledRestrictedUntil = null;
+        privilege.InstantBookingAllowed = true;
+        privilege.BookingCooldownUntil = null;
+        privilege.UnderStaffReview = false;
+        privilege.UpdatedAt = _dateTimeProvider.UtcNow;
+        if (_dbContext.Entry(privilege).State == EntityState.Detached)
+            _dbContext.CustomerBookingPrivileges.Add(privilege);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return privilege;
+    }
+
     private static CustomerBehaviorRestrictionLevel ResolveLevel(
         int noShowCount,
         decimal noShowRate,

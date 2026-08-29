@@ -7,6 +7,8 @@ public interface ICustomerBookingPrivilegeService
 {
     Task<CustomerBookingPrivilege> RecalculateAsync(Guid customerId, CancellationToken cancellationToken);
 
+    Task<CustomerBookingPrivilege> ClearRestrictionsAsync(Guid customerId, CancellationToken cancellationToken);
+
     Task EnsureCanCreateAsync(
         Guid customerId,
         BookingType bookingType,
