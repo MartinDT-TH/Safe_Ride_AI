@@ -25,6 +25,7 @@ public sealed class TripsController : ControllerBase
     private readonly ITripArrivalVerificationService _tripArrivalVerificationService;
     private readonly ITripCustomerNoShowReminderService _tripCustomerNoShowReminderService;
     private readonly ICustomerNoShowEligibilityService _customerNoShowEligibilityService;
+    private readonly ICustomerNoShowReportingService _customerNoShowReportingService;
     private readonly ITripChatService _tripChatService;
     private readonly IHubContext<TripChatHub> _tripChatHubContext;
     private readonly ISender _sender;
@@ -35,6 +36,7 @@ public sealed class TripsController : ControllerBase
         ITripArrivalVerificationService tripArrivalVerificationService,
         ITripCustomerNoShowReminderService tripCustomerNoShowReminderService,
         ICustomerNoShowEligibilityService customerNoShowEligibilityService,
+        ICustomerNoShowReportingService customerNoShowReportingService,
         ISender sender,
         ITripSharingService tripSharingService,
         ITripChatService tripChatService,
@@ -44,6 +46,7 @@ public sealed class TripsController : ControllerBase
         _tripArrivalVerificationService = tripArrivalVerificationService;
         _tripCustomerNoShowReminderService = tripCustomerNoShowReminderService;
         _customerNoShowEligibilityService = customerNoShowEligibilityService;
+        _customerNoShowReportingService = customerNoShowReportingService;
         _tripChatService = tripChatService;
         _tripChatHubContext = tripChatHubContext;
         _sender = sender;
@@ -191,6 +194,23 @@ public sealed class TripsController : ControllerBase
         if (!TryGetDriverId(out var driverId))
             return Unauthorized(new ProblemDetails { Status = 401, Title = "Unauthorized", Detail = "Cannot resolve authenticated driver account." });
         return Ok(await _customerNoShowEligibilityService.GetAsync(driverId, tripId, cancellationToken));
+    }
+
+    [HttpPost("{tripId:long}/customer-no-show")]
+    [Authorize(Roles = "Driver")]
+    [AllowTripContinuation(TripContinuationOperation.TripStatusUpdate)]
+    [ProducesResponseType<CustomerNoShowReportResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<CustomerNoShowReportResponse>> ReportCustomerNoShow(
+        long tripId, CancellationToken cancellationToken)
+    {
+        if (!TryGetDriverId(out var driverId))
+            return Unauthorized(new ProblemDetails { Status = 401, Title = "Unauthorized", Detail = "Cannot resolve authenticated driver account." });
+        return Ok(await _customerNoShowReportingService.ReportAsync(driverId, tripId, cancellationToken));
     }
 
     [HttpPost("{tripId:long}/end")]
