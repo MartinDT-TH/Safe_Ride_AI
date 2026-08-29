@@ -1014,6 +1014,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                   bool isUpdatingTrip,
                   bool isWaitingForCustomerConfirmation,
                   String? tripRequestsErrorMessage,
+                  CustomerNoShowEligibility? noShowEligibility,
                 })
               >(
                 selector: (_, provider) => (
@@ -1028,6 +1029,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                   isWaitingForCustomerConfirmation:
                       provider.isWaitingForCustomerConfirmation,
                   tripRequestsErrorMessage: provider.tripRequestsErrorMessage,
+                  noShowEligibility: provider.customerNoShowEligibility,
                 ),
                 builder: (context, state, child) {
                   if (state.isLoadingActiveTrip ||
@@ -1072,6 +1074,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                       isUpdating: state.isUpdatingTrip,
                       onCall: () => _startInAppCall(state.activeTrip!),
                       onChat: () => _openChat(state.activeTrip!),
+                      noShowEligibility: state.noShowEligibility,
                     );
                   }
                   if (state.hasNewRequest && state.currentRequest != null) {
@@ -1182,12 +1185,14 @@ class _ActiveTripCard extends StatelessWidget {
     required this.isUpdating,
     required this.onCall,
     required this.onChat,
+    required this.noShowEligibility,
   });
 
   final ActiveDriverTrip trip;
   final bool isUpdating;
   final VoidCallback onCall;
   final VoidCallback onChat;
+  final CustomerNoShowEligibility? noShowEligibility;
 
   @override
   Widget build(BuildContext context) {
@@ -1363,7 +1368,7 @@ class _ActiveTripCard extends StatelessWidget {
                   ),
                 ],
               )
-            else if (status == 'ARRIVED')
+            else if (status == 'ARRIVED') ...[
               Row(
                 children: [
                   if (canCancel) ...[
@@ -1402,8 +1407,40 @@ class _ActiveTripCard extends StatelessWidget {
                     ),
                   ),
                 ],
-              )
-            else if (status == 'IN_PROGRESS') ...[
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed:
+                      isUpdating || noShowEligibility?.canReportNoShow != true
+                      ? null
+                      : () => _runTripAction(
+                          context,
+                          () => context
+                              .read<DriverDashboardProvider>()
+                              .reportCustomerNoShow(),
+                        ),
+                  icon: const Icon(Icons.person_off_outlined),
+                    label: Text(
+                        noShowEligibility?.canReportNoShow == true
+                            ? 'Khách không xuất hiện'
+                            : noShowEligibility?.remainingSeconds != null &&
+                                    noShowEligibility!.remainingSeconds > 0
+                                ? 'Còn ${noShowEligibility!.remainingSeconds} giây chờ'
+                            : noShowEligibility?.reasonMessage.isNotEmpty == true
+                                ? noShowEligibility!.reasonMessage
+                                : 'Đang chờ đủ thời gian xác nhận',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFB45309),
+                    side: const BorderSide(color: Color(0xFFB45309)),
+                  ),
+                ),
+              ),
+            ] else if (status == 'IN_PROGRESS') ...[
               Row(
                 children: [
                   Expanded(

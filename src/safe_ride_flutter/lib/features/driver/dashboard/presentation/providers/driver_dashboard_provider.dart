@@ -126,6 +126,7 @@ class DriverDashboardProvider extends ChangeNotifier {
   final HistoryRepository? _historyRepository;
   String? _accessToken;
   StreamSubscription<void>? _sessionExpiredSubscription;
+  Timer? _customerNoShowEligibilityTimer;
   static const int _maxPendingLocationUpdates = 20;
   final Queue<_PendingDriverLocationUpdate> _pendingLocationUpdates = Queue();
   bool _isFlushingLocationUpdates = false;
@@ -162,6 +163,10 @@ class DriverDashboardProvider extends ChangeNotifier {
 
   bool _isUpdatingTrip = false;
   bool get isUpdatingTrip => _isUpdatingTrip;
+
+  CustomerNoShowEligibility? _customerNoShowEligibility;
+  CustomerNoShowEligibility? get customerNoShowEligibility =>
+      _customerNoShowEligibility;
 
   bool _isWaitingForCustomerConfirmation = false;
   bool get isWaitingForCustomerConfirmation =>
@@ -233,6 +238,10 @@ class DriverDashboardProvider extends ChangeNotifier {
     _registerRealtimeHandlers();
     try {
       await loadActiveTrip();
+      _customerNoShowEligibilityTimer ??= Timer.periodic(
+        const Duration(seconds: 5),
+        (_) => refreshCustomerNoShowEligibility(),
+      );
     } catch (error) {
       debugPrint('DRIVER_DASHBOARD: load active trip failed: $error');
     }
@@ -843,7 +852,87 @@ class DriverDashboardProvider extends ChangeNotifier {
   }
 
   Future<bool> markArrived() {
-    return updateTripStatus('ARRIVED');
+    final trip = _activeTrip;
+    final token = _accessToken;
+    if (trip == null || token == null || _isUpdatingTrip) {
+      return Future.value(false);
+    }
+    return _runArriveRequest(trip.tripId, token);
+  }
+
+  Future<bool> _runArriveRequest(int tripId, String token) async {
+    _isUpdatingTrip = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      await _dio.post(
+        ApiEndpoints.tripArrive(tripId),
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+        ),
+      );
+      _activeTrip = _activeTrip?.copyWith(tripStatus: 'ARRIVED');
+      await refreshCustomerNoShowEligibility();
+      return true;
+    } on DioException catch (error) {
+      _captureTripActionError(error);
+      rethrow;
+    } finally {
+      _isUpdatingTrip = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> refreshCustomerNoShowEligibility() async {
+    final trip = _activeTrip;
+    final token = _accessToken;
+    if (trip == null || token == null || trip.tripStatus != 'ARRIVED') return;
+    try {
+      final response = await _dio.get(
+        ApiEndpoints.customerNoShowEligibility(trip.tripId),
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+        ),
+      );
+      if (response.data is Map) {
+        _customerNoShowEligibility = CustomerNoShowEligibility.fromJson(
+          Map<String, dynamic>.from(response.data as Map),
+        );
+        notifyListeners();
+      }
+    } on DioException catch (error) {
+      _captureTripActionError(error);
+      notifyListeners();
+    }
+  }
+
+  Future<bool> reportCustomerNoShow() async {
+    final trip = _activeTrip;
+    final token = _accessToken;
+    if (trip == null ||
+        token == null ||
+        _isUpdatingTrip ||
+        _customerNoShowEligibility?.canReportNoShow != true) {
+      return false;
+    }
+    _isUpdatingTrip = true;
+    notifyListeners();
+    try {
+      await _dio.post(
+        ApiEndpoints.reportCustomerNoShow(trip.tripId),
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(token)},
+        ),
+      );
+      await loadActiveTrip();
+      return true;
+    } on DioException catch (error) {
+      _captureTripActionError(error);
+      rethrow;
+    } finally {
+      _isUpdatingTrip = false;
+      notifyListeners();
+    }
   }
 
   Future<bool> startTrip() {
@@ -1532,6 +1621,7 @@ class DriverDashboardProvider extends ChangeNotifier {
 
   void _clearActiveTrip() {
     _activeTrip = null;
+    _customerNoShowEligibility = null;
     _activeTripDetailsLoaded.clear();
     _activeTripDetailsFetches.clear();
   }
@@ -1733,6 +1823,7 @@ class DriverDashboardProvider extends ChangeNotifier {
   @override
   void dispose() {
     _sessionExpiredSubscription?.cancel();
+    _customerNoShowEligibilityTimer?.cancel();
     super.dispose();
   }
 }
@@ -1788,6 +1879,29 @@ class ActiveDriverTrip {
       paymentCompleted: paymentCompleted ?? this.paymentCompleted,
       endReconciliationPending:
           endReconciliationPending ?? this.endReconciliationPending,
+    );
+  }
+}
+
+class CustomerNoShowEligibility {
+  const CustomerNoShowEligibility({
+    required this.canReportNoShow,
+    required this.reasonMessage,
+    required this.remainingSeconds,
+    required this.reminderSent,
+  });
+
+  final bool canReportNoShow;
+  final String reasonMessage;
+  final int remainingSeconds;
+  final bool reminderSent;
+
+  factory CustomerNoShowEligibility.fromJson(Map<String, dynamic> json) {
+    return CustomerNoShowEligibility(
+      canReportNoShow: json['canReportNoShow'] == true,
+      reasonMessage: json['reasonMessage']?.toString() ?? '',
+      remainingSeconds: (json['remainingSeconds'] as num?)?.toInt() ?? 0,
+      reminderSent: json['reminderSent'] == true,
     );
   }
 }
