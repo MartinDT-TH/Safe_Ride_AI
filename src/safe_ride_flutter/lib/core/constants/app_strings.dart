@@ -258,11 +258,14 @@ abstract final class ApiEndpoints {
   static const bookingCatalog = '/bookings/catalog';
   static const bookingEstimate = '/bookings/estimate';
   static const driverOnline = '/drivers/online';
+  static const driverLicenseStatus = '/drivers/license-status';
   static const driverOffline = '/drivers/offline';
   static const driverLocation = '/drivers/location';
   static const driverActiveTrip = '/drivers/trips/active';
   static const driverWallet = '/drivers/wallet';
   static const driverWithdrawals = '/drivers/wallet/withdrawals';
+  static const driverWalletTopUps = '/payments/driver/wallet/top-ups';
+  static String driverWalletTopUpStatus(int id) => '/payments/driver/wallet/top-ups/$id';
   static const driverTripRequests = '/drivers/trip-requests';
   static const driverMatchingPreferences = '/drivers/matching-preferences';
   static const nearbyDrivers = '/drivers/nearby';

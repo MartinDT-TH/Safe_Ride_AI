@@ -62,6 +62,7 @@ public static class DependencyInjection
         IConfiguration configuration,
         IHostEnvironment environment)
     {
+        services.AddDataProtection();
         var backgroundJobsEnabled = configuration.GetValue<bool>("BackgroundJobs:Enabled");
 
         services
@@ -337,6 +338,8 @@ public static class DependencyInjection
                 provider.GetRequiredService<InMemoryRedisService>(),
                 provider.GetRequiredService<ILogger<ResilientRedisService>>()));
         services.AddSingleton<ICloudinaryImageService, CloudinaryImageService>();
+        services.AddSingleton<IPiiProtectionService, PiiProtectionService>();
+        services.AddScoped<DriverKycBackfillService>();
         services.AddSingleton<IIdentityDocumentStorage, CloudinaryIdentityDocumentStorage>();
         services.AddSingleton<ITripReturnEvidenceStorage, CloudinaryTripReturnEvidenceStorage>();
         services.AddSingleton<IAccidentEvidenceStorage, CloudinaryAccidentEvidenceStorage>();
@@ -420,6 +423,13 @@ public static class DependencyInjection
         services.AddScoped<IDriverQueryService, DriverQueryService>();
         services.AddScoped<IDriverMatchingPreferencesService, DriverMatchingPreferencesService>();
         services.AddScoped<IDriverWalletService, DriverWalletService>();
+        services.AddHttpClient<IDriverWalletTopUpService, DriverWalletTopUpService>((provider, client) =>
+        {
+            var options = provider.GetRequiredService<IOptions<PayOsOptions>>().Value;
+            client.BaseAddress = new Uri(string.IsNullOrWhiteSpace(options.BaseUrl) ? "https://api-merchant.payos.vn" : options.BaseUrl);
+            if (!string.IsNullOrWhiteSpace(options.ClientId)) client.DefaultRequestHeaders.Add("x-client-id", options.ClientId);
+            if (!string.IsNullOrWhiteSpace(options.ApiKey)) client.DefaultRequestHeaders.Add("x-api-key", options.ApiKey);
+        });
         services.AddScoped<IDriverRealtimeService, DriverRealtimeService>();
         services.AddScoped<TripFareFinalizationService>();
         services.AddSingleton<ITripCommissionCalculator, TripCommissionCalculator>();
