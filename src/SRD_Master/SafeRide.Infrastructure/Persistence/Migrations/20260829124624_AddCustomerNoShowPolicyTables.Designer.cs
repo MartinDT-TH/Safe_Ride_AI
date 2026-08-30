@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NetTopologySuite.Geometries;
 using SafeRide.Infrastructure.Persistence;
@@ -12,9 +13,11 @@ using SafeRide.Infrastructure.Persistence;
 namespace SafeRide.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260829124624_AddCustomerNoShowPolicyTables")]
+    partial class AddCustomerNoShowPolicyTables
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2941,18 +2944,6 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
                     b.Property<decimal?>("ActualFare")
                         .HasColumnType("decimal(18, 2)");
 
-                    b.Property<decimal?>("ArrivalDistanceMeters")
-                        .HasColumnType("decimal(18, 3)");
-
-                    b.Property<decimal?>("ArrivalLatitude")
-                        .HasColumnType("decimal(9, 6)");
-
-                    b.Property<DateTime?>("ArrivalLocationVerifiedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<decimal?>("ArrivalLongitude")
-                        .HasColumnType("decimal(9, 6)");
-
                     b.Property<DateTime?>("ArrivedAt")
                         .HasColumnType("datetime2");
 
@@ -2973,9 +2964,6 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("datetime2")
                         .HasDefaultValueSql("(getdate())");
-
-                    b.Property<DateTime?>("CustomerNoShowReminderSentAt")
-                        .HasColumnType("datetime2");
 
                     b.Property<bool?>("DestinationReached")
                         .HasColumnType("bit");

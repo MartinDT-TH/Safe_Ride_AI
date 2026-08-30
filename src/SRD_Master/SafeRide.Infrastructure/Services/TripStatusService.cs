@@ -33,6 +33,7 @@ public sealed class TripStatusService : ITripStatusService
     private readonly ITripFinancialSettlementService _financialSettlementService;
     private readonly ISafetyPaymentReconciliationService _safetyPaymentReconciliationService;
     private readonly IAccountBanEvaluationService _accountBanEvaluationService;
+    private readonly ICustomerBookingPrivilegeService? _customerBookingPrivilegeService;
     private readonly ILogger<TripStatusService> _logger;
 
     [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
@@ -51,7 +52,8 @@ public sealed class TripStatusService : ITripStatusService
         IPreTripVehicleCheckService preTripVehicleCheckService,
         ITripFinancialSettlementService financialSettlementService,
         IAccountBanEvaluationService accountBanEvaluationService,
-        ILogger<TripStatusService> logger)
+        ILogger<TripStatusService> logger,
+        ICustomerBookingPrivilegeService? customerBookingPrivilegeService = null)
         : this(
             dbContext, dateTimeProvider, redisService, realtimeNotificationService,
             tripReturnEvidenceStorage, evidenceFileValidator, tripSharingService, options, mapRoutingService,
@@ -59,7 +61,7 @@ public sealed class TripStatusService : ITripStatusService
             preTripVehicleCheckService, financialSettlementService,
             new SafetyPaymentReconciliationService(
                 dbContext, financialSettlementService, dateTimeProvider),
-            accountBanEvaluationService, logger)
+            accountBanEvaluationService, logger, customerBookingPrivilegeService)
     {
     }
 
@@ -79,7 +81,8 @@ public sealed class TripStatusService : ITripStatusService
         ITripFinancialSettlementService financialSettlementService,
         ISafetyPaymentReconciliationService safetyPaymentReconciliationService,
         IAccountBanEvaluationService accountBanEvaluationService,
-        ILogger<TripStatusService> logger)
+        ILogger<TripStatusService> logger,
+        ICustomerBookingPrivilegeService? customerBookingPrivilegeService = null)
     {
         _dbContext = dbContext;
         _dateTimeProvider = dateTimeProvider;
@@ -97,6 +100,7 @@ public sealed class TripStatusService : ITripStatusService
         _safetyPaymentReconciliationService = safetyPaymentReconciliationService;
         _accountBanEvaluationService = accountBanEvaluationService;
         _logger = logger;
+        _customerBookingPrivilegeService = customerBookingPrivilegeService;
     }
 
     public async Task UpdateDriverTripStatusAsync(
@@ -1247,6 +1251,14 @@ public sealed class TripStatusService : ITripStatusService
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        if (tripStatus == TripStatus.COMPLETED
+            && previousTripStatus != TripStatus.COMPLETED
+            && _customerBookingPrivilegeService is not null)
+        {
+            await _customerBookingPrivilegeService.RecalculateAsync(
+                trip.Booking.CustomerId,
+                cancellationToken);
+        }
         if (keepDriverOffline)
         {
             await RemoveDriverFromMatchingAsync(trip.DriverId, cancellationToken);

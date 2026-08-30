@@ -24,6 +24,353 @@ public sealed class TripStatusServiceTests
 {
     private static readonly DateTime UtcNow =
         new(2026, 6, 15, 8, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public async Task CustomerNoShowEligibility_IsFalseBeforeArrival()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.DRIVER_ARRIVING);
+        var result = await CreateEligibilityService(fixture).GetAsync(fixture.DriverId, fixture.TripId, CancellationToken.None);
+        Assert.False(result.CanReportNoShow);
+        Assert.Equal("NOT_ARRIVED", result.ReasonCode);
+        Assert.False(result.ReminderSent);
+    }
+
+    [Fact]
+    public async Task CustomerNoShowEligibility_RequiresGpsVerifiedArrival()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.ARRIVED);
+        var trip = await GetTripAsync(fixture);
+        trip.ArrivedAt = UtcNow.AddMinutes(-20);
+        await fixture.DbContext.SaveChangesAsync();
+
+        var result = await CreateEligibilityService(fixture).GetAsync(fixture.DriverId, fixture.TripId, CancellationToken.None);
+        Assert.False(result.CanReportNoShow);
+        Assert.Equal("ARRIVAL_NOT_GPS_VERIFIED", result.ReasonCode);
+    }
+
+    [Fact]
+    public async Task CustomerNoShowEligibility_CountsDownBeforeWaitIsSatisfied()
+    {
+        using var fixture = await PrepareArrivedTripAsync(UtcNow.AddMinutes(-5), reminderSent: true);
+        var result = await CreateEligibilityService(fixture).GetAsync(fixture.DriverId, fixture.TripId, CancellationToken.None);
+        Assert.False(result.CanReportNoShow);
+        Assert.Equal("WAIT_TIME_NOT_SATISFIED", result.ReasonCode);
+        Assert.True(result.RemainingSeconds > 0);
+    }
+
+    [Fact]
+    public async Task CustomerNoShowEligibility_RequiresReminder()
+    {
+        using var fixture = await PrepareArrivedTripAsync(UtcNow.AddMinutes(-20), reminderSent: false);
+        var result = await CreateEligibilityService(fixture).GetAsync(fixture.DriverId, fixture.TripId, CancellationToken.None);
+        Assert.False(result.CanReportNoShow);
+        Assert.Equal("REMINDER_NOT_SENT", result.ReasonCode);
+    }
+
+    [Fact]
+    public async Task CustomerNoShowEligibility_IsFalseAfterTripStarts()
+    {
+        using var fixture = await PrepareArrivedTripAsync(UtcNow.AddMinutes(-20), reminderSent: true);
+        var trip = await GetTripAsync(fixture);
+        trip.TripStatus = TripStatus.IN_PROGRESS;
+        trip.StartedAt = UtcNow.AddMinutes(-1);
+        await fixture.DbContext.SaveChangesAsync();
+        var result = await CreateEligibilityService(fixture).GetAsync(fixture.DriverId, fixture.TripId, CancellationToken.None);
+        Assert.False(result.CanReportNoShow);
+        Assert.Contains(result.ReasonCode, new[] { "TRIP_ALREADY_STARTED", "NOT_ARRIVED" });
+    }
+
+    [Fact]
+    public async Task CustomerNoShowEligibility_IsFalseWhenAlreadyReported()
+    {
+        using var fixture = await PrepareArrivedTripAsync(UtcNow.AddMinutes(-20), reminderSent: true);
+        fixture.DbContext.CustomerBehaviorEvents.Add(new CustomerBehaviorEvent
+        {
+            CustomerId = fixture.CustomerId,
+            BookingId = fixture.TripId,
+            TripId = fixture.TripId,
+            DriverId = fixture.DriverId,
+            EventType = CustomerBehaviorEventType.VERIFIED_NO_SHOW,
+            Status = CustomerBehaviorEventStatus.VERIFIED,
+            VerifiedAt = UtcNow,
+            CreatedAt = UtcNow,
+            UpdatedAt = UtcNow
+        });
+        await fixture.DbContext.SaveChangesAsync();
+        var result = await CreateEligibilityService(fixture).GetAsync(fixture.DriverId, fixture.TripId, CancellationToken.None);
+        Assert.False(result.CanReportNoShow);
+        Assert.Equal("ALREADY_REPORTED", result.ReasonCode);
+        Assert.True(result.HasExistingVerifiedNoShow);
+    }
+
+    [Fact]
+    public async Task CustomerNoShowEligibility_IsTrueWhenAllConditionsAreSatisfied()
+    {
+        using var fixture = await PrepareArrivedTripAsync(UtcNow.AddMinutes(-20), reminderSent: true);
+        var result = await CreateEligibilityService(fixture).GetAsync(fixture.DriverId, fixture.TripId, CancellationToken.None);
+        Assert.True(result.CanReportNoShow);
+        Assert.Equal("ELIGIBLE", result.ReasonCode);
+        Assert.Equal(0, result.RemainingSeconds);
+        Assert.True(result.ReminderSent);
+    }
+
+    [Fact]
+    public async Task CustomerNoShowReminder_IsRecordedOnlyOnce()
+    {
+        using var fixture = await PrepareArrivedTripAsync(UtcNow.AddMinutes(-20), reminderSent: false);
+        var reminder = new TripCustomerNoShowReminderService(fixture.DbContext, new DateTimeProviderFake(UtcNow));
+        Assert.True(await reminder.RecordIfNeededAsync(fixture.TripId, CancellationToken.None));
+        Assert.False(await reminder.RecordIfNeededAsync(fixture.TripId, CancellationToken.None));
+        Assert.Single(await fixture.DbContext.Notifications.ToListAsync());
+        Assert.NotNull((await GetTripAsync(fixture)).CustomerNoShowReminderSentAt);
+    }
+
+    [Fact]
+    public async Task CustomerNoShowReminder_DoesNotRecordForNonArrivedTrip()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.IN_PROGRESS);
+        var reminder = new TripCustomerNoShowReminderService(fixture.DbContext, new DateTimeProviderFake(UtcNow));
+        Assert.False(await reminder.RecordIfNeededAsync(fixture.TripId, CancellationToken.None));
+        Assert.Empty(await fixture.DbContext.Notifications.ToListAsync());
+        Assert.Null((await GetTripAsync(fixture)).CustomerNoShowReminderSentAt);
+    }
+
+    [Fact]
+    public async Task CustomerNoShowEligibility_RejectsNonAssignedDriverAndMissingTrip()
+    {
+        using var fixture = await PrepareArrivedTripAsync(UtcNow.AddMinutes(-20), reminderSent: true);
+        var service = CreateEligibilityService(fixture);
+        var forbidden = await Assert.ThrowsAsync<BookingException>(() => service.GetAsync(Guid.NewGuid(), fixture.TripId, CancellationToken.None));
+        var missing = await Assert.ThrowsAsync<BookingException>(() => service.GetAsync(fixture.DriverId, -1, CancellationToken.None));
+        Assert.Equal(403, forbidden.StatusCode);
+        Assert.Equal(404, missing.StatusCode);
+    }
+
+    [Fact]
+    public async Task CustomerNoShowReport_CreatesVerifiedEventAndClosesTripWithoutCharges()
+    {
+        using var fixture = await PrepareArrivedTripAsync(UtcNow.AddMinutes(-20), reminderSent: true);
+        var driver = await fixture.DbContext.DriverProfiles.SingleAsync();
+        driver.WorkStatus = DriverWorkStatus.Busy;
+        await fixture.DbContext.SaveChangesAsync();
+        var result = await CreateNoShowReportingService(fixture).ReportAsync(fixture.DriverId, fixture.TripId, CancellationToken.None);
+
+        var trip = await GetTripAsync(fixture);
+        Assert.Equal(TripStatus.CANCELLED, trip.TripStatus);
+        Assert.Equal(BookingStatus.Cancelled, trip.Booking.BookingStatus);
+        Assert.Equal(DriverWorkStatus.Online, driver.WorkStatus);
+        Assert.Equal(0m, result.CustomerCharge);
+        Assert.Single(await fixture.DbContext.CustomerBehaviorEvents.ToListAsync());
+        Assert.Empty(await fixture.DbContext.DriverNoShowSupports.ToListAsync());
+        Assert.Empty(await fixture.DbContext.Payments.ToListAsync());
+        Assert.Empty(await fixture.DbContext.WalletTransactions.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData(4.8, false)]
+    [InlineData(5.0, false)]
+    [InlineData(5.3, true)]
+    public async Task CustomerNoShowReport_AppliesDriverSupportOnlyAbovePickupDistanceThreshold(
+        double pickupDistanceKm, bool expectedEligible)
+    {
+        using var fixture = await PrepareArrivedTripAsync(UtcNow.AddMinutes(-20), reminderSent: true);
+        await AddConfirmedOfferAsync(fixture, (decimal)pickupDistanceKm);
+
+        var result = await CreateNoShowReportingService(fixture).ReportAsync(
+            fixture.DriverId, fixture.TripId, CancellationToken.None);
+
+        Assert.Equal(0m, result.CustomerCharge);
+        Assert.Equal(expectedEligible, result.DriverSupportEligible);
+        Assert.Equal(expectedEligible ? 10_000m : 0m, result.DriverSupportAmount);
+        Assert.Equal(
+            expectedEligible ? DriverNoShowSupportStatus.CREDITED : null,
+            result.DriverSupportStatus);
+        Assert.Equal(expectedEligible ? 1 : 0,
+            await fixture.DbContext.DriverNoShowSupports.CountAsync());
+        Assert.Equal(expectedEligible ? 1 : 0,
+            await fixture.DbContext.WalletTransactions.CountAsync());
+        Assert.Equal(expectedEligible ? 10_000m : 0m,
+            (await fixture.DbContext.DriverWallets.SingleOrDefaultAsync())?.CurrentBalance ?? 0m);
+    }
+
+    [Fact]
+    public async Task CustomerNoShowReport_DoesNotDoubleCreditDriverSupportOnReplay()
+    {
+        using var fixture = await PrepareArrivedTripAsync(UtcNow.AddMinutes(-20), reminderSent: true);
+        await AddConfirmedOfferAsync(fixture, 5.3m);
+
+        var service = CreateNoShowReportingService(fixture);
+        var first = await service.ReportAsync(fixture.DriverId, fixture.TripId, CancellationToken.None);
+        var exception = await Assert.ThrowsAsync<BookingException>(() => service.ReportAsync(
+            fixture.DriverId, fixture.TripId, CancellationToken.None));
+
+        Assert.Equal(10_000m, first.DriverSupportAmount);
+        Assert.Equal(409, exception.StatusCode);
+        Assert.Single(await fixture.DbContext.DriverNoShowSupports.ToListAsync());
+        Assert.Single(await fixture.DbContext.WalletTransactions.ToListAsync());
+        Assert.Equal(10_000m, (await fixture.DbContext.DriverWallets.SingleAsync()).CurrentBalance);
+    }
+
+    [Fact]
+    public async Task CustomerNoShowReport_RejectsDuplicateEvent()
+    {
+        using var fixture = await PrepareArrivedTripAsync(UtcNow.AddMinutes(-20), reminderSent: true);
+        var service = CreateNoShowReportingService(fixture);
+        await service.ReportAsync(fixture.DriverId, fixture.TripId, CancellationToken.None);
+        var exception = await Assert.ThrowsAsync<BookingException>(() => service.ReportAsync(fixture.DriverId, fixture.TripId, CancellationToken.None));
+        Assert.Equal(409, exception.StatusCode);
+        Assert.Single(await fixture.DbContext.CustomerBehaviorEvents.ToListAsync());
+    }
+
+    private static async Task<TripStatusFixture> PrepareArrivedTripAsync(DateTime arrivedAt, bool reminderSent)
+    {
+        var fixture = await TripStatusFixture.CreateAsync(TripStatus.ARRIVED);
+        var trip = await GetTripAsync(fixture);
+        trip.ArrivedAt = arrivedAt;
+        trip.ArrivalLocationVerifiedAt = arrivedAt;
+        trip.ArrivalLatitude = 10.762622m;
+        trip.ArrivalLongitude = 106.660172m;
+        trip.CustomerNoShowReminderSentAt = reminderSent ? UtcNow : null;
+        await fixture.DbContext.SaveChangesAsync();
+        return fixture;
+    }
+
+    private static async Task AddConfirmedOfferAsync(TripStatusFixture fixture, decimal pickupDistanceKm)
+    {
+        fixture.DbContext.BookingDriverOffers.Add(new BookingDriverOffer
+        {
+            BookingId = (await GetTripAsync(fixture)).BookingId,
+            DriverId = fixture.DriverId,
+            OfferStatus = DriverOfferStatus.CustomerConfirmed,
+            OfferedAt = UtcNow.AddHours(-1),
+            ConfirmedAt = UtcNow.AddMinutes(-30),
+            ExpiresAt = UtcNow.AddHours(1),
+            PickupDistanceKm = pickupDistanceKm
+        });
+        await fixture.DbContext.SaveChangesAsync();
+    }
+
+    private static async Task<Trip> GetTripAsync(TripStatusFixture fixture) =>
+        await fixture.DbContext.Trips.SingleAsync(x => x.Id == fixture.TripId);
+
+    private static CustomerNoShowEligibilityService CreateEligibilityService(TripStatusFixture fixture) =>
+        new(fixture.DbContext, new DateTimeProviderFake(UtcNow), new OptionsMonitorFake<CustomerNoShowOptions>(new CustomerNoShowOptions()));
+
+    private static CustomerNoShowReportingService CreateNoShowReportingService(TripStatusFixture fixture) =>
+        new(fixture.DbContext, new DateTimeProviderFake(UtcNow),
+            new OptionsMonitorFake<CustomerNoShowOptions>(new CustomerNoShowOptions()),
+            new NoOpBookingLifecycleJobScheduler(), fixture.Redis,
+            new CustomerBookingPrivilegeService(
+                fixture.DbContext,
+                new DateTimeProviderFake(UtcNow),
+                new OptionsMonitorFake<CustomerNoShowOptions>(new CustomerNoShowOptions())));
+
+    [Fact]
+    public async Task DriverArrival_VerifiesFreshLocationAndStoresSnapshot()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.DRIVER_ARRIVING);
+        var arrival = CreateArrivalVerificationService(fixture);
+        var pickup = await fixture.DbContext.Bookings
+            .Where(x => x.Trip!.Id == fixture.TripId)
+            .Select(x => x.PickupLocation)
+            .SingleAsync();
+        fixture.Redis.SetDriverLocation(
+            fixture.DriverId,
+            new DriverLocationCache(fixture.DriverId, pickup.Y, pickup.X, UtcNow));
+
+        var result = await arrival.VerifyAndRecordAsync(
+            fixture.DriverId, fixture.TripId, CancellationToken.None);
+        await fixture.Service.UpdateDriverTripStatusAsync(
+            fixture.DriverId, fixture.TripId, TripStatus.ARRIVED, CancellationToken.None);
+
+        var trip = await fixture.DbContext.Trips.SingleAsync(x => x.Id == fixture.TripId);
+        Assert.Equal(TripStatus.ARRIVED, trip.TripStatus);
+        Assert.NotNull(trip.ArrivedAt);
+        Assert.Equal((decimal)result.Latitude, trip.ArrivalLatitude);
+        Assert.Equal((decimal)result.Longitude, trip.ArrivalLongitude);
+        Assert.Equal(0m, trip.ArrivalDistanceMeters);
+        Assert.Equal(UtcNow, trip.ArrivalLocationVerifiedAt);
+        Assert.Empty(await fixture.DbContext.CustomerBehaviorEvents.ToListAsync());
+        Assert.Empty(await fixture.DbContext.DriverNoShowSupports.ToListAsync());
+        Assert.Empty(await fixture.DbContext.Payments.ToListAsync());
+        Assert.Empty(await fixture.DbContext.WalletTransactions.ToListAsync());
+    }
+
+    [Fact]
+    public async Task DriverArrival_RejectsMissingLocationWithoutChangingTrip()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.DRIVER_ARRIVING);
+        var arrival = CreateArrivalVerificationService(fixture);
+
+        var exception = await Assert.ThrowsAsync<BookingException>(() => arrival.VerifyAndRecordAsync(
+            fixture.DriverId, fixture.TripId, CancellationToken.None));
+
+        Assert.Equal(400, exception.StatusCode);
+        await AssertArrivalUnchangedAsync(fixture);
+    }
+
+    [Fact]
+    public async Task DriverArrival_RejectsStaleLocationWithoutChangingTrip()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.DRIVER_ARRIVING);
+        var arrival = CreateArrivalVerificationService(fixture);
+        fixture.Redis.SetDriverLocation(
+            fixture.DriverId,
+            new DriverLocationCache(fixture.DriverId, 106.660172, 10.762622, UtcNow.AddSeconds(-121)));
+
+        var exception = await Assert.ThrowsAsync<BookingException>(() => arrival.VerifyAndRecordAsync(
+            fixture.DriverId, fixture.TripId, CancellationToken.None));
+
+        Assert.Equal(400, exception.StatusCode);
+        await AssertArrivalUnchangedAsync(fixture);
+    }
+
+    [Fact]
+    public async Task DriverArrival_RejectsLocationOutsideRadiusWithoutChangingTrip()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.DRIVER_ARRIVING);
+        var arrival = CreateArrivalVerificationService(fixture);
+        fixture.Redis.SetDriverLocation(
+            fixture.DriverId,
+            new DriverLocationCache(fixture.DriverId, 106.700000, 10.800000, UtcNow));
+
+        var exception = await Assert.ThrowsAsync<BookingException>(() => arrival.VerifyAndRecordAsync(
+            fixture.DriverId, fixture.TripId, CancellationToken.None));
+
+        Assert.Equal(400, exception.StatusCode);
+        await AssertArrivalUnchangedAsync(fixture);
+    }
+
+    [Fact]
+    public async Task DriverArrival_RejectsUnassignedDriverWithoutChangingTrip()
+    {
+        using var fixture = await TripStatusFixture.CreateAsync(TripStatus.DRIVER_ARRIVING);
+        var arrival = CreateArrivalVerificationService(fixture);
+
+        var exception = await Assert.ThrowsAsync<BookingException>(() => arrival.VerifyAndRecordAsync(
+            Guid.NewGuid(), fixture.TripId, CancellationToken.None));
+
+        Assert.Equal(403, exception.StatusCode);
+        await AssertArrivalUnchangedAsync(fixture);
+    }
+
+    private static TripArrivalVerificationService CreateArrivalVerificationService(TripStatusFixture fixture) =>
+        new(
+            fixture.DbContext,
+            fixture.Redis,
+            new DateTimeProviderFake(UtcNow),
+            new OptionsMonitorFake<CustomerNoShowOptions>(new CustomerNoShowOptions()));
+
+    private static async Task AssertArrivalUnchangedAsync(TripStatusFixture fixture)
+    {
+        var trip = await fixture.DbContext.Trips.SingleAsync(x => x.Id == fixture.TripId);
+        Assert.Equal(TripStatus.DRIVER_ARRIVING, trip.TripStatus);
+        Assert.Null(trip.ArrivedAt);
+        Assert.Null(trip.ArrivalLatitude);
+        Assert.Null(trip.ArrivalLongitude);
+        Assert.Null(trip.ArrivalDistanceMeters);
+        Assert.Null(trip.ArrivalLocationVerifiedAt);
+    }
     [Fact]
     public async Task EndTrip_MovesDirectlyToWaitingPaymentWithoutCustomerResponse()
     {
@@ -2874,6 +3221,15 @@ public sealed class TripStatusServiceTests
             RemovedKeys.AddRange(RedisKeys.TripTrackingKeys(tripId));
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class NoOpBookingLifecycleJobScheduler : IBookingLifecycleJobScheduler
+    {
+        public void ScheduleExpandRadius(long bookingId, TimeSpan delay) { }
+        public void ScheduleExpireBooking(long bookingId, TimeSpan delay) { }
+        public void ScheduleExpireDriverOffer(long offerId, TimeSpan delay) { }
+        public Task CancelExpireDriverOfferAsync(long offerId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task CancelJobsForBookingAsync(long bookingId, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class RealtimeNotificationServiceFake

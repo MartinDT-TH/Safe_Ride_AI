@@ -214,6 +214,20 @@ public static class DependencyInjection
             .ValidateOnStart();
 
         services
+            .AddOptions<CustomerNoShowOptions>()
+            .Bind(configuration.GetSection(CustomerNoShowOptions.SectionName))
+            .Validate(options => options.NoShowWaitMinutes > 0, "CustomerNoShow:NoShowWaitMinutes must be greater than zero.")
+            .Validate(options => options.ArrivalRadiusMeters > 0, "CustomerNoShow:ArrivalRadiusMeters must be greater than zero.")
+            .Validate(options => options.DriverLocationFreshnessSeconds > 0, "CustomerNoShow:DriverLocationFreshnessSeconds must be greater than zero.")
+            .Validate(options => options.DriverSupportMinPickupDistanceKm > 0, "CustomerNoShow:DriverSupportMinPickupDistanceKm must be greater than zero.")
+            .Validate(options => options.DriverNoShowSupportAmount >= 0, "CustomerNoShow:DriverNoShowSupportAmount must be non-negative.")
+            .Validate(options => options.BehaviorWindowDays > 0, "CustomerNoShow:BehaviorWindowDays must be greater than zero.")
+            .Validate(options => options.ScheduleRestrictionDaysFirst > 0, "CustomerNoShow:ScheduleRestrictionDaysFirst must be greater than zero.")
+            .Validate(options => options.ScheduleRestrictionDaysPersistent > 0, "CustomerNoShow:ScheduleRestrictionDaysPersistent must be greater than zero.")
+            .Validate(options => options.InstantCooldownHoursPersistent > 0, "CustomerNoShow:InstantCooldownHoursPersistent must be greater than zero.")
+            .ValidateOnStart();
+
+        services
             .AddOptions<ExpandSearchingRadiusJobOptions>()
             .Bind(configuration.GetSection(ExpandSearchingRadiusJobOptions.SectionName))
             .Validate(options => options.RadiusExpandedNotificationTtlMinutes > 0, "BackgroundJobs:ExpandSearchingRadius:RadiusExpandedNotificationTtlMinutes must be greater than zero.")
@@ -423,6 +437,12 @@ public static class DependencyInjection
         services.AddScoped<IAdminRevenueQueryService, AdminRevenueQueryService>();
         services.AddScoped<TripPaymentSettlementService>();
         services.AddScoped<ITripStatusService, TripStatusService>();
+        services.AddScoped<ITripArrivalVerificationService, TripArrivalVerificationService>();
+        services.AddScoped<ITripCustomerNoShowReminderService, TripCustomerNoShowReminderService>();
+        services.AddScoped<ICustomerNoShowEligibilityService, CustomerNoShowEligibilityService>();
+        services.AddScoped<ICustomerNoShowReportingService, CustomerNoShowReportingService>();
+        services.AddScoped<ICustomerBookingPrivilegeService, CustomerBookingPrivilegeService>();
+        services.AddScoped<IStaffNoShowReviewService, StaffNoShowReviewService>();
         services.AddScoped<ITripSharingService, TripSharingService>();
         services.AddScoped<ITripChatService, TripChatService>();
         services.AddSingleton<ITripChatContentFilter, TripChatContentFilter>();

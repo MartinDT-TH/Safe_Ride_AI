@@ -81,6 +81,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   bool _deviationAlertOpen = false;
   bool _isSendingSOS = false;
   bool _isReportingAccident = false;
+  bool _customerIsComing = false;
   late bool _isSOSActivated;
   late bool _isPrepaid;
   late String? _currentTripStatus;
@@ -1450,6 +1451,28 @@ class _TripTrackingPageState extends State<TripTrackingPage>
               ),
               SizedBox(height: 12),
               if (isArriving) ...[
+                if (_currentTripStatus == 'ARRIVED') ...[
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _customerIsComing
+                          ? null
+                          : () {
+                              setState(() => _customerIsComing = true);
+                              _showMessage(
+                                'Đã báo cho tài xế rằng bạn đang đến.',
+                              );
+                            },
+                      icon: Icon(Icons.directions_walk_rounded),
+                      label: Text(
+                        _customerIsComing ? 'Đã báo đang đến' : 'Tôi đang đến',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 10),
+                ],
                 SizedBox(
                   width: double.infinity,
                   child: _isPrepaid

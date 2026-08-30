@@ -273,6 +273,11 @@ abstract final class ApiEndpoints {
   static String confirmDriverOffer(int bookingId, int offerId) =>
       '/bookings/$bookingId/confirm-driver-offer/$offerId';
   static String tripStatus(int tripId) => '/trips/$tripId/status';
+  static String tripArrive(int tripId) => '/trips/$tripId/arrive';
+  static String customerNoShowEligibility(int tripId) =>
+      '/trips/$tripId/customer-no-show/eligibility';
+  static String reportCustomerNoShow(int tripId) =>
+      '/trips/$tripId/customer-no-show';
   static String preTripVehicleChecks(int tripId) =>
       '/trips/$tripId/vehicle-safety-checks';
   static String safetyTermination(int tripId) =>
