@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Common.Exceptions;
 using SafeRide.Application.Common.Models;
 using SafeRide.Application.Common.Realtime;
 using SafeRide.Domain.Enums;
@@ -348,6 +349,19 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
         var utcNow = _dateTimeProvider.UtcNow;
         var profile = await _dbContext.DriverProfiles
             .FirstOrDefaultAsync(x => x.DriverId == driverId, cancellationToken);
+        var today = DateOnly.FromDateTime(utcNow);
+        var expiredLicense = await _dbContext.DriverKycs.AsNoTracking()
+            .Where(x => x.DriverId == driverId
+                && x.DocumentType == KycDocumentType.DRIVING_LICENSE
+                && x.KycStatus == KycStatus.Approved
+                && x.ExpiryDate.HasValue
+                && x.ExpiryDate.Value < today)
+            .Select(x => x.ExpiryDate)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (expiredLicense.HasValue)
+        {
+            throw new DriverLicenseExpiredException(expiredLicense.Value);
+        }
         if (profile is not null && profile.WorkStatus != DriverWorkStatus.Busy)
         {
             profile.WorkStatus = DriverWorkStatus.Online;

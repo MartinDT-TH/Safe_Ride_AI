@@ -17,5 +17,7 @@ public partial class DriverWallet
 
     public virtual ICollection<WalletTransaction> WalletTransactions { get; set; } = new List<WalletTransaction>();
 
+    public virtual ICollection<DriverWalletTopUp> TopUps { get; set; } = new List<DriverWalletTopUp>();
+
     public virtual ICollection<WithdrawalRequest> WithdrawalRequests { get; set; } = new List<WithdrawalRequest>();
 }

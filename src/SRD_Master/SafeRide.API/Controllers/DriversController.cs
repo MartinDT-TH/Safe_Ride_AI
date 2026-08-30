@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
 using MediatR;
 using SafeRide.API.Authorization;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Common.Exceptions;
 using SafeRide.Application.Common.Models;
 using SafeRide.Application.Features.Auth;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
@@ -249,13 +251,37 @@ public sealed class DriversController : ControllerBase
             return Unauthorized();
         }
 
-        await _driverRealtimeService.SetDriverOnlineAsync(
-            driverId,
-            request.Latitude,
-            request.Longitude,
-            cancellationToken);
+        try
+        {
+            await _driverRealtimeService.SetDriverOnlineAsync(driverId, request.Latitude, request.Longitude, cancellationToken);
+        }
+        catch (DriverLicenseExpiredException exception)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Bằng lái đã hết hạn",
+                Detail = exception.Message,
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
 
         return NoContent();
+    }
+
+    [Authorize(Roles = "Driver")]
+    [HttpGet("license-status")]
+    public async Task<IActionResult> GetLicenseStatus(CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var driverId)) return Unauthorized();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var expiry = await HttpContext.RequestServices.GetRequiredService<SafeRide.Infrastructure.Persistence.ApplicationDbContext>()
+            .DriverKycs.AsNoTracking()
+            .Where(x => x.DriverId == driverId && x.DocumentType == KycDocumentType.DRIVING_LICENSE && x.KycStatus == KycStatus.Approved)
+            .OrderByDescending(x => x.ExpiryDate)
+            .Select(x => x.ExpiryDate)
+            .FirstOrDefaultAsync(cancellationToken);
+        var daysRemaining = expiry.HasValue ? expiry.Value.DayNumber - today.DayNumber : (int?)null;
+        return Ok(new { expiryDate = expiry, daysRemaining, isExpired = daysRemaining.HasValue && daysRemaining.Value < 0, shouldWarn = daysRemaining is >= 0 and <= 3 });
     }
 
     [Authorize(Roles = "Driver")]
