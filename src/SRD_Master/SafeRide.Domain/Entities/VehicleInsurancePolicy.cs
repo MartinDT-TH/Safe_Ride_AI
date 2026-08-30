@@ -21,4 +21,5 @@ public sealed class VehicleInsurancePolicy
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAtUtc { get; set; }
     public Vehicle Vehicle { get; set; } = null!;
+    public ICollection<InsurancePolicyDocument> Documents { get; set; } = new List<InsurancePolicyDocument>();
 }

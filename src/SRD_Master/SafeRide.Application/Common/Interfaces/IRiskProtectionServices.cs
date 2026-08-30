@@ -200,6 +200,30 @@ public interface IAccidentEvidenceStorage
     Task DeleteAsync(string publicId, string contentType, CancellationToken cancellationToken);
 }
 
+public interface IInsuranceDocumentService
+{
+    Task<InsurancePolicyDocumentResponse> UploadPolicyDocumentAsync(Guid userId, long policyId, InsurancePolicyDocumentType type, InsuranceDocumentUpload upload, CancellationToken cancellationToken);
+    Task<IReadOnlyList<InsurancePolicyDocumentResponse>> ListPolicyDocumentsAsync(Guid userId, long policyId, bool isStaff, CancellationToken cancellationToken);
+    Task<InsuranceDocumentDownload> OpenPolicyDocumentAsync(Guid userId, long policyId, long documentId, bool isStaff, CancellationToken cancellationToken);
+    Task<InsuranceClaimDocumentResponse> UploadClaimDocumentAsync(Guid staffUserId, long claimId, InsuranceClaimDocumentType type, InsuranceDocumentUpload upload, CancellationToken cancellationToken);
+    Task<IReadOnlyList<InsuranceClaimDocumentResponse>> ListClaimDocumentsAsync(Guid staffUserId, long claimId, CancellationToken cancellationToken);
+    Task<InsuranceDocumentDownload> OpenClaimDocumentAsync(Guid staffUserId, long claimId, long documentId, CancellationToken cancellationToken);
+}
+
+public sealed record InsuranceDocumentUpload(string FileName, string ContentType, long FileSizeBytes, Stream Content);
+public sealed record InsuranceDocumentDownload(Stream Content, string FileName, string ContentType, long FileSizeBytes);
+
+public interface IPrivateInsuranceDocumentStorage
+{
+    Task<StoredPrivateInsuranceDocument> SaveAsync(
+        string aggregateType, long aggregateId, string fileName, string contentType,
+        Stream content, CancellationToken cancellationToken);
+    Task<Stream> OpenReadAsync(string objectKey, CancellationToken cancellationToken);
+    Task DeleteAsync(string objectKey, CancellationToken cancellationToken);
+}
+
+public sealed record StoredPrivateInsuranceDocument(string ObjectKey, long FileSizeBytes);
+
 public interface IPreTripVehicleCheckEvidenceStorage
 {
     Task<StoredPreTripVehicleCheckEvidence> SaveAsync(

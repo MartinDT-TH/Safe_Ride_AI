@@ -114,28 +114,85 @@ public sealed class TripCommissionCalculator : ITripCommissionCalculator, IClaim
     public ClaimLiabilityCalculationResult CalculateLiabilities(ClaimLiabilityCalculationInput input)
     {
         if (input.EligibleDamage < 0
+            || input.InsurancePaidAmount < 0
+            || input.CustomerInsuranceAppliedAmount < 0
             || input.DriverFaultPercentage is < 0 or > 100
             || input.CustomerFaultPercentage is < 0 or > 100
             || input.ThirdPartyFaultPercentage is < 0 or > 100
+            || input.VehicleFailurePercentage is < 0 or > 100
+            || input.ObjectiveCausePercentage is < 0 or > 100
             || input.DriverFaultPercentage + input.CustomerFaultPercentage
-                + input.ThirdPartyFaultPercentage > 100m)
+                + input.ThirdPartyFaultPercentage + input.VehicleFailurePercentage
+                + input.ObjectiveCausePercentage > 100m)
             throw new ArgumentOutOfRangeException(nameof(input));
 
-        var driver = CalculateDriverLiability(new DriverLiabilityCalculationInput(
-            input.EligibleDamage,
+        var grossAllocations = AllocateResidual(
+            RoundVnd(input.EligibleDamage),
             input.DriverFaultPercentage,
+            input.CustomerFaultPercentage,
+            input.ThirdPartyFaultPercentage,
+            input.VehicleFailurePercentage,
+            input.ObjectiveCausePercentage);
+        var driverGross = grossAllocations[0];
+        var customerGross = grossAllocations[1];
+        var thirdPartyGross = grossAllocations[2];
+        var vehicleObjectiveGross = grossAllocations[3] + grossAllocations[4];
+        var customerInsurance = RoundVnd(input.CustomerInsuranceAppliedAmount);
+        if (customerInsurance > customerGross)
+            throw new ArgumentOutOfRangeException(nameof(input.CustomerInsuranceAppliedAmount));
+
+        var customerAfterOwnInsurance = customerGross - customerInsurance;
+        var participantExposure = customerAfterOwnInsurance + driverGross;
+        var systemInsurance = RoundVnd(input.InsurancePaidAmount);
+        if (systemInsurance > participantExposure)
+            throw new ArgumentOutOfRangeException(nameof(input.InsurancePaidAmount));
+        var systemBenefits = AllocateByWeight(
+            systemInsurance,
+            customerAfterOwnInsurance,
+            driverGross);
+        var customerSystemBenefit = systemBenefits[0];
+        var driverSystemBenefit = systemBenefits[1];
+        var customerFinal = customerAfterOwnInsurance - customerSystemBenefit;
+        var driverFinal = driverGross - driverSystemBenefit;
+        var residual = RoundVnd(input.EligibleDamage - customerInsurance - systemInsurance);
+        var driver = CalculateDriverLiability(new DriverLiabilityCalculationInput(
+            driverFinal,
+            100m,
             input.DriverFaultLevel,
             input.OrdinaryNegligenceRate,
             input.OrdinaryNegligenceCap,
             input.GrossNegligenceRate,
             input.GrossNegligenceCap));
-        var customer = RoundVnd(input.EligibleDamage * input.CustomerFaultPercentage / 100m);
-        var thirdParty = RoundVnd(input.EligibleDamage * input.ThirdPartyFaultPercentage / 100m);
-        var totalRecoverable = Math.Min(
-            RoundVnd(input.EligibleDamage),
-            driver.LiabilityAmount + customer + thirdParty);
 
-        return new ClaimLiabilityCalculationResult(driver, customer, thirdParty, totalRecoverable);
+        driver = driver with
+        {
+            DriverAttributableEligibleDamage = driverFinal,
+            LiabilityAmount = RecalculateDriverLiability(driverFinal, input)
+        };
+        var totalRecoverable = Math.Min(
+            residual,
+            driver.LiabilityAmount + customerFinal + thirdPartyGross);
+
+        return new ClaimLiabilityCalculationResult(driver, customerFinal, thirdPartyGross, totalRecoverable)
+        {
+            ResidualUninsuredDamage = residual,
+            CustomerGrossExposure = customerGross,
+            DriverGrossExposure = driverGross,
+            ThirdPartyGrossExposure = thirdPartyGross,
+            VehicleObjectiveGrossExposure = vehicleObjectiveGross,
+            CustomerInsuranceAppliedAmount = customerInsurance,
+            CustomerExposureAfterOwnInsurance = customerAfterOwnInsurance,
+            DriverExposureBeforeSystemInsurance = driverGross,
+            ParticipantExposureBeforeSystemInsurance = participantExposure,
+            SystemInsuranceApprovedAmount = systemInsurance,
+            CustomerSystemInsuranceBenefit = customerSystemBenefit,
+            DriverSystemInsuranceBenefit = driverSystemBenefit,
+            CustomerFinalExposure = customerFinal,
+            DriverRemainingExposureBeforeRateCap = driverFinal,
+            CustomerAttributableResidualDamage = customerFinal,
+            ThirdPartyAttributableResidualDamage = thirdPartyGross,
+            VehicleObjectiveResidualAmount = vehicleObjectiveGross
+        };
     }
 
     private static DriverLiabilityCalculationResult ApplyRule(decimal attributable, decimal rate, decimal cap)
@@ -143,6 +200,72 @@ public sealed class TripCommissionCalculator : ITripCommissionCalculator, IClaim
         EnsureRate(rate, nameof(rate));
         if (cap < 0) throw new ArgumentOutOfRangeException(nameof(cap));
         return new(attributable, rate, cap, Math.Min(RoundVnd(attributable * rate), RoundVnd(cap)));
+    }
+
+    private static decimal RecalculateDriverLiability(
+        decimal attributable,
+        ClaimLiabilityCalculationInput input) => input.DriverFaultLevel switch
+        {
+            DriverFaultLevel.NO_FAULT => 0m,
+            DriverFaultLevel.ORDINARY_NEGLIGENCE => Math.Min(
+                RoundVnd(attributable * input.OrdinaryNegligenceRate),
+                RoundVnd(input.OrdinaryNegligenceCap)),
+            DriverFaultLevel.GROSS_NEGLIGENCE => Math.Min(
+                RoundVnd(attributable * input.GrossNegligenceRate),
+                RoundVnd(input.GrossNegligenceCap)),
+            DriverFaultLevel.INTENTIONAL_MISCONDUCT => attributable,
+            _ => throw new ArgumentOutOfRangeException(nameof(input.DriverFaultLevel))
+        };
+
+    private static decimal[] AllocateResidual(decimal residual, params decimal[] percentages)
+    {
+        var allocations = percentages
+            .Select(percentage => residual * percentage / 100m)
+            .Select(decimal.Truncate)
+            .ToArray();
+        // Inputs used by the service always total 100%. Preserve an omitted
+        // tail for backwards-compatible calculator callers rather than
+        // looping millions of times to distribute a genuinely unassigned
+        // percentage.
+        if (percentages.Sum() < 100m) return allocations;
+        var remaining = (int)(residual - allocations.Sum());
+        var order = percentages
+            .Select((percentage, index) => new
+            {
+                index,
+                Fraction = residual * percentage / 100m
+                    - decimal.Truncate(residual * percentage / 100m)
+            })
+            .OrderByDescending(item => item.Fraction)
+            .ThenBy(item => item.index)
+            .ToArray();
+        for (var i = 0; i < remaining && order.Length > 0; i++)
+            allocations[order[i % order.Length].index] += 1m;
+        return allocations;
+    }
+
+    private static decimal[] AllocateByWeight(decimal amount, params decimal[] weights)
+    {
+        var totalWeight = weights.Sum();
+        if (amount == 0m || totalWeight == 0m) return new decimal[weights.Length];
+
+        var allocations = weights
+            .Select(weight => decimal.Truncate(amount * weight / totalWeight))
+            .ToArray();
+        var remaining = (int)(amount - allocations.Sum());
+        var order = weights
+            .Select((weight, index) => new
+            {
+                index,
+                Fraction = amount * weight / totalWeight
+                    - decimal.Truncate(amount * weight / totalWeight)
+            })
+            .OrderByDescending(item => item.Fraction)
+            .ThenBy(item => item.index)
+            .ToArray();
+        for (var i = 0; i < remaining; i++)
+            allocations[order[i % order.Length].index] += 1m;
+        return allocations;
     }
 
     private static decimal RoundVnd(decimal amount) => decimal.Round(amount, 0, MidpointRounding.AwayFromZero);

@@ -19,17 +19,19 @@ public sealed class MockInsuranceProvider : IInsuranceProvider
             context.PolicyCoverageAmount,
             context.PolicyDeductibleAmount,
             context.ProviderCoverageLimit);
+        var maximum = approved;
         var reference = $"MOCK-CALC-{context.ClaimId}-{Guid.NewGuid():N}";
         var requestPayload = JsonSerializer.Serialize(context);
         var responsePayload = JsonSerializer.Serialize(new
         {
             requestedAmount = requested,
             approvedAmount = approved,
+            maximumApprovableInsuranceAmount = maximum,
             reference
         });
 
         return Task.FromResult(new InsuranceCalculationResult(
-            requested, approved, reference, requestPayload, responsePayload));
+            requested, approved, reference, requestPayload, responsePayload, maximum));
     }
 
     public Task<InsuranceSubmissionResult> SubmitClaimAsync(
@@ -44,6 +46,7 @@ public sealed class MockInsuranceProvider : IInsuranceProvider
             context.PolicyCoverageAmount,
             context.PolicyDeductibleAmount,
             context.ProviderCoverageLimit);
+        var maximum = approved;
         var status = approved <= 0m
             ? InsuranceClaimStatus.REJECTED
             : requested <= context.AutoApprovalThreshold
@@ -56,6 +59,7 @@ public sealed class MockInsuranceProvider : IInsuranceProvider
             status,
             requestedAmount = requested,
             approvedAmount = approved,
+            maximumApprovableInsuranceAmount = maximum,
             reference
         });
         var message = status switch
@@ -66,7 +70,7 @@ public sealed class MockInsuranceProvider : IInsuranceProvider
         };
 
         return Task.FromResult(new InsuranceSubmissionResult(
-            status, reference, requested, approved, message, requestPayload, responsePayload));
+            status, reference, requested, approved, message, requestPayload, responsePayload, maximum));
     }
 
     public Task<InsuranceSubmissionResult> GetClaimStatusAsync(
@@ -92,7 +96,8 @@ public sealed class MockInsuranceProvider : IInsuranceProvider
             status = context.CurrentStatus,
             requestedAmount = requested,
             approvedAmount = approved,
-            reference = context.Reference
+            reference = context.Reference,
+            maximumApprovableInsuranceAmount = maximumApproved
         });
 
         return Task.FromResult(new InsuranceSubmissionResult(
@@ -102,7 +107,8 @@ public sealed class MockInsuranceProvider : IInsuranceProvider
             approved,
             "Đã đồng bộ trạng thái hồ sơ bảo hiểm mô phỏng.",
             requestPayload,
-            responsePayload));
+            responsePayload,
+            maximumApproved));
     }
 
     public Task<InsuranceSubmissionResult> ReviewClaimAsync(
@@ -131,6 +137,7 @@ public sealed class MockInsuranceProvider : IInsuranceProvider
             status,
             requestedAmount = requested,
             approvedAmount = approved,
+            maximumApprovableInsuranceAmount = maximumApproved,
             reference,
             reason = context.Reason.Trim()
         });
@@ -142,7 +149,8 @@ public sealed class MockInsuranceProvider : IInsuranceProvider
             approved,
             approve ? "Staff đã duyệt yêu cầu bảo hiểm mô phỏng." : "Staff đã từ chối yêu cầu bảo hiểm mô phỏng.",
             requestPayload,
-            responsePayload));
+            responsePayload,
+            maximumApproved));
     }
 
     private static decimal CalculateApprovedAmount(

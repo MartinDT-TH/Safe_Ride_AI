@@ -1092,7 +1092,7 @@ public sealed class TripStatusServiceTests
     }
 
     [Fact]
-    public async Task StartTrip_WithVerifiedPhysicalDamageInsurance_SnapshotsPolicyValues()
+    public async Task StartTrip_WithVerifiedCustomerInsurance_DoesNotSnapshotCustomerPolicy()
     {
         using var fixture = await TripStatusFixture.CreateAsync(
             TripStatus.ARRIVED,
@@ -1147,11 +1147,11 @@ public sealed class TripStatusServiceTests
             CancellationToken.None);
 
         var coverage = await fixture.DbContext.TripProtectionCoverages.SingleAsync();
-        Assert.Equal(insurance.Id, coverage.VehicleInsurancePolicyId);
-        Assert.Equal("Safe Insurer", coverage.InsuranceProviderSnapshot);
-        Assert.Equal("POLICY-001", coverage.PolicyNumberSnapshot);
-        Assert.Equal(15_000_000m, coverage.InsuranceCoverageSnapshot);
-        Assert.Equal(500_000m, coverage.InsuranceDeductibleSnapshot);
+        Assert.Null(coverage.VehicleInsurancePolicyId);
+        Assert.Null(coverage.InsuranceProviderSnapshot);
+        Assert.Null(coverage.PolicyNumberSnapshot);
+        Assert.Null(coverage.InsuranceCoverageSnapshot);
+        Assert.Null(coverage.InsuranceDeductibleSnapshot);
 
         insurance.Provider = "Changed Insurer";
         insurance.PolicyNumber = "CHANGED-POLICY";
@@ -1163,18 +1163,35 @@ public sealed class TripStatusServiceTests
         var persistedSnapshot = await fixture.DbContext.TripProtectionCoverages
             .AsNoTracking()
             .SingleAsync(x => x.TripId == fixture.TripId);
-        Assert.Equal("Safe Insurer", persistedSnapshot.InsuranceProviderSnapshot);
-        Assert.Equal("POLICY-001", persistedSnapshot.PolicyNumberSnapshot);
-        Assert.Equal(15_000_000m, persistedSnapshot.InsuranceCoverageSnapshot);
-        Assert.Equal(500_000m, persistedSnapshot.InsuranceDeductibleSnapshot);
+        Assert.Null(persistedSnapshot.VehicleInsurancePolicyId);
+        Assert.Null(persistedSnapshot.InsuranceProviderSnapshot);
+        Assert.Null(persistedSnapshot.PolicyNumberSnapshot);
+        Assert.Null(persistedSnapshot.InsuranceCoverageSnapshot);
+        Assert.Null(persistedSnapshot.InsuranceDeductibleSnapshot);
     }
 
     [Fact]
-    public async Task InProgressStatusRetry_DoesNotBackfillHistoricalCoverage()
+    public async Task InProgressStatusRetry_RepairsCoverageFromHistoricalStartPolicyAndPass()
     {
         using var fixture = await TripStatusFixture.CreateAsync(
             TripStatus.IN_PROGRESS,
             riskProtectionEnabled: true);
+        var trip = await fixture.DbContext.Trips.SingleAsync(x => x.Id == fixture.TripId);
+        fixture.DbContext.PreTripVehicleChecks.Add(new PreTripVehicleCheck
+        {
+            TripId = trip.Id,
+            DriverId = fixture.DriverId,
+            BrakeResponsePassed = true,
+            FrontRearLightsPassed = true,
+            TurnSignalsPassed = true,
+            VisibleTiresPassed = true,
+            DashboardWarningPassed = true,
+            WindshieldVisibilityPassed = true,
+            NoMajorVisibleIssue = true,
+            Result = PreTripCheckResult.PASS,
+            CheckedAtUtc = trip.StartedAt!.Value.AddMinutes(-1)
+        });
+        await fixture.DbContext.SaveChangesAsync();
 
         await fixture.Service.UpdateDriverTripStatusAsync(
             fixture.DriverId,
@@ -1182,7 +1199,9 @@ public sealed class TripStatusServiceTests
             TripStatus.IN_PROGRESS,
             CancellationToken.None);
 
-        Assert.Empty(await fixture.DbContext.TripProtectionCoverages.ToListAsync());
+        var coverage = await fixture.DbContext.TripProtectionCoverages.SingleAsync();
+        Assert.Equal(trip.StartedAt, coverage.ActivatedAtUtc);
+        Assert.Equal(20_000_000m, coverage.ProtectionLimit);
     }
 
     [Fact]

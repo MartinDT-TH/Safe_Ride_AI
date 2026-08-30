@@ -175,6 +175,9 @@ public sealed class StaffRiskProtectionController : ControllerBase
     private async Task<StoredControllerEvidence> StoreTrustedEvidenceAsync(
         long claimId, IFormFile file, CancellationToken cancellationToken)
     {
+        if (file is null || file.Length <= 0)
+            throw InvalidEvidence("Vui lòng tải lên chứng từ khoản thu hồi.");
+
         await using var source = file.OpenReadStream();
         var validated = await _evidenceFileValidator.ValidateAsync(
             new EvidenceFileValidationRequest(

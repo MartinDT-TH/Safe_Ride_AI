@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../../core/localization/localization_extensions.dart';
@@ -94,6 +95,15 @@ class _VehicleInsurancePageState extends State<VehicleInsurancePage> {
     }
   }
 
+  Future<void> _uploadDocument(VehicleInsurancePolicyModel item) async {
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (picked == null || !mounted) return;
+    final uploaded = await context.read<VehicleProvider>().uploadInsuranceDocument(
+      widget.vehicle.id, item.id, picked.path, 'POLICY_CERTIFICATE');
+    if (!mounted) return;
+    if (!uploaded) _showError();
+  }
+
   void _showError() => ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
       content: Text(
@@ -170,7 +180,7 @@ class _VehicleInsurancePageState extends State<VehicleInsurancePage> {
                       tooltip:
                           '${context.l10n.statusLabel}: ${insuranceStatusLabel(context.l10n, item.verificationStatus)}',
                       onSelected: (value) =>
-                          value == 'edit' ? _edit(item) : _delete(item),
+                          value == 'edit' ? _edit(item) : value == 'upload' ? _uploadDocument(item) : _delete(item),
                       itemBuilder: (_) => [
                         PopupMenuItem(
                           value: 'edit',
@@ -179,6 +189,10 @@ class _VehicleInsurancePageState extends State<VehicleInsurancePage> {
                         PopupMenuItem(
                           value: 'delete',
                           child: Text(context.l10n.delete),
+                        ),
+                        const PopupMenuItem(
+                          value: 'upload',
+                          child: Text('Tải chứng từ bảo hiểm'),
                         ),
                       ],
                       child: Chip(

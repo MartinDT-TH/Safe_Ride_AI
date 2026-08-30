@@ -88,6 +88,14 @@ class VehicleProvider extends ChangeNotifier {
         );
       });
 
+  Future<List<InsuranceDocumentModel>>  loadInsuranceDocuments(int vehicleId, int policyId) async =>
+      _repository.getInsuranceDocuments(await _requireAccessToken(), vehicleId, policyId);
+
+  Future<bool> uploadInsuranceDocument(int vehicleId, int policyId, String path, String documentType) =>
+      _mutate(() async {
+        await _repository.uploadInsuranceDocument(await _requireAccessToken(), vehicleId, policyId, path, documentType);
+      });
+
   Future<bool> _mutate(Future<void> Function() action) async {
     _isMutating = true;
     _errorMessage = null;

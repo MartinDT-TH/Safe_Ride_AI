@@ -216,7 +216,7 @@ function AdminRiskFundPage() {
               <ReviewItem label="Hiệu lực từ" value={formatDate(currentPolicy.effectiveFromUtc)} />
               <ReviewItem label="Tỷ lệ trích quỹ" value={`${Number(currentPolicy.riskReserveRate) * 100}%`} />
               <ReviewItem label="Hạn mức bảo vệ mặc định" value={formatVnd(currentPolicy.defaultProtectionLimit)} />
-              <ReviewItem label="Ngưỡng bảo hiểm mô phỏng tự duyệt" value={formatVnd(currentPolicy.claimAutoApprovalThreshold)} />
+              <ReviewItem label="Ngưỡng Bảo hiểm hệ thống tự duyệt" value={formatVnd(currentPolicy.claimAutoApprovalThreshold)} />
             </div>
           </div> : <div className="risk-card">Chưa tải được chính sách hiện hành.</div>}
           <div className="risk-card">
@@ -252,8 +252,8 @@ function AdminRiskFundPage() {
                 <NumberField label="Trần sơ suất thông thường" name="driverOrdinaryNegligenceCap" value={policy} setValue={setPolicy} />
                 <NumberField label="Tỷ lệ sơ suất nghiêm trọng" name="driverGrossNegligenceRate" value={policy} setValue={setPolicy} max="1" step="0.01" />
                 <NumberField label="Trần sơ suất nghiêm trọng" name="driverGrossNegligenceCap" value={policy} setValue={setPolicy} />
-                <NumberField label="Hạn mức bảo hiểm mô phỏng" name="mockInsuranceCoverageLimit" value={policy} setValue={setPolicy} />
-                <NumberField label="Ngưỡng bảo hiểm mô phỏng tự duyệt" name="claimAutoApprovalThreshold" value={policy} setValue={setPolicy} />
+                <NumberField label="Hạn mức Bảo hiểm hệ thống SafeRide" name="mockInsuranceCoverageLimit" value={policy} setValue={setPolicy} />
+                <NumberField label="Ngưỡng Bảo hiểm hệ thống tự duyệt" name="claimAutoApprovalThreshold" value={policy} setValue={setPolicy} />
               </div>
               <Field label="Lý do ban hành phiên bản"><textarea required value={policy.changeReason} onChange={(event) => setPolicy({ ...policy, changeReason: event.target.value })} /></Field>
               <label className="risk-check"><input type="checkbox" checked={policy.riskFundEnabled} onChange={(event) => setPolicy({ ...policy, riskFundEnabled: event.target.checked })} /> Cho phép Risk Protection dùng Quỹ rủi ro</label>

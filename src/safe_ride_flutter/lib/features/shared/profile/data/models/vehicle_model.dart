@@ -1,5 +1,18 @@
 enum VehicleType { motorbike, car }
 
+class InsuranceDocumentModel {
+  const InsuranceDocumentModel({required this.id, required this.documentType, required this.originalFileName, required this.contentType, required this.fileSizeBytes, required this.uploadedAtUtc});
+  final int id;
+  final String documentType;
+  final String originalFileName;
+  final String contentType;
+  final int fileSizeBytes;
+  final DateTime uploadedAtUtc;
+  factory InsuranceDocumentModel.fromJson(Map<String, dynamic> json) => InsuranceDocumentModel(
+    id: (json['id'] as num).toInt(), documentType: json['documentType'].toString(), originalFileName: json['originalFileName'].toString(),
+    contentType: json['contentType'].toString(), fileSizeBytes: (json['fileSizeBytes'] as num).toInt(), uploadedAtUtc: DateTime.parse(json['uploadedAtUtc'].toString()));
+}
+
 class VehicleInsurancePolicyModel {
   const VehicleInsurancePolicyModel({
     required this.id,

@@ -1163,12 +1163,14 @@ public sealed class TripStatusService : ITripStatusService
                 driverProfile.UpdatedAt = utcNow;
             }
         }
-        if (tripStatus == TripStatus.IN_PROGRESS && previousTripStatus != TripStatus.IN_PROGRESS)
+        if (tripStatus == TripStatus.IN_PROGRESS)
         {
             await _preTripVehicleCheckService.EnsureCanStartAndActivateCoverageAsync(
                 trip.DriverId,
                 trip,
-                utcNow,
+                previousTripStatus == TripStatus.IN_PROGRESS && trip.StartedAt is not null
+                    ? trip.StartedAt.Value
+                    : utcNow,
                 cancellationToken);
         }
         if (tripStatus == TripStatus.COMPLETED)

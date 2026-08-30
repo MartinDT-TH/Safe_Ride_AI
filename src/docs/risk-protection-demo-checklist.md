@@ -9,9 +9,9 @@ database.
 - [ ] API, Flutter app, and React management app use the intended demo environment.
 - [ ] Customer, Driver, Staff, and Admin accounts can sign in.
 - [ ] The selected vehicle belongs to the Customer.
-- [ ] If demonstrating external vehicle insurance, the vehicle has a Staff-verified,
-      effective `PHYSICAL_DAMAGE` policy. Do not use `MANDATORY_TPL` as own-vehicle
-      coverage.
+- [ ] If demonstrating Customer external insurance, prepare only its confirmed
+      contribution/reference. No Customer policy registration or verification is
+      required for Risk Protection settlement.
 - [ ] Risk Fund has an authorized positive demo balance.
 - [ ] Choose one of the six scenarios in
       [the Risk Protection guide](risk-protection-guide.md#six-verified-demo-scenarios).
@@ -43,14 +43,16 @@ database.
 11. [ ] Staff completes step 2, **Nguyên nhân**, and step 3, **Phân bổ trách nhiệm**.
         Show that responsibility and cause totals equal 100 percent, then choose
         **Xác nhận trách nhiệm**.
-12. [ ] Staff completes step 4 and chooses **Yêu cầu máy chủ tính đề xuất**. Show
-        the adjacent **Đề xuất từ máy chủ** and explain that React did not calculate it.
+12. [ ] Staff completes step 4, records the optional Customer external-insurance
+        contribution, and chooses **Yêu cầu máy chủ tính đề xuất**. Show the
+        Customer-first/System-second waterfall and explain that React did not
+        calculate the allocation.
 13. [ ] In step 5, **Rà soát & thực hiện**, review the claim summary. There is no
         separate invented “Confirm claim” button: the authoritative actions are
         responsibility confirmation, server calculation, and permitted funding.
-14. [ ] If the scenario uses vehicle insurance, open **Thao tác kế toán nâng cao
-        & kiểm toán**, demonstrate the Mock Insurance approval/rejection, and state
-        explicitly that it is a capstone simulation.
+14. [ ] Open **Thao tác kế toán nâng cao & kiểm toán**, demonstrate SafeRide System
+        Insurance approval/rejection through `MockInsuranceProvider`, and state
+        explicitly that only the SafeRide insurer is simulated.
 15. [ ] Choose **Cấp kinh phí / thử lại cấp kinh phí**, read the impact confirmation,
         confirm once, and show the resulting claim status.
 16. [ ] If the scenario is recoverable, record the actual Driver, Customer, Third

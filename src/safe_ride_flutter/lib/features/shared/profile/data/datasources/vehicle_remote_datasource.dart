@@ -103,6 +103,17 @@ class VehicleRemoteDatasource {
     options: _authorized(accessToken),
   );
 
+  Future<List<InsuranceDocumentModel>> getInsuranceDocuments(String accessToken, int vehicleId, int policyId) async {
+    final response = await _dio.get('/vehicles/$vehicleId/insurance-policies/$policyId/documents', options: _authorized(accessToken));
+    return (response.data as List<dynamic>).map((item) => InsuranceDocumentModel.fromJson(Map<String, dynamic>.from(item as Map))).toList(growable: false);
+  }
+
+  Future<InsuranceDocumentModel> uploadInsuranceDocument(String accessToken, int vehicleId, int policyId, String path, String documentType) async {
+    final fileName = path.split(RegExp(r'[/\\]')).last;
+    final response = await _dio.post('/vehicles/$vehicleId/insurance-policies/$policyId/documents', data: FormData.fromMap({'documentType': documentType, 'file': await MultipartFile.fromFile(path, filename: fileName)}), options: _authorized(accessToken));
+    return InsuranceDocumentModel.fromJson(Map<String, dynamic>.from(response.data as Map));
+  }
+
   Options _authorized(String accessToken) {
     return Options(headers: {'Authorization': 'Bearer $accessToken'});
   }
