@@ -3,10 +3,16 @@ const ACCESS_TOKEN_KEY = 'saferide_access_token';
 const REFRESH_TOKEN_KEY = 'saferide_refresh_token';
 export class ApiError extends Error {
     status;
-    constructor(message, status) {
+    code;
+    detail;
+    traceId;
+    constructor(message, status, { code, detail, traceId } = {}) {
         super(message);
         this.name = 'ApiError';
         this.status = status;
+        this.code = code;
+        this.detail = detail ?? message;
+        this.traceId = traceId;
     }
 }
 export function saveAuthTokens(accessToken, refreshToken) {
@@ -37,7 +43,8 @@ export async function apiRequest(path, { auth = true, headers, body, ...init } =
         headers: requestHeaders,
     });
     if (!response.ok) {
-        throw new ApiError(await readErrorMessage(response), response.status);
+        const problem = await readErrorDetails(response);
+        throw new ApiError(problem.message, response.status, problem);
     }
     if (response.status === 204) {
         return undefined;
@@ -53,7 +60,10 @@ export async function apiDownload(path, { auth = true, headers, ...init } = {}) 
         if (token) requestHeaders.set('Authorization', `Bearer ${token}`);
     }
     const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers: requestHeaders });
-    if (!response.ok) throw new ApiError(await readErrorMessage(response), response.status);
+    if (!response.ok) {
+        const problem = await readErrorDetails(response);
+        throw new ApiError(problem.message, response.status, problem);
+    }
     return {
         blob: await response.blob(),
         fileName: getDownloadFileName(response.headers.get('Content-Disposition')),
@@ -66,12 +76,18 @@ function getDownloadFileName(disposition) {
     if (utf8) return decodeURIComponent(utf8[1]);
     return disposition.match(/filename="?([^";]+)"?/i)?.[1];
 }
-async function readErrorMessage(response) {
+async function readErrorDetails(response) {
     try {
         const payload = await response.json();
-        return payload.message ?? payload.detail ?? payload.title ?? `HTTP ${response.status}`;
+        const detail = payload.detail ?? payload.message ?? payload.title ?? `HTTP ${response.status}`;
+        return {
+            message: detail,
+            detail,
+            code: payload.code,
+            traceId: payload.traceId,
+        };
     }
     catch {
-        return `HTTP ${response.status}`;
+        return { message: `HTTP ${response.status}`, detail: `HTTP ${response.status}` };
     }
 }

@@ -152,17 +152,32 @@ public sealed class PreTripVehicleCheckService : IPreTripVehicleCheckService
         DateTime startedAtUtc,
         CancellationToken cancellationToken)
     {
-        if (trip.TripStatus != TripStatus.ARRIVED)
+        var isStartTransition = trip.TripStatus == TripStatus.ARRIVED;
+        var isHistoricalStartRetry = trip.TripStatus == TripStatus.IN_PROGRESS
+            && trip.StartedAt is not null;
+        if (!isStartTransition && !isHistoricalStartRetry)
         {
             throw Conflict(
                 "Chỉ được kích hoạt bảo vệ khi chuyến đi chuyển từ trạng thái đã đến sang đang thực hiện.");
         }
 
-        var policy = await _policyProvider.GetEffectivePolicyAsync(startedAtUtc, cancellationToken);
+        if (await _dbContext.TripProtectionCoverages.AnyAsync(
+                x => x.TripId == trip.Id,
+                cancellationToken))
+        {
+            return;
+        }
+
+        var activationTimeUtc = isHistoricalStartRetry
+            ? NormalizeUtc(trip.StartedAt!.Value)
+            : NormalizeUtc(startedAtUtc);
+        var policy = await _policyProvider.GetEffectivePolicyAsync(activationTimeUtc, cancellationToken);
         if (!policy.RiskFundEnabled) return;
 
         var check = await _dbContext.PreTripVehicleChecks
-            .Where(x => x.TripId == trip.Id && x.DriverId == driverId)
+            .Where(x => x.TripId == trip.Id
+                && x.DriverId == driverId
+                && x.CheckedAtUtc <= activationTimeUtc)
             .OrderByDescending(x => x.CheckedAtUtc)
             .ThenByDescending(x => x.Id)
             .FirstOrDefaultAsync(cancellationToken);
@@ -174,36 +189,13 @@ public sealed class PreTripVehicleCheckService : IPreTripVehicleCheckService
                 StatusCodes.Status409Conflict);
         }
 
-        if (await _dbContext.TripProtectionCoverages.AnyAsync(
-                x => x.TripId == trip.Id,
-                cancellationToken))
-        {
-            return;
-        }
-
-        var insurance = await _dbContext.VehicleInsurancePolicies
-            .Where(x => x.VehicleId == trip.Booking.VehicleId
-                && !x.IsDeleted
-                && x.InsuranceType == VehicleInsuranceType.PHYSICAL_DAMAGE
-                && x.VerificationStatus == InsuranceVerificationStatus.VERIFIED
-                && x.EffectiveFromUtc <= startedAtUtc
-                && x.ExpiresAtUtc > startedAtUtc)
-            .OrderByDescending(x => x.CoverageAmount)
-            .ThenByDescending(x => x.Id)
-            .FirstOrDefaultAsync(cancellationToken);
-
         _dbContext.TripProtectionCoverages.Add(new TripProtectionCoverage
         {
             TripId = trip.Id,
             PolicyVersionId = policy.Id,
             PreTripVehicleCheckId = check.Id,
             ProtectionLimit = policy.DefaultProtectionLimit,
-            VehicleInsurancePolicyId = insurance?.Id,
-            InsuranceProviderSnapshot = insurance?.Provider,
-            PolicyNumberSnapshot = insurance?.PolicyNumber,
-            InsuranceCoverageSnapshot = insurance?.CoverageAmount,
-            InsuranceDeductibleSnapshot = insurance?.Deductible,
-            ActivatedAtUtc = startedAtUtc
+            ActivatedAtUtc = activationTimeUtc
         });
     }
 
@@ -233,6 +225,13 @@ public sealed class PreTripVehicleCheckService : IPreTripVehicleCheckService
         var normalized = value?.Trim();
         return string.IsNullOrEmpty(normalized) ? null : normalized;
     }
+
+    private static DateTime NormalizeUtc(DateTime value) => value.Kind switch
+    {
+        DateTimeKind.Utc => value,
+        DateTimeKind.Local => value.ToUniversalTime(),
+        _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+    };
 
     private static BookingException InvalidRequest(string detail) => new(
         "pretrip.invalid_request",

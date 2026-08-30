@@ -9,11 +9,14 @@ vi.mock('../../shared/api/apiClient', () => ({ apiRequest, apiDownload }));
 
 import {
   buildQueryPath,
+  calculateClaim,
   confirmManualRefund,
   exportRiskFundTransactions,
   fundClaim,
   isEntireRiskFundRequestPermanent,
+  isRiskProtectionConcurrencyConflict,
   reconcilePartyCauses,
+  refreshMockInsuranceStatus,
   saveLiabilityAssessment,
 } from './riskProtectionApi';
 
@@ -85,5 +88,46 @@ describe('risk protection API contracts', () => {
   it('exports the exact filtered ledger path', async () => {
     await exportRiskFundTransactions({ type: 'CLAIM_ADVANCE', fromUtc: '2026-08-01T00:00:00Z' });
     expect(apiDownload).toHaveBeenCalledWith('/admin/risk-fund/transactions/export?type=CLAIM_ADVANCE&fromUtc=2026-08-01T00%3A00%3A00Z');
+  });
+
+  it('sends the optional Customer external-insurance result as a settlement fact', async () => {
+    const payload = {
+      totalDamageAmount: 10000000,
+      eligibleDamageAmount: 10000000,
+      customerInsuranceAppliedAmount: 6000000,
+      customerInsuranceReference: 'CUSTOMER-EXT-001',
+      customerInsuranceNote: 'Confirmed contribution',
+      rowVersion: 'AQID',
+      submitToInsurance: true,
+    };
+    await calculateClaim(8, payload);
+    expect(apiRequest).toHaveBeenCalledWith('/staff/claims/8/calculate', {
+      method: 'POST', body: JSON.stringify(payload),
+    });
+  });
+
+  it('refreshes mock insurance status with the current row version', async () => {
+    await refreshMockInsuranceStatus(8, 'AQID');
+    expect(apiRequest).toHaveBeenCalledWith('/staff/claims/8/mock-insurance/status', {
+      method: 'POST', body: JSON.stringify({ rowVersion: 'AQID' }),
+    });
+  });
+
+  it('classifies only authoritative optimistic-concurrency codes', () => {
+    expect(isRiskProtectionConcurrencyConflict({
+      status: 409, code: 'risk_protection.concurrency_conflict',
+    })).toBe(true);
+    expect(isRiskProtectionConcurrencyConflict({
+      status: 409, code: 'persistence.concurrency_conflict',
+    })).toBe(true);
+    expect(isRiskProtectionConcurrencyConflict({
+      status: 500, code: 'persistence.concurrency_conflict',
+    })).toBe(false);
+    expect(isRiskProtectionConcurrencyConflict({
+      status: 409, code: 'risk_protection.recovery_payer_mismatch',
+    })).toBe(false);
+    expect(isRiskProtectionConcurrencyConflict({
+      status: 409, code: 'risk_protection.recovery_exceeds_outstanding',
+    })).toBe(false);
   });
 });

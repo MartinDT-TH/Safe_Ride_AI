@@ -24,4 +24,6 @@ abstract class VehicleRepository {
     int vehicleId,
     int policyId,
   );
+  Future<List<InsuranceDocumentModel>> getInsuranceDocuments(String accessToken, int vehicleId, int policyId);
+  Future<InsuranceDocumentModel> uploadInsuranceDocument(String accessToken, int vehicleId, int policyId, String path, String documentType);
 }

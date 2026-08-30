@@ -45,4 +45,10 @@ class VehicleRepositoryImpl implements VehicleRepository {
     int vehicleId,
     int policyId,
   ) => _datasource.deleteInsurancePolicy(accessToken, vehicleId, policyId);
+
+  @override
+  Future<List<InsuranceDocumentModel>> getInsuranceDocuments(String accessToken, int vehicleId, int policyId) => _datasource.getInsuranceDocuments(accessToken, vehicleId, policyId);
+
+  @override
+  Future<InsuranceDocumentModel> uploadInsuranceDocument(String accessToken, int vehicleId, int policyId, String path, String documentType) => _datasource.uploadInsuranceDocument(accessToken, vehicleId, policyId, path, documentType);
 }

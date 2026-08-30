@@ -153,6 +153,9 @@ public static class DependencyInjection
             .AddOptions<CloudinaryOptions>()
             .Bind(configuration.GetSection(CloudinaryOptions.SectionName));
         services
+            .AddOptions<PrivateInsuranceDocumentStorageOptions>()
+            .Bind(configuration.GetSection(PrivateInsuranceDocumentStorageOptions.SectionName));
+        services
             .AddOptions<PayOsOptions>()
             .Bind(configuration.GetSection(PayOsOptions.SectionName));
         var googleMapsIsPrimaryProvider = string.Equals(
@@ -326,6 +329,8 @@ public static class DependencyInjection
         services.AddSingleton<IIdentityDocumentStorage, CloudinaryIdentityDocumentStorage>();
         services.AddSingleton<ITripReturnEvidenceStorage, CloudinaryTripReturnEvidenceStorage>();
         services.AddSingleton<IAccidentEvidenceStorage, CloudinaryAccidentEvidenceStorage>();
+        services.AddSingleton<IPrivateInsuranceDocumentStorage, PrivateInsuranceDocumentStorage>();
+        services.AddScoped<IInsuranceDocumentService, InsuranceDocumentService>();
         services.AddSingleton<NonProductionFileSafetyScanner>();
         services.AddSingleton<UnconfiguredFileSafetyScanner>();
         services.AddSingleton<IFileSafetyScanner>(provider =>
