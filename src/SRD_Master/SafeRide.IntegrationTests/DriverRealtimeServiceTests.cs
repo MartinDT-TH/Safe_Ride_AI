@@ -480,7 +480,7 @@ public sealed class DriverRealtimeServiceTests
 
     private sealed class CountingApplicationDbContext(
         DbContextOptions<ApplicationDbContext> options)
-        : ApplicationDbContext(options)
+        : ApplicationDbContext(options, new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider())
     {
         public int SaveChangesCount { get; set; }
 

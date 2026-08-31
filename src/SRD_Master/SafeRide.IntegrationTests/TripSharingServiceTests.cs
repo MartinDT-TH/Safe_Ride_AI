@@ -404,7 +404,7 @@ public sealed class TripSharingServiceTests
                 .UseInMemoryDatabase($"trip-sharing-{Guid.NewGuid():N}")
                 .ConfigureWarnings(warnings => warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning))
                 .Options;
-            var db = new ApplicationDbContext(options);
+            var db = new ApplicationDbContext(options, new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
             var clock = new MutableClock { UtcNow = new DateTime(2026, 7, 15, 9, 0, 0, DateTimeKind.Utc) };
 
             var owner = AddUser(db, "+84901234567", "Chủ chuyến đi");

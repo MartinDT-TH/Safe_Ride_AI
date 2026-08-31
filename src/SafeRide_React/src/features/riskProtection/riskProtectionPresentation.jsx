@@ -71,6 +71,25 @@ const labels = {
   DEBIT: 'Ghi giảm quỹ',
 };
 
+export const initialCustomerInsurance = { appliedAmount: '0', reference: '', note: '' };
+
+const evaluatedClaimStatuses = new Set([
+  'APPROVED',
+  'PENDING_FUNDING',
+  'FUNDED',
+  'RECOVERY_IN_PROGRESS',
+  'SETTLED',
+  'CLOSED',
+]);
+
+export function shouldShowSystemInsurance(claim) {
+  if (!claim) return false;
+  return claim.insuranceStatus !== 'NOT_SUBMITTED'
+    || evaluatedClaimStatuses.has(claim.status)
+    || Number(claim.totalDamageAmount) > 0
+    || Number(claim.eligibleDamageAmount) > 0;
+}
+
 export function riskProtectionLabel(value) {
   if (!value) return '—';
   return labels[value] ?? String(value).toLowerCase().split('_')

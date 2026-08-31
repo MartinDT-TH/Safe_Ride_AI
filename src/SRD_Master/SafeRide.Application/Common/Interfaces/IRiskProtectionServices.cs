@@ -72,15 +72,6 @@ public interface ISafetyTerminationEvidenceStorage
     Task DeleteAsync(string publicId, string contentType, CancellationToken cancellationToken);
 }
 
-public interface IVehicleInsurancePolicyService
-{
-    Task<IReadOnlyList<VehicleInsurancePolicyResponse>> GetAsync(Guid ownerUserId, long vehicleId, CancellationToken cancellationToken);
-    Task<VehicleInsurancePolicyResponse> CreateAsync(Guid ownerUserId, long vehicleId, VehicleInsurancePolicyRequest request, CancellationToken cancellationToken);
-    Task<VehicleInsurancePolicyResponse> UpdateAsync(Guid ownerUserId, long vehicleId, long policyId, VehicleInsurancePolicyRequest request, CancellationToken cancellationToken);
-    Task<VehicleInsurancePolicyResponse> ReviewAsync(Guid staffUserId, long policyId, InsuranceVerificationStatus status, CancellationToken cancellationToken);
-    Task DeleteAsync(Guid ownerUserId, long vehicleId, long policyId, CancellationToken cancellationToken);
-}
-
 public interface ISafetyReportService
 {
     Task<SafetyReportResponse> CreateAsync(Guid driverId, long tripId, SafetyReportRequest request, CancellationToken cancellationToken);
@@ -202,9 +193,6 @@ public interface IAccidentEvidenceStorage
 
 public interface IInsuranceDocumentService
 {
-    Task<InsurancePolicyDocumentResponse> UploadPolicyDocumentAsync(Guid userId, long policyId, InsurancePolicyDocumentType type, InsuranceDocumentUpload upload, CancellationToken cancellationToken);
-    Task<IReadOnlyList<InsurancePolicyDocumentResponse>> ListPolicyDocumentsAsync(Guid userId, long policyId, bool isStaff, CancellationToken cancellationToken);
-    Task<InsuranceDocumentDownload> OpenPolicyDocumentAsync(Guid userId, long policyId, long documentId, bool isStaff, CancellationToken cancellationToken);
     Task<InsuranceClaimDocumentResponse> UploadClaimDocumentAsync(Guid staffUserId, long claimId, InsuranceClaimDocumentType type, InsuranceDocumentUpload upload, CancellationToken cancellationToken);
     Task<IReadOnlyList<InsuranceClaimDocumentResponse>> ListClaimDocumentsAsync(Guid staffUserId, long claimId, CancellationToken cancellationToken);
     Task<InsuranceDocumentDownload> OpenClaimDocumentAsync(Guid staffUserId, long claimId, long documentId, CancellationToken cancellationToken);

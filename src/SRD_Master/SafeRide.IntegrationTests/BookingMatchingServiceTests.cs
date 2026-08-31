@@ -268,7 +268,7 @@ public sealed class BookingMatchingServiceTests
             var options = new DbContextOptionsBuilder<ApplicationDbContext>()
                 .UseInMemoryDatabase($"booking-matching-{Guid.NewGuid():N}")
                 .Options;
-            var dbContext = new ApplicationDbContext(options);
+            var dbContext = new ApplicationDbContext(options, new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
             var redis = new InMemoryRedisService();
             var realtime = new RealtimeNotificationServiceFake();
             var route = new RouteMapFake();

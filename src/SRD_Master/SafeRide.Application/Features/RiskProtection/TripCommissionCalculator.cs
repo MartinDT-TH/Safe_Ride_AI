@@ -138,22 +138,28 @@ public sealed class TripCommissionCalculator : ITripCommissionCalculator, IClaim
         var thirdPartyGross = grossAllocations[2];
         var vehicleObjectiveGross = grossAllocations[3] + grossAllocations[4];
         var customerInsurance = RoundVnd(input.CustomerInsuranceAppliedAmount);
-        if (customerInsurance > customerGross)
+        if (customerInsurance > RoundVnd(input.EligibleDamage))
             throw new ArgumentOutOfRangeException(nameof(input.CustomerInsuranceAppliedAmount));
 
-        var customerAfterOwnInsurance = customerGross - customerInsurance;
-        var participantExposure = customerAfterOwnInsurance + driverGross;
+        var customerInsuranceBenefit = Math.Min(customerInsurance, customerGross);
+        var customerInsuranceExcess = customerInsurance - customerInsuranceBenefit;
+        var driverCustomerInsuranceBenefit = Math.Min(customerInsuranceExcess, driverGross);
+        var unallocatedCategoryReduction = customerInsuranceExcess - driverCustomerInsuranceBenefit;
+        var customerAfterOwnInsurance = customerGross - customerInsuranceBenefit;
+        var driverAfterCustomerInsurance = driverGross - driverCustomerInsuranceBenefit;
+        var remainingAfterCustomerInsurance = RoundVnd(input.EligibleDamage - customerInsurance);
+        var participantExposure = customerAfterOwnInsurance + driverAfterCustomerInsurance;
         var systemInsurance = RoundVnd(input.InsurancePaidAmount);
         if (systemInsurance > participantExposure)
             throw new ArgumentOutOfRangeException(nameof(input.InsurancePaidAmount));
         var systemBenefits = AllocateByWeight(
             systemInsurance,
             customerAfterOwnInsurance,
-            driverGross);
+            driverAfterCustomerInsurance);
         var customerSystemBenefit = systemBenefits[0];
         var driverSystemBenefit = systemBenefits[1];
         var customerFinal = customerAfterOwnInsurance - customerSystemBenefit;
-        var driverFinal = driverGross - driverSystemBenefit;
+        var driverFinal = driverAfterCustomerInsurance - driverSystemBenefit;
         var residual = RoundVnd(input.EligibleDamage - customerInsurance - systemInsurance);
         var driver = CalculateDriverLiability(new DriverLiabilityCalculationInput(
             driverFinal,
@@ -181,8 +187,13 @@ public sealed class TripCommissionCalculator : ITripCommissionCalculator, IClaim
             ThirdPartyGrossExposure = thirdPartyGross,
             VehicleObjectiveGrossExposure = vehicleObjectiveGross,
             CustomerInsuranceAppliedAmount = customerInsurance,
+            CustomerInsuranceBenefitToCustomer = customerInsuranceBenefit,
+            CustomerInsuranceExcessAppliedToOtherLoss = customerInsuranceExcess,
+            CustomerInsuranceBenefitToDriver = driverCustomerInsuranceBenefit,
+            CustomerInsuranceUnallocatedCategoryReduction = unallocatedCategoryReduction,
             CustomerExposureAfterOwnInsurance = customerAfterOwnInsurance,
-            DriverExposureBeforeSystemInsurance = driverGross,
+            DriverExposureBeforeSystemInsurance = driverAfterCustomerInsurance,
+            RemainingLossAfterCustomerInsurance = remainingAfterCustomerInsurance,
             ParticipantExposureBeforeSystemInsurance = participantExposure,
             SystemInsuranceApprovedAmount = systemInsurance,
             CustomerSystemInsuranceBenefit = customerSystemBenefit,

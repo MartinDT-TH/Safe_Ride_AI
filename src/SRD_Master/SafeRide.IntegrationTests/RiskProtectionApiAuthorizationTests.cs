@@ -220,78 +220,36 @@ public sealed class RiskProtectionApiAuthorizationTests
     }
 
     [Fact]
-    public async Task InsuranceApi_EnforcesCustomerOwnershipAndStaffOnlyVerificationWithAudit()
+    public async Task LegacyVehicleInsuranceRoutes_AreNotActive()
     {
         using var factory = new AuthApiFactory();
-        var ownerId = Guid.NewGuid();
-        var ownerClient = await CreateClientAsync(factory, ownerId, "Customer");
-        var vehicleResponse = await ownerClient.PostAsJsonAsync(
-            "/api/vehicles",
-            new SaveVehicleRequest
-            {
-                BrandModel = "Honda Vision",
-                PlateNumber = "29A123456",
-                Color = "Đen",
-                VehicleType = VehicleType.Motorbike,
-                EngineCapacityCc = 110
-            });
-        Assert.Equal(HttpStatusCode.Created, vehicleResponse.StatusCode);
-        var vehicle = (await vehicleResponse.Content.ReadFromJsonAsync<VehicleResponse>())!;
-        var policyRequest = new VehicleInsurancePolicyRequest(
-            VehicleInsuranceType.PHYSICAL_DAMAGE,
-            "Safe Insurer",
-            $"POL-{Guid.NewGuid():N}",
-            DateTime.UtcNow.AddDays(-1),
-            DateTime.UtcNow.AddYears(1),
-            20_000_000m,
-            500_000m,
-            "https://storage.test/policy.pdf");
+        using var customerClient = await CreateClientAsync(factory, Guid.NewGuid(), "Customer");
+        using var staffClient = await CreateClientAsync(factory, Guid.NewGuid(), "Staff");
 
-        var createResponse = await ownerClient.PostAsJsonAsync(
-            $"/api/vehicles/{vehicle.Id}/insurance-policies",
-            policyRequest);
-        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
-        var policy = (await createResponse.Content
-            .ReadFromJsonAsync<VehicleInsurancePolicyResponse>(ApiJsonOptions))!;
-
-        using var outsiderClient = await CreateClientAsync(factory, Guid.NewGuid(), "Customer");
         Assert.Equal(
             HttpStatusCode.NotFound,
-            (await outsiderClient.GetAsync(
-                $"/api/vehicles/{vehicle.Id}/insurance-policies")).StatusCode);
-
-        foreach (var role in new[] { "Driver", "Staff", "Admin" })
-        {
-            using var client = await CreateClientAsync(factory, Guid.NewGuid(), role);
-            Assert.Equal(
-                HttpStatusCode.Forbidden,
-                (await client.GetAsync(
-                    $"/api/vehicles/{vehicle.Id}/insurance-policies")).StatusCode);
-        }
-
-        foreach (var role in new[] { "Customer", "Driver", "Admin" })
-        {
-            using var client = role == "Customer"
-                ? await CreateClientAsync(factory, ownerId, role)
-                : await CreateClientAsync(factory, Guid.NewGuid(), role);
-            Assert.Equal(
-                HttpStatusCode.Forbidden,
-                (await client.PutAsJsonAsync(
-                    $"/api/staff/vehicle-insurance-policies/{policy.Id}/verification",
-                    new { status = InsuranceVerificationStatus.VERIFIED })).StatusCode);
-        }
-
-        var staffId = Guid.NewGuid();
-        using var staffClient = await CreateClientAsync(factory, staffId, "Staff");
-        var reviewResponse = await staffClient.PutAsJsonAsync(
-            $"/api/staff/vehicle-insurance-policies/{policy.Id}/verification",
-            new { status = InsuranceVerificationStatus.VERIFIED });
-        Assert.Equal(HttpStatusCode.OK, reviewResponse.StatusCode);
-        var reviewed = (await reviewResponse.Content
-            .ReadFromJsonAsync<VehicleInsurancePolicyResponse>(ApiJsonOptions))!;
-        Assert.Equal(InsuranceVerificationStatus.VERIFIED, reviewed.VerificationStatus);
-        Assert.Equal(staffId, reviewed.ReviewedByUserId);
-        Assert.NotNull(reviewed.ReviewedAtUtc);
+            (await customerClient.GetAsync("/api/vehicles/42/insurance-policies")).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.NotFound,
+            (await customerClient.PostAsJsonAsync(
+                "/api/vehicles/42/insurance-policies",
+                new { provider = "removed" })).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.NotFound,
+            (await customerClient.DeleteAsync("/api/vehicles/42/insurance-policies/7")).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.NotFound,
+            (await customerClient.GetAsync(
+                "/api/vehicles/42/insurance-policies/7/documents")).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.NotFound,
+            (await staffClient.PutAsJsonAsync(
+                "/api/staff/vehicle-insurance-policies/7/verification",
+                new { status = "VERIFIED" })).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.NotFound,
+            (await staffClient.GetAsync(
+                "/api/staff/vehicle-insurance-policies/7/documents")).StatusCode);
     }
 
     [Fact]

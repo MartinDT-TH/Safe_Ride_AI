@@ -441,7 +441,6 @@ public static class DependencyInjection
         services.AddSingleton<IClaimSettlementCalculator, TripCommissionCalculator>();
         services.AddScoped<IRiskProtectionPolicyProvider, RiskProtectionPolicyProvider>();
         services.AddScoped<IPreTripVehicleCheckService, PreTripVehicleCheckService>();
-        services.AddScoped<IVehicleInsurancePolicyService, VehicleInsurancePolicyService>();
         services.AddScoped<ISafetyReportService, SafetyReportService>();
         services.AddScoped<RiskFundLedgerService>();
         services.AddScoped<IRiskFundLedgerService>(provider => provider.GetRequiredService<RiskFundLedgerService>());

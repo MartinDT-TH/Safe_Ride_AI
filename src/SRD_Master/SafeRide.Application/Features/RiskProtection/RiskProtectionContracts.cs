@@ -140,8 +140,13 @@ public sealed record ClaimLiabilityCalculationResult(
     public decimal ThirdPartyGrossExposure { get; init; }
     public decimal VehicleObjectiveGrossExposure { get; init; }
     public decimal CustomerInsuranceAppliedAmount { get; init; }
+    public decimal CustomerInsuranceBenefitToCustomer { get; init; }
+    public decimal CustomerInsuranceExcessAppliedToOtherLoss { get; init; }
+    public decimal CustomerInsuranceBenefitToDriver { get; init; }
+    public decimal CustomerInsuranceUnallocatedCategoryReduction { get; init; }
     public decimal CustomerExposureAfterOwnInsurance { get; init; }
     public decimal DriverExposureBeforeSystemInsurance { get; init; }
+    public decimal RemainingLossAfterCustomerInsurance { get; init; }
     public decimal ParticipantExposureBeforeSystemInsurance { get; init; }
     public decimal SystemInsuranceApprovedAmount { get; init; }
     public decimal CustomerSystemInsuranceBenefit { get; init; }
@@ -241,33 +246,6 @@ public sealed record SafetyReportResponse(
     bool EscalationRequested,
     long? SosAlertId,
     DateTime CreatedAtUtc);
-
-// DocumentUrl is an owner-supplied external reference, not a SafeRide upload.
-// Verification of the policy does not imply that the referenced file was scanned.
-public sealed record VehicleInsurancePolicyRequest(
-    VehicleInsuranceType InsuranceType,
-    string Provider,
-    string PolicyNumber,
-    DateTime EffectiveFromUtc,
-    DateTime ExpiresAtUtc,
-    decimal CoverageAmount,
-    decimal Deductible,
-    string? DocumentUrl);
-
-public sealed record VehicleInsurancePolicyResponse(
-    long Id,
-    long VehicleId,
-    VehicleInsuranceType InsuranceType,
-    string Provider,
-    string PolicyNumber,
-    DateTime EffectiveFromUtc,
-    DateTime ExpiresAtUtc,
-    decimal CoverageAmount,
-    decimal Deductible,
-    string? DocumentUrl,
-    InsuranceVerificationStatus VerificationStatus,
-    Guid? ReviewedByUserId,
-    DateTime? ReviewedAtUtc);
 
 public sealed record CreateAccidentRequest(
     AccidentCategory Category,
@@ -500,10 +478,6 @@ public sealed record ProtectionClaimResponse(
     decimal RiskFundRequiredAmount = 0m,
     decimal MaximumApprovableInsuranceAmount = 0m,
     decimal RecommendedInsuranceApprovalAmount = 0m,
-    string? InsuranceProviderSnapshot = null,
-    string? PolicyNumberSnapshot = null,
-    decimal? InsuranceCoverageSnapshot = null,
-    decimal? InsuranceDeductibleSnapshot = null,
     decimal MockInsuranceCoverageLimit = 0m,
     string? InsuranceReference = null,
     decimal CustomerInsuranceAppliedAmount = 0m,
@@ -525,7 +499,12 @@ public sealed record ProtectionClaimResponse(
     decimal DriverRemainingExposureBeforeRateCap = 0m,
     decimal SystemInsuranceCoverageLimitSnapshot = 0m,
     string SystemInsuranceProvider = "MockInsuranceProvider",
-    string SystemInsuranceEvaluationReason = "NOT_EVALUATED");
+    string SystemInsuranceEvaluationReason = "NOT_EVALUATED",
+    decimal CustomerInsuranceBenefitToCustomer = 0m,
+    decimal CustomerInsuranceExcessAppliedToOtherLoss = 0m,
+    decimal CustomerInsuranceBenefitToDriver = 0m,
+    decimal CustomerInsuranceUnallocatedCategoryReduction = 0m,
+    decimal RemainingLossAfterCustomerInsurance = 0m);
 
 public sealed record DriverLiabilityResponse(
     long Id,

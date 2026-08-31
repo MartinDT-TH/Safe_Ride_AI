@@ -58,7 +58,7 @@ public sealed class AdminTripManagementServiceTests
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase($"admin-trip-details-{Guid.NewGuid():N}")
             .Options;
-        var dbContext = new ApplicationDbContext(options);
+        var dbContext = new ApplicationDbContext(options, new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
 
         return new AdminTripFixture(
             dbContext,

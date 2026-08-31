@@ -86,17 +86,6 @@ export function refreshMockInsuranceStatus(claimId, rowVersion) {
   });
 }
 
-export function listPolicyDocuments(vehicleId, policyId) {
-  return apiRequest(`/vehicles/${vehicleId}/insurance-policies/${policyId}/documents`);
-}
-
-export function uploadPolicyDocument(vehicleId, policyId, documentType, file) {
-  const body = new FormData();
-  body.set('documentType', documentType);
-  body.append('file', file, file.name);
-  return apiRequest(`/vehicles/${vehicleId}/insurance-policies/${policyId}/documents`, { method: 'POST', body });
-}
-
 export function listClaimInsuranceDocuments(claimId) {
   return apiRequest(`/staff/claims/${claimId}/insurance-documents`);
 }

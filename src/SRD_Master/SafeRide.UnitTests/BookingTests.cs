@@ -31,7 +31,7 @@ public sealed class BookingTests
                 "Server=(localdb)\\mssqllocaldb;Database=SafeRideModelTest;Trusted_Connection=True;",
                 sql => sql.UseNetTopologySuite())
             .Options;
-        using var dbContext = new ApplicationDbContext(options);
+        using var dbContext = new ApplicationDbContext(options, new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
         var property = dbContext.Model
             .FindEntityType(typeof(Booking))!
             .FindProperty(nameof(Booking.ScheduledAt))!;
@@ -60,7 +60,7 @@ public sealed class BookingTests
                 "Server=(localdb)\\mssqllocaldb;Database=SafeRideModelTest;Trusted_Connection=True;",
                 sql => sql.UseNetTopologySuite())
             .Options;
-        using var dbContext = new ApplicationDbContext(options);
+        using var dbContext = new ApplicationDbContext(options, new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
         var bookingType = dbContext.Model.FindEntityType(typeof(Booking))!;
         string[] immutableProperties =
         [
@@ -1005,5 +1005,10 @@ public sealed class BookingTests
             BookingType bookingType,
             DateTime utcNow,
             CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<CustomerBookingPrivilege> ClearRestrictionsAsync(
+            Guid customerId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new CustomerBookingPrivilege { CustomerId = customerId });
     }
 }
