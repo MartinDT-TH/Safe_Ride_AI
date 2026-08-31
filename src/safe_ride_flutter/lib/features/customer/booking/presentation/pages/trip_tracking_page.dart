@@ -84,6 +84,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   bool _customerIsComing = false;
   bool _readinessPromptAcknowledged = false;
   bool _isSendingCustomerReadiness = false;
+  bool _arrivalMessageShown = false;
   late bool _isSOSActivated;
   late bool _isPrepaid;
   late String? _currentTripStatus;
@@ -359,6 +360,10 @@ class _TripTrackingPageState extends State<TripTrackingPage>
             _isWaitingForDriverPayment = false;
           }
         });
+
+        if (update.tripStatus == 'ARRIVED') {
+          _showArrivalMessageIfNeeded();
+        }
 
         if (update.tripStatus == 'WAITING_RETURN_CONFIRM') {
           unawaited(_openSummaryIfPrepaid());
@@ -1973,7 +1978,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   }
 
   void _handleTripStatus(String? tripStatus, [BookingResponse? booking]) {
-    if (tripStatus == 'WAITING_PAYMENT') {
+    if (tripStatus == 'ARRIVED') {
+      _showArrivalMessageIfNeeded();
+    } else if (tripStatus == 'WAITING_PAYMENT') {
       if (!_isWaitingForDriverPayment && mounted) {
         setState(() => _isWaitingForDriverPayment = true);
       }
@@ -1985,6 +1992,12 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     } else if (tripStatus == 'COMPLETED') {
       _finishCompletedTrip();
     }
+  }
+
+  void _showArrivalMessageIfNeeded() {
+    if (_arrivalMessageShown || !mounted) return;
+    _arrivalMessageShown = true;
+    _showMessage('Tài xế đã đến điểm đón.');
   }
 
   Future<void> _openSummaryIfPrepaid([BookingResponse? booking]) async {
