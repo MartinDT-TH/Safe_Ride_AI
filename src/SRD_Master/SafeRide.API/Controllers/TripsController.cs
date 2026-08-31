@@ -26,6 +26,7 @@ public sealed class TripsController : ControllerBase
     private readonly ITripCustomerNoShowReminderService _tripCustomerNoShowReminderService;
     private readonly ICustomerNoShowEligibilityService _customerNoShowEligibilityService;
     private readonly ICustomerNoShowReportingService _customerNoShowReportingService;
+    private readonly ITripCustomerReadinessService _tripCustomerReadinessService;
     private readonly ITripChatService _tripChatService;
     private readonly IHubContext<TripChatHub> _tripChatHubContext;
     private readonly ISender _sender;
@@ -37,6 +38,7 @@ public sealed class TripsController : ControllerBase
         ITripCustomerNoShowReminderService tripCustomerNoShowReminderService,
         ICustomerNoShowEligibilityService customerNoShowEligibilityService,
         ICustomerNoShowReportingService customerNoShowReportingService,
+        ITripCustomerReadinessService tripCustomerReadinessService,
         ISender sender,
         ITripSharingService tripSharingService,
         ITripChatService tripChatService,
@@ -47,6 +49,7 @@ public sealed class TripsController : ControllerBase
         _tripCustomerNoShowReminderService = tripCustomerNoShowReminderService;
         _customerNoShowEligibilityService = customerNoShowEligibilityService;
         _customerNoShowReportingService = customerNoShowReportingService;
+        _tripCustomerReadinessService = tripCustomerReadinessService;
         _tripChatService = tripChatService;
         _tripChatHubContext = tripChatHubContext;
         _sender = sender;
@@ -211,6 +214,18 @@ public sealed class TripsController : ControllerBase
         if (!TryGetDriverId(out var driverId))
             return Unauthorized(new ProblemDetails { Status = 401, Title = "Unauthorized", Detail = "Cannot resolve authenticated driver account." });
         return Ok(await _customerNoShowReportingService.ReportAsync(driverId, tripId, cancellationToken));
+    }
+
+    [HttpPost("{tripId:long}/customer-readiness")]
+    [Authorize(Roles = "Customer")]
+    public async Task<IActionResult> ReportCustomerReadiness(
+        long tripId,
+        [FromBody] CustomerReadinessRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var customerId)) return Unauthorized();
+        await _tripCustomerReadinessService.ReportAsync(customerId, tripId, request.Message, cancellationToken);
+        return NoContent();
     }
 
     [HttpPost("{tripId:long}/end")]

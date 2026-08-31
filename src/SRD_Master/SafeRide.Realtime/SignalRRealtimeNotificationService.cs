@@ -87,6 +87,15 @@ public sealed class SignalRRealtimeNotificationService
                 cancellationToken));
     }
 
+    public Task PublishCustomerReadinessReportedAsync(
+        CustomerReadinessReportedEvent notification,
+        CancellationToken cancellationToken = default) =>
+        SendToDriverAsync(
+            notification.DriverId,
+            "CustomerReadinessReported",
+            notification,
+            cancellationToken);
+
     public Task PublishTripPaymentPendingAsync(
         TripPaymentPendingEvent notification,
         CancellationToken cancellationToken = default)
