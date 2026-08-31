@@ -1,6 +1,7 @@
 using Hangfire;
 using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -62,7 +63,20 @@ public static class DependencyInjection
         IConfiguration configuration,
         IHostEnvironment environment)
     {
-        services.AddDataProtection();
+        var dataProtectionKeysPath = configuration["DataProtection:KeysPath"];
+        if (string.IsNullOrWhiteSpace(dataProtectionKeysPath))
+        {
+            dataProtectionKeysPath = Path.Combine(
+                environment.ContentRootPath,
+                "App_Data",
+                "DataProtection-Keys");
+        }
+
+        Directory.CreateDirectory(dataProtectionKeysPath);
+        services
+            .AddDataProtection()
+            .SetApplicationName("SafeRide")
+            .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
         var backgroundJobsEnabled = configuration.GetValue<bool>("BackgroundJobs:Enabled");
 
         services
