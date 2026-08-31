@@ -1463,7 +1463,7 @@ class _ActiveTripCard extends StatelessWidget {
                             ? 'Khách không xuất hiện'
                             : noShowEligibility?.remainingSeconds != null &&
                                     noShowEligibility!.remainingSeconds > 0
-                                ? 'Còn ${noShowEligibility!.remainingSeconds} giây chờ'
+                                ? 'Còn ${_formatNoShowCountdown(noShowEligibility!.remainingSeconds)} để báo khách không xuất hiện'
                             : noShowEligibility?.reasonMessage.isNotEmpty == true
                                 ? noShowEligibility!.reasonMessage
                                 : 'Đang chờ đủ thời gian xác nhận',
@@ -2607,3 +2607,10 @@ class _AddressItem extends StatelessWidget {
 }
 
 // _BottomNavBar logic removed, now using DriverBottomNavBar widget
+
+String _formatNoShowCountdown(int seconds) {
+  final safeSeconds = seconds < 0 ? 0 : seconds;
+  final minutes = safeSeconds ~/ 60;
+  final remainingSeconds = safeSeconds % 60;
+  return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+}
