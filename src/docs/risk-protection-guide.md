@@ -38,9 +38,8 @@ replenish the fund.
 
 ### Customer
 
-- may keep legacy vehicle insurance records under Profile, My Vehicles,
-  Insurance, but no policy registration or verification is required for Risk
-  Protection settlement;
+- manages ordinary vehicle profile data without registering an insurance policy
+  with SafeRide;
 - reports an accident from an active trip;
 - captures accident evidence with the rear camera;
 - reads the localized case summary, responsibility result, and protection
@@ -94,8 +93,8 @@ Opening balance, audited adjustment, and creation of a policy version are under
    `TripProtectionCoverage` for the trip.
 4. Coverage references the immutable effective Risk Protection policy version.
    Its `MockInsuranceCoverageLimit` is the historical SafeRide System Insurance
-   limit. A legacy Customer `PHYSICAL_DAMAGE` snapshot may also be retained for
-   compatibility, but it is not settlement authority.
+   limit. It contains no Customer insurer, policy, verification, or coverage
+   snapshot.
 5. Normal trip lifecycle and fare settlement continue under the ordinary trip
    rules.
 6. An eligible completed trip creates at most one Risk Fund contribution from
@@ -152,15 +151,7 @@ Important distinctions:
 - a defect known and concealed by the Customer can be assigned to Customer with
   `CUSTOMER_KNEW`, when supported by evidence.
 
-## Customer-owned vehicle insurance
-
-`MANDATORY_TPL` is mandatory third-party liability insurance. It is not treated
-as coverage for damage to the customer's own vehicle.
-
-Legacy `VehicleInsurancePolicy`, `PHYSICAL_DAMAGE`, and `MANDATORY_TPL` APIs are
-retained because profile/vehicle functionality may still use them. They are not
-required to activate Risk Protection and are not the authority for claim
-settlement. No destructive cleanup is part of this phase.
+## Customer external insurance result
 
 Customer insurance is optional and external to SafeRide. Staff records only the
 confirmed financial result relevant to the claim:
@@ -170,9 +161,11 @@ confirmed financial result relevant to the claim:
 - server timestamp `CustomerInsuranceConfirmedAtUtc`;
 - optional `CustomerInsuranceNote`.
 
-The amount must be non-negative and cannot exceed `CustomerGrossExposure`.
-SafeRide does not mock the Customer insurer, manage its approval lifecycle, or
-redistribute any excess contribution to Driver or another fault category.
+The amount must be non-negative and cannot exceed `EligibleDamageAmount`.
+SafeRide does not register, verify, select, or mock the Customer insurer. The
+confirmed amount reduces Customer gross exposure first. Any excess then reduces
+the remaining eligible covered loss under the server allocation; fault
+percentages remain unchanged.
 
 ## Insurance-first settlement waterfall
 
@@ -181,7 +174,9 @@ The server applies this exact order:
 1. validate and round `EligibleDamageAmount` within the documented total damage;
 2. allocate gross exposure by confirmed Driver, Customer, Third Party, Vehicle,
    and Objective percentages using deterministic whole-VND rounding;
-3. apply `CustomerInsuranceAppliedAmount` only to `CustomerGrossExposure`;
+3. apply `CustomerInsuranceAppliedAmount` to Customer gross exposure first and
+   then apply any excess to remaining eligible covered loss without changing
+   fault percentages;
 4. calculate the remaining Customer + Driver participant exposure;
 5. cap SafeRide System Insurance by that participant exposure and the immutable
    `MockInsuranceCoverageLimit` from the trip's policy version;
@@ -193,12 +188,11 @@ The server applies this exact order:
    and, for reimbursement-to-fund claims, insurer recovery capacity;
 9. classify the remaining protected funding as permanent SafeRide support.
 
-Mandatory example: for VND 10,000,000 eligible damage at Customer 70% / Driver
-30%, gross exposure is 7,000,000 / 3,000,000. Customer insurance of 6,000,000
-leaves 1,000,000 / 3,000,000. SafeRide System Insurance of 2,000,000 is allocated
-500,000 / 1,500,000, leaving 500,000 / 1,500,000. At a 50% Driver rate, personal
-Driver liability is 750,000. Customer insurance + System Insurance + remaining
-party/Risk Fund handling reconciles to 10,000,000 without double compensation.
+Mandatory spillover example: for VND 10,000,000 eligible damage at Customer 30%
+/ Driver 70%, Customer insurance of 6,000,000 clears the Customer's 3,000,000
+gross exposure and reduces Driver covered exposure by the remaining 3,000,000.
+The result before SafeRide System Insurance is Customer 0 / Driver 4,000,000;
+the historical 30/70 fault percentages do not change.
 
 `TripProtectionCoverage.ProtectionLimit` caps only SafeRide/Risk Fund funding.
 It does not reduce Customer or Third Party economic responsibility. A provider
@@ -212,8 +206,8 @@ The mock provider represents only SafeRide System Insurance. It exposes the
 server-calculated `MaximumApprovableInsuranceAmount` and the same value as the
 recommended approval. The maximum is bounded by remaining Customer/Driver
 exposure after Customer insurance and by the immutable System Insurance limit in
-the trip's Risk Protection policy version. Customer `PHYSICAL_DAMAGE` snapshots
-do not enable or cap it. Staff cannot submit a maximum of their own.
+the trip's Risk Protection policy version. No Customer policy record enables or
+caps it. Staff cannot submit a maximum of their own.
 
 The lifecycle is `NOT_SUBMITTED` -> `PENDING` -> `APPROVED` or `REJECTED`.
 Auto-approved submissions are final and cannot be reviewed again. While pending,

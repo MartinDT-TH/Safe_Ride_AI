@@ -21,9 +21,11 @@ import {
 } from '../../features/riskProtection/riskProtectionApi';
 import {
   confirmRiskAction,
+  initialCustomerInsurance,
   responsibilityTotal,
   riskProtectionLabel,
   SettlementRecommendation,
+  shouldShowSystemInsurance,
 } from '../../features/riskProtection/riskProtectionPresentation';
 import '../admin/risk-fund/AdminRiskFundPage.css';
 
@@ -58,7 +60,6 @@ const initialSettlement = {
 };
 const initialRecovery = { sourceType: 'DRIVER', payerReference: '', amount: '', paymentReference: '', evidence: null };
 const initialWriteOff = { amount: '', reason: '', evidence: null };
-export const initialCustomerInsurance = { appliedAmount: '0', reference: '', note: '' };
 
 function StaffAccidentsPage() {
   const [filters, setFilters] = useState({ status: '', category: '', tripId: '', fromUtc: '', toUtc: '' });
@@ -254,7 +255,8 @@ function StaffAccidentsPage() {
     event.preventDefault();
     const current = claim ?? accident?.claim;
     const maximum = Number(current?.maximumApprovableInsuranceAmount ?? current?.insuranceEligibleAmount ?? 0);
-    const approvedAmount = mode === 'recommended' ? maximum : mode === 'lower' ? Number(insurance.approvedAmount) : 0;
+    const recommended = Number(current?.recommendedInsuranceApprovalAmount ?? maximum);
+    const approvedAmount = mode === 'recommended' ? recommended : mode === 'lower' ? Number(insurance.approvedAmount) : 0;
     if (mode === 'lower' && (!Number.isFinite(approvedAmount) || approvedAmount <= 0 || approvedAmount >= maximum)) {
       setError('Mức duyệt thấp hơn phải lớn hơn 0 và nhỏ hơn mức tối đa được phép.');
       return;
@@ -403,6 +405,7 @@ function StaffAccidentsPage() {
               <div className="risk-form__columns">{Object.keys(settlement).map((key) => <Field key={key} label={claimFieldLabel(key)}><input required type="number" min="0" value={settlement[key]} onChange={(event) => setSettlement({ ...settlement, [key]: event.target.value })} /></Field>)}</div>
               <CustomerInsuranceInput
                 claim={currentClaim}
+                eligibleDamageAmount={settlement.eligibleDamageAmount}
                 value={customerInsurance}
                 onChange={setCustomerInsurance}
               />
@@ -435,7 +438,12 @@ function StaffAccidentsPage() {
               <ReviewItem label="Trạng thái hồ sơ" value={riskProtectionLabel((claim ?? accident.claim)?.status)} />
               <ReviewItem label="Thiệt hại đủ điều kiện" value={formatVnd((claim ?? accident.claim)?.eligibleDamageAmount)} />
               <ReviewItem label="Bảo hiểm riêng của khách" value={formatVnd((claim ?? accident.claim)?.customerInsuranceAppliedAmount)} />
+              <ReviewItem label="Bảo hiểm riêng áp dụng cho khách" value={formatVnd((claim ?? accident.claim)?.customerInsuranceBenefitToCustomer)} />
+              <ReviewItem label="Phần bảo hiểm riêng vượt phần khách" value={formatVnd((claim ?? accident.claim)?.customerInsuranceExcessAppliedToOtherLoss)} />
+              <ReviewItem label="Bảo hiểm riêng giảm phần tài xế" value={formatVnd((claim ?? accident.claim)?.customerInsuranceBenefitToDriver)} />
+              <ReviewItem label="Phần giảm không phân bổ lại lỗi" value={formatVnd((claim ?? accident.claim)?.customerInsuranceUnallocatedCategoryReduction)} />
               <ReviewItem label="Phần khách sau bảo hiểm riêng" value={formatVnd((claim ?? accident.claim)?.customerExposureAfterOwnInsurance)} />
+              <ReviewItem label="Phần tài xế sau bảo hiểm riêng" value={formatVnd((claim ?? accident.claim)?.driverExposureBeforeSystemInsurance)} />
               <ReviewItem label="Bảo hiểm hệ thống tối đa" value={formatVnd((claim ?? accident.claim)?.systemInsuranceMaximumAmount)} />
               <ReviewItem label="Bảo hiểm hệ thống đã duyệt" value={formatVnd((claim ?? accident.claim)?.systemInsuranceApprovedAmount)} />
               <ReviewItem label="Quyền lợi hệ thống cho khách" value={formatVnd((claim ?? accident.claim)?.customerSystemInsuranceBenefit)} />
@@ -496,15 +504,6 @@ function StaffAccidentsPage() {
   );
 }
 
-const evaluatedClaimStatuses = new Set([
-  'APPROVED',
-  'PENDING_FUNDING',
-  'FUNDED',
-  'RECOVERY_IN_PROGRESS',
-  'SETTLED',
-  'CLOSED',
-]);
-
 const systemInsuranceReasonLabels = {
   POLICY_LIMIT_ZERO: 'Hạn mức Bảo hiểm Hệ thống trong policy snapshot của chuyến đi bằng 0.',
   NO_REMAINING_COVERED_EXPOSURE: 'Không còn phần thiệt hại thuộc phạm vi Customer/Driver để Bảo hiểm Hệ thống xem xét.',
@@ -512,15 +511,13 @@ const systemInsuranceReasonLabels = {
   NO_APPROVABLE_SYSTEM_INSURANCE: 'Máy chủ không xác định được khoản Bảo hiểm Hệ thống có thể duyệt cho hồ sơ này.',
 };
 
-export function shouldShowSystemInsurance(claim) {
-  if (!claim) return false;
-  return claim.insuranceStatus !== 'NOT_SUBMITTED'
-    || evaluatedClaimStatuses.has(claim.status)
-    || Number(claim.totalDamageAmount) > 0
-    || Number(claim.eligibleDamageAmount) > 0;
-}
-
-export function CustomerInsuranceInput({ claim, value, onChange }) {
+export function CustomerInsuranceInput({ claim, eligibleDamageAmount, value, onChange }) {
+  const enteredEligibleDamage = eligibleDamageAmount === '' || eligibleDamageAmount == null
+    ? null
+    : Number(eligibleDamageAmount);
+  const eligibleDamageCap = Number.isFinite(enteredEligibleDamage)
+    ? enteredEligibleDamage
+    : claim?.eligibleDamageAmount;
   return <fieldset className="risk-form" aria-label="Bảo hiểm riêng của khách hàng">
     <legend>BẢO HIỂM RIÊNG CỦA KHÁCH HÀNG — KHÔNG BẮT BUỘC</legend>
     <p className="risk-form__hint">Đây là khoản bảo hiểm bên ngoài SafeRide đã xác nhận chi trả. Nếu khách không có hoặc không sử dụng bảo hiểm riêng, để 0.</p>
@@ -531,6 +528,7 @@ export function CustomerInsuranceInput({ claim, value, onChange }) {
           aria-label="Khoản bảo hiểm riêng đã xác nhận chi trả"
           type="number"
           min="0"
+          max={eligibleDamageCap ?? undefined}
           value={value.appliedAmount}
           onChange={(event) => onChange({ ...value, appliedAmount: event.target.value })}
         />
@@ -541,7 +539,7 @@ export function CustomerInsuranceInput({ claim, value, onChange }) {
       />
       <ReviewItem
         label="Tối đa có thể áp dụng"
-        value={claim?.customerGrossExposure != null ? formatVnd(claim.customerGrossExposure) : 'Sẽ được máy chủ xác định'}
+        value={eligibleDamageCap != null ? formatVnd(eligibleDamageCap) : 'Bằng thiệt hại đủ điều kiện do máy chủ xác định'}
       />
     </div>
     <details>
@@ -579,6 +577,7 @@ export function SystemInsuranceCard({
       <ReviewItem label="Trạng thái" value={riskProtectionLabel(claim?.insuranceStatus)} />
       <ReviewItem label="Thiệt hại đủ điều kiện" value={formatVnd(claim?.eligibleDamageAmount)} />
       <ReviewItem label="Bảo hiểm riêng khách hàng" value={formatVnd(claim?.customerInsuranceAppliedAmount)} />
+      <ReviewItem label="Còn lại sau bảo hiểm riêng" value={formatVnd(claim?.remainingLossAfterCustomerInsurance)} />
       <ReviewItem label="Phần Customer/Driver còn lại" value={formatVnd(claim?.systemInsuranceCoveredExposureRemaining)} />
       <ReviewItem label="Giới hạn bảo hiểm hệ thống" value={formatVnd(claim?.systemInsuranceCoverageLimitSnapshot)} />
       <ReviewItem label="Mức tối đa có thể duyệt" value={formatVnd(maximum)} />

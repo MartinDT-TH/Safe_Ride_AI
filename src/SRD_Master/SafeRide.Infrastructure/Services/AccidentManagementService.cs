@@ -364,10 +364,8 @@ public sealed class AccidentManagementService : IAccidentManagementService
         claim.TotalDamageAmount = Round(request.TotalDamageAmount);
         claim.EligibleDamageAmount = Round(request.EligibleDamageAmount);
         var customerInsurance = Round(request.CustomerInsuranceAppliedAmount);
-        var withoutInsurance = CalculateLiabilities(
-            claim.EligibleDamageAmount, assessment, policy, 0m, 0m);
-        if (customerInsurance > withoutInsurance.CustomerGrossExposure)
-            throw Invalid("Customer insurance contribution cannot exceed the Customer gross exposure.");
+        if (customerInsurance > claim.EligibleDamageAmount)
+            throw Invalid("Customer insurance contribution cannot exceed EligibleDamage.");
         var customerInsuranceChanged = claim.CustomerInsuranceAppliedAmount != customerInsurance;
         claim.CustomerInsuranceAppliedAmount = customerInsurance;
         claim.CustomerInsuranceReference = customerInsurance > 0m
@@ -1461,10 +1459,6 @@ public sealed class AccidentManagementService : IAccidentManagementService
             Round(x.RiskFundAdvanceAmount + x.RiskFundPermanentLossAmount),
             x.InsuranceRequestedAmount,
             x.InsuranceRequestedAmount,
-            coverage?.InsuranceProviderSnapshot,
-            coverage?.PolicyNumberSnapshot,
-            coverage?.InsuranceCoverageSnapshot,
-            coverage?.InsuranceDeductibleSnapshot,
             systemCoverageLimit,
             x.InsuranceReference,
             x.CustomerInsuranceAppliedAmount,
@@ -1485,7 +1479,13 @@ public sealed class AccidentManagementService : IAccidentManagementService
             liabilities?.CustomerFinalExposure ?? x.CustomerLiabilityAmount,
             liabilities?.DriverRemainingExposureBeforeRateCap ?? driverAttributable,
             systemCoverageLimit,
-            GetSystemInsuranceEvaluationReason(x, liabilities, systemCoverageLimit));
+            nameof(MockInsuranceProvider),
+            GetSystemInsuranceEvaluationReason(x, liabilities, systemCoverageLimit),
+            liabilities?.CustomerInsuranceBenefitToCustomer ?? 0m,
+            liabilities?.CustomerInsuranceExcessAppliedToOtherLoss ?? 0m,
+            liabilities?.CustomerInsuranceBenefitToDriver ?? 0m,
+            liabilities?.CustomerInsuranceUnallocatedCategoryReduction ?? 0m,
+            liabilities?.RemainingLossAfterCustomerInsurance ?? Math.Max(0m, x.EligibleDamageAmount - x.CustomerInsuranceAppliedAmount));
     }
 
     private async Task<TripProtectionCoverage> GetOrRepairSystemProtectionCoverageAsync(

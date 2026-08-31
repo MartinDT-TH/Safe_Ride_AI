@@ -86,19 +86,3 @@ String safetyReasonLabel(AppLocalizations l10n, String value) =>
       'UNSAFE_REQUEST' => l10n.riskReasonUnsafeRequest,
       _ => l10n.riskReasonOther,
     };
-
-String insuranceTypeLabel(AppLocalizations l10n, String value) =>
-    switch (value) {
-      'MANDATORY_TPL' => l10n.mandatoryTplInsurance,
-      'PHYSICAL_DAMAGE' => l10n.physicalDamageInsurance,
-      _ => l10n.riskInsuranceOther,
-    };
-
-String insuranceStatusLabel(AppLocalizations l10n, String value) =>
-    switch (value) {
-      'PENDING' => l10n.riskInsurancePending,
-      'VERIFIED' => l10n.riskInsuranceVerified,
-      'REJECTED' => l10n.riskStatusRejected,
-      'EXPIRED' => l10n.riskInsuranceExpired,
-      _ => l10n.statusPending,
-    };

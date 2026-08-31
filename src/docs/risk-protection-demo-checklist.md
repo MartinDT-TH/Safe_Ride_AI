@@ -23,9 +23,8 @@ database.
 1. [ ] Admin opens **Risk Fund** → **Cài đặt chính sách** and shows the current
        effective version plus immutable version history.
 2. [ ] Admin shows **Tổng quan** and the current Risk Fund balance.
-3. [ ] Customer opens Profile → My Vehicles → **Bảo hiểm/Insurance**, shows the
-       vehicle and localized verification status, and explains `PHYSICAL_DAMAGE`
-       versus `MANDATORY_TPL`.
+3. [ ] Customer opens Profile → My Vehicles and shows that vehicle management
+       contains no SafeRide-managed Customer insurance policy workflow.
 4. [ ] Create/assign the demo trip and let the Driver arrive.
 5. [ ] Driver completes **Kiểm tra an toàn trước chuyến / Pre-trip vehicle safety
        check**. Explain that it is a reasonable visible check, not a mechanical

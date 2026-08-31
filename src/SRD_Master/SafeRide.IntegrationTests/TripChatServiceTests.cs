@@ -467,7 +467,7 @@ public sealed class TripChatServiceTests
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase($"trip-chat-{Guid.NewGuid():N}")
             .Options;
-        return new ApplicationDbContext(options);
+        return new ApplicationDbContext(options, new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
     }
 
     private static TripChatService CreateService(

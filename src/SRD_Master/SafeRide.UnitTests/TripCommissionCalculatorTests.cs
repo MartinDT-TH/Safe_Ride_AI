@@ -351,15 +351,72 @@ public sealed class TripCommissionCalculatorTests
     }
 
     [Fact]
-    public void CalculateLiabilities_CustomerInsuranceCannotExceedCustomerGrossExposure()
+    public void CalculateLiabilities_CustomerInsuranceSpillover_DoesNotReassignThirdPartyOrNonHumanFault()
     {
-        var input = new ClaimLiabilityCalculationInput(
-            10_000_000m, 30m, 70m, 0m,
+        var result = _calculator.CalculateLiabilities(new ClaimLiabilityCalculationInput(
+            10_000_000m, 30m, 20m, 20m,
             DriverFaultLevel.ORDINARY_NEGLIGENCE,
             0.50m, 20_000_000m, 0.75m, 50_000_000m,
-            CustomerInsuranceAppliedAmount: 7_000_001m);
+            VehicleFailurePercentage: 20m,
+            ObjectiveCausePercentage: 10m,
+            CustomerInsuranceAppliedAmount: 8_000_000m));
+
+        Assert.Equal(2_000_000m, result.CustomerInsuranceBenefitToCustomer);
+        Assert.Equal(3_000_000m, result.CustomerInsuranceBenefitToDriver);
+        Assert.Equal(3_000_000m, result.CustomerInsuranceUnallocatedCategoryReduction);
+        Assert.Equal(2_000_000m, result.ThirdPartyGrossExposure);
+        Assert.Equal(3_000_000m, result.VehicleObjectiveGrossExposure);
+        Assert.Equal(0m, result.CustomerExposureAfterOwnInsurance);
+        Assert.Equal(0m, result.DriverExposureBeforeSystemInsurance);
+        Assert.Equal(2_000_000m, result.ResidualUninsuredDamage);
+    }
+
+    [Fact]
+    public void CalculateLiabilities_CustomerInsuranceAboveCustomerGross_SpillsToDriverExposure()
+    {
+        var result = _calculator.CalculateLiabilities(new ClaimLiabilityCalculationInput(
+            10_000_000m, 70m, 30m, 0m,
+            DriverFaultLevel.ORDINARY_NEGLIGENCE,
+            0.50m, 20_000_000m, 0.75m, 50_000_000m,
+            CustomerInsuranceAppliedAmount: 6_000_000m));
+
+        Assert.Equal(3_000_000m, result.CustomerGrossExposure);
+        Assert.Equal(7_000_000m, result.DriverGrossExposure);
+        Assert.Equal(3_000_000m, result.CustomerInsuranceBenefitToCustomer);
+        Assert.Equal(3_000_000m, result.CustomerInsuranceExcessAppliedToOtherLoss);
+        Assert.Equal(3_000_000m, result.CustomerInsuranceBenefitToDriver);
+        Assert.Equal(0m, result.CustomerExposureAfterOwnInsurance);
+        Assert.Equal(4_000_000m, result.DriverExposureBeforeSystemInsurance);
+        Assert.Equal(4_000_000m, result.ResidualUninsuredDamage);
+    }
+
+    [Fact]
+    public void CalculateLiabilities_CustomerInsuranceAboveEligibleDamage_IsRejected()
+    {
+        var input = new ClaimLiabilityCalculationInput(
+            10_000_000m, 70m, 30m, 0m,
+            DriverFaultLevel.ORDINARY_NEGLIGENCE,
+            0.50m, 20_000_000m, 0.75m, 50_000_000m,
+            CustomerInsuranceAppliedAmount: 10_000_001m);
 
         Assert.Throws<ArgumentOutOfRangeException>(() => _calculator.CalculateLiabilities(input));
+    }
+
+    [Fact]
+    public void CalculateLiabilities_CustomerInsuranceEqualEligibleDamage_ClearsParticipantExposure()
+    {
+        var result = _calculator.CalculateLiabilities(new ClaimLiabilityCalculationInput(
+            10_000_000m, 70m, 30m, 0m,
+            DriverFaultLevel.ORDINARY_NEGLIGENCE,
+            0.50m, 20_000_000m, 0.75m, 50_000_000m,
+            CustomerInsuranceAppliedAmount: 10_000_000m));
+
+        Assert.Equal(0m, result.CustomerExposureAfterOwnInsurance);
+        Assert.Equal(0m, result.DriverExposureBeforeSystemInsurance);
+        Assert.Equal(0m, result.ParticipantExposureBeforeSystemInsurance);
+        Assert.Equal(0m, result.ResidualUninsuredDamage);
+        Assert.Equal(0m, result.Driver.LiabilityAmount);
+        Assert.Equal(0m, result.TotalRecoverableLiabilityAmount);
     }
 
     [Fact]

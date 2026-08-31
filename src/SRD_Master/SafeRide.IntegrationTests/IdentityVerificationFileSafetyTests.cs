@@ -141,7 +141,7 @@ public sealed class IdentityVerificationFileSafetyTests
         var builder = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase($"identity-file-safety-{Guid.NewGuid():N}");
         if (interceptor is not null) builder.AddInterceptors(interceptor);
-        return new ApplicationDbContext(builder.Options);
+        return new ApplicationDbContext(builder.Options, new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
     }
 
     private sealed class TrackingIdentityDocumentStorage : IIdentityDocumentStorage

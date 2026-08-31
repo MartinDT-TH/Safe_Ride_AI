@@ -6,14 +6,12 @@ class VehicleCard extends StatelessWidget {
   final VehicleModel vehicle;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
-  final VoidCallback onInsurance;
 
   const VehicleCard({
     super.key,
     required this.vehicle,
     required this.onEdit,
     required this.onDelete,
-    required this.onInsurance,
   });
 
   @override
@@ -86,18 +84,6 @@ class VehicleCard extends StatelessWidget {
                   Row(
                     children: [
                       Spacer(),
-                      InkWell(
-                        onTap: onInsurance,
-                        child: Text(
-                          context.l10n.vehicleInsurance,
-                          style: const TextStyle(
-                            color: tealColor,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: 24),
                       InkWell(
                         onTap: onEdit,
                         child: Text(

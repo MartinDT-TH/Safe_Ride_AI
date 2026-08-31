@@ -61,7 +61,7 @@ public sealed class PromotionCompletedTripsEligibilityTests
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase($"promotion-eligibility-{Guid.NewGuid():N}")
             .Options;
-        var dbContext = new ApplicationDbContext(options);
+        var dbContext = new ApplicationDbContext(options, new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
         var repository = new PromotionRepository(dbContext);
         var ruleStore = new PromotionUnlockRuleStoreFake(requiredCompletedTrips);
         var promotion = new Promotion

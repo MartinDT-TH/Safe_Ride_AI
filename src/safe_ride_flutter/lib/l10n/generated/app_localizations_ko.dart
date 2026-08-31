@@ -2554,61 +2554,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get optionalEvidence => '증거 자료(선택)';
 
   @override
-  String get vehicleInsurance => '보험';
-
-  @override
-  String get addInsurance => '보험 추가';
-
-  @override
-  String get insuranceLoadFailed => '보험 정보를 불러올 수 없습니다. 다시 시도해 주세요.';
-
-  @override
-  String get insuranceUpdateFailed => '보험을 업데이트할 수 없습니다.';
-
-  @override
-  String get deleteInsuranceQuestion => '보험 계약을 삭제할까요?';
-
-  @override
-  String get policyNumber => '증권 번호';
-
-  @override
-  String get optionalInsuranceEmpty => '보험은 선택 사항입니다. 이 차량에는 계약이 없습니다.';
-
-  @override
-  String get addInsurancePolicy => '보험 계약 추가';
-
-  @override
-  String get editInsurancePolicy => '보험 계약 수정';
-
-  @override
-  String get insuranceType => '보험 유형';
-
-  @override
-  String get mandatoryTplInsurance => '의무 제3자 책임보험';
-
-  @override
-  String get physicalDamageInsurance => '차량 손해';
-
-  @override
-  String get insuranceProvider => '보험사';
-
-  @override
-  String get effectiveDate => '시작일';
-
-  @override
-  String get insuranceCoverageLimit => '보장 한도';
-
-  @override
-  String get insuranceDeductible => '자기부담금';
-
-  @override
-  String get optionalDocumentUrl => '문서 URL(선택)';
-
-  @override
-  String get optionalInsuranceHint =>
-      '보험은 선택 사항입니다. 생성 또는 수정하면 직원 확인을 위해 PENDING 상태로 돌아갑니다.';
-
-  @override
   String get endTripReasonTitle => '운행 종료 사유';
 
   @override
@@ -2744,18 +2689,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get riskReasonOther => '기타 사유';
-
-  @override
-  String get riskInsurancePending => '직원 확인 대기';
-
-  @override
-  String get riskInsuranceVerified => '확인됨';
-
-  @override
-  String get riskInsuranceExpired => '만료됨';
-
-  @override
-  String get riskInsuranceOther => '기타 보험';
 
   @override
   String get riskIncidentInformation => '사고 정보';

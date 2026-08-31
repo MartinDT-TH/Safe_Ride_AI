@@ -17,17 +17,6 @@ public sealed class InsuranceDocumentsController : ControllerBase
     private readonly IInsuranceDocumentService _documents;
     public InsuranceDocumentsController(IInsuranceDocumentService documents) => _documents = documents;
 
-    [HttpGet("vehicle-insurance-policies/{policyId:long}/documents")]
-    public async Task<ActionResult<IReadOnlyList<InsurancePolicyDocumentResponse>>> ListPolicy(long policyId, CancellationToken cancellationToken)
-        => Ok(await _documents.ListPolicyDocumentsAsync(GetUserId(), policyId, true, cancellationToken));
-
-    [HttpGet("vehicle-insurance-policies/{policyId:long}/documents/{documentId:long}/content")]
-    public async Task<IActionResult> PolicyContent(long policyId, long documentId, CancellationToken cancellationToken)
-    {
-        var document = await _documents.OpenPolicyDocumentAsync(GetUserId(), policyId, documentId, true, cancellationToken);
-        return File(document.Content, document.ContentType, document.FileName);
-    }
-
     [HttpPost("claims/{claimId:long}/insurance-documents")]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(10_485_760)]

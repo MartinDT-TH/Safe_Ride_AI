@@ -108,7 +108,7 @@ internal sealed class SqlServerTestDatabase : IAsyncDisposable
                     .UseNetTopologySuite()
                     .EnableRetryOnFailure())
             .Options;
-        return new ApplicationDbContext(options);
+        return new ApplicationDbContext(options, new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
     }
 
     public async Task ResetAsync(CancellationToken cancellationToken = default)

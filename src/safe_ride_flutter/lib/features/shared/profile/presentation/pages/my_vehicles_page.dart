@@ -2,12 +2,10 @@ import 'package:flutter/material.dart';
 import '../../../../../core/localization/localization_extensions.dart';
 import 'package:provider/provider.dart';
 import '../../../../../core/widgets/app_dialog.dart';
-import '../../../../../core/widgets/motorbike_feature_notice.dart';
 import '../../data/models/vehicle_model.dart';
 import '../providers/vehicle_provider.dart';
 import '../widgets/vehicle_card.dart';
 import '../widgets/vehicle_form_sheet.dart';
-import 'vehicle_insurance_page.dart';
 
 class MyVehiclesPage extends StatefulWidget {
   const MyVehiclesPage({super.key});
@@ -49,20 +47,6 @@ class _MyVehiclesPageState extends State<MyVehiclesPage> {
         if (!saved) _showError(provider);
         return saved;
       },
-    );
-  }
-
-  Future<void> _openInsurance(VehicleModel vehicle) {
-    if (vehicle.type == VehicleType.motorbike) {
-      return MotorbikeFeatureNotice.show(context);
-    }
-    return Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ChangeNotifierProvider.value(
-          value: context.read<VehicleProvider>(),
-          child: VehicleInsurancePage(vehicle: vehicle),
-        ),
-      ),
     );
   }
 
@@ -283,7 +267,6 @@ class _MyVehiclesPageState extends State<MyVehiclesPage> {
               vehicle: vehicle,
               onEdit: () => _onEditVehicle(vehicle),
               onDelete: () => _handleDelete(vehicle),
-              onInsurance: () => _openInsurance(vehicle),
             ),
           ),
         ],

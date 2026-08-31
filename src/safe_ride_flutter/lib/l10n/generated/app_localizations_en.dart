@@ -2652,63 +2652,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get optionalEvidence => 'Evidence (optional)';
 
   @override
-  String get vehicleInsurance => 'Insurance';
-
-  @override
-  String get addInsurance => 'Add insurance';
-
-  @override
-  String get insuranceLoadFailed =>
-      'Could not load insurance information. Please try again.';
-
-  @override
-  String get insuranceUpdateFailed => 'Could not update insurance.';
-
-  @override
-  String get deleteInsuranceQuestion => 'Delete insurance policy?';
-
-  @override
-  String get policyNumber => 'Policy number';
-
-  @override
-  String get optionalInsuranceEmpty =>
-      'Insurance is optional. This vehicle has no policies.';
-
-  @override
-  String get addInsurancePolicy => 'Add insurance policy';
-
-  @override
-  String get editInsurancePolicy => 'Edit insurance policy';
-
-  @override
-  String get insuranceType => 'Insurance type';
-
-  @override
-  String get mandatoryTplInsurance => 'Mandatory third-party liability';
-
-  @override
-  String get physicalDamageInsurance => 'Physical damage';
-
-  @override
-  String get insuranceProvider => 'Provider';
-
-  @override
-  String get effectiveDate => 'Effective date';
-
-  @override
-  String get insuranceCoverageLimit => 'Coverage limit';
-
-  @override
-  String get insuranceDeductible => 'Deductible';
-
-  @override
-  String get optionalDocumentUrl => 'Document URL (optional)';
-
-  @override
-  String get optionalInsuranceHint =>
-      'Insurance is optional. Creating or editing a policy resets it to PENDING for Staff verification.';
-
-  @override
   String get endTripReasonTitle => 'Reason for ending trip';
 
   @override
@@ -2844,18 +2787,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get riskReasonOther => 'Other reason';
-
-  @override
-  String get riskInsurancePending => 'Awaiting Staff verification';
-
-  @override
-  String get riskInsuranceVerified => 'Verified';
-
-  @override
-  String get riskInsuranceExpired => 'Expired';
-
-  @override
-  String get riskInsuranceOther => 'Other insurance';
 
   @override
   String get riskIncidentInformation => 'Incident information';

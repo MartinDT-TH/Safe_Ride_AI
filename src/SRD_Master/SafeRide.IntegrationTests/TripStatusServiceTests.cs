@@ -1088,47 +1088,17 @@ public sealed class TripStatusServiceTests
         Assert.Equal(pass.Id, coverage.PreTripVehicleCheckId);
         Assert.Equal(20_000_000m, coverage.ProtectionLimit);
         Assert.Equal(UtcNow, coverage.ActivatedAtUtc);
-        Assert.Null(coverage.VehicleInsurancePolicyId);
+        Assert.Equal(
+            await fixture.DbContext.RiskProtectionPolicyVersions.Select(x => x.Id).SingleAsync(),
+            coverage.PolicyVersionId);
     }
 
     [Fact]
-    public async Task StartTrip_WithVerifiedCustomerInsurance_DoesNotSnapshotCustomerPolicy()
+    public async Task StartTrip_SnapshotsOnlySafeRideProtectionAuthority()
     {
         using var fixture = await TripStatusFixture.CreateAsync(
             TripStatus.ARRIVED,
             riskProtectionEnabled: true);
-        var vehicleId = await fixture.DbContext.Trips
-            .Where(x => x.Id == fixture.TripId)
-            .Select(x => x.Booking.VehicleId)
-            .SingleAsync();
-        var insurance = new VehicleInsurancePolicy
-        {
-            VehicleId = vehicleId,
-            InsuranceType = VehicleInsuranceType.PHYSICAL_DAMAGE,
-            Provider = "Safe Insurer",
-            PolicyNumber = "POLICY-001",
-            EffectiveFromUtc = UtcNow.AddDays(-1),
-            ExpiresAtUtc = UtcNow.AddDays(30),
-            CoverageAmount = 15_000_000m,
-            Deductible = 500_000m,
-            VerificationStatus = InsuranceVerificationStatus.VERIFIED,
-            CreatedAtUtc = UtcNow
-        };
-        var higherCoverageMandatoryTpl = new VehicleInsurancePolicy
-        {
-            VehicleId = vehicleId,
-            InsuranceType = VehicleInsuranceType.MANDATORY_TPL,
-            Provider = "Mandatory TPL Insurer",
-            PolicyNumber = "TPL-001",
-            EffectiveFromUtc = UtcNow.AddDays(-1),
-            ExpiresAtUtc = UtcNow.AddDays(30),
-            CoverageAmount = 100_000_000m,
-            Deductible = 0m,
-            VerificationStatus = InsuranceVerificationStatus.VERIFIED,
-            CreatedAtUtc = UtcNow
-        };
-        fixture.DbContext.VehicleInsurancePolicies.AddRange(insurance, higherCoverageMandatoryTpl);
-        await fixture.DbContext.SaveChangesAsync();
         var checkService = new PreTripVehicleCheckService(
             fixture.DbContext,
             fixture.RiskProtectionPolicyProvider,
@@ -1147,27 +1117,19 @@ public sealed class TripStatusServiceTests
             CancellationToken.None);
 
         var coverage = await fixture.DbContext.TripProtectionCoverages.SingleAsync();
-        Assert.Null(coverage.VehicleInsurancePolicyId);
-        Assert.Null(coverage.InsuranceProviderSnapshot);
-        Assert.Null(coverage.PolicyNumberSnapshot);
-        Assert.Null(coverage.InsuranceCoverageSnapshot);
-        Assert.Null(coverage.InsuranceDeductibleSnapshot);
-
-        insurance.Provider = "Changed Insurer";
-        insurance.PolicyNumber = "CHANGED-POLICY";
-        insurance.CoverageAmount = 1m;
-        insurance.Deductible = 0m;
-        await fixture.DbContext.SaveChangesAsync();
+        var policyId = await fixture.DbContext.RiskProtectionPolicyVersions
+            .Select(x => x.Id)
+            .SingleAsync();
+        Assert.Equal(policyId, coverage.PolicyVersionId);
+        Assert.Equal(20_000_000m, coverage.ProtectionLimit);
+        Assert.Equal(UtcNow, coverage.ActivatedAtUtc);
         fixture.DbContext.ChangeTracker.Clear();
 
         var persistedSnapshot = await fixture.DbContext.TripProtectionCoverages
             .AsNoTracking()
             .SingleAsync(x => x.TripId == fixture.TripId);
-        Assert.Null(persistedSnapshot.VehicleInsurancePolicyId);
-        Assert.Null(persistedSnapshot.InsuranceProviderSnapshot);
-        Assert.Null(persistedSnapshot.PolicyNumberSnapshot);
-        Assert.Null(persistedSnapshot.InsuranceCoverageSnapshot);
-        Assert.Null(persistedSnapshot.InsuranceDeductibleSnapshot);
+        Assert.Equal(policyId, persistedSnapshot.PolicyVersionId);
+        Assert.Equal(20_000_000m, persistedSnapshot.ProtectionLimit);
     }
 
     [Fact]
@@ -2749,7 +2711,7 @@ public sealed class TripStatusServiceTests
             var options = new DbContextOptionsBuilder<ApplicationDbContext>()
                 .UseInMemoryDatabase($"trip-status-{Guid.NewGuid():N}")
                 .Options;
-            var dbContext = new ApplicationDbContext(options);
+            var dbContext = new ApplicationDbContext(options, new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
 
             var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
             var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");

@@ -180,7 +180,7 @@ public sealed class RiskProtectionIntegrationTests
     }
 
     [Fact]
-    public async Task PreTrip_LatestPass_ActivatesCoverageWithoutVehicleInsurance()
+    public async Task PreTrip_LatestPass_ActivatesSafeRideCoverageWithoutCustomerPolicy()
     {
         await using var db = CreateDbContext();
         var graph = await SeedTripAsync(db, TripStatus.ARRIVED, riskEnabled: true);
@@ -210,7 +210,8 @@ public sealed class RiskProtectionIntegrationTests
         Assert.True(pass.WindshieldVisibilityPassed);
         Assert.True(pass.NoMajorVisibleIssue);
         Assert.Equal(pass.Id, coverage.PreTripVehicleCheckId);
-        Assert.Null(coverage.VehicleInsurancePolicyId);
+        Assert.Equal(graph.Policy.Id, coverage.PolicyVersionId);
+        Assert.Equal(graph.Policy.DefaultProtectionLimit, coverage.ProtectionLimit);
     }
 
     [Fact]
@@ -338,57 +339,6 @@ public sealed class RiskProtectionIntegrationTests
     }
 
     [Fact]
-    public async Task VehicleInsurance_CrudEnforcesOwnership_AndStaffReviewCapturesAuditActorAndTime()
-    {
-        await using var db = CreateDbContext();
-        var graph = await SeedTripAsync(db, TripStatus.ARRIVED, riskEnabled: true);
-        var ownerId = graph.Trip.Booking.CustomerId;
-        var vehicleId = graph.Trip.Booking.VehicleId;
-        var outsiderId = Guid.NewGuid();
-        var staffId = Guid.NewGuid();
-        var service = new VehicleInsurancePolicyService(db, new SystemDateTimeProvider());
-        var request = new VehicleInsurancePolicyRequest(
-            VehicleInsuranceType.PHYSICAL_DAMAGE,
-            "Safe Insurer",
-            $"POL-{Guid.NewGuid():N}",
-            DateTime.UtcNow.AddDays(-1),
-            DateTime.UtcNow.AddYears(1),
-            20_000_000m,
-            500_000m,
-            "https://storage.test/policy.pdf");
-
-        var ownershipError = await Assert.ThrowsAsync<BookingException>(() =>
-            service.CreateAsync(outsiderId, vehicleId, request, CancellationToken.None));
-        Assert.Equal("vehicle.not_found", ownershipError.Code);
-
-        var created = await service.CreateAsync(ownerId, vehicleId, request, CancellationToken.None);
-        Assert.Equal(InsuranceVerificationStatus.PENDING, created.VerificationStatus);
-
-        var reviewed = await service.ReviewAsync(
-            staffId,
-            created.Id,
-            InsuranceVerificationStatus.VERIFIED,
-            CancellationToken.None);
-        Assert.Equal(InsuranceVerificationStatus.VERIFIED, reviewed.VerificationStatus);
-        Assert.Equal(staffId, reviewed.ReviewedByUserId);
-        Assert.NotNull(reviewed.ReviewedAtUtc);
-
-        var updateError = await Assert.ThrowsAsync<BookingException>(() =>
-            service.UpdateAsync(outsiderId, vehicleId, created.Id, request, CancellationToken.None));
-        Assert.Equal("vehicle.not_found", updateError.Code);
-
-        var updated = await service.UpdateAsync(
-            ownerId,
-            vehicleId,
-            created.Id,
-            request with { CoverageAmount = 25_000_000m },
-            CancellationToken.None);
-        Assert.Equal(InsuranceVerificationStatus.PENDING, updated.VerificationStatus);
-        Assert.Null(updated.ReviewedByUserId);
-        Assert.Null(updated.ReviewedAtUtc);
-    }
-
-    [Fact]
     public void PreTrip_Model_OrdersLatestAttemptByTripAndDescendingCheckTime()
     {
         using var db = CreateDbContext();
@@ -402,8 +352,26 @@ public sealed class RiskProtectionIntegrationTests
         Assert.Contains(
             "CK_PreTripVehicleChecks_EvidenceFileSize",
             entityType.GetCheckConstraints().Select(constraint => constraint.Name));
-        Assert.NotNull(model.FindEntityType(typeof(Vehicle))!
-            .FindNavigation(nameof(Vehicle.VehicleInsurancePolicies)));
+        Assert.Null(model.FindEntityType(typeof(Vehicle))!
+            .FindNavigation("VehicleInsurancePolicies"));
+        Assert.DoesNotContain(
+            model.GetEntityTypes(),
+            candidate => candidate.ClrType.Name == "VehicleInsurancePolicy");
+        Assert.NotNull(model.FindEntityType(typeof(InsuranceClaimDocument)));
+        Assert.Equal(
+            [
+                nameof(TripProtectionCoverage.ActivatedAtUtc),
+                nameof(TripProtectionCoverage.Id),
+                nameof(TripProtectionCoverage.PolicyVersionId),
+                nameof(TripProtectionCoverage.PreTripVehicleCheckId),
+                nameof(TripProtectionCoverage.ProtectionLimit),
+                nameof(TripProtectionCoverage.TripId)
+            ],
+            model.FindEntityType(typeof(TripProtectionCoverage))!
+                .GetProperties()
+                .Select(property => property.Name)
+                .Order()
+                .ToArray());
     }
 
     [Fact]
@@ -849,7 +817,8 @@ public sealed class RiskProtectionIntegrationTests
                 null),
             CancellationToken.None));
 
-        Assert.Equal("risk_protection.conflict", exception.Code);
+        Assert.Equal("risk_protection.system_protection_snapshot_unavailable", exception.Code);
+        Assert.Contains("SafeRide", exception.Message, StringComparison.Ordinal);
         Assert.Empty(await db.AccidentReports.ToListAsync());
     }
 
@@ -999,7 +968,7 @@ public sealed class RiskProtectionIntegrationTests
     public async Task LiabilityAssessment_RootCauseAllocationMustMatchEachResponsibleParty()
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
+        var graph = await SeedCoveredAccidentAsync(db);
         var service = CreateAccidentService(db);
 
         var exception = await Assert.ThrowsAsync<BookingException>(() => service.SaveAssessmentAsync(
@@ -1038,7 +1007,7 @@ public sealed class RiskProtectionIntegrationTests
         AccidentRootCause rootCause)
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
+        var graph = await SeedCoveredAccidentAsync(db);
         var service = CreateAccidentService(db);
         decimal Allocation(ResponsiblePartyType expected) => party == expected ? 100m : 0m;
 
@@ -1072,7 +1041,7 @@ public sealed class RiskProtectionIntegrationTests
     public async Task LiabilityAssessment_HiddenDefectAndAwarenessMustMatchAllocation()
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
+        var graph = await SeedCoveredAccidentAsync(db);
         var service = CreateAccidentService(db);
         var hiddenDefect = new LiabilityAssessmentRequest(
             0m, 0m, 0m, 100m, 0m,
@@ -1088,7 +1057,7 @@ public sealed class RiskProtectionIntegrationTests
         Assert.Equal(ProtectionClaimStatus.UNDER_REVIEW, result.Status);
 
         await using var secondDb = CreateDbContext();
-        var secondGraph = await SeedCoveredAccidentAsync(secondDb, withInsurance: false);
+        var secondGraph = await SeedCoveredAccidentAsync(secondDb);
         var secondService = CreateAccidentService(secondDb);
         var inconsistent = hiddenDefect with { VehicleDefectAwareness = VehicleDefectAwareness.CUSTOMER_KNEW };
         var exception = await Assert.ThrowsAsync<BookingException>(() => secondService.SaveAssessmentAsync(
@@ -1100,7 +1069,7 @@ public sealed class RiskProtectionIntegrationTests
     public async Task BusinessScenarioA_OrdinaryDriverNegligence_AppliesSnapshotRateAndCapWithoutWalletDeduction()
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
+        var graph = await SeedCoveredAccidentAsync(db);
         var wallet = new DriverWallet
         {
             DriverId = graph.TripGraph.DriverId,
@@ -1146,7 +1115,7 @@ public sealed class RiskProtectionIntegrationTests
     public async Task BusinessScenarioB_CustomerInterference_CanBeRecoveredFromCustomerWithoutDriverLiability()
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
+        var graph = await SeedCoveredAccidentAsync(db);
         var service = CreateAccidentService(db);
         var staffId = Guid.NewGuid();
         var claim = await service.SaveAssessmentAsync(
@@ -1205,7 +1174,7 @@ public sealed class RiskProtectionIntegrationTests
     public async Task BusinessScenarioC_PassiveCustomerIntoxication_CannotCreateFaultAndThirdPartyCanBeFullyResponsible()
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
+        var graph = await SeedCoveredAccidentAsync(db);
         var service = CreateAccidentService(db);
 
         Assert.DoesNotContain("CUSTOMER_INTOXICATION", Enum.GetNames<AccidentRootCause>());
@@ -1237,7 +1206,7 @@ public sealed class RiskProtectionIntegrationTests
     public async Task BusinessScenarioD_ThirdPartyFault_RiskFundAdvanceIsRecoverableAndReplenishedExactlyOnce()
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
+        var graph = await SeedCoveredAccidentAsync(db);
         var service = CreateAccidentService(db);
         var staffId = Guid.NewGuid();
         var claim = await service.SaveAssessmentAsync(
@@ -1289,7 +1258,7 @@ public sealed class RiskProtectionIntegrationTests
     public async Task BusinessScenarioE_LatentBrakeDefect_AssignsVehicleWithoutInventingHumanFault()
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
+        var graph = await SeedCoveredAccidentAsync(db);
         var service = CreateAccidentService(db);
         var claim = await service.SaveAssessmentAsync(
             Guid.NewGuid(),
@@ -1321,7 +1290,7 @@ public sealed class RiskProtectionIntegrationTests
     public async Task BusinessScenarioF_ConcealedKnownDefect_AssignsCustomerWithoutBlamingDriver()
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
+        var graph = await SeedCoveredAccidentAsync(db);
         var service = CreateAccidentService(db);
         var claim = await service.SaveAssessmentAsync(
             Guid.NewGuid(),
@@ -1353,7 +1322,7 @@ public sealed class RiskProtectionIntegrationTests
     public async Task ClaimCalculation_UsesConfirmedPercentagesAndIntentionalMisconductAttributableDamage()
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
+        var graph = await SeedCoveredAccidentAsync(db);
         var service = CreateAccidentService(db);
         var assessment = ValidAssessment(DriverFaultLevel.INTENTIONAL_MISCONDUCT);
         var claim = await service.SaveAssessmentAsync(
@@ -1395,7 +1364,7 @@ public sealed class RiskProtectionIntegrationTests
     public async Task ClaimCalculation_AmountAboveRecoverableLiability_SplitsAdvanceFromFinalPayout()
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
+        var graph = await SeedCoveredAccidentAsync(db);
         var service = CreateAccidentService(db);
         var claim = await service.SaveAssessmentAsync(
             Guid.NewGuid(), graph.Accident.Id, ValidAssessment(), true, CancellationToken.None);
@@ -1424,7 +1393,7 @@ public sealed class RiskProtectionIntegrationTests
     public async Task MockInsurance_PendingSubmissionAndStaffReviewAreAuditedWithoutOverpayingClaim()
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: true);
+        var graph = await SeedCoveredAccidentAsync(db);
         var service = CreateAccidentService(db);
         var claim = await service.SaveAssessmentAsync(
             Guid.NewGuid(), graph.Accident.Id, ValidAssessment(), true, CancellationToken.None);
@@ -1482,7 +1451,7 @@ public sealed class RiskProtectionIntegrationTests
     public async Task MockInsuranceReview_EnforcesMaximumReasonAndSingleFinalTransition()
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: true);
+        var graph = await SeedCoveredAccidentAsync(db);
         var staffId = Guid.NewGuid();
         var service = CreateAccidentService(db);
         var claim = await service.SaveAssessmentAsync(staffId, graph.Accident.Id, ValidAssessment(), true, CancellationToken.None);
@@ -1508,7 +1477,7 @@ public sealed class RiskProtectionIntegrationTests
     public async Task InsurancePrioritySettlement_AppliesCustomerInsuranceThenAllocatesSystemInsurance()
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: true);
+        var graph = await SeedCoveredAccidentAsync(db);
         var staffId = Guid.NewGuid();
         var service = CreateAccidentService(db);
         var claim = await service.SaveAssessmentAsync(
@@ -1567,26 +1536,60 @@ public sealed class RiskProtectionIntegrationTests
             reviewed.CustomerInsuranceAppliedAmount
                 + reviewed.SystemInsuranceApprovedAmount
                 + reviewed.RiskFundRequiredAmount);
+        Assert.Empty(await db.WalletTransactions.ToListAsync());
     }
 
     [Fact]
-    public async Task CustomerInsurance_AboveCustomerGrossExposure_IsRejectedByServer()
+    public async Task CustomerInsurance_AboveCustomerGrossExposure_SpillsToDriverOnServer()
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
+        var graph = await SeedCoveredAccidentAsync(db);
         var staffId = Guid.NewGuid();
         var service = CreateAccidentService(db);
         var claim = await service.SaveAssessmentAsync(
             staffId,
             graph.Accident.Id,
             new LiabilityAssessmentRequest(
-                30m, 70m, 0m, 0m, 0m,
+                70m, 30m, 0m, 0m, 0m,
                 DriverFaultLevel.ORDINARY_NEGLIGENCE,
                 VehicleDefectAwareness.UNKNOWN,
                 [
-                    new LiabilityCauseRequest(AccidentRootCause.DRIVER_ERROR, ResponsiblePartyType.DRIVER, 30m),
-                    new LiabilityCauseRequest(AccidentRootCause.CUSTOMER_INTERFERENCE, ResponsiblePartyType.CUSTOMER, 70m)
+                    new LiabilityCauseRequest(AccidentRootCause.DRIVER_ERROR, ResponsiblePartyType.DRIVER, 70m),
+                    new LiabilityCauseRequest(AccidentRootCause.CUSTOMER_INTERFERENCE, ResponsiblePartyType.CUSTOMER, 30m)
                 ]),
+            true,
+            CancellationToken.None);
+
+        var result = await service.CalculateClaimAsync(
+            staffId,
+            claim.Id,
+            new CalculateClaimRequest(
+                10_000_000m,
+                10_000_000m,
+                CustomerInsuranceAppliedAmount: 6_000_000m),
+            CancellationToken.None);
+
+        Assert.Equal(3_000_000m, result.CustomerGrossExposure);
+        Assert.Equal(7_000_000m, result.DriverGrossExposure);
+        Assert.Equal(0m, result.CustomerExposureAfterOwnInsurance);
+        Assert.Equal(4_000_000m, result.DriverExposureBeforeSystemInsurance);
+        Assert.Equal(3_000_000m, result.CustomerInsuranceBenefitToDriver);
+        var assessment = await db.AccidentLiabilityAssessments.SingleAsync();
+        Assert.Equal(30m, assessment.CustomerFaultPercentage);
+        Assert.Equal(70m, assessment.DriverFaultPercentage);
+    }
+
+    [Fact]
+    public async Task CustomerInsurance_AboveEligibleDamage_IsRejectedByServer()
+    {
+        await using var db = CreateDbContext();
+        var graph = await SeedCoveredAccidentAsync(db);
+        var staffId = Guid.NewGuid();
+        var service = CreateAccidentService(db);
+        var claim = await service.SaveAssessmentAsync(
+            staffId,
+            graph.Accident.Id,
+            ValidAssessment(),
             true,
             CancellationToken.None);
 
@@ -1596,17 +1599,88 @@ public sealed class RiskProtectionIntegrationTests
             new CalculateClaimRequest(
                 10_000_000m,
                 10_000_000m,
-                CustomerInsuranceAppliedAmount: 7_000_001m),
+                CustomerInsuranceAppliedAmount: 10_000_001m),
             CancellationToken.None));
 
         Assert.Equal("risk_protection.invalid_request", exception.Code);
+        Assert.Contains("EligibleDamage", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task SystemInsurance_IsAvailableWithoutLegacyCustomerPhysicalDamageSnapshot()
+    public async Task CustomerInsurance_EqualEligibleDamage_LeavesNoSystemOrRiskFundNeed()
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
+        var graph = await SeedCoveredAccidentAsync(db);
+        var staffId = Guid.NewGuid();
+        var service = CreateAccidentService(db);
+        var claim = await service.SaveAssessmentAsync(
+            staffId,
+            graph.Accident.Id,
+            new LiabilityAssessmentRequest(
+                70m, 30m, 0m, 0m, 0m,
+                DriverFaultLevel.ORDINARY_NEGLIGENCE,
+                VehicleDefectAwareness.UNKNOWN,
+                [
+                    new LiabilityCauseRequest(AccidentRootCause.DRIVER_ERROR, ResponsiblePartyType.DRIVER, 70m),
+                    new LiabilityCauseRequest(AccidentRootCause.CUSTOMER_INTERFERENCE, ResponsiblePartyType.CUSTOMER, 30m)
+                ]),
+            true,
+            CancellationToken.None);
+
+        var result = await service.CalculateClaimAsync(
+            staffId,
+            claim.Id,
+            new CalculateClaimRequest(
+                10_000_000m,
+                10_000_000m,
+                CustomerInsuranceAppliedAmount: 10_000_000m),
+            CancellationToken.None);
+
+        Assert.Equal(0m, result.CustomerExposureAfterOwnInsurance);
+        Assert.Equal(0m, result.DriverExposureBeforeSystemInsurance);
+        Assert.Equal(0m, result.SystemInsuranceMaximumAmount);
+        Assert.Equal(0m, result.ResidualUninsuredDamage);
+        Assert.Equal(0m, result.DriverLiabilityAmount);
+        Assert.Equal(0m, result.CustomerLiabilityAmount);
+        Assert.Equal(0m, result.RiskFundRequiredAmount);
+        Assert.Equal(0m, result.RiskFundAdvanceAmount);
+        Assert.Equal(0m, result.RiskFundPermanentLossAmount);
+        Assert.Empty(await db.WalletTransactions.ToListAsync());
+    }
+
+    [Fact]
+    public async Task LegacyTripWithoutCoverage_ReconstructsSnapshotFromTripStartPolicy()
+    {
+        await using var db = CreateDbContext();
+        var graph = await SeedCoveredAccidentAsync(db);
+        db.TripProtectionCoverages.Remove(graph.Coverage);
+        await db.SaveChangesAsync();
+        var staffId = Guid.NewGuid();
+        var service = CreateAccidentService(db);
+        var claim = await service.SaveAssessmentAsync(
+            staffId,
+            graph.Accident.Id,
+            ValidAssessment(),
+            true,
+            CancellationToken.None);
+
+        var result = await service.CalculateClaimAsync(
+            staffId,
+            claim.Id,
+            new CalculateClaimRequest(10_000_000m, 10_000_000m),
+            CancellationToken.None);
+
+        var repaired = await db.TripProtectionCoverages.SingleAsync();
+        Assert.Equal(graph.TripGraph.Policy.Id, repaired.PolicyVersionId);
+        Assert.Equal(graph.TripGraph.Trip.StartedAt, repaired.ActivatedAtUtc);
+        Assert.Equal(10_000_000m, result.SystemInsuranceCoverageLimitSnapshot);
+    }
+
+    [Fact]
+    public async Task SystemInsurance_IsAvailableWithoutCustomerPolicyRecords()
+    {
+        await using var db = CreateDbContext();
+        var graph = await SeedCoveredAccidentAsync(db);
         var staffId = Guid.NewGuid();
         var service = CreateAccidentService(db);
         var claim = await service.SaveAssessmentAsync(
@@ -1629,7 +1703,6 @@ public sealed class RiskProtectionIntegrationTests
             new CalculateClaimRequest(10_000_000m, 10_000_000m),
             CancellationToken.None);
 
-        Assert.Null(graph.Coverage.InsuranceCoverageSnapshot);
         Assert.Equal(10_000_000m, result.SystemInsuranceCoverageLimitSnapshot);
         Assert.Equal(10_000_000m, result.SystemInsuranceMaximumAmount);
         Assert.Equal(InsuranceClaimStatus.PENDING, result.InsuranceStatus);
@@ -1639,7 +1712,7 @@ public sealed class RiskProtectionIntegrationTests
     public async Task SystemInsurance_UsesTripPolicyVersionAfterNewCurrentPolicyIsCreated()
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
+        var graph = await SeedCoveredAccidentAsync(db);
         db.RiskProtectionPolicyVersions.Add(new RiskProtectionPolicyVersion
         {
             EffectiveFromUtc = DateTime.UtcNow,
@@ -1682,7 +1755,7 @@ public sealed class RiskProtectionIntegrationTests
     public async Task InsuranceFirstSettlement_FullApprovalLeavesFaultHistoryButNoFinancialExposure()
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: true);
+        var graph = await SeedCoveredAccidentAsync(db);
         var staffId = Guid.NewGuid();
         var service = CreateAccidentService(db);
         var claim = await service.SaveAssessmentAsync(
@@ -1738,7 +1811,7 @@ public sealed class RiskProtectionIntegrationTests
         VehicleDefectAwareness awareness)
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: true);
+        var graph = await SeedCoveredAccidentAsync(db);
         var staffId = Guid.NewGuid();
         var service = CreateAccidentService(db);
         decimal Allocation(ResponsiblePartyType expected) => party == expected ? 100m : 0m;
@@ -1777,7 +1850,7 @@ public sealed class RiskProtectionIntegrationTests
     public async Task SystemInsurance_DoesNotCollapseThirdPartyRecoveryAccounting()
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: true);
+        var graph = await SeedCoveredAccidentAsync(db);
         var staffId = Guid.NewGuid();
         var service = CreateAccidentService(db);
         var claim = await service.SaveAssessmentAsync(
@@ -1813,7 +1886,7 @@ public sealed class RiskProtectionIntegrationTests
     public async Task InsuranceReimbursement_IsSeparateFromDirectPaymentAndCannotDoubleRecover()
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: true);
+        var graph = await SeedCoveredAccidentAsync(db);
         var service = CreateAccidentService(db);
         var staffId = Guid.NewGuid();
         var claim = await service.SaveAssessmentAsync(
@@ -1888,7 +1961,7 @@ public sealed class RiskProtectionIntegrationTests
     public async Task ClaimCalculation_IgnoresManualSourceAmountsAndKeepsServerFundingBalanced()
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: true);
+        var graph = await SeedCoveredAccidentAsync(db);
         var service = CreateAccidentService(db);
         var claim = await service.SaveAssessmentAsync(
             Guid.NewGuid(), graph.Accident.Id, ValidAssessment(), true, CancellationToken.None);
@@ -1915,7 +1988,7 @@ public sealed class RiskProtectionIntegrationTests
     public async Task LiabilityDispute_ReopensClaimAndMarksDriverLiabilityDisputedBeforeFunding()
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
+        var graph = await SeedCoveredAccidentAsync(db);
         var service = CreateAccidentService(db);
         var disputeEvidence = await service.AddEvidenceAsync(
             graph.TripGraph.DriverId,
@@ -1966,7 +2039,7 @@ public sealed class RiskProtectionIntegrationTests
     public async Task LiabilityDispute_AfterFundingIsRejectedWithoutAuditMutation()
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
+        var graph = await SeedCoveredAccidentAsync(db);
         var service = CreateAccidentService(db);
         var evidence = await service.AddEvidenceAsync(
             graph.TripGraph.DriverId,
@@ -2395,7 +2468,7 @@ public sealed class RiskProtectionIntegrationTests
     public async Task RiskProtectionPolicy_ReferencedByCoverage_CannotBeChanged()
     {
         await using var db = CreateDbContext();
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
+        var graph = await SeedCoveredAccidentAsync(db);
 
         graph.TripGraph.Policy.RiskReserveRate = .25m;
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync());
@@ -2549,14 +2622,14 @@ public sealed class RiskProtectionIntegrationTests
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase($"risk-protection-{Guid.NewGuid():N}")
             .Options;
-        return new ApplicationDbContext(options);
+        return new ApplicationDbContext(options, new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
     }
 
     private static async Task<FundableClaimGraph> SeedFundableClaimAsync(
         ApplicationDbContext db,
         decimal fundAmount)
     {
-        var graph = await SeedCoveredAccidentAsync(db, withInsurance: false);
+        var graph = await SeedCoveredAccidentAsync(db);
         var claim = new ProtectionClaim
         {
             AccidentReportId = graph.Accident.Id,
@@ -2597,8 +2670,7 @@ public sealed class RiskProtectionIntegrationTests
             NullLogger<AccidentManagementService>.Instance);
 
     private static async Task<CoveredAccidentGraph> SeedCoveredAccidentAsync(
-        ApplicationDbContext db,
-        bool withInsurance)
+        ApplicationDbContext db)
     {
         var graph = await SeedTripAsync(db, TripStatus.IN_PROGRESS, riskEnabled: true);
         graph.Trip.StartedAt = DateTime.UtcNow.AddMinutes(-30);
@@ -2625,10 +2697,6 @@ public sealed class RiskProtectionIntegrationTests
             PolicyVersionId = graph.Policy.Id,
             PreTripVehicleCheckId = check.Id,
             ProtectionLimit = graph.Policy.DefaultProtectionLimit,
-            InsuranceProviderSnapshot = withInsurance ? "Mock insurer" : null,
-            PolicyNumberSnapshot = withInsurance ? "MOCK-POLICY-001" : null,
-            InsuranceCoverageSnapshot = withInsurance ? 10_000_000m : null,
-            InsuranceDeductibleSnapshot = withInsurance ? 1_000_000m : null,
             ActivatedAtUtc = graph.Trip.StartedAt.Value
         };
         var accident = new AccidentReport
