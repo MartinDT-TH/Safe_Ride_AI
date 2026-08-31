@@ -25,6 +25,14 @@ public sealed record TripStatusChangedEvent(
     DateTime UpdatedAt,
     BookingStatus? BookingStatus = null);
 
+public sealed record CustomerReadinessReportedEvent(
+    long TripId,
+    long BookingId,
+    Guid CustomerId,
+    Guid DriverId,
+    string Message,
+    DateTime ReportedAt);
+
 public sealed record TripPaymentPendingEvent(
     long TripId,
     long BookingId,

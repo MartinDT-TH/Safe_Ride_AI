@@ -274,6 +274,27 @@ class SOSTriggeredUpdate {
   }
 }
 
+class CustomerReadinessUpdate {
+  const CustomerReadinessUpdate({required this.tripId, required this.message});
+
+  final int tripId;
+  final String message;
+
+  static CustomerReadinessUpdate? fromSignalRArguments(List<Object?>? arguments) {
+    if (arguments == null || arguments.isEmpty || arguments.first is! Map) {
+      return null;
+    }
+    final data = Map<String, dynamic>.from(arguments.first as Map);
+    final rawTripId = data[ApiKeys.tripId] ?? data['TripId'];
+    final tripId = rawTripId is num
+        ? rawTripId.toInt()
+        : int.tryParse(rawTripId?.toString() ?? '');
+    final message = (data[ApiKeys.message] ?? data['Message'])?.toString();
+    if (tripId == null || message == null || message.isEmpty) return null;
+    return CustomerReadinessUpdate(tripId: tripId, message: message);
+  }
+}
+
 class TripPaymentUpdate {
   const TripPaymentUpdate({
     required this.tripId,
@@ -719,6 +740,7 @@ class SocketService {
   bool _tripRouteRecalculatedListenerAttached = false;
   bool _tripStatusListenerAttached = false;
   bool _sosTriggeredListenerAttached = false;
+  bool _customerReadinessListenerAttached = false;
   bool _tripPaymentListenerAttached = false;
   bool _driverOfferReceivedListenerAttached = false;
   bool _driverOfferClosedListenerAttached = false;
@@ -737,6 +759,8 @@ class SocketService {
   _tripStatusHandlers = {};
   final Map<String, void Function(SOSTriggeredUpdate update)>
   _sosTriggeredHandlers = {};
+  final Map<String, void Function(CustomerReadinessUpdate)>
+  _customerReadinessHandlers = {};
   final Map<String, void Function(TripPaymentUpdate update)>
   _tripPaymentHandlers = {};
   final Map<String, void Function(DriverOfferUpdate update)>
@@ -849,6 +873,7 @@ class SocketService {
       _tripRouteRecalculatedListenerAttached = false;
       _tripStatusListenerAttached = false;
       _sosTriggeredListenerAttached = false;
+      _customerReadinessListenerAttached = false;
       _tripPaymentListenerAttached = false;
       _driverOfferReceivedListenerAttached = false;
       _driverOfferClosedListenerAttached = false;
@@ -893,6 +918,10 @@ class SocketService {
     }
     if (_sosTriggeredHandlers.isNotEmpty && !_sosTriggeredListenerAttached) {
       _attachSOSTriggeredListener();
+    }
+    if (_customerReadinessHandlers.isNotEmpty &&
+        !_customerReadinessListenerAttached) {
+      _attachCustomerReadinessListener();
     }
     if (_tripPaymentHandlers.isNotEmpty && !_tripPaymentListenerAttached) {
       _attachTripPaymentListeners();
@@ -1114,6 +1143,34 @@ class SocketService {
 
   void removeSOSTriggeredHandler(String key) {
     _sosTriggeredHandlers.remove(key);
+  }
+
+  void onCustomerReadinessReported(
+    void Function(CustomerReadinessUpdate update) handler, {
+    String key = 'default',
+  }) {
+    _customerReadinessHandlers[key] = handler;
+    _attachCustomerReadinessListener();
+  }
+
+  void _attachCustomerReadinessListener() {
+    if (_connection == null || _customerReadinessListenerAttached) return;
+    _customerReadinessListenerAttached = true;
+    _connection!.on(
+      _configService.config.realtime.events.customerReadinessReported,
+      (arguments) {
+        final update = CustomerReadinessUpdate.fromSignalRArguments(arguments);
+        if (update != null) {
+          for (final handler in List.of(_customerReadinessHandlers.values)) {
+            handler(update);
+          }
+        }
+      },
+    );
+  }
+
+  void removeCustomerReadinessReportedHandler(String key) {
+    _customerReadinessHandlers.remove(key);
   }
 
   void onTripPaymentUpdated(

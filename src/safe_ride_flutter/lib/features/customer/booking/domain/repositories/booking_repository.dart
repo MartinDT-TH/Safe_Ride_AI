@@ -53,6 +53,12 @@ abstract class BookingRepository {
 
   Future<void> completeTrip(String accessToken, {required int tripId});
 
+  Future<void> reportCustomerReadiness(
+    String accessToken, {
+    required int tripId,
+    required String message,
+  });
+
   Future<void> triggerSOS(
     String accessToken, {
     required int tripId,

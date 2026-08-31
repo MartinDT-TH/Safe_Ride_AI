@@ -25,6 +25,10 @@ public interface IRealtimeNotificationService
         TripStatusChangedEvent notification,
         CancellationToken cancellationToken = default);
 
+    Task PublishCustomerReadinessReportedAsync(
+        CustomerReadinessReportedEvent notification,
+        CancellationToken cancellationToken = default);
+
     Task PublishTripPaymentPendingAsync(
         TripPaymentPendingEvent notification,
         CancellationToken cancellationToken = default);

@@ -82,6 +82,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   bool _isSendingSOS = false;
   bool _isReportingAccident = false;
   bool _customerIsComing = false;
+  bool _readinessPromptAcknowledged = false;
+  bool _isSendingCustomerReadiness = false;
+  bool _arrivalMessageShown = false;
   late bool _isSOSActivated;
   late bool _isPrepaid;
   late String? _currentTripStatus;
@@ -358,6 +361,10 @@ class _TripTrackingPageState extends State<TripTrackingPage>
           }
         });
 
+        if (update.tripStatus == 'ARRIVED') {
+          _showArrivalMessageIfNeeded();
+        }
+
         if (update.tripStatus == 'WAITING_RETURN_CONFIRM') {
           unawaited(_openSummaryIfPrepaid());
         } else if (update.tripStatus == 'COMPLETED') {
@@ -519,6 +526,89 @@ class _TripTrackingPageState extends State<TripTrackingPage>
 
     final minutes = (remainingDistanceKm / 25 * 60).round();
     return minutes > 0 ? minutes : 1;
+  }
+
+  bool get _hasReliableArrivalEstimate =>
+      _driverPosition != null || _arrivalRoutePoints.length >= 2;
+
+  Widget _buildReadinessPrompt() {
+    final minutes = _getArrivalDurationMinutes();
+    if (_currentTripStatus != 'DRIVER_ARRIVING' ||
+        !_hasReliableArrivalEstimate ||
+        minutes > 5 ||
+        _readinessPromptAcknowledged) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE8F6F5),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _tealColor.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.notifications_active_outlined, color: _tealColor),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'Tài xế sắp đến. Bạn đã sẵn sàng chưa?',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: _isSendingCustomerReadiness
+                ? null
+                : () => _reportCustomerReadiness('Tôi đã sẵn sàng'),
+            style: TextButton.styleFrom(
+              foregroundColor: _tealColor,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text(
+              'Tôi đã sẵn sàng',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _reportCustomerReadiness(String message) async {
+    final tripId = widget.booking.tripId;
+    final accessToken = context.read<AuthProvider>().token;
+    if (tripId == null || accessToken == null || accessToken.isEmpty) {
+      _showMessage('Không thể gửi thông báo cho tài xế.');
+      return;
+    }
+
+    setState(() => _isSendingCustomerReadiness = true);
+    final sent = await context.read<BookingProvider>().reportCustomerReadiness(
+      accessToken,
+      tripId: tripId,
+      message: message,
+    );
+    if (!mounted) return;
+    setState(() {
+      _isSendingCustomerReadiness = false;
+      if (message == 'Tôi đã sẵn sàng') {
+        _readinessPromptAcknowledged = sent;
+      } else {
+        _customerIsComing = sent;
+      }
+    });
+    _showMessage(sent ? 'Đã báo cho tài xế.' : 'Không thể báo cho tài xế.');
   }
 
   int _getTripDurationMinutes() {
@@ -1451,18 +1541,16 @@ class _TripTrackingPageState extends State<TripTrackingPage>
               ),
               SizedBox(height: 12),
               if (isArriving) ...[
+                _buildReadinessPrompt(),
                 if (_currentTripStatus == 'ARRIVED') ...[
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
                       onPressed: _customerIsComing
                           ? null
-                          : () {
-                              setState(() => _customerIsComing = true);
-                              _showMessage(
-                                'Đã báo cho tài xế rằng bạn đang đến.',
-                              );
-                            },
+                          : _isSendingCustomerReadiness
+                          ? null
+                          : () => _reportCustomerReadiness('Tôi đang đến'),
                       icon: Icon(Icons.directions_walk_rounded),
                       label: Text(
                         _customerIsComing ? 'Đã báo đang đến' : 'Tôi đang đến',
@@ -1890,7 +1978,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   }
 
   void _handleTripStatus(String? tripStatus, [BookingResponse? booking]) {
-    if (tripStatus == 'WAITING_PAYMENT') {
+    if (tripStatus == 'ARRIVED') {
+      _showArrivalMessageIfNeeded();
+    } else if (tripStatus == 'WAITING_PAYMENT') {
       if (!_isWaitingForDriverPayment && mounted) {
         setState(() => _isWaitingForDriverPayment = true);
       }
@@ -1902,6 +1992,12 @@ class _TripTrackingPageState extends State<TripTrackingPage>
     } else if (tripStatus == 'COMPLETED') {
       _finishCompletedTrip();
     }
+  }
+
+  void _showArrivalMessageIfNeeded() {
+    if (_arrivalMessageShown || !mounted) return;
+    _arrivalMessageShown = true;
+    _showMessage('Tài xế đã đến điểm đón.');
   }
 
   Future<void> _openSummaryIfPrepaid([BookingResponse? booking]) async {

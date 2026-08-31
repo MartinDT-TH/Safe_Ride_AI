@@ -522,6 +522,22 @@ class BookingProvider extends ChangeNotifier {
     return ok == true;
   }
 
+  Future<bool> reportCustomerReadiness(
+    String accessToken, {
+    required int tripId,
+    required String message,
+  }) async {
+    final ok = await _run(() async {
+      await _repository.reportCustomerReadiness(
+        accessToken,
+        tripId: tripId,
+        message: message,
+      );
+      return true;
+    });
+    return ok == true;
+  }
+
   Future<bool> triggerSOS(
     String accessToken, {
     required int tripId,

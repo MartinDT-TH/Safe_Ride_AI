@@ -281,6 +281,8 @@ abstract final class ApiEndpoints {
       '/trips/$tripId/customer-no-show/eligibility';
   static String reportCustomerNoShow(int tripId) =>
       '/trips/$tripId/customer-no-show';
+  static String customerReadiness(int tripId) =>
+      '/trips/$tripId/customer-readiness';
   static String preTripVehicleChecks(int tripId) =>
       '/trips/$tripId/vehicle-safety-checks';
   static String safetyTermination(int tripId) =>

@@ -368,6 +368,28 @@ class BookingRemoteDatasource {
     }
   }
 
+  Future<void> reportCustomerReadiness(
+    String accessToken, {
+    required int tripId,
+    required String message,
+  }) async {
+    try {
+      await _dio.post(
+        ApiEndpoints.customerReadiness(tripId),
+        data: {ApiKeys.message: message},
+        options: Options(
+          headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
+        ),
+      );
+    } on DioException catch (exception) {
+      final data = exception.response?.data;
+      if (data is Map && data[ApiKeys.detail] != null) {
+        throw BookingApiException(data[ApiKeys.detail].toString());
+      }
+      throw BookingApiException(LocaleProvider.currentLocalizations.genericError);
+    }
+  }
+
   Future<void> triggerSOS(
     String accessToken, {
     required int tripId,

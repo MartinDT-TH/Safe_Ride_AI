@@ -62,6 +62,7 @@ public sealed class MobileConfigController : ControllerBase
                     "CustomerConfirmedDriverOffer",
                     "TripCreated",
                     "TripStatusChanged",
+                    "CustomerReadinessReported",
                     "TripPaymentPending",
                     "TripPaymentSucceeded")),
             new MobileStatusGroupResponse(

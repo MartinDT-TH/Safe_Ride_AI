@@ -396,6 +396,12 @@ class DriverDashboardProvider extends ChangeNotifier {
       }
     }, key: 'driverDashboard');
 
+    _socketService.onCustomerReadinessReported((update) {
+      if (_activeTrip?.tripId != update.tripId) return;
+      _snackbarMessage = update.message;
+      notifyListeners();
+    }, key: 'driverDashboardCustomerReadiness');
+
     _socketService.onTripPaymentUpdated((update) {
       if (_activeTrip?.tripId != update.tripId) {
         return;
@@ -541,6 +547,9 @@ class DriverDashboardProvider extends ChangeNotifier {
       }
     }
     _socketService.removeTripStatusChangedHandler('driverDashboard');
+    _socketService.removeCustomerReadinessReportedHandler(
+      'driverDashboardCustomerReadiness',
+    );
     _socketService.removeTripPaymentUpdatedHandler('driverDashboardPayment');
     _socketService.removeDriverLocationUpdatedHandler('driverDashboardDemo');
     _socketService.removeBookingUpdatedHandler('driverDashboardBooking');
