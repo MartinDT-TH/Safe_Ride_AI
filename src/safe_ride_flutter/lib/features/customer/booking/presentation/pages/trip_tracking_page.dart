@@ -83,6 +83,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   bool _isReportingAccident = false;
   bool _customerIsComing = false;
   bool _readinessPromptAcknowledged = false;
+  bool _isSendingCustomerReadiness = false;
   late bool _isSOSActivated;
   late bool _isPrepaid;
   late String? _currentTripStatus;
@@ -557,10 +558,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
           ),
           const SizedBox(width: 8),
           TextButton(
-            onPressed: () {
-              setState(() => _readinessPromptAcknowledged = true);
-              _showMessage('Đã ghi nhận bạn sẵn sàng.');
-            },
+            onPressed: _isSendingCustomerReadiness
+                ? null
+                : () => _reportCustomerReadiness('Tôi đã sẵn sàng'),
             style: TextButton.styleFrom(
               foregroundColor: _tealColor,
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -578,6 +578,32 @@ class _TripTrackingPageState extends State<TripTrackingPage>
         ],
       ),
     );
+  }
+
+  Future<void> _reportCustomerReadiness(String message) async {
+    final tripId = widget.booking.tripId;
+    final accessToken = context.read<AuthProvider>().token;
+    if (tripId == null || accessToken == null || accessToken.isEmpty) {
+      _showMessage('Không thể gửi thông báo cho tài xế.');
+      return;
+    }
+
+    setState(() => _isSendingCustomerReadiness = true);
+    final sent = await context.read<BookingProvider>().reportCustomerReadiness(
+      accessToken,
+      tripId: tripId,
+      message: message,
+    );
+    if (!mounted) return;
+    setState(() {
+      _isSendingCustomerReadiness = false;
+      if (message == 'Tôi đã sẵn sàng') {
+        _readinessPromptAcknowledged = sent;
+      } else {
+        _customerIsComing = sent;
+      }
+    });
+    _showMessage(sent ? 'Đã báo cho tài xế.' : 'Không thể báo cho tài xế.');
   }
 
   int _getTripDurationMinutes() {
@@ -1517,12 +1543,9 @@ class _TripTrackingPageState extends State<TripTrackingPage>
                     child: OutlinedButton.icon(
                       onPressed: _customerIsComing
                           ? null
-                          : () {
-                              setState(() => _customerIsComing = true);
-                              _showMessage(
-                                'Đã báo cho tài xế rằng bạn đang đến.',
-                              );
-                            },
+                          : _isSendingCustomerReadiness
+                          ? null
+                          : () => _reportCustomerReadiness('Tôi đang đến'),
                       icon: Icon(Icons.directions_walk_rounded),
                       label: Text(
                         _customerIsComing ? 'Đã báo đang đến' : 'Tôi đang đến',

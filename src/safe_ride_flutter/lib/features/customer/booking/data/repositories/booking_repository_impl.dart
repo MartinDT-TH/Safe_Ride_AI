@@ -112,6 +112,17 @@ class BookingRepositoryImpl implements BookingRepository {
   }
 
   @override
+  Future<void> reportCustomerReadiness(
+    String accessToken, {
+    required int tripId,
+    required String message,
+  }) => _remoteDatasource.reportCustomerReadiness(
+    accessToken,
+    tripId: tripId,
+    message: message,
+  );
+
+  @override
   Future<void> triggerSOS(
     String accessToken, {
     required int tripId,
