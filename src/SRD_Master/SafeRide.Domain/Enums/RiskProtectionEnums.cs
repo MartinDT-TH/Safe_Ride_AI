@@ -32,9 +32,8 @@ public enum RiskFundTransactionType { OPENING_BALANCE, CONTRIBUTION, CLAIM_ADVAN
 public enum LedgerDirection { CREDIT, DEBIT }
 public enum RecoverySourceType { DRIVER, CUSTOMER, THIRD_PARTY, INSURANCE }
 public enum ClaimReconciliationType { ADVANCE_WRITE_OFF }
-public enum VehicleInsuranceType { MANDATORY_TPL, PHYSICAL_DAMAGE, OTHER }
-public enum InsuranceVerificationStatus { PENDING, VERIFIED, REJECTED, EXPIRED }
 public enum InsuranceClaimStatus { NOT_SUBMITTED, PENDING, APPROVED, REJECTED }
+public enum InsuranceClaimDocumentType { CLAIM_SUBMISSION, INSURER_APPROVAL, INSURER_PARTIAL_APPROVAL, INSURER_REJECTION, PAYMENT_CONFIRMATION, SETTLEMENT_DOCUMENT, OTHER }
 public enum InsurancePaymentDestination { DIRECT_TO_CLAIMANT, REIMBURSE_RISK_FUND }
 public enum InsuranceProviderOperation { CALCULATE, SUBMIT, GET_STATUS, APPROVE, REJECT }
 public enum AccidentEvidenceType { PHOTO, DOCUMENT, DRIVER_STATEMENT, CUSTOMER_STATEMENT, THIRD_PARTY_INFORMATION, POLICE_REPORT }

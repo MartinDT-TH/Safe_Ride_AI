@@ -829,7 +829,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get issueDate => 'Ngày cấp';
 
   @override
-  String get expiryDate => 'Hết hạn';
+  String get expiryDate => 'Ngày hết hạn';
 
   @override
   String get documents => 'Tài liệu';
@@ -2642,63 +2642,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get optionalEvidence => 'Bằng chứng (tùy chọn)';
 
   @override
-  String get vehicleInsurance => 'Bảo hiểm';
-
-  @override
-  String get addInsurance => 'Thêm bảo hiểm';
-
-  @override
-  String get insuranceLoadFailed =>
-      'Không thể tải thông tin bảo hiểm. Vui lòng thử lại.';
-
-  @override
-  String get insuranceUpdateFailed => 'Không thể cập nhật bảo hiểm.';
-
-  @override
-  String get deleteInsuranceQuestion => 'Xóa hợp đồng bảo hiểm?';
-
-  @override
-  String get policyNumber => 'Số hợp đồng';
-
-  @override
-  String get optionalInsuranceEmpty =>
-      'Bảo hiểm là tùy chọn. Phương tiện chưa có hợp đồng nào.';
-
-  @override
-  String get addInsurancePolicy => 'Thêm hợp đồng bảo hiểm';
-
-  @override
-  String get editInsurancePolicy => 'Sửa hợp đồng bảo hiểm';
-
-  @override
-  String get insuranceType => 'Loại bảo hiểm';
-
-  @override
-  String get mandatoryTplInsurance => 'Trách nhiệm dân sự bắt buộc';
-
-  @override
-  String get physicalDamageInsurance => 'Thiệt hại vật chất';
-
-  @override
-  String get insuranceProvider => 'Nhà cung cấp';
-
-  @override
-  String get effectiveDate => 'Hiệu lực';
-
-  @override
-  String get insuranceCoverageLimit => 'Hạn mức bảo hiểm';
-
-  @override
-  String get insuranceDeductible => 'Mức khấu trừ';
-
-  @override
-  String get optionalDocumentUrl => 'URL tài liệu (tùy chọn)';
-
-  @override
-  String get optionalInsuranceHint =>
-      'Bảo hiểm không bắt buộc. Tạo hoặc sửa hợp đồng sẽ chuyển trạng thái về PENDING để Staff xác minh.';
-
-  @override
   String get endTripReasonTitle => 'Lý do kết thúc chuyến';
 
   @override
@@ -2836,18 +2779,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get riskReasonOther => 'Lý do khác';
 
   @override
-  String get riskInsurancePending => 'Chờ nhân viên xác minh';
-
-  @override
-  String get riskInsuranceVerified => 'Đã xác minh';
-
-  @override
-  String get riskInsuranceExpired => 'Đã hết hạn';
-
-  @override
-  String get riskInsuranceOther => 'Bảo hiểm khác';
-
-  @override
   String get riskIncidentInformation => 'Thông tin sự cố';
 
   @override
@@ -2874,4 +2805,14 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get documentUrlDeferredHint =>
       'Hiện hệ thống chỉ lưu liên kết tài liệu. Chỉ dùng liên kết tin cậy; tải tệp trực tiếp sẽ được bổ sung khi có kho lưu trữ an toàn dùng chung.';
+
+  @override
+  String get motorbikeFeatureSuspendedTitle => 'Dịch vụ xe máy tạm ngừng';
+
+  @override
+  String get motorbikeFeatureSuspendedMessage =>
+      'Từ ngày 20/8, chức năng đã tạm ngừng.';
+
+  @override
+  String get acknowledge => 'Đã hiểu';
 }

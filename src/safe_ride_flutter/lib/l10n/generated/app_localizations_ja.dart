@@ -804,7 +804,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get issueDate => '発行日';
 
   @override
-  String get expiryDate => '満了日';
+  String get expiryDate => '有効期限';
 
   @override
   String get documents => '書類';
@@ -2549,61 +2549,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get optionalEvidence => '証拠（任意）';
 
   @override
-  String get vehicleInsurance => '保険';
-
-  @override
-  String get addInsurance => '保険を追加';
-
-  @override
-  String get insuranceLoadFailed => '保険情報を読み込めませんでした。再試行してください。';
-
-  @override
-  String get insuranceUpdateFailed => '保険を更新できませんでした。';
-
-  @override
-  String get deleteInsuranceQuestion => '保険契約を削除しますか？';
-
-  @override
-  String get policyNumber => '証券番号';
-
-  @override
-  String get optionalInsuranceEmpty => '保険は任意です。この車両には契約がありません。';
-
-  @override
-  String get addInsurancePolicy => '保険契約を追加';
-
-  @override
-  String get editInsurancePolicy => '保険契約を編集';
-
-  @override
-  String get insuranceType => '保険種別';
-
-  @override
-  String get mandatoryTplInsurance => '自賠責保険';
-
-  @override
-  String get physicalDamageInsurance => '車両損害';
-
-  @override
-  String get insuranceProvider => '保険会社';
-
-  @override
-  String get effectiveDate => '開始日';
-
-  @override
-  String get insuranceCoverageLimit => '補償限度額';
-
-  @override
-  String get insuranceDeductible => '免責額';
-
-  @override
-  String get optionalDocumentUrl => '書類URL（任意）';
-
-  @override
-  String get optionalInsuranceHint =>
-      '保険は任意です。作成または編集すると、スタッフ確認のためPENDINGに戻ります。';
-
-  @override
   String get endTripReasonTitle => '終了理由';
 
   @override
@@ -2741,18 +2686,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get riskReasonOther => 'その他の理由';
 
   @override
-  String get riskInsurancePending => 'スタッフ確認待ち';
-
-  @override
-  String get riskInsuranceVerified => '確認済み';
-
-  @override
-  String get riskInsuranceExpired => '期限切れ';
-
-  @override
-  String get riskInsuranceOther => 'その他の保険';
-
-  @override
   String get riskIncidentInformation => '事故情報';
 
   @override
@@ -2778,4 +2711,13 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get documentUrlDeferredHint =>
       '現在は書類リンクのみ保存します。信頼できるリンクを使用してください。安全な共通ストレージ導入後に直接アップロードを追加します。';
+
+  @override
+  String get motorbikeFeatureSuspendedTitle => 'バイクサービスを一時停止';
+
+  @override
+  String get motorbikeFeatureSuspendedMessage => '8月20日より、この機能は一時停止しています。';
+
+  @override
+  String get acknowledge => '了解';
 }

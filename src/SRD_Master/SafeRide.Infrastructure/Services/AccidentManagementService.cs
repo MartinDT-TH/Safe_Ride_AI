@@ -65,16 +65,11 @@ public sealed class AccidentManagementService : IAccidentManagementService
         var tripEndedAt = trip.SafetyTerminatedAt ?? trip.EndedAt ?? trip.CompletedAt;
         if (tripEndedAt is not null && occurredAtUtc > NormalizeUtc(tripEndedAt.Value).AddMinutes(5))
             throw Invalid("Thời điểm tai nạn không được nằm sau khi chuyến đi đã kết thúc.");
-        var hasEligibleCoverage = await _dbContext.TripProtectionCoverages
-            .AsNoTracking()
-            .Include(x => x.PolicyVersion)
-            .AnyAsync(x => x.TripId == tripId
-                && x.ActivatedAtUtc <= occurredAtUtc
-                && x.ProtectionLimit > 0m
-                && x.PolicyVersion.RiskFundEnabled,
-                cancellationToken);
-        if (!hasEligibleCoverage)
-            throw Conflict("Chuyến đi không có protection coverage hợp lệ tại thời điểm tai nạn.");
+        var coverage = await GetOrRepairSystemProtectionCoverageAsync(trip, cancellationToken);
+        if (coverage.ActivatedAtUtc > occurredAtUtc
+            || coverage.ProtectionLimit <= 0m
+            || !coverage.PolicyVersion.RiskFundEnabled)
+            throw SystemProtectionSnapshotUnavailable();
 
         var recipients = isManagement
             ? new[] { trip.DriverId, trip.Booking.CustomerId }
@@ -144,7 +139,7 @@ public sealed class AccidentManagementService : IAccidentManagementService
         var accident = await _dbContext.AccidentReports.AsNoTracking()
             .Include(x => x.Trip).ThenInclude(x => x.Booking)
             .Include(x => x.Evidence)
-            .Include(x => x.ProtectionClaim)
+            .Include(x => x.ProtectionClaim).ThenInclude(x => x!.DriverLiabilities)
             .Include(x => x.LiabilityAssessment).ThenInclude(x => x!.Causes)
             .Include(x => x.LiabilityAssessment).ThenInclude(x => x!.Disputes)
                 .ThenInclude(x => x.Evidence)
@@ -155,7 +150,12 @@ public sealed class AccidentManagementService : IAccidentManagementService
         var canSeeAssessment = isManagement
             || accident.LiabilityAssessment?.Status is LiabilityAssessmentStatus.CONFIRMED
                 or LiabilityAssessmentStatus.DISPUTED;
-        return Map(accident, canSeeAssessment);
+        var coverage = accident.ProtectionClaim is null
+            ? null
+            : await _dbContext.TripProtectionCoverages.AsNoTracking()
+                .Include(x => x.PolicyVersion)
+                .SingleOrDefaultAsync(x => x.TripId == accident.TripId, cancellationToken);
+        return Map(accident, canSeeAssessment, coverage);
     }
 
     public async Task EnsureCanUploadEvidenceAsync(
@@ -338,7 +338,8 @@ public sealed class AccidentManagementService : IAccidentManagementService
     {
         if (request.TotalDamageAmount < 0 || request.EligibleDamageAmount < 0
             || request.EligibleDamageAmount > request.TotalDamageAmount
-            || request.RequestedInsuranceAmount < 0 || request.RequestedRiskFundAmount < 0)
+            || request.RequestedInsuranceAmount < 0 || request.RequestedRiskFundAmount < 0
+            || request.CustomerInsuranceAppliedAmount < 0)
             throw Invalid("Các giá trị settlement không hợp lệ.");
         if (!Enum.IsDefined(request.InsurancePaymentDestination))
             throw Invalid("Hình thức thanh toán bảo hiểm không hợp lệ.");
@@ -356,92 +357,60 @@ public sealed class AccidentManagementService : IAccidentManagementService
             or ProtectionClaimStatus.CLOSED)
             throw Conflict("Không thể tính lại claim sau khi đã cấp vốn hoặc ghi nhận recovery.");
         ApplyExpectedRowVersion(claim, request.RowVersion);
-        var coverage = await _dbContext.TripProtectionCoverages
-            .Include(x => x.PolicyVersion)
-            .SingleOrDefaultAsync(x => x.TripId == claim.AccidentReport.TripId, cancellationToken)
-            ?? throw Conflict("Chuyến đi không có protection coverage snapshot hợp lệ.");
+        var coverage = await GetOrRepairSystemProtectionCoverageAsync(
+            claim.AccidentReport.Trip,
+            cancellationToken);
         var policy = coverage.PolicyVersion;
-        if (request.RequestedRiskFundAmount > coverage.ProtectionLimit)
-            throw Invalid("Khoản yêu cầu Risk Fund vượt protection limit đã snapshot của chuyến đi.");
-        var liabilities = _claimCalculator.CalculateLiabilities(new ClaimLiabilityCalculationInput(
-            request.EligibleDamageAmount,
-            assessment.DriverFaultPercentage,
-            assessment.CustomerFaultPercentage,
-            assessment.ThirdPartyFaultPercentage,
-            assessment.DriverFaultLevel,
-            policy.DriverOrdinaryNegligenceRate, policy.DriverOrdinaryNegligenceCap,
-            policy.DriverGrossNegligenceRate, policy.DriverGrossNegligenceCap));
-
         claim.TotalDamageAmount = Round(request.TotalDamageAmount);
         claim.EligibleDamageAmount = Round(request.EligibleDamageAmount);
-        claim.InsuranceRequestedAmount = Round(request.RequestedInsuranceAmount);
-        claim.InsurancePaymentDestination = request.InsurancePaymentDestination;
+        var customerInsurance = Round(request.CustomerInsuranceAppliedAmount);
+        if (customerInsurance > claim.EligibleDamageAmount)
+            throw Invalid("Customer insurance contribution cannot exceed EligibleDamage.");
+        var customerInsuranceChanged = claim.CustomerInsuranceAppliedAmount != customerInsurance;
+        claim.CustomerInsuranceAppliedAmount = customerInsurance;
+        claim.CustomerInsuranceReference = customerInsurance > 0m
+            ? NormalizeOptional(request.CustomerInsuranceReference, 200, "Customer insurance reference")
+            : null;
+        claim.CustomerInsuranceNote = customerInsurance > 0m
+            ? NormalizeOptional(request.CustomerInsuranceNote, 1000, "Customer insurance note")
+            : null;
+        claim.CustomerInsuranceConfirmedAtUtc = customerInsurance > 0m
+            ? customerInsuranceChanged ? DateTime.UtcNow : claim.CustomerInsuranceConfirmedAtUtc ?? DateTime.UtcNow
+            : null;
+        claim.InsuranceRequestedAmount = CalculateSystemInsuranceMaximum(
+            claim.EligibleDamageAmount, assessment, policy, customerInsurance);
+        // The JSON-ignored destination is retained only for legacy in-memory
+        // callers that model a pre-funded insurance receivable. Normal HTTP
+        // requests always use the inferred direct-to-claimant path.
+        claim.InsurancePaymentDestination = request.RequestedRiskFundAmount > 0m
+            && request.InsurancePaymentDestination == InsurancePaymentDestination.REIMBURSE_RISK_FUND
+            ? InsurancePaymentDestination.REIMBURSE_RISK_FUND
+            : InsurancePaymentDestination.DIRECT_TO_CLAIMANT;
         claim.InsuranceApprovedAmount = 0m;
         claim.InsurancePaidDirectToClaimant = 0m;
         claim.InsuranceReimbursedToRiskFund = 0m;
-        claim.DriverLiabilityAmount = liabilities.Driver.LiabilityAmount;
-        claim.CustomerLiabilityAmount = liabilities.CustomerLiabilityAmount;
-        claim.ThirdPartyLiabilityAmount = liabilities.ThirdPartyLiabilityAmount;
-        var requestedRiskFundAmount = Round(request.RequestedRiskFundAmount);
-        var recoverableLiability = Round(liabilities.TotalRecoverableLiabilityAmount);
-        claim.RiskFundAdvanceAmount = request.IsPermanentRiskFundLoss
-            ? 0m
-            : Math.Min(requestedRiskFundAmount, recoverableLiability);
-        claim.RiskFundPermanentLossAmount = request.IsPermanentRiskFundLoss
-            ? requestedRiskFundAmount
-            : requestedRiskFundAmount - claim.RiskFundAdvanceAmount;
         claim.RecoveredAmount = 0m;
         claim.WrittenOffAdvanceAmount = 0m;
-        claim.OutstandingRecoveryAmount = Math.Min(
-            claim.RiskFundAdvanceAmount,
-            liabilities.TotalRecoverableLiabilityAmount);
         claim.UpdatedAtUtc = DateTime.UtcNow;
 
-        var liability = claim.DriverLiabilities.SingleOrDefault();
-        liability ??= new DriverLiability
-        {
-            ProtectionClaimId = claim.Id,
-            DriverId = claim.AccidentReport.Trip.DriverId,
-            CreatedAtUtc = DateTime.UtcNow
-        };
-        if (liability.Id == 0) _dbContext.DriverLiabilities.Add(liability);
-        liability.DriverAttributableEligibleDamage = liabilities.Driver.DriverAttributableEligibleDamage;
-        liability.FaultLevel = assessment.DriverFaultLevel;
-        liability.AppliedRate = liabilities.Driver.AppliedRate;
-        liability.AppliedCap = liabilities.Driver.AppliedCap;
-        liability.ConfirmedAmount = liabilities.Driver.LiabilityAmount;
-        liability.OutstandingAmount = Math.Max(0m, liabilities.Driver.LiabilityAmount - liability.PaidAmount);
-        liability.Status = liability.OutstandingAmount == 0 ? DriverLiabilityStatus.PAID : DriverLiabilityStatus.CONFIRMED;
-        liability.DisputeReason = null;
-        liability.UpdatedAtUtc = DateTime.UtcNow;
-
-        decimal insuranceAllocationForValidation = 0m;
-        decimal insuranceRecoveryCapacity = 0m;
-        if (claim.InsuranceRequestedAmount > 0)
+        if (request.SubmitToInsurance && claim.InsuranceRequestedAmount > 0)
         {
             var calculation = await _insuranceProvider.CalculateClaimAsync(
                 CreateInsuranceCalculationContext(claim, coverage, policy),
                 cancellationToken);
             AddInsuranceCalculationAudit(claim, calculation, staffUserId);
-            if (request.InsurancePaymentDestination == InsurancePaymentDestination.REIMBURSE_RISK_FUND)
-                insuranceRecoveryCapacity = calculation.ApprovedAmount;
             var submission = await _insuranceProvider.SubmitClaimAsync(
                 CreateInsuranceSubmissionContext(claim, coverage, policy),
                 cancellationToken);
             claim.InsuranceStatus = submission.Status;
             claim.InsuranceReference = submission.Reference;
-            insuranceAllocationForValidation = request.InsurancePaymentDestination
-                == InsurancePaymentDestination.DIRECT_TO_CLAIMANT
-                ? submission.ApprovedAmount
+            EnsureInsuranceApprovalWithinSnapshot(
+                submission.ApprovedAmount,
+                claim.InsuranceRequestedAmount,
+                claim.EligibleDamageAmount);
+            claim.InsuranceApprovedAmount = submission.Status == InsuranceClaimStatus.APPROVED
+                ? ClampInsuranceApproval(submission.ApprovedAmount, claim.InsuranceRequestedAmount, claim.EligibleDamageAmount)
                 : 0m;
-            if (submission.Status == InsuranceClaimStatus.APPROVED)
-            {
-                claim.InsuranceApprovedAmount = submission.ApprovedAmount;
-                claim.InsurancePaidDirectToClaimant = request.InsurancePaymentDestination
-                    == InsurancePaymentDestination.DIRECT_TO_CLAIMANT
-                    ? submission.ApprovedAmount
-                    : 0m;
-            }
             AddInsuranceAudit(claim, InsuranceProviderOperation.SUBMIT, submission, staffUserId);
         }
         else
@@ -450,20 +419,7 @@ public sealed class AccidentManagementService : IAccidentManagementService
             claim.InsuranceReference = null;
         }
 
-        if (!request.IsPermanentRiskFundLoss)
-        {
-            claim.RiskFundAdvanceAmount = Math.Min(
-                requestedRiskFundAmount,
-                Round(liabilities.TotalRecoverableLiabilityAmount + insuranceRecoveryCapacity));
-            claim.RiskFundPermanentLossAmount = requestedRiskFundAmount - claim.RiskFundAdvanceAmount;
-        }
-        var totalRequestedFundAmount = claim.RiskFundAdvanceAmount + claim.RiskFundPermanentLossAmount;
-        if (insuranceAllocationForValidation + totalRequestedFundAmount > claim.EligibleDamageAmount)
-            throw Invalid("Tổng nguồn chi trả từ bảo hiểm và Risk Fund không được vượt EligibleDamage.");
-        claim.OutstandingRecoveryAmount = Math.Min(
-            claim.RiskFundAdvanceAmount,
-            liabilities.TotalRecoverableLiabilityAmount + insuranceRecoveryCapacity);
-
+        ApplyDerivedSettlement(claim, assessment, coverage, policy);
         claim.Status = claim.InsuranceStatus == InsuranceClaimStatus.PENDING
             ? ProtectionClaimStatus.UNDER_REVIEW
             : ProtectionClaimStatus.APPROVED;
@@ -472,7 +428,7 @@ public sealed class AccidentManagementService : IAccidentManagementService
             claim.AccidentReport, "ProtectionClaimCalculated", "Hồ sơ bảo vệ đã được cập nhật",
             "Staff đã hoàn tất bước tính toán hồ sơ bảo vệ. Vui lòng mở chi tiết sự cố để xem trạng thái.");
         await SaveChangesWithConcurrencyAsync(cancellationToken);
-        return Map(claim, assessment.RowVersion);
+        return Map(claim, assessment.RowVersion, coverage, policy);
     }
 
     public async Task<ProtectionClaimResponse> ReviewMockInsuranceAsync(
@@ -482,75 +438,74 @@ public sealed class AccidentManagementService : IAccidentManagementService
         bool approve,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Reference)
-            || string.IsNullOrWhiteSpace(request.Reason)
-            || request.ApprovedAmount < 0)
-            throw Invalid("Kết quả bảo hiểm phải có tham chiếu, lý do và số tiền hợp lệ.");
-        if (!Enum.IsDefined(request.InsurancePaymentDestination))
-            throw Invalid("Hình thức thanh toán bảo hiểm không hợp lệ.");
+        if (request.ApprovedAmount < 0)
+            throw Invalid("Số tiền bảo hiểm không hợp lệ.");
         var claim = await _dbContext.ProtectionClaims
+            .Include(x => x.AccidentReport).ThenInclude(x => x.LiabilityAssessment)
             .Include(x => x.AccidentReport).ThenInclude(x => x.Trip).ThenInclude(x => x.Booking)
+            .Include(x => x.DriverLiabilities)
             .SingleOrDefaultAsync(x => x.Id == claimId, cancellationToken)
             ?? throw ClaimNotFound();
         if (claim.InsuranceStatus != InsuranceClaimStatus.PENDING)
             throw Conflict("Hồ sơ bảo hiểm không ở trạng thái chờ Staff duyệt.");
         ApplyExpectedRowVersion(claim, request.RowVersion);
 
-        var coverage = await _dbContext.TripProtectionCoverages.AsNoTracking()
-            .Include(x => x.PolicyVersion)
-            .SingleOrDefaultAsync(x => x.TripId == claim.AccidentReport.TripId, cancellationToken);
-        if (coverage is null)
-            throw Conflict("Chuyến đi không có protection coverage snapshot hợp lệ.");
+        if (claim.Status is ProtectionClaimStatus.FUNDED
+            or ProtectionClaimStatus.RECOVERY_IN_PROGRESS
+            or ProtectionClaimStatus.SETTLED
+            or ProtectionClaimStatus.CLOSED)
+            throw Conflict("Claim cannot be recalculated after funding or recovery has started.");
+        if (claim.AccidentReport.LiabilityAssessment?.Status != LiabilityAssessmentStatus.CONFIRMED)
+            throw Conflict("A confirmed liability assessment is required before settlement.");
+        var coverage = await GetOrRepairSystemProtectionCoverageAsync(
+            claim.AccidentReport.Trip,
+            cancellationToken);
         var policy = coverage.PolicyVersion;
-        var insuranceLimit = Math.Max(0m,
-            (coverage.InsuranceCoverageSnapshot ?? 0m)
-            - (coverage.InsuranceDeductibleSnapshot ?? 0m));
-        var allowed = Math.Min(claim.InsuranceRequestedAmount,
-            Math.Min(claim.EligibleDamageAmount,
-                Math.Min(policy.MockInsuranceCoverageLimit, insuranceLimit)));
+        var reviewReason = request.Reason?.Trim() ?? string.Empty;
+        if (!approve && request.ApprovedAmount != 0m)
+            throw Invalid("Rejected insurance claims must have an approved amount of zero.");
+        if (!string.IsNullOrWhiteSpace(request.Reference) && request.Reference.Trim().Length > 200)
+            throw Invalid("External insurance reference is too long.");
+        if (request.InsurancePaymentDestination != InsurancePaymentDestination.DIRECT_TO_CLAIMANT
+            && claim.InsurancePaymentDestination != InsurancePaymentDestination.REIMBURSE_RISK_FUND)
+            throw Conflict("Insurance payment destination is inferred from the claim funding state.");
+        var allowed = CalculateSystemInsuranceMaximum(
+            claim.EligibleDamageAmount,
+            claim.AccidentReport.LiabilityAssessment!,
+            policy,
+            claim.CustomerInsuranceAppliedAmount);
         if (approve && (request.ApprovedAmount <= 0m || request.ApprovedAmount > allowed))
             throw Invalid("Số tiền duyệt vượt yêu cầu, coverage snapshot hoặc giới hạn mock insurer.");
-        var directPayment = approve
-            && request.InsurancePaymentDestination == InsurancePaymentDestination.DIRECT_TO_CLAIMANT
-            ? request.ApprovedAmount
-            : 0m;
-        if (directPayment
-            + claim.RiskFundAdvanceAmount + claim.RiskFundPermanentLossAmount
-            > claim.EligibleDamageAmount)
-            throw Invalid("Tổng nguồn chi trả từ bảo hiểm và Risk Fund không được vượt EligibleDamage.");
-
+        if ((!approve || request.ApprovedAmount < allowed) && reviewReason.Length < 10)
+            throw Invalid("A meaningful reason is required for rejection or approval below the recommended amount.");
         var review = await _insuranceProvider.ReviewClaimAsync(
             new InsuranceClaimReviewContext(
                 claim.Id,
                 claim.InsuranceRequestedAmount,
-                claim.EligibleDamageAmount,
-                coverage.InsuranceCoverageSnapshot,
-                coverage.InsuranceDeductibleSnapshot,
+                claim.InsuranceRequestedAmount,
+                policy.MockInsuranceCoverageLimit,
+                0m,
                 policy.MockInsuranceCoverageLimit,
                 request.ApprovedAmount,
-                request.Reference,
-                request.Reason),
+                claim.InsuranceReference ?? string.Empty,
+                reviewReason),
             approve,
             cancellationToken);
         claim.InsuranceStatus = review.Status;
-        claim.InsurancePaymentDestination = request.InsurancePaymentDestination;
-        claim.InsuranceApprovedAmount = review.ApprovedAmount;
-        claim.InsurancePaidDirectToClaimant = approve
-            && request.InsurancePaymentDestination == InsurancePaymentDestination.DIRECT_TO_CLAIMANT
-            ? review.ApprovedAmount
+        claim.InsurancePaymentDestination = claim.InsurancePaymentDestination == InsurancePaymentDestination.REIMBURSE_RISK_FUND
+            ? InsurancePaymentDestination.REIMBURSE_RISK_FUND
+            : InsurancePaymentDestination.DIRECT_TO_CLAIMANT;
+        EnsureInsuranceApprovalWithinSnapshot(
+            review.ApprovedAmount,
+            claim.InsuranceRequestedAmount,
+            claim.EligibleDamageAmount);
+        claim.InsuranceApprovedAmount = approve
+            ? ClampInsuranceApproval(review.ApprovedAmount, claim.InsuranceRequestedAmount, claim.EligibleDamageAmount)
             : 0m;
+        claim.InsurancePaidDirectToClaimant = 0m;
         claim.InsuranceReimbursedToRiskFund = 0m;
-        claim.TotalPaidToClaimant = claim.InsurancePaidDirectToClaimant;
-        if (approve && request.InsurancePaymentDestination == InsurancePaymentDestination.REIMBURSE_RISK_FUND)
-        {
-            var liabilityRecoveryCapacity = claim.DriverLiabilityAmount
-                + claim.CustomerLiabilityAmount
-                + claim.ThirdPartyLiabilityAmount;
-            claim.OutstandingRecoveryAmount = Math.Min(
-                claim.RiskFundAdvanceAmount,
-                liabilityRecoveryCapacity + review.ApprovedAmount);
-        }
-        claim.InsuranceReference = review.Reference;
+        ApplyDerivedSettlement(claim, claim.AccidentReport.LiabilityAssessment!, coverage, policy);
+        claim.InsuranceReference ??= review.Reference;
         claim.Status = ProtectionClaimStatus.APPROVED;
         AddInsuranceAudit(
             claim,
@@ -564,7 +519,7 @@ public sealed class AccidentManagementService : IAccidentManagementService
                 ? "Khoản bảo hiểm mô phỏng đã được Staff phê duyệt."
                 : "Khoản bảo hiểm mô phỏng đã bị từ chối; Staff sẽ tiếp tục xử lý hồ sơ.");
         await SaveChangesWithConcurrencyAsync(cancellationToken);
-        return Map(claim);
+        return Map(claim, null, coverage, policy);
     }
 
     public async Task<ProtectionClaimResponse> RefreshMockInsuranceStatusAsync(
@@ -574,7 +529,9 @@ public sealed class AccidentManagementService : IAccidentManagementService
         CancellationToken cancellationToken)
     {
         var claim = await _dbContext.ProtectionClaims
+            .Include(x => x.AccidentReport).ThenInclude(x => x.LiabilityAssessment)
             .Include(x => x.AccidentReport).ThenInclude(x => x.Trip)
+            .Include(x => x.DriverLiabilities)
             .SingleOrDefaultAsync(x => x.Id == claimId, cancellationToken)
             ?? throw ClaimNotFound();
         if (claim.InsuranceStatus == InsuranceClaimStatus.NOT_SUBMITTED
@@ -582,10 +539,15 @@ public sealed class AccidentManagementService : IAccidentManagementService
             throw Conflict("Claim chưa được gửi tới nhà cung cấp bảo hiểm.");
         ApplyExpectedRowVersion(claim, rowVersion);
 
-        var coverage = await _dbContext.TripProtectionCoverages.AsNoTracking()
-            .Include(x => x.PolicyVersion)
-            .SingleOrDefaultAsync(x => x.TripId == claim.AccidentReport.TripId, cancellationToken)
-            ?? throw Conflict("Chuyến đi không có protection coverage snapshot hợp lệ.");
+        if (claim.Status is ProtectionClaimStatus.FUNDED
+            or ProtectionClaimStatus.RECOVERY_IN_PROGRESS
+            or ProtectionClaimStatus.SETTLED
+            or ProtectionClaimStatus.CLOSED)
+            throw Conflict("Không thể tính lại claim sau khi đã cấp vốn hoặc ghi nhận recovery.");
+
+        var coverage = await GetOrRepairSystemProtectionCoverageAsync(
+            claim.AccidentReport.Trip,
+            cancellationToken);
         var result = await _insuranceProvider.GetClaimStatusAsync(
             new InsuranceClaimStatusContext(
                 claim.Id,
@@ -593,18 +555,36 @@ public sealed class AccidentManagementService : IAccidentManagementService
                 claim.InsuranceStatus,
                 claim.InsuranceRequestedAmount,
                 claim.InsuranceApprovedAmount,
-                claim.EligibleDamageAmount,
-                coverage.InsuranceCoverageSnapshot,
-                coverage.InsuranceDeductibleSnapshot,
+                claim.InsuranceRequestedAmount,
+                coverage.PolicyVersion.MockInsuranceCoverageLimit,
+                0m,
                 coverage.PolicyVersion.MockInsuranceCoverageLimit),
             cancellationToken);
 
         claim.InsuranceStatus = result.Status;
-        claim.InsuranceReference = result.Reference;
+        claim.InsuranceReference = claim.InsuranceReference ?? result.Reference;
+        EnsureInsuranceApprovalWithinSnapshot(
+            result.ApprovedAmount,
+            claim.InsuranceRequestedAmount,
+            claim.EligibleDamageAmount);
+        claim.InsuranceApprovedAmount = result.Status == InsuranceClaimStatus.APPROVED
+            ? ClampInsuranceApproval(result.ApprovedAmount, claim.InsuranceRequestedAmount, claim.EligibleDamageAmount)
+            : 0m;
+        if (claim.AccidentReport.LiabilityAssessment?.Status == LiabilityAssessmentStatus.CONFIRMED)
+        {
+            ApplyDerivedSettlement(
+                claim,
+                claim.AccidentReport.LiabilityAssessment,
+                coverage,
+                coverage.PolicyVersion);
+            claim.Status = result.Status == InsuranceClaimStatus.PENDING
+                ? ProtectionClaimStatus.UNDER_REVIEW
+                : ProtectionClaimStatus.APPROVED;
+        }
         claim.UpdatedAtUtc = DateTime.UtcNow;
         AddInsuranceAudit(claim, InsuranceProviderOperation.GET_STATUS, result, staffUserId);
         await SaveChangesWithConcurrencyAsync(cancellationToken);
-        return Map(claim);
+        return Map(claim, null, coverage, coverage.PolicyVersion);
     }
 
     public async Task<IReadOnlyList<InsuranceProviderAuditResponse>> GetInsuranceAuditsAsync(
@@ -650,11 +630,16 @@ public sealed class AccidentManagementService : IAccidentManagementService
     {
         idempotencyKey = NormalizeRequired(idempotencyKey, 90, "Idempotency key");
         var claim = await _dbContext.ProtectionClaims
+            .Include(x => x.AccidentReport).ThenInclude(x => x.LiabilityAssessment)
             .Include(x => x.AccidentReport).ThenInclude(x => x.Trip).ThenInclude(x => x.Booking)
+            .Include(x => x.DriverLiabilities)
             .SingleOrDefaultAsync(x => x.Id == claimId, cancellationToken)
             ?? throw ClaimNotFound();
 
         var amount = Round(claim.RiskFundAdvanceAmount + claim.RiskFundPermanentLossAmount);
+        if (Round(claim.CustomerInsuranceAppliedAmount + claim.InsurancePaidDirectToClaimant + amount)
+            > Round(claim.EligibleDamageAmount))
+            throw Invalid("Insurance contribution and Risk Fund funding exceed eligible damage.");
         var type = claim.RiskFundAdvanceAmount > 0
             ? RiskFundTransactionType.CLAIM_ADVANCE
             : RiskFundTransactionType.CLAIM_PAYOUT;
@@ -774,6 +759,7 @@ public sealed class AccidentManagementService : IAccidentManagementService
         var claim = await _dbContext.ProtectionClaims
             .Include(x => x.Recoveries)
             .Include(x => x.DriverLiabilities)
+            .Include(x => x.AccidentReport).ThenInclude(x => x.LiabilityAssessment)
             .Include(x => x.AccidentReport).ThenInclude(x => x.Trip).ThenInclude(x => x.Booking)
             .SingleOrDefaultAsync(x => x.Id == claimId, cancellationToken) ?? throw ClaimNotFound();
         if (existing is not null)
@@ -930,7 +916,9 @@ public sealed class AccidentManagementService : IAccidentManagementService
             var idempotencyKey = NormalizeRequired(request.IdempotencyKey, 100, "Idempotency key");
             var evidence = ValidateTrustedEvidence(request.Evidence);
             var claim = await _dbContext.ProtectionClaims
+                .Include(x => x.AccidentReport).ThenInclude(x => x.LiabilityAssessment)
                 .Include(x => x.AccidentReport).ThenInclude(x => x.Trip).ThenInclude(x => x.Booking)
+                .Include(x => x.DriverLiabilities)
                 .Include(x => x.ReconciliationRecords)
                 .SingleOrDefaultAsync(x => x.Id == claimId, cancellationToken) ?? throw ClaimNotFound();
             var existing = claim.ReconciliationRecords.SingleOrDefault(x => x.IdempotencyKey == idempotencyKey);
@@ -1219,7 +1207,10 @@ public sealed class AccidentManagementService : IAccidentManagementService
             throw Invalid("Mức độ nhận biết lỗi ẩn phải phù hợp root cause và allocation của từng bên.");
     }
 
-    private static AccidentResponse Map(AccidentReport x, bool includeAssessment = false) => new(x.Id, x.TripId, x.ReportedByUserId,
+    private AccidentResponse Map(
+        AccidentReport x,
+        bool includeAssessment = false,
+        TripProtectionCoverage? coverage = null) => new(x.Id, x.TripId, x.ReportedByUserId,
         x.Category, x.Status, x.OccurredAtUtc, x.Latitude, x.Longitude, x.Description,
         x.PoliceReportReference, x.CreatedAtUtc, x.ProtectionClaim?.Id, x.ProtectionClaim?.Status,
         x.Evidence.OrderByDescending(e => e.CreatedAtUtc).Select(e => new AccidentEvidenceResponse(
@@ -1230,8 +1221,8 @@ public sealed class AccidentManagementService : IAccidentManagementService
             ? Map(x.LiabilityAssessment)
             : null,
         includeAssessment && x.ProtectionClaim is not null
-            ? Map(x.ProtectionClaim)
-            : null);
+             ? Map(x.ProtectionClaim, null, coverage)
+             : null);
 
     private static LiabilityAssessmentResponse Map(AccidentLiabilityAssessment assessment)
     {
@@ -1279,20 +1270,291 @@ public sealed class AccidentManagementService : IAccidentManagementService
         evidence.Description,
         evidence.CreatedAtUtc);
 
-    private static ProtectionClaimResponse Map(ProtectionClaim x, byte[]? assessmentRowVersion = null) => new(
-        x.Id,
-        x.AccidentReportId,
-        Convert.ToBase64String(x.RowVersion),
-        assessmentRowVersion is null ? null : Convert.ToBase64String(assessmentRowVersion),
-        x.Status, x.InsuranceStatus, x.InsurancePaymentDestination, x.InsuranceRequestedAmount,
-        x.TotalDamageAmount, x.EligibleDamageAmount,
-        x.InsuranceApprovedAmount, x.InsurancePaidDirectToClaimant, x.InsuranceReimbursedToRiskFund,
-        x.RiskFundAdvanceAmount, x.RiskFundPermanentLossAmount,
-        x.DriverLiabilityAmount, x.CustomerLiabilityAmount, x.ThirdPartyLiabilityAmount,
-        x.TotalPaidToClaimant, x.RecoveredAmount, x.OutstandingRecoveryAmount,
-        x.WrittenOffAdvanceAmount,
-        Math.Max(0m, x.RiskFundAdvanceAmount - x.RecoveredAmount - x.WrittenOffAdvanceAmount),
-        IsReconciled(x));
+    private decimal CalculateSystemInsuranceMaximum(
+        decimal eligibleDamage,
+        AccidentLiabilityAssessment assessment,
+        RiskProtectionPolicyVersion policy,
+        decimal customerInsuranceAppliedAmount)
+    {
+        var beforeSystemInsurance = CalculateLiabilities(
+            eligibleDamage,
+            assessment,
+            policy,
+            customerInsuranceAppliedAmount,
+            0m);
+        return Round(Math.Min(
+            beforeSystemInsurance.ParticipantExposureBeforeSystemInsurance,
+            Math.Max(0m, policy.MockInsuranceCoverageLimit)));
+    }
+
+    private ClaimLiabilityCalculationResult CalculateLiabilities(
+        decimal eligibleDamage,
+        AccidentLiabilityAssessment assessment,
+        RiskProtectionPolicyVersion policy,
+        decimal customerInsuranceAppliedAmount,
+        decimal systemInsuranceApprovedAmount) =>
+        _claimCalculator.CalculateLiabilities(new ClaimLiabilityCalculationInput(
+            eligibleDamage,
+            assessment.DriverFaultPercentage,
+            assessment.CustomerFaultPercentage,
+            assessment.ThirdPartyFaultPercentage,
+            assessment.DriverFaultLevel,
+            policy.DriverOrdinaryNegligenceRate,
+            policy.DriverOrdinaryNegligenceCap,
+            policy.DriverGrossNegligenceRate,
+            policy.DriverGrossNegligenceCap,
+            systemInsuranceApprovedAmount,
+            assessment.VehicleFailurePercentage,
+            assessment.ObjectiveCausePercentage,
+            customerInsuranceAppliedAmount));
+
+    private static decimal ClampInsuranceApproval(
+        decimal approved,
+        decimal insuranceEligible,
+        decimal eligibleDamage) => Round(Math.Min(
+            Math.Max(0m, approved),
+            Math.Min(Math.Max(0m, insuranceEligible), Math.Max(0m, eligibleDamage))));
+
+    private static void EnsureInsuranceApprovalWithinSnapshot(
+        decimal approved,
+        decimal insuranceEligible,
+        decimal eligibleDamage)
+    {
+        if (approved < 0m
+            || Round(approved) > Round(insuranceEligible)
+            || Round(approved) > Round(eligibleDamage))
+            throw Invalid("Insurance approval exceeds the snapshotted coverage or eligible damage.");
+    }
+
+    private void ApplyDerivedSettlement(
+        ProtectionClaim claim,
+        AccidentLiabilityAssessment assessment,
+        TripProtectionCoverage coverage,
+        RiskProtectionPolicyVersion policy)
+    {
+        claim.InsuranceApprovedAmount = ClampInsuranceApproval(
+            claim.InsuranceApprovedAmount,
+            claim.InsuranceRequestedAmount,
+            claim.EligibleDamageAmount);
+        claim.InsurancePaidDirectToClaimant = claim.InsurancePaymentDestination
+            == InsurancePaymentDestination.DIRECT_TO_CLAIMANT
+            ? claim.InsuranceApprovedAmount
+            : 0m;
+        claim.InsuranceReimbursedToRiskFund = 0m;
+
+        var liabilities = CalculateLiabilities(
+            claim.EligibleDamageAmount,
+            assessment,
+            policy,
+            claim.CustomerInsuranceAppliedAmount,
+            claim.InsuranceApprovedAmount);
+
+        claim.DriverLiabilityAmount = liabilities.Driver.LiabilityAmount;
+        claim.CustomerLiabilityAmount = liabilities.CustomerLiabilityAmount;
+        claim.ThirdPartyLiabilityAmount = liabilities.ThirdPartyLiabilityAmount;
+
+        var liability = claim.DriverLiabilities.SingleOrDefault();
+        liability ??= new DriverLiability
+        {
+            ProtectionClaimId = claim.Id,
+            DriverId = claim.AccidentReport.Trip.DriverId,
+            CreatedAtUtc = DateTime.UtcNow
+        };
+        if (liability.Id == 0) _dbContext.DriverLiabilities.Add(liability);
+        liability.DriverAttributableEligibleDamage = liabilities.Driver.DriverAttributableEligibleDamage;
+        liability.FaultLevel = assessment.DriverFaultLevel;
+        liability.AppliedRate = liabilities.Driver.AppliedRate;
+        liability.AppliedCap = liabilities.Driver.AppliedCap;
+        liability.ConfirmedAmount = liabilities.Driver.LiabilityAmount;
+        liability.OutstandingAmount = Math.Max(0m, liability.ConfirmedAmount - liability.PaidAmount);
+        liability.Status = liability.OutstandingAmount == 0m
+            ? DriverLiabilityStatus.PAID
+            : DriverLiabilityStatus.CONFIRMED;
+        liability.DisputeReason = null;
+        liability.UpdatedAtUtc = DateTime.UtcNow;
+
+        var directInsurance = Round(
+            claim.CustomerInsuranceAppliedAmount + claim.InsurancePaidDirectToClaimant);
+        var claimantNeed = Math.Max(0m, claim.EligibleDamageAmount - directInsurance);
+        // ProtectionLimit caps SafeRide/Risk Fund exposure only. It does not
+        // reduce any legal/economic payer obligation above.
+        var requiredFund = Round(Math.Min(
+            claimantNeed,
+            Math.Max(0m, coverage.ProtectionLimit)));
+        if (Round(directInsurance + requiredFund) > Round(claim.EligibleDamageAmount))
+            throw Invalid("Direct insurance and Risk Fund funding exceed the current claimant need.");
+        var insuranceRecoveryCapacity = claim.InsurancePaymentDestination
+            == InsurancePaymentDestination.REIMBURSE_RISK_FUND
+            ? claim.InsuranceApprovedAmount
+            : 0m;
+        var recoverableCapacity = Round(
+            liabilities.TotalRecoverableLiabilityAmount + insuranceRecoveryCapacity);
+        claim.RiskFundAdvanceAmount = Round(Math.Min(requiredFund, recoverableCapacity));
+        claim.RiskFundPermanentLossAmount = Round(
+            Math.Max(0m, requiredFund - claim.RiskFundAdvanceAmount));
+        claim.OutstandingRecoveryAmount = claim.RiskFundAdvanceAmount;
+        claim.TotalPaidToClaimant = Round(Math.Min(
+            claim.EligibleDamageAmount,
+            directInsurance));
+    }
+
+    private ProtectionClaimResponse Map(
+        ProtectionClaim x,
+        byte[]? assessmentRowVersion = null,
+        TripProtectionCoverage? coverage = null,
+        RiskProtectionPolicyVersion? policy = null)
+    {
+        var assessment = x.AccidentReport?.LiabilityAssessment;
+        var storedDriverLiability = x.DriverLiabilities.FirstOrDefault();
+        var snapshottedPolicy = policy ?? coverage?.PolicyVersion;
+        var calculationPolicy = snapshottedPolicy ?? new RiskProtectionPolicyVersion
+        {
+            DriverOrdinaryNegligenceRate = storedDriverLiability?.AppliedRate ?? 0m,
+            DriverOrdinaryNegligenceCap = storedDriverLiability?.AppliedCap ?? decimal.MaxValue,
+            DriverGrossNegligenceRate = storedDriverLiability?.AppliedRate ?? 0m,
+            DriverGrossNegligenceCap = storedDriverLiability?.AppliedCap ?? decimal.MaxValue
+        };
+        var liabilities = assessment is null
+            ? null
+            : CalculateLiabilities(
+                x.EligibleDamageAmount,
+                assessment,
+                calculationPolicy,
+                x.CustomerInsuranceAppliedAmount,
+                x.InsuranceApprovedAmount);
+        var residual = liabilities?.ResidualUninsuredDamage
+            ?? Round(Math.Max(
+                0m,
+                x.EligibleDamageAmount
+                    - x.CustomerInsuranceAppliedAmount
+                    - x.InsuranceApprovedAmount));
+        var driverAttributable = liabilities?.DriverRemainingExposureBeforeRateCap
+            ?? storedDriverLiability?.DriverAttributableEligibleDamage
+            ?? 0m;
+        var customerAttributable = liabilities?.CustomerFinalExposure ?? x.CustomerLiabilityAmount;
+        var thirdPartyAttributable = liabilities?.ThirdPartyGrossExposure ?? x.ThirdPartyLiabilityAmount;
+        var vehicleObjective = liabilities?.VehicleObjectiveGrossExposure
+            ?? Math.Max(0m, residual - driverAttributable - customerAttributable - thirdPartyAttributable);
+        var systemCoverageLimit = snapshottedPolicy?.MockInsuranceCoverageLimit ?? 0m;
+        return new ProtectionClaimResponse(
+            x.Id,
+            x.AccidentReportId,
+            Convert.ToBase64String(x.RowVersion),
+            assessmentRowVersion is null ? null : Convert.ToBase64String(assessmentRowVersion),
+            x.Status, x.InsuranceStatus, x.InsurancePaymentDestination, x.InsuranceRequestedAmount,
+            x.TotalDamageAmount, x.EligibleDamageAmount,
+            x.InsuranceApprovedAmount, x.InsurancePaidDirectToClaimant, x.InsuranceReimbursedToRiskFund,
+            x.RiskFundAdvanceAmount, x.RiskFundPermanentLossAmount,
+            x.DriverLiabilityAmount, x.CustomerLiabilityAmount, x.ThirdPartyLiabilityAmount,
+            x.TotalPaidToClaimant, x.RecoveredAmount, x.OutstandingRecoveryAmount,
+            x.WrittenOffAdvanceAmount,
+            Math.Max(0m, x.RiskFundAdvanceAmount - x.RecoveredAmount - x.WrittenOffAdvanceAmount),
+            IsReconciled(x),
+            x.InsuranceRequestedAmount,
+            residual,
+            driverAttributable,
+            customerAttributable,
+            thirdPartyAttributable,
+            vehicleObjective,
+            Round(x.RiskFundAdvanceAmount + x.RiskFundPermanentLossAmount),
+            x.InsuranceRequestedAmount,
+            x.InsuranceRequestedAmount,
+            systemCoverageLimit,
+            x.InsuranceReference,
+            x.CustomerInsuranceAppliedAmount,
+            x.CustomerInsuranceReference,
+            x.CustomerInsuranceConfirmedAtUtc,
+            x.CustomerInsuranceNote,
+            liabilities?.CustomerGrossExposure ?? 0m,
+            liabilities?.DriverGrossExposure ?? 0m,
+            liabilities?.ThirdPartyGrossExposure ?? 0m,
+            liabilities?.VehicleObjectiveGrossExposure ?? 0m,
+            liabilities?.CustomerExposureAfterOwnInsurance ?? 0m,
+            liabilities?.DriverExposureBeforeSystemInsurance ?? 0m,
+            liabilities?.ParticipantExposureBeforeSystemInsurance ?? 0m,
+            x.InsuranceRequestedAmount,
+            x.InsuranceApprovedAmount,
+            liabilities?.CustomerSystemInsuranceBenefit ?? 0m,
+            liabilities?.DriverSystemInsuranceBenefit ?? 0m,
+            liabilities?.CustomerFinalExposure ?? x.CustomerLiabilityAmount,
+            liabilities?.DriverRemainingExposureBeforeRateCap ?? driverAttributable,
+            systemCoverageLimit,
+            nameof(MockInsuranceProvider),
+            GetSystemInsuranceEvaluationReason(x, liabilities, systemCoverageLimit),
+            liabilities?.CustomerInsuranceBenefitToCustomer ?? 0m,
+            liabilities?.CustomerInsuranceExcessAppliedToOtherLoss ?? 0m,
+            liabilities?.CustomerInsuranceBenefitToDriver ?? 0m,
+            liabilities?.CustomerInsuranceUnallocatedCategoryReduction ?? 0m,
+            liabilities?.RemainingLossAfterCustomerInsurance ?? Math.Max(0m, x.EligibleDamageAmount - x.CustomerInsuranceAppliedAmount));
+    }
+
+    private async Task<TripProtectionCoverage> GetOrRepairSystemProtectionCoverageAsync(
+        Trip trip,
+        CancellationToken cancellationToken)
+    {
+        var existing = await _dbContext.TripProtectionCoverages
+            .Include(x => x.PolicyVersion)
+            .SingleOrDefaultAsync(x => x.TripId == trip.Id, cancellationToken);
+        if (existing is not null) return existing;
+
+        if (trip.StartedAt is null)
+            throw SystemProtectionSnapshotUnavailable();
+
+        var startedAtUtc = NormalizeUtc(trip.StartedAt.Value);
+        var check = await _dbContext.PreTripVehicleChecks
+            .Where(x => x.TripId == trip.Id
+                && x.DriverId == trip.DriverId
+                && x.Result == PreTripCheckResult.PASS
+                && x.CheckedAtUtc <= startedAtUtc)
+            .OrderByDescending(x => x.CheckedAtUtc)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (check is null)
+            throw SystemProtectionSnapshotUnavailable();
+
+        var policy = await _dbContext.RiskProtectionPolicyVersions
+            .Where(x => x.EffectiveFromUtc <= startedAtUtc)
+            .OrderByDescending(x => x.EffectiveFromUtc)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (policy is null || !policy.RiskFundEnabled || policy.DefaultProtectionLimit <= 0m)
+            throw SystemProtectionSnapshotUnavailable();
+
+        var repaired = new TripProtectionCoverage
+        {
+            TripId = trip.Id,
+            PolicyVersionId = policy.Id,
+            PreTripVehicleCheckId = check.Id,
+            ProtectionLimit = policy.DefaultProtectionLimit,
+            ActivatedAtUtc = startedAtUtc,
+            PolicyVersion = policy
+        };
+        _dbContext.TripProtectionCoverages.Add(repaired);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        _logger.LogWarning(
+            "Reconstructed missing SafeRide system protection snapshot for legacy trip {TripId} from policy {PolicyVersionId} effective at trip start {StartedAtUtc}.",
+            trip.Id,
+            policy.Id,
+            startedAtUtc);
+        return repaired;
+    }
+
+    private static string GetSystemInsuranceEvaluationReason(
+        ProtectionClaim claim,
+        ClaimLiabilityCalculationResult? liabilities,
+        decimal systemCoverageLimit)
+    {
+        if (claim.InsuranceRequestedAmount > 0m) return "AVAILABLE";
+        if (systemCoverageLimit <= 0m) return "POLICY_LIMIT_ZERO";
+        if ((liabilities?.ParticipantExposureBeforeSystemInsurance ?? 0m) <= 0m)
+            return "NO_REMAINING_COVERED_EXPOSURE";
+        if (claim.Status is ProtectionClaimStatus.FUNDED
+            or ProtectionClaimStatus.RECOVERY_IN_PROGRESS
+            or ProtectionClaimStatus.SETTLED
+            or ProtectionClaimStatus.CLOSED)
+            return "CLAIM_RESOLVED";
+        return "NO_APPROVABLE_SYSTEM_INSURANCE";
+    }
 
     private static InsuranceClaimSubmissionContext CreateInsuranceSubmissionContext(
         ProtectionClaim claim,
@@ -1300,9 +1562,9 @@ public sealed class AccidentManagementService : IAccidentManagementService
         RiskProtectionPolicyVersion policy) => new(
             claim.Id,
             claim.InsuranceRequestedAmount,
-            claim.EligibleDamageAmount,
-            coverage.InsuranceCoverageSnapshot,
-            coverage.InsuranceDeductibleSnapshot,
+            claim.InsuranceRequestedAmount,
+            policy.MockInsuranceCoverageLimit,
+            0m,
             policy.MockInsuranceCoverageLimit,
             policy.ClaimAutoApprovalThreshold);
 
@@ -1312,9 +1574,9 @@ public sealed class AccidentManagementService : IAccidentManagementService
         RiskProtectionPolicyVersion policy) => new(
             claim.Id,
             claim.InsuranceRequestedAmount,
-            claim.EligibleDamageAmount,
-            coverage.InsuranceCoverageSnapshot,
-            coverage.InsuranceDeductibleSnapshot,
+            claim.InsuranceRequestedAmount,
+            policy.MockInsuranceCoverageLimit,
+            0m,
             policy.MockInsuranceCoverageLimit);
 
     private void AddInsuranceCalculationAudit(
@@ -1485,6 +1747,16 @@ public sealed class AccidentManagementService : IAccidentManagementService
         return normalized;
     }
 
+    private static string? NormalizeOptional(string? value, int maxLength, string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+
+        var normalized = value.Trim();
+        if (normalized.Length > maxLength)
+            throw Invalid($"{fieldName} cannot exceed {maxLength} characters.");
+        return normalized;
+    }
+
     private static string MaskPaymentReference(string paymentReference)
     {
         if (paymentReference.Length <= 4) return new string('*', paymentReference.Length);
@@ -1555,6 +1827,9 @@ public sealed class AccidentManagementService : IAccidentManagementService
     private static BookingException Invalid(string detail) => new("risk_protection.invalid_request", detail, StatusCodes.Status400BadRequest);
     private static BookingException Conflict(string detail) => new("risk_protection.conflict", detail, StatusCodes.Status409Conflict);
     private static BookingException Conflict(string code, string detail) => new(code, detail, StatusCodes.Status409Conflict);
+    private static BookingException SystemProtectionSnapshotUnavailable() => Conflict(
+        "risk_protection.system_protection_snapshot_unavailable",
+        "SafeRide không thể xác định chính sách Bảo hiểm Hệ thống lịch sử của chuyến đi này.");
     private static BookingException NotFound() => new("accident.not_found", "Không tìm thấy báo cáo tai nạn.", StatusCodes.Status404NotFound);
     private static BookingException ClaimNotFound() => new("claim.not_found", "Không tìm thấy hồ sơ yêu cầu bảo vệ.", StatusCodes.Status404NotFound);
 }

@@ -117,7 +117,7 @@ public sealed class CustomerBookingPrivilegeServiceTests
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase($"privilege-{Guid.NewGuid():N}")
             .Options;
-        return new ApplicationDbContext(options);
+        return new ApplicationDbContext(options, new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
     }
 
     private static void AddNoShows(ApplicationDbContext context, int count)

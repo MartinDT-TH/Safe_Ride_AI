@@ -96,6 +96,20 @@ class DriverWalletRemoteDatasource {
     }
   }
 
+  Future<Map<String, dynamic>> createTopUp(String token, {required num amount}) async {
+    try {
+      final response = await _dio.post(ApiEndpoints.driverWalletTopUps, data: {'amount': amount}, options: Options(headers: {ApiKeys.authorization: AuthHeader.bearer(token)}));
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (error) { throw DriverWalletApiException(_messageFrom(error)); }
+  }
+
+  Future<Map<String, dynamic>> getTopUpStatus(String token, int id) async {
+    try {
+      final response = await _dio.get(ApiEndpoints.driverWalletTopUpStatus(id), options: Options(headers: {ApiKeys.authorization: AuthHeader.bearer(token)}));
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (error) { throw DriverWalletApiException(_messageFrom(error)); }
+  }
+
   static String _messageFrom(DioException error) {
     final data = error.response?.data;
     return data is Map && data['detail'] != null

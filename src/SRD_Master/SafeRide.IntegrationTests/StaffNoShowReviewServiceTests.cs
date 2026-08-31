@@ -98,7 +98,9 @@ public sealed class StaffNoShowReviewServiceTests
         context.Trips.Add(new Trip { Id = 2, BookingId = 2, DriverId = DriverId });
     }
 
-    private static ApplicationDbContext CreateContext() => new(new DbContextOptionsBuilder<ApplicationDbContext>().UseInMemoryDatabase($"staff-review-{Guid.NewGuid():N}").Options);
+    private static ApplicationDbContext CreateContext() => new(
+        new DbContextOptionsBuilder<ApplicationDbContext>().UseInMemoryDatabase($"staff-review-{Guid.NewGuid():N}").Options,
+        new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
     private sealed class Clock(DateTime value) : IDateTimeProvider { public DateTime UtcNow => value; }
     private sealed class OptionsMonitor<T>(T value) : IOptionsMonitor<T> { public T CurrentValue => value; public T Get(string? name) => value; public IDisposable? OnChange(Action<T, string?> listener) => null; }
 }

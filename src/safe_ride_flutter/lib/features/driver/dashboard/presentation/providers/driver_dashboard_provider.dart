@@ -100,6 +100,7 @@ class _PendingDriverLocationUpdate {
 }
 
 class DriverDashboardProvider extends ChangeNotifier {
+  static const num minimumOnlineWalletBalance = 500000;
   DriverDashboardProvider({
     SocketService? socketService,
     Dio? dio,
@@ -431,6 +432,9 @@ class DriverDashboardProvider extends ChangeNotifier {
   Future<void> goOnline(double lat, double lng) async {
     final token = _accessToken;
     if (token == null) return;
+    if (!await hasMinimumOnlineWalletBalance()) {
+      throw StateError('Driver wallet balance is below the online minimum.');
+    }
     try {
       await _dio.post(
         ApiEndpoints.driverOnline,
@@ -447,9 +451,40 @@ class DriverDashboardProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('Failed to go online: $e');
-      _errorMessage = LocaleProvider.currentLocalizations.onlineFailed;
+      final response = e is DioException ? e.response?.data : null;
+      _errorMessage = response is Map && response['detail'] is String
+          ? response['detail'] as String
+          : LocaleProvider.currentLocalizations.onlineFailed;
       notifyListeners();
       rethrow;
+    }
+  }
+
+  /// Checks the driver's current wallet balance before enabling trip reception.
+  /// Returns true when the wallet meets the minimum required balance.
+  Future<bool> hasMinimumOnlineWalletBalance() async {
+    final token = _accessToken;
+    final repository = _driverWalletRepository;
+    if (token == null || token.isEmpty || repository == null) return false;
+    try {
+      final wallet = await repository.getWallet(token, period: 'Day');
+      return wallet.availableBalance >= minimumOnlineWalletBalance;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getLicenseStatus() async {
+    final token = _accessToken;
+    if (token == null || token.isEmpty) return null;
+    try {
+      final response = await _dio.get(
+        ApiEndpoints.driverLicenseStatus,
+        options: Options(headers: {ApiKeys.authorization: AuthHeader.bearer(token)}),
+      );
+      return Map<String, dynamic>.from(response.data as Map);
+    } catch (_) {
+      return null;
     }
   }
 

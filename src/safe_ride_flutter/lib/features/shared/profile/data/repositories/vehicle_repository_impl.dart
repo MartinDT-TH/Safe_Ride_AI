@@ -26,23 +26,4 @@ class VehicleRepositoryImpl implements VehicleRepository {
   Future<void> deleteVehicle(String accessToken, int id) {
     return _datasource.deleteVehicle(accessToken, id);
   }
-
-  @override
-  Future<List<VehicleInsurancePolicyModel>> getInsurancePolicies(
-    String accessToken,
-    int vehicleId,
-  ) => _datasource.getInsurancePolicies(accessToken, vehicleId);
-
-  @override
-  Future<VehicleInsurancePolicyModel> saveInsurancePolicy(
-    String accessToken,
-    VehicleInsurancePolicyModel policy,
-  ) => _datasource.saveInsurancePolicy(accessToken, policy);
-
-  @override
-  Future<void> deleteInsurancePolicy(
-    String accessToken,
-    int vehicleId,
-    int policyId,
-  ) => _datasource.deleteInsurancePolicy(accessToken, vehicleId, policyId);
 }

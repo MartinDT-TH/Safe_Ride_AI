@@ -1619,7 +1619,7 @@ abstract class AppLocalizations {
   /// No description provided for @expiryDate.
   ///
   /// In vi, this message translates to:
-  /// **'Hết hạn'**
+  /// **'Ngày hết hạn'**
   String get expiryDate;
 
   /// No description provided for @documents.
@@ -4928,114 +4928,6 @@ abstract class AppLocalizations {
   /// **'Bằng chứng (tùy chọn)'**
   String get optionalEvidence;
 
-  /// No description provided for @vehicleInsurance.
-  ///
-  /// In vi, this message translates to:
-  /// **'Bảo hiểm'**
-  String get vehicleInsurance;
-
-  /// No description provided for @addInsurance.
-  ///
-  /// In vi, this message translates to:
-  /// **'Thêm bảo hiểm'**
-  String get addInsurance;
-
-  /// No description provided for @insuranceLoadFailed.
-  ///
-  /// In vi, this message translates to:
-  /// **'Không thể tải thông tin bảo hiểm. Vui lòng thử lại.'**
-  String get insuranceLoadFailed;
-
-  /// No description provided for @insuranceUpdateFailed.
-  ///
-  /// In vi, this message translates to:
-  /// **'Không thể cập nhật bảo hiểm.'**
-  String get insuranceUpdateFailed;
-
-  /// No description provided for @deleteInsuranceQuestion.
-  ///
-  /// In vi, this message translates to:
-  /// **'Xóa hợp đồng bảo hiểm?'**
-  String get deleteInsuranceQuestion;
-
-  /// No description provided for @policyNumber.
-  ///
-  /// In vi, this message translates to:
-  /// **'Số hợp đồng'**
-  String get policyNumber;
-
-  /// No description provided for @optionalInsuranceEmpty.
-  ///
-  /// In vi, this message translates to:
-  /// **'Bảo hiểm là tùy chọn. Phương tiện chưa có hợp đồng nào.'**
-  String get optionalInsuranceEmpty;
-
-  /// No description provided for @addInsurancePolicy.
-  ///
-  /// In vi, this message translates to:
-  /// **'Thêm hợp đồng bảo hiểm'**
-  String get addInsurancePolicy;
-
-  /// No description provided for @editInsurancePolicy.
-  ///
-  /// In vi, this message translates to:
-  /// **'Sửa hợp đồng bảo hiểm'**
-  String get editInsurancePolicy;
-
-  /// No description provided for @insuranceType.
-  ///
-  /// In vi, this message translates to:
-  /// **'Loại bảo hiểm'**
-  String get insuranceType;
-
-  /// No description provided for @mandatoryTplInsurance.
-  ///
-  /// In vi, this message translates to:
-  /// **'Trách nhiệm dân sự bắt buộc'**
-  String get mandatoryTplInsurance;
-
-  /// No description provided for @physicalDamageInsurance.
-  ///
-  /// In vi, this message translates to:
-  /// **'Thiệt hại vật chất'**
-  String get physicalDamageInsurance;
-
-  /// No description provided for @insuranceProvider.
-  ///
-  /// In vi, this message translates to:
-  /// **'Nhà cung cấp'**
-  String get insuranceProvider;
-
-  /// No description provided for @effectiveDate.
-  ///
-  /// In vi, this message translates to:
-  /// **'Hiệu lực'**
-  String get effectiveDate;
-
-  /// No description provided for @insuranceCoverageLimit.
-  ///
-  /// In vi, this message translates to:
-  /// **'Hạn mức bảo hiểm'**
-  String get insuranceCoverageLimit;
-
-  /// No description provided for @insuranceDeductible.
-  ///
-  /// In vi, this message translates to:
-  /// **'Mức khấu trừ'**
-  String get insuranceDeductible;
-
-  /// No description provided for @optionalDocumentUrl.
-  ///
-  /// In vi, this message translates to:
-  /// **'URL tài liệu (tùy chọn)'**
-  String get optionalDocumentUrl;
-
-  /// No description provided for @optionalInsuranceHint.
-  ///
-  /// In vi, this message translates to:
-  /// **'Bảo hiểm không bắt buộc. Tạo hoặc sửa hợp đồng sẽ chuyển trạng thái về PENDING để Staff xác minh.'**
-  String get optionalInsuranceHint;
-
   /// No description provided for @endTripReasonTitle.
   ///
   /// In vi, this message translates to:
@@ -5306,30 +5198,6 @@ abstract class AppLocalizations {
   /// **'Lý do khác'**
   String get riskReasonOther;
 
-  /// No description provided for @riskInsurancePending.
-  ///
-  /// In vi, this message translates to:
-  /// **'Chờ nhân viên xác minh'**
-  String get riskInsurancePending;
-
-  /// No description provided for @riskInsuranceVerified.
-  ///
-  /// In vi, this message translates to:
-  /// **'Đã xác minh'**
-  String get riskInsuranceVerified;
-
-  /// No description provided for @riskInsuranceExpired.
-  ///
-  /// In vi, this message translates to:
-  /// **'Đã hết hạn'**
-  String get riskInsuranceExpired;
-
-  /// No description provided for @riskInsuranceOther.
-  ///
-  /// In vi, this message translates to:
-  /// **'Bảo hiểm khác'**
-  String get riskInsuranceOther;
-
   /// No description provided for @riskIncidentInformation.
   ///
   /// In vi, this message translates to:
@@ -5377,6 +5245,24 @@ abstract class AppLocalizations {
   /// In vi, this message translates to:
   /// **'Hiện hệ thống chỉ lưu liên kết tài liệu. Chỉ dùng liên kết tin cậy; tải tệp trực tiếp sẽ được bổ sung khi có kho lưu trữ an toàn dùng chung.'**
   String get documentUrlDeferredHint;
+
+  /// No description provided for @motorbikeFeatureSuspendedTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Dịch vụ xe máy tạm ngừng'**
+  String get motorbikeFeatureSuspendedTitle;
+
+  /// No description provided for @motorbikeFeatureSuspendedMessage.
+  ///
+  /// In vi, this message translates to:
+  /// **'Từ ngày 20/8, chức năng đã tạm ngừng.'**
+  String get motorbikeFeatureSuspendedMessage;
+
+  /// No description provided for @acknowledge.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đã hiểu'**
+  String get acknowledge;
 }
 
 class _AppLocalizationsDelegate

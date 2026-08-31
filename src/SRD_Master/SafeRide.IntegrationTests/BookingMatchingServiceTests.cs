@@ -111,6 +111,51 @@ public sealed class BookingMatchingServiceTests
     }
 
     [Fact]
+    public async Task StartMatchingAsync_ExpiredLicense_DoesNotCreateOffer()
+    {
+        await using var fixture = await MatchingFixture.CreateAsync();
+        var license = Assert.Single(fixture.DbContext.DriverKycs);
+        license.ExpiryDate = DateOnly.FromDateTime(UtcNow.AddDays(-1));
+        await fixture.DbContext.SaveChangesAsync();
+
+        var result = await fixture.Service.StartMatchingAsync(
+            fixture.BookingId,
+            CancellationToken.None);
+
+        Assert.Null(result);
+        Assert.Equal(0, fixture.Route.RequestCount);
+        Assert.Empty(await fixture.DbContext.BookingDriverOffers.ToListAsync());
+    }
+
+    [Fact]
+    public async Task StartMatchingAsync_LatestExpiredLicense_UsesOlderValidLicense()
+    {
+        await using var fixture = await MatchingFixture.CreateAsync();
+        var driver = await fixture.DbContext.AspNetUsers.FindAsync(fixture.DriverId);
+        fixture.DbContext.DriverKycs.Add(new DriverKyc
+        {
+            DriverId = fixture.DriverId,
+            Driver = driver!,
+            DocumentType = KycDocumentType.DRIVING_LICENSE,
+            KycStatus = KycStatus.Approved,
+            LicenseClass = LicenseClass.A1,
+            DocumentNumber = "A-EXPIRED",
+            ExpiryDate = DateOnly.FromDateTime(UtcNow.AddDays(-1)),
+            CreatedAt = UtcNow,
+            VerifiedAt = UtcNow
+        });
+        await fixture.DbContext.SaveChangesAsync();
+
+        var result = await fixture.Service.StartMatchingAsync(
+            fixture.BookingId,
+            CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal(LicenseClass.A1, result.LicenseClass);
+        Assert.Single(await fixture.DbContext.BookingDriverOffers.ToListAsync());
+    }
+
+    [Fact]
     public async Task StartMatchingAsync_ReleasesBookingLockAfterMatchingAttempt()
     {
         await using var fixture = await MatchingFixture.CreateAsync();
@@ -268,7 +313,7 @@ public sealed class BookingMatchingServiceTests
             var options = new DbContextOptionsBuilder<ApplicationDbContext>()
                 .UseInMemoryDatabase($"booking-matching-{Guid.NewGuid():N}")
                 .Options;
-            var dbContext = new ApplicationDbContext(options);
+            var dbContext = new ApplicationDbContext(options, new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
             var redis = new InMemoryRedisService();
             var realtime = new RealtimeNotificationServiceFake();
             var route = new RouteMapFake();

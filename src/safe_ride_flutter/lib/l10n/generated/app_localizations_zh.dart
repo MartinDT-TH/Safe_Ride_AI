@@ -801,7 +801,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get issueDate => '签发日期';
 
   @override
-  String get expiryDate => '到期日期';
+  String get expiryDate => '有效期至';
 
   @override
   String get documents => '文件';
@@ -2537,60 +2537,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get optionalEvidence => '证据（可选）';
 
   @override
-  String get vehicleInsurance => '保险';
-
-  @override
-  String get addInsurance => '添加保险';
-
-  @override
-  String get insuranceLoadFailed => '无法加载保险信息，请重试。';
-
-  @override
-  String get insuranceUpdateFailed => '无法更新保险。';
-
-  @override
-  String get deleteInsuranceQuestion => '删除保险合同？';
-
-  @override
-  String get policyNumber => '保单编号';
-
-  @override
-  String get optionalInsuranceEmpty => '保险为可选项，此车辆暂无保单。';
-
-  @override
-  String get addInsurancePolicy => '添加保险合同';
-
-  @override
-  String get editInsurancePolicy => '编辑保险合同';
-
-  @override
-  String get insuranceType => '保险类型';
-
-  @override
-  String get mandatoryTplInsurance => '机动车第三者责任强制保险';
-
-  @override
-  String get physicalDamageInsurance => '车辆损失险';
-
-  @override
-  String get insuranceProvider => '保险公司';
-
-  @override
-  String get effectiveDate => '生效日期';
-
-  @override
-  String get insuranceCoverageLimit => '赔付限额';
-
-  @override
-  String get insuranceDeductible => '免赔额';
-
-  @override
-  String get optionalDocumentUrl => '文件 URL（可选）';
-
-  @override
-  String get optionalInsuranceHint => '保险为可选项。新建或编辑后将重置为 PENDING，等待员工验证。';
-
-  @override
   String get endTripReasonTitle => '结束行程原因';
 
   @override
@@ -2727,18 +2673,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get riskReasonOther => '其他原因';
 
   @override
-  String get riskInsurancePending => '等待员工验证';
-
-  @override
-  String get riskInsuranceVerified => '已验证';
-
-  @override
-  String get riskInsuranceExpired => '已过期';
-
-  @override
-  String get riskInsuranceOther => '其他保险';
-
-  @override
   String get riskIncidentInformation => '事故信息';
 
   @override
@@ -2761,4 +2695,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get documentUrlDeferredHint => '目前仅保存文件链接。请使用可信链接；待安全共享存储可用后再提供直接上传。';
+
+  @override
+  String get motorbikeFeatureSuspendedTitle => '摩托车服务暂停';
+
+  @override
+  String get motorbikeFeatureSuspendedMessage => '自8月20日起，此功能已暂时停用。';
+
+  @override
+  String get acknowledge => '知道了';
 }

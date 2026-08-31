@@ -1,5 +1,14 @@
 import { apiDownload, apiRequest } from '../../shared/api/apiClient';
 
+export const riskProtectionConcurrencyCodes = new Set([
+  'risk_protection.concurrency_conflict',
+  'persistence.concurrency_conflict',
+]);
+
+export function isRiskProtectionConcurrencyConflict(error) {
+  return error?.status === 409 && riskProtectionConcurrencyCodes.has(error?.code);
+}
+
 export const riskFundDashboardPath = '/admin/risk-fund';
 export const riskFundTransactionsPath = '/admin/risk-fund/transactions';
 export const riskFundExportPath = '/admin/risk-fund/transactions/export';
@@ -71,6 +80,23 @@ export function getMockInsuranceAudits(claimId) {
   return apiRequest(`/staff/claims/${claimId}/mock-insurance/audits`);
 }
 
+export function refreshMockInsuranceStatus(claimId, rowVersion) {
+  return apiRequest(`/staff/claims/${claimId}/mock-insurance/status`, {
+    method: 'POST', body: JSON.stringify({ rowVersion }),
+  });
+}
+
+export function listClaimInsuranceDocuments(claimId) {
+  return apiRequest(`/staff/claims/${claimId}/insurance-documents`);
+}
+
+export function uploadClaimInsuranceDocument(claimId, documentType, file) {
+  const body = new FormData();
+  body.set('documentType', documentType);
+  body.append('file', file, file.name);
+  return apiRequest(`/staff/claims/${claimId}/insurance-documents`, { method: 'POST', body });
+}
+
 export function fundClaim(claimId, idempotencyKey, rowVersion) {
   return apiRequest(`/staff/claims/${claimId}/approve-funding`, {
     method: 'POST', headers: { 'Idempotency-Key': idempotencyKey },
@@ -81,7 +107,7 @@ export function fundClaim(claimId, idempotencyKey, rowVersion) {
 export function recordClaimRecovery(claimId, payload) {
   const body = new FormData();
   ['sourceType', 'payerReference', 'amount', 'paymentReference', 'rowVersion'].forEach((key) => body.set(key, payload[key]));
-  body.set('evidence', payload.evidence);
+  if (payload.evidence) body.append('evidence', payload.evidence, payload.evidence.name);
   return apiRequest(`/staff/claims/${claimId}/recoveries`, {
     method: 'POST', headers: { 'Idempotency-Key': payload.idempotencyKey }, body,
   });

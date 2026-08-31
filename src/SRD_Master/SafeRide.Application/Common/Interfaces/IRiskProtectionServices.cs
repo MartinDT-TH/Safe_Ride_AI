@@ -72,15 +72,6 @@ public interface ISafetyTerminationEvidenceStorage
     Task DeleteAsync(string publicId, string contentType, CancellationToken cancellationToken);
 }
 
-public interface IVehicleInsurancePolicyService
-{
-    Task<IReadOnlyList<VehicleInsurancePolicyResponse>> GetAsync(Guid ownerUserId, long vehicleId, CancellationToken cancellationToken);
-    Task<VehicleInsurancePolicyResponse> CreateAsync(Guid ownerUserId, long vehicleId, VehicleInsurancePolicyRequest request, CancellationToken cancellationToken);
-    Task<VehicleInsurancePolicyResponse> UpdateAsync(Guid ownerUserId, long vehicleId, long policyId, VehicleInsurancePolicyRequest request, CancellationToken cancellationToken);
-    Task<VehicleInsurancePolicyResponse> ReviewAsync(Guid staffUserId, long policyId, InsuranceVerificationStatus status, CancellationToken cancellationToken);
-    Task DeleteAsync(Guid ownerUserId, long vehicleId, long policyId, CancellationToken cancellationToken);
-}
-
 public interface ISafetyReportService
 {
     Task<SafetyReportResponse> CreateAsync(Guid driverId, long tripId, SafetyReportRequest request, CancellationToken cancellationToken);
@@ -199,6 +190,27 @@ public interface IAccidentEvidenceStorage
 
     Task DeleteAsync(string publicId, string contentType, CancellationToken cancellationToken);
 }
+
+public interface IInsuranceDocumentService
+{
+    Task<InsuranceClaimDocumentResponse> UploadClaimDocumentAsync(Guid staffUserId, long claimId, InsuranceClaimDocumentType type, InsuranceDocumentUpload upload, CancellationToken cancellationToken);
+    Task<IReadOnlyList<InsuranceClaimDocumentResponse>> ListClaimDocumentsAsync(Guid staffUserId, long claimId, CancellationToken cancellationToken);
+    Task<InsuranceDocumentDownload> OpenClaimDocumentAsync(Guid staffUserId, long claimId, long documentId, CancellationToken cancellationToken);
+}
+
+public sealed record InsuranceDocumentUpload(string FileName, string ContentType, long FileSizeBytes, Stream Content);
+public sealed record InsuranceDocumentDownload(Stream Content, string FileName, string ContentType, long FileSizeBytes);
+
+public interface IPrivateInsuranceDocumentStorage
+{
+    Task<StoredPrivateInsuranceDocument> SaveAsync(
+        string aggregateType, long aggregateId, string fileName, string contentType,
+        Stream content, CancellationToken cancellationToken);
+    Task<Stream> OpenReadAsync(string objectKey, CancellationToken cancellationToken);
+    Task DeleteAsync(string objectKey, CancellationToken cancellationToken);
+}
+
+public sealed record StoredPrivateInsuranceDocument(string ObjectKey, long FileSizeBytes);
 
 public interface IPreTripVehicleCheckEvidenceStorage
 {

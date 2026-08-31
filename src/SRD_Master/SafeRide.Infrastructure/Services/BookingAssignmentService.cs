@@ -631,19 +631,15 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
                 400);
         }
 
-        var driverLicenses = await _dbContext.DriverKycs
-            .AsNoTracking()
-            .Where(x => x.DriverId == driverProfile.DriverId
-                && x.DocumentType == KycDocumentType.DRIVING_LICENSE
-                && x.KycStatus == KycStatus.Approved
-                && x.LicenseClass.HasValue)
-            .Select(x => x.LicenseClass)
-            .ToListAsync(cancellationToken);
+        var driverLicenses = await _dbContext.LoadApprovedDrivingLicensesAsync(
+            driverProfile.DriverId,
+            cancellationToken);
+        var today = DateOnly.FromDateTime(_dateTimeProvider.UtcNow);
 
         var canServeBooking = driverLicenses.Any(driverLicense =>
-            driverLicense.HasValue
+            driverLicense.IsUsableOn(today)
             && _licenseCompatibilityService.CanDrive(
-                driverLicense.Value,
+                driverLicense.LicenseClass!.Value,
                 booking.Vehicle.RequiredLicenseClass));
 
         if (!canServeBooking)
@@ -1030,7 +1026,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         DateTime utcNow,
         CancellationToken cancellationToken)
     {
-        var confirmedOffer = await (
+        var confirmedOfferRows = await (
             from driverOffer in _dbContext.BookingDriverOffers.AsNoTracking()
             join profile in _dbContext.DriverProfiles.AsNoTracking()
                 on driverOffer.DriverId equals profile.DriverId
@@ -1041,7 +1037,6 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             where driverOffer.Id == offerId
                 && kyc.DocumentType == KycDocumentType.DRIVING_LICENSE
                 && kyc.KycStatus == KycStatus.Approved
-                && kyc.LicenseClass.HasValue
             orderby kyc.VerifiedAt ?? kyc.CreatedAt descending
             select new
             {
@@ -1051,17 +1046,22 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
                 user.UserName,
                 user.AvatarUrl,
                 profile.ExperienceYears,
-                LicenseClass = kyc.LicenseClass ?? LicenseClass.A1,
+                LicenseClass = kyc.LicenseClass,
+                kyc.ExpiryDate,
                 driverOffer.ExpiresAt,
                 driverOffer.OfferStatus
             })
-            .Take(1)
-            .FirstOrDefaultAsync(cancellationToken);
+            .ToListAsync(cancellationToken);
+        var today = DateOnly.FromDateTime(utcNow);
+        var confirmedOffer = confirmedOfferRows.FirstOrDefault(x =>
+            x.LicenseClass.HasValue
+            && (!x.ExpiryDate.HasValue || x.ExpiryDate.Value >= today));
 
         if (confirmedOffer is null)
         {
             return null;
         }
+        var confirmedLicenseClass = confirmedOffer.LicenseClass.GetValueOrDefault();
 
         var ratingStats = await _dbContext.Ratings
             .AsNoTracking()
@@ -1100,7 +1100,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             ratingStats is null ? 0 : Math.Round(ratingStats.AverageRating, 1),
             ratingStats?.TripCount ?? 0,
             confirmedOffer.ExperienceYears ?? 0,
-            confirmedOffer.LicenseClass,
+            confirmedLicenseClass,
             confirmedOffer.ExpiresAt,
             confirmedOffer.OfferStatus,
             driverLatitude,

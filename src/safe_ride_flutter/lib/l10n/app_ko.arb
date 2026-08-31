@@ -254,7 +254,6 @@
   ,"accidentOccurredAt":"발생 시각"
   ,"safetyReportTitle":"안전 사고 신고","unsafeCustomer":"위험한 고객","vehicleIssue":"차량 문제","safetyReasonCode":"사유","safetyReportDescription":"상황을 설명하세요","requestSosEscalation":"SOS 에스컬레이션 요청","requestSosEscalationHint":"현재 위치를 보내고 지속 SOS 알림을 생성합니다","safetyReportSubmitted":"안전 사고 신고를 제출했습니다.","safetyReportFailed":"안전 사고 신고를 제출할 수 없습니다. 다시 시도하세요."
   ,"vehicleFaultType":"차량 결함 유형","otherVehicleFault":"기타 차량 결함","optionalEvidence":"증거 자료(선택)"
-  ,"vehicleInsurance":"보험","addInsurance":"보험 추가","insuranceLoadFailed":"보험 정보를 불러올 수 없습니다. 다시 시도해 주세요.","insuranceUpdateFailed":"보험을 업데이트할 수 없습니다.","deleteInsuranceQuestion":"보험 계약을 삭제할까요?","policyNumber":"증권 번호","optionalInsuranceEmpty":"보험은 선택 사항입니다. 이 차량에는 계약이 없습니다.","addInsurancePolicy":"보험 계약 추가","editInsurancePolicy":"보험 계약 수정","insuranceType":"보험 유형","mandatoryTplInsurance":"의무 제3자 책임보험","physicalDamageInsurance":"차량 손해","insuranceProvider":"보험사","effectiveDate":"시작일","expiryDate":"만료일","insuranceCoverageLimit":"보장 한도","insuranceDeductible":"자기부담금","optionalDocumentUrl":"문서 URL(선택)","optionalInsuranceHint":"보험은 선택 사항입니다. 생성 또는 수정하면 직원 확인을 위해 PENDING 상태로 돌아갑니다."
   ,"endTripReasonTitle":"운행 종료 사유","endTripReasonDescription":"정확한 사유를 선택하세요. 안전 종료는 별도의 Risk Protection 절차를 사용해야 합니다.","normalCompletionReason":"목적지 도착","normalCompletionReasonDescription":"예약된 운임을 적용합니다.","customerRequestedStopReason":"고객의 조기 종료 요청","customerRequestedStopReasonDescription":"예약 경로 진행률과 최소 서비스 운임을 사용합니다.","driverUnableToContinueReason":"기사가 계속 운행할 수 없음","startedByMistakeReason":"실수로 운행 시작"
   ,"riskStatusReported":"접수됨","riskStatusEvidenceCollection":"증거 수집 중","riskStatusUnderReview":"검토 중","riskStatusLiabilityPending":"책임 판정 대기","riskStatusSettlement":"보호 처리 중","riskStatusClosed":"종료됨","riskStatusRejected":"거절됨"
   ,"riskCategoryDriverInjury":"기사 부상","riskCategoryCustomerVehicleDamage":"고객 차량 손해","riskCategoryThirdPartyDamage":"제3자 손해","riskCategoryMultiple":"복수 손해"
@@ -264,7 +263,7 @@
   ,"riskLiabilityPartiallyPaid":"일부 납부됨","riskLiabilityPaid":"납부됨","riskLiabilityWaived":"면제됨"
   ,"riskRoleDriver":"기사","riskRoleCustomer":"고객","riskRoleThirdParty":"제3자","riskRoleVehicle":"차량","riskRoleObjective":"객관적 요인"
   ,"riskReasonDistracting":"주의 산만 유발","riskReasonViolent":"폭력적 행동","riskReasonInterferingVehicle":"차량 조작 방해","riskReasonUnsafeRequest":"안전하지 않은 요구","riskReasonOther":"기타 사유"
-  ,"riskInsurancePending":"직원 확인 대기","riskInsuranceVerified":"확인됨","riskInsuranceExpired":"만료됨","riskInsuranceOther":"기타 보험"
   ,"riskIncidentInformation":"사고 정보","riskResponsibilityResult":"책임 판정 결과","riskProtectionOutcome":"보호 처리 결과","riskEligibleDamage":"보호 대상 손해"
   ,"mandatoryTplExplanation":"의무 제3자 책임보험은 주로 제3자를 보호하며 고객 차량 손해를 자동으로 보장하지 않습니다.","physicalDamageExplanation":"차량 손해보험은 확인된 계약 조건에 따라 고객 차량 손해에 적용될 수 있습니다.","insurerNoGuarantee":"계약 저장이 보험사의 지급 승인을 보장하지는 않습니다.","documentUrlDeferredHint":"현재는 문서 링크만 저장합니다. 신뢰할 수 있는 링크를 사용하세요. 안전한 공용 저장소가 마련되면 직접 업로드를 추가합니다."
+  ,"motorbikeFeatureSuspendedTitle":"오토바이 서비스 일시 중단","motorbikeFeatureSuspendedMessage":"8월 20일부터 이 기능이 일시 중단되었습니다.","acknowledge":"확인"
 }

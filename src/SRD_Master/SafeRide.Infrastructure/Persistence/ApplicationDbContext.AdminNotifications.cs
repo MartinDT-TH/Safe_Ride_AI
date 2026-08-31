@@ -16,7 +16,6 @@ public partial class ApplicationDbContext
     public virtual DbSet<TripFinancialSettlement> TripFinancialSettlements { get; set; }
     public virtual DbSet<PreTripVehicleCheck> PreTripVehicleChecks { get; set; }
     public virtual DbSet<TripProtectionCoverage> TripProtectionCoverages { get; set; }
-    public virtual DbSet<VehicleInsurancePolicy> VehicleInsurancePolicies { get; set; }
     public virtual DbSet<AccidentReport> AccidentReports { get; set; }
     public virtual DbSet<AccidentEvidence> AccidentEvidence { get; set; }
     public virtual DbSet<AccidentLiabilityAssessment> AccidentLiabilityAssessments { get; set; }
@@ -24,6 +23,7 @@ public partial class ApplicationDbContext
     public virtual DbSet<LiabilityDisputeAudit> LiabilityDisputeAudits { get; set; }
     public virtual DbSet<LiabilityDisputeEvidence> LiabilityDisputeEvidence { get; set; }
     public virtual DbSet<ProtectionClaim> ProtectionClaims { get; set; }
+    public virtual DbSet<InsuranceClaimDocument> InsuranceClaimDocuments { get; set; }
     public virtual DbSet<DriverLiability> DriverLiabilities { get; set; }
     public virtual DbSet<ClaimRecovery> ClaimRecoveries { get; set; }
     public virtual DbSet<ClaimReconciliationRecord> ClaimReconciliationRecords { get; set; }

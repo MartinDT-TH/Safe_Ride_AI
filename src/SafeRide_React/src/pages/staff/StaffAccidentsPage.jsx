@@ -10,9 +10,10 @@ import {
   formatVnd,
   fundClaim,
   getAccident,
-  isEntireRiskFundRequestPermanent,
+  isRiskProtectionConcurrencyConflict,
   reconcilePartyCauses,
   recordClaimRecovery,
+  refreshMockInsuranceStatus,
   reviewMockInsurance,
   saveLiabilityAssessment,
   staffAccidentsPath,
@@ -20,9 +21,11 @@ import {
 } from '../../features/riskProtection/riskProtectionApi';
 import {
   confirmRiskAction,
+  initialCustomerInsurance,
   responsibilityTotal,
   riskProtectionLabel,
   SettlementRecommendation,
+  shouldShowSystemInsurance,
 } from '../../features/riskProtection/riskProtectionPresentation';
 import '../admin/risk-fund/AdminRiskFundPage.css';
 
@@ -54,10 +57,6 @@ const initialAssessment = {
 const initialSettlement = {
   totalDamageAmount: '',
   eligibleDamageAmount: '',
-  requestedInsuranceAmount: '0',
-  requestedRiskFundAmount: '0',
-  isPermanentRiskFundLoss: false,
-  insurancePaymentDestination: 'DIRECT_TO_CLAIMANT',
 };
 const initialRecovery = { sourceType: 'DRIVER', payerReference: '', amount: '', paymentReference: '', evidence: null };
 const initialWriteOff = { amount: '', reason: '', evidence: null };
@@ -80,7 +79,8 @@ function StaffAccidentsPage() {
   const [settlement, setSettlement] = useState(initialSettlement);
   const [recovery, setRecovery] = useState(initialRecovery);
   const [writeOff, setWriteOff] = useState(initialWriteOff);
-  const [insurance, setInsurance] = useState({ approvedAmount: '', reference: '', reason: '', insurancePaymentDestination: 'DIRECT_TO_CLAIMANT' });
+  const [insurance, setInsurance] = useState({ mode: 'recommended', approvedAmount: '', reason: '' });
+  const [customerInsurance, setCustomerInsurance] = useState(initialCustomerInsurance);
   const [fundingKey, setFundingKey] = useState(() => createIdempotencyKey('fund'));
   const [recoveryKey, setRecoveryKey] = useState(() => createIdempotencyKey('recovery'));
   const [writeOffKey, setWriteOffKey] = useState(() => createIdempotencyKey('write-off'));
@@ -88,9 +88,12 @@ function StaffAccidentsPage() {
   const [detailError, setDetailError] = useState('');
   const [feedback, setFeedback] = useState('');
   const [error, setError] = useState('');
+  const [recoveryError, setRecoveryError] = useState('');
+  const [recoverySuccess, setRecoverySuccess] = useState('');
   const [busy, setBusy] = useState(false);
   const claimId = claim?.id ?? accident?.claim?.id ?? accident?.claimId;
   const currentClaim = claim ?? accident?.claim;
+  const showSystemInsurance = shouldShowSystemInsurance(currentClaim);
   const fundingAllowed = ['APPROVED', 'PENDING_FUNDING'].includes(currentClaim?.status);
   const audits = useFetch(claimId ? `/staff/claims/${claimId}/mock-insurance/audits` : null);
   const accidents = Array.isArray(queue.data) ? queue.data : [];
@@ -117,11 +120,12 @@ function StaffAccidentsPage() {
     setSettlement(currentClaim ? {
       totalDamageAmount: String(currentClaim.totalDamageAmount ?? ''),
       eligibleDamageAmount: String(currentClaim.eligibleDamageAmount ?? ''),
-      requestedInsuranceAmount: String(currentClaim.insuranceRequestedAmount ?? 0),
-      requestedRiskFundAmount: String(Number(currentClaim.riskFundAdvanceAmount ?? 0) + Number(currentClaim.riskFundPermanentLossAmount ?? 0)),
-      isPermanentRiskFundLoss: isEntireRiskFundRequestPermanent(currentClaim),
-      insurancePaymentDestination: currentClaim.insurancePaymentDestination ?? 'DIRECT_TO_CLAIMANT',
     } : initialSettlement);
+    setCustomerInsurance(currentClaim ? {
+      appliedAmount: String(currentClaim.customerInsuranceAppliedAmount ?? 0),
+      reference: currentClaim.customerInsuranceReference ?? '',
+      note: currentClaim.customerInsuranceNote ?? '',
+    } : initialCustomerInsurance);
   };
 
   const openAccident = async (accidentId) => {
@@ -150,7 +154,7 @@ function StaffAccidentsPage() {
     }
   };
 
-  const run = async (action, message, { refreshAccident = true } = {}) => {
+  const run = async (action, message, { refreshAccident = true, onError, onSuccess } = {}) => {
     if (busy) return null;
     setBusy(true);
     setError('');
@@ -159,17 +163,19 @@ function StaffAccidentsPage() {
       const result = await action();
       if (result?.id) setClaim(result);
       setFeedback(message);
+      onSuccess?.(result);
       queue.refetch();
       if (refreshAccident) await refreshDetail();
       if (claimId) audits.refetch();
       return result;
     } catch (caught) {
-      if (caught.status === 409) {
+      if (isRiskProtectionConcurrencyConflict(caught)) {
         await refreshDetail();
         setError('Dữ liệu đã được người khác cập nhật. Hồ sơ mới nhất đã được tải lại để tránh ghi đè.');
       } else {
         setError(caught.message);
       }
+      onError?.(caught);
       return null;
     } finally {
       setBusy(false);
@@ -191,11 +197,15 @@ function StaffAccidentsPage() {
     const payload = {
       ...Object.fromEntries(Object.entries(settlement).map(([key, value]) => [
         key,
-        key === 'isPermanentRiskFundLoss' || key === 'insurancePaymentDestination' ? value : Number(value),
+        Number(value),
       ])),
       rowVersion: claim?.rowVersion ?? accident?.claim?.rowVersion,
+      submitToInsurance: true,
+      customerInsuranceAppliedAmount: Number(customerInsurance.appliedAmount || 0),
+      customerInsuranceReference: customerInsurance.reference.trim() || null,
+      customerInsuranceNote: customerInsurance.note.trim() || null,
     };
-    await run(() => calculateClaim(claimId, payload), 'Máy chủ đã tính lại đề xuất từ policy và coverage snapshot.');
+    await run(() => calculateClaim(claimId, payload), 'Máy chủ đã áp dụng bảo hiểm riêng của khách trước, rồi tính quyền lợi bảo hiểm hệ thống SafeRide.');
   };
 
   const submitFunding = async () => {
@@ -209,31 +219,68 @@ function StaffAccidentsPage() {
 
   const submitRecovery = async (event) => {
     event.preventDefault();
+    setRecoveryError('');
+    setRecoverySuccess('');
+    if (!recovery.evidence) {
+      setRecoveryError('Vui lòng chọn chứng từ khoản thu hồi.');
+      return;
+    }
+    if (recovery.evidence.size > 10 * 1024 * 1024) {
+      setRecoveryError('Chứng từ không được vượt quá 10 MB.');
+      return;
+    }
     if (!confirmRiskAction('Ghi nhận khoản tiền đã thực nhận và hoàn vào Quỹ rủi ro? Hãy kiểm tra số tiền, nguồn và bằng chứng.')) return;
+    const submittedAmount = Number(recovery.amount);
+    const submittedSource = recovery.sourceType;
     const result = await run(() => recordClaimRecovery(claimId, {
       ...recovery,
-      amount: Number(recovery.amount),
+      amount: submittedAmount,
       rowVersion: claim?.rowVersion ?? accident?.claim?.rowVersion,
       idempotencyKey: recoveryKey,
-    }), 'Đã ghi nhận khoản thu hồi có bằng chứng.');
+    }), '', {
+      onError: (caught) => setRecoveryError(
+        isRiskProtectionConcurrencyConflict(caught)
+          ? 'Dữ liệu đã được người khác cập nhật. Hồ sơ mới nhất đã được tải lại để tránh ghi đè.'
+          : caught.message),
+      onSuccess: () => setRecoverySuccess(
+        `Đã ghi nhận ${formatVnd(submittedAmount)} từ ${riskProtectionLabel(submittedSource)} và hoàn lại Quỹ rủi ro.`),
+    });
     if (result) {
       setRecovery(initialRecovery);
       setRecoveryKey(createIdempotencyKey('recovery'));
     }
   };
 
-  const submitInsurance = async (event, approve) => {
+  const submitInsurance = async (event, approve, mode = approve ? 'recommended' : 'reject') => {
     event.preventDefault();
+    const current = claim ?? accident?.claim;
+    const maximum = Number(current?.maximumApprovableInsuranceAmount ?? current?.insuranceEligibleAmount ?? 0);
+    const recommended = Number(current?.recommendedInsuranceApprovalAmount ?? maximum);
+    const approvedAmount = mode === 'recommended' ? recommended : mode === 'lower' ? Number(insurance.approvedAmount) : 0;
+    if (mode === 'lower' && (!Number.isFinite(approvedAmount) || approvedAmount <= 0 || approvedAmount >= maximum)) {
+      setError('Mức duyệt thấp hơn phải lớn hơn 0 và nhỏ hơn mức tối đa được phép.');
+      return;
+    }
+    if ((mode === 'lower' || mode === 'reject') && insurance.reason.trim().length < 10) {
+      setError('Vui lòng nhập lý do có ý nghĩa (ít nhất 10 ký tự).');
+      return;
+    }
     if (!confirmRiskAction(approve
-      ? 'Xác nhận kết quả bảo hiểm mô phỏng và số tiền được duyệt?'
-      : 'Từ chối kết quả bảo hiểm mô phỏng này?')) return;
+      ? 'Xác nhận kết quả Bảo hiểm hệ thống SafeRide và số tiền được duyệt?'
+      : 'Từ chối kết quả Bảo hiểm hệ thống SafeRide này?')) return;
     await run(() => reviewMockInsurance(claimId, approve, {
-      approvedAmount: approve ? Number(insurance.approvedAmount) : 0,
-      reference: insurance.reference,
+      approvedAmount,
+      reference: undefined,
       reason: insurance.reason,
       rowVersion: claim?.rowVersion ?? accident?.claim?.rowVersion,
-      insurancePaymentDestination: insurance.insurancePaymentDestination,
-    }), approve ? 'Đã phê duyệt kết quả bảo hiểm mô phỏng.' : 'Đã từ chối kết quả bảo hiểm mô phỏng.');
+    }), approve ? 'Đã phê duyệt Bảo hiểm hệ thống SafeRide.' : 'Đã từ chối Bảo hiểm hệ thống SafeRide.');
+  };
+
+  const refreshInsuranceStatus = async () => {
+    await run(
+      () => refreshMockInsuranceStatus(claimId, claim?.rowVersion ?? accident?.claim?.rowVersion),
+      'Đã cập nhật trạng thái từ MockInsuranceProvider của hệ thống SafeRide.',
+    );
   };
 
   const submitWriteOff = async (event) => {
@@ -354,19 +401,30 @@ function StaffAccidentsPage() {
 
           {accident && <section className="risk-grid risk-grid--settlement">
             <form className="risk-card risk-form" onSubmit={submitSettlement}>
-              <WorkflowHeading step="4" title="Đề xuất xử lý quyền lợi" description="Nhập dữ liệu thiệt hại để máy chủ tính theo policy và coverage snapshot." compact />
-              <div className="risk-form__columns">{Object.keys(settlement).filter((key) => key !== 'isPermanentRiskFundLoss' && key !== 'insurancePaymentDestination').map((key) => <Field key={key} label={claimFieldLabel(key)}><input required type="number" min="0" value={settlement[key]} onChange={(event) => setSettlement({ ...settlement, [key]: event.target.value })} /></Field>)}</div>
-              <details className="risk-advanced">
-                <summary>Tùy chọn hạch toán nâng cao</summary>
-                <p className="risk-form__hint">Chỉ thay đổi khi hồ sơ thực tế yêu cầu. Máy chủ vẫn kiểm tra toàn bộ giới hạn.</p>
-                <Field label="Nơi nhận khoản bảo hiểm"><select value={settlement.insurancePaymentDestination} onChange={(event) => setSettlement({ ...settlement, insurancePaymentDestination: event.target.value })}><option value="DIRECT_TO_CLAIMANT">{riskProtectionLabel('DIRECT_TO_CLAIMANT')}</option><option value="REIMBURSE_RISK_FUND">{riskProtectionLabel('REIMBURSE_RISK_FUND')}</option></select></Field>
-                <label className="risk-check"><input type="checkbox" checked={settlement.isPermanentRiskFundLoss} onChange={(event) => setSettlement({ ...settlement, isPermanentRiskFundLoss: event.target.checked })} /> Toàn bộ khoản Quỹ rủi ro là hỗ trợ cuối cùng, không phải khoản ứng có thể thu hồi</label>
-              </details>
+              <WorkflowHeading step="4" title="Nhập thiệt hại" description="Nhập các số liệu thiệt hại thực tế; máy chủ sẽ tự tính toàn bộ phân bổ bảo hiểm và Quỹ rủi ro." compact />
+              <div className="risk-form__columns">{Object.keys(settlement).map((key) => <Field key={key} label={claimFieldLabel(key)}><input required type="number" min="0" value={settlement[key]} onChange={(event) => setSettlement({ ...settlement, [key]: event.target.value })} /></Field>)}</div>
+              <CustomerInsuranceInput
+                claim={currentClaim}
+                eligibleDamageAmount={settlement.eligibleDamageAmount}
+                value={customerInsurance}
+                onChange={setCustomerInsurance}
+              />
+              <p className="risk-form__hint">Bảo hiểm có thể chi trả, khoản đã duyệt, thiệt hại còn lại và phân bổ Quỹ rủi ro đều do máy chủ trả về.</p>
               {!assessmentConfirmed && <div className="risk-alert risk-alert--info">Cần xác nhận trách nhiệm ở bước 3 trước khi máy chủ có thể tính đề xuất.</div>}
               <button disabled={busy || !claimId || !assessmentConfirmed} type="submit">Yêu cầu máy chủ tính đề xuất</button>
             </form>
             <div className="risk-card"><SettlementRecommendation claim={claim ?? accident.claim} /></div>
           </section>}
+
+          {showSystemInsurance && <SystemInsuranceCard
+            claim={currentClaim}
+            busy={busy}
+            insurance={insurance}
+            setInsurance={setInsurance}
+            onReview={submitInsurance}
+            onRefresh={refreshInsuranceStatus}
+            audits={audits.data ?? []}
+          />}
 
           {claimId && <section className="risk-card risk-form">
             <WorkflowHeading step="5" title="Rà soát & thực hiện" description="Kiểm tra đề xuất máy chủ trước khi cấp kinh phí. Thao tác ghi giảm quỹ luôn yêu cầu xác nhận." compact />
@@ -379,10 +437,25 @@ function StaffAccidentsPage() {
             <div className="risk-review-grid">
               <ReviewItem label="Trạng thái hồ sơ" value={riskProtectionLabel((claim ?? accident.claim)?.status)} />
               <ReviewItem label="Thiệt hại đủ điều kiện" value={formatVnd((claim ?? accident.claim)?.eligibleDamageAmount)} />
-              <ReviewItem label="Bảo hiểm đã duyệt" value={formatVnd((claim ?? accident.claim)?.insuranceApprovedAmount)} />
+              <ReviewItem label="Bảo hiểm riêng của khách" value={formatVnd((claim ?? accident.claim)?.customerInsuranceAppliedAmount)} />
+              <ReviewItem label="Bảo hiểm riêng áp dụng cho khách" value={formatVnd((claim ?? accident.claim)?.customerInsuranceBenefitToCustomer)} />
+              <ReviewItem label="Phần bảo hiểm riêng vượt phần khách" value={formatVnd((claim ?? accident.claim)?.customerInsuranceExcessAppliedToOtherLoss)} />
+              <ReviewItem label="Bảo hiểm riêng giảm phần tài xế" value={formatVnd((claim ?? accident.claim)?.customerInsuranceBenefitToDriver)} />
+              <ReviewItem label="Phần giảm không phân bổ lại lỗi" value={formatVnd((claim ?? accident.claim)?.customerInsuranceUnallocatedCategoryReduction)} />
+              <ReviewItem label="Phần khách sau bảo hiểm riêng" value={formatVnd((claim ?? accident.claim)?.customerExposureAfterOwnInsurance)} />
+              <ReviewItem label="Phần tài xế sau bảo hiểm riêng" value={formatVnd((claim ?? accident.claim)?.driverExposureBeforeSystemInsurance)} />
+              <ReviewItem label="Bảo hiểm hệ thống tối đa" value={formatVnd((claim ?? accident.claim)?.systemInsuranceMaximumAmount)} />
+              <ReviewItem label="Bảo hiểm hệ thống đã duyệt" value={formatVnd((claim ?? accident.claim)?.systemInsuranceApprovedAmount)} />
+              <ReviewItem label="Quyền lợi hệ thống cho khách" value={formatVnd((claim ?? accident.claim)?.customerSystemInsuranceBenefit)} />
+              <ReviewItem label="Quyền lợi hệ thống cho tài xế" value={formatVnd((claim ?? accident.claim)?.driverSystemInsuranceBenefit)} />
+              <ReviewItem label="Thiệt hại còn lại sau bảo hiểm" value={formatVnd((claim ?? accident.claim)?.residualUninsuredDamage)} />
+              <ReviewItem label="Phần tài xế còn lại" value={formatVnd((claim ?? accident.claim)?.driverAttributableResidualDamage)} />
               <ReviewItem label="Trách nhiệm tài xế" value={formatVnd((claim ?? accident.claim)?.driverLiabilityAmount)} />
+              <ReviewItem label="Phần khách hàng còn lại" value={formatVnd((claim ?? accident.claim)?.customerAttributableResidualDamage)} />
               <ReviewItem label="Trách nhiệm khách hàng" value={formatVnd((claim ?? accident.claim)?.customerLiabilityAmount)} />
+              <ReviewItem label="Phần bên thứ ba còn lại" value={formatVnd((claim ?? accident.claim)?.thirdPartyAttributableResidualDamage)} />
               <ReviewItem label="Khoản dự kiến thu hồi từ bên thứ ba" value={formatVnd((claim ?? accident.claim)?.thirdPartyLiabilityAmount)} />
+              <ReviewItem label="Phần phương tiện/khách quan" value={formatVnd((claim ?? accident.claim)?.vehicleObjectiveResidualAmount)} />
               <ReviewItem label="Khoản ứng từ Quỹ rủi ro" value={formatVnd((claim ?? accident.claim)?.riskFundAdvanceAmount)} />
               <ReviewItem label="Hỗ trợ cuối cùng từ Quỹ rủi ro" value={formatVnd((claim ?? accident.claim)?.riskFundPermanentLossAmount)} />
               <ReviewItem label="Đã thu hồi" value={formatVnd((claim ?? accident.claim)?.recoveredAmount)} />
@@ -398,18 +471,11 @@ function StaffAccidentsPage() {
             <summary>Thao tác kế toán nâng cao & kiểm toán</summary>
             <p>Các thao tác dưới đây dùng cho hồ sơ ngoại lệ. Mọi thay đổi vẫn được máy chủ kiểm tra, ghi audit và bảo vệ bằng concurrency token nội bộ.</p>
             <section className="risk-grid">
-              <form className="risk-form" onSubmit={(event) => submitInsurance(event, true)}>
-                <h3>Bảo hiểm mô phỏng · {riskProtectionLabel((claim ?? accident.claim)?.insuranceStatus)}</h3>
-                <Field label="Số tiền duyệt"><input required type="number" min="0" value={insurance.approvedAmount} onChange={(event) => setInsurance({ ...insurance, approvedAmount: event.target.value })} /></Field>
-                <Field label="Mã tham chiếu"><input required value={insurance.reference} onChange={(event) => setInsurance({ ...insurance, reference: event.target.value })} /></Field>
-                <Field label="Lý do"><textarea required value={insurance.reason} onChange={(event) => setInsurance({ ...insurance, reason: event.target.value })} /></Field>
-                <Field label="Nơi nhận khoản bảo hiểm"><select value={insurance.insurancePaymentDestination} onChange={(event) => setInsurance({ ...insurance, insurancePaymentDestination: event.target.value })}><option value="DIRECT_TO_CLAIMANT">{riskProtectionLabel('DIRECT_TO_CLAIMANT')}</option><option value="REIMBURSE_RISK_FUND">{riskProtectionLabel('REIMBURSE_RISK_FUND')}</option></select></Field>
-                <div className="risk-actions"><button disabled={busy} type="submit">Phê duyệt</button><button className="risk-secondary" disabled={busy} type="button" onClick={(event) => submitInsurance(event, false)}>Từ chối</button></div>
-                <details><summary>Lịch sử trao đổi với bảo hiểm mô phỏng</summary>{(audits.data ?? []).map((item) => <p key={item.id} className="risk-form__hint">{formatDate(item.createdAtUtc)} · {riskProtectionLabel(item.operation)} · {riskProtectionLabel(item.resultStatus)} · {formatVnd(item.approvedAmount)} · {item.providerReference}</p>)}</details>
-              </form>
               <form className="risk-form" onSubmit={submitRecovery}>
                 <h3>Ghi nhận khoản thu hồi</h3>
                 <p className="risk-form__hint">Chỉ ghi nhận tiền đã thực nhận. Không tự động trừ ví tài xế.</p>
+                {recoveryError && <div className="risk-alert risk-alert--error" role="alert">{recoveryError}</div>}
+                {recoverySuccess && <div className="risk-alert risk-alert--success" role="status">{recoverySuccess}</div>}
                 <Field label="Nguồn thu hồi"><select value={recovery.sourceType} onChange={(event) => setRecovery({ ...recovery, sourceType: event.target.value })}>{recoverySources.map((value) => <option key={value} value={value}>{riskProtectionLabel(value)}</option>)}</select></Field>
                 <Field label="Bên thanh toán"><input required value={recovery.payerReference} onChange={(event) => setRecovery({ ...recovery, payerReference: event.target.value })} /></Field>
                 <Field label="Số tiền thực nhận"><input required type="number" min="1" value={recovery.amount} onChange={(event) => setRecovery({ ...recovery, amount: event.target.value })} /></Field>
@@ -436,6 +502,115 @@ function StaffAccidentsPage() {
       </div>
     </AdminLayout>
   );
+}
+
+const systemInsuranceReasonLabels = {
+  POLICY_LIMIT_ZERO: 'Hạn mức Bảo hiểm Hệ thống trong policy snapshot của chuyến đi bằng 0.',
+  NO_REMAINING_COVERED_EXPOSURE: 'Không còn phần thiệt hại thuộc phạm vi Customer/Driver để Bảo hiểm Hệ thống xem xét.',
+  CLAIM_RESOLVED: 'Hồ sơ đã được xử lý xong nên không còn khoản Bảo hiểm Hệ thống có thể duyệt.',
+  NO_APPROVABLE_SYSTEM_INSURANCE: 'Máy chủ không xác định được khoản Bảo hiểm Hệ thống có thể duyệt cho hồ sơ này.',
+};
+
+export function CustomerInsuranceInput({ claim, eligibleDamageAmount, value, onChange }) {
+  const enteredEligibleDamage = eligibleDamageAmount === '' || eligibleDamageAmount == null
+    ? null
+    : Number(eligibleDamageAmount);
+  const eligibleDamageCap = Number.isFinite(enteredEligibleDamage)
+    ? enteredEligibleDamage
+    : claim?.eligibleDamageAmount;
+  return <fieldset className="risk-form" aria-label="Bảo hiểm riêng của khách hàng">
+    <legend>BẢO HIỂM RIÊNG CỦA KHÁCH HÀNG — KHÔNG BẮT BUỘC</legend>
+    <p className="risk-form__hint">Đây là khoản bảo hiểm bên ngoài SafeRide đã xác nhận chi trả. Nếu khách không có hoặc không sử dụng bảo hiểm riêng, để 0.</p>
+    <div className="risk-form__columns">
+      <Field label="Khoản bảo hiểm riêng đã xác nhận chi trả">
+        <input
+          required
+          aria-label="Khoản bảo hiểm riêng đã xác nhận chi trả"
+          type="number"
+          min="0"
+          max={eligibleDamageCap ?? undefined}
+          value={value.appliedAmount}
+          onChange={(event) => onChange({ ...value, appliedAmount: event.target.value })}
+        />
+      </Field>
+      <ReviewItem
+        label="Phần trách nhiệm ban đầu của khách (máy chủ)"
+        value={claim?.customerGrossExposure != null ? formatVnd(claim.customerGrossExposure) : 'Sẽ được máy chủ xác định'}
+      />
+      <ReviewItem
+        label="Tối đa có thể áp dụng"
+        value={eligibleDamageCap != null ? formatVnd(eligibleDamageCap) : 'Bằng thiệt hại đủ điều kiện do máy chủ xác định'}
+      />
+    </div>
+    <details>
+      <summary>Tham chiếu và ghi chú không bắt buộc</summary>
+      <div className="risk-form__columns">
+        <Field label="Mã tham chiếu"><input maxLength="200" value={value.reference} onChange={(event) => onChange({ ...value, reference: event.target.value })} /></Field>
+        <Field label="Ghi chú"><textarea maxLength="1000" value={value.note} onChange={(event) => onChange({ ...value, note: event.target.value })} /></Field>
+      </div>
+    </details>
+  </fieldset>;
+}
+
+export function SystemInsuranceCard({
+  claim,
+  busy = false,
+  insurance,
+  setInsurance,
+  onReview,
+  onRefresh,
+  audits = [],
+}) {
+  const maximum = Number(claim?.maximumApprovableInsuranceAmount ?? claim?.systemInsuranceMaximumAmount ?? 0);
+  const recommended = Number(claim?.recommendedInsuranceApprovalAmount ?? maximum);
+  const isPendingReview = claim?.insuranceStatus === 'PENDING' && maximum > 0;
+  const zeroReason = systemInsuranceReasonLabels[claim?.systemInsuranceEvaluationReason]
+    ?? systemInsuranceReasonLabels.NO_APPROVABLE_SYSTEM_INSURANCE;
+
+  return <section className="risk-card risk-form risk-insurance-review" aria-label="Bảo hiểm hệ thống SafeRide">
+    <div className="risk-section-title">
+      <h3>BẢO HIỂM HỆ THỐNG SAFERIDE</h3>
+      <p>Bảo hiểm mặc định của chuyến đi · Nhà cung cấp mô phỏng</p>
+    </div>
+    <div className="risk-review-grid">
+      <ReviewItem label="Nhà cung cấp" value={claim?.systemInsuranceProvider ?? 'MockInsuranceProvider'} />
+      <ReviewItem label="Trạng thái" value={riskProtectionLabel(claim?.insuranceStatus)} />
+      <ReviewItem label="Thiệt hại đủ điều kiện" value={formatVnd(claim?.eligibleDamageAmount)} />
+      <ReviewItem label="Bảo hiểm riêng khách hàng" value={formatVnd(claim?.customerInsuranceAppliedAmount)} />
+      <ReviewItem label="Còn lại sau bảo hiểm riêng" value={formatVnd(claim?.remainingLossAfterCustomerInsurance)} />
+      <ReviewItem label="Phần Customer/Driver còn lại" value={formatVnd(claim?.systemInsuranceCoveredExposureRemaining)} />
+      <ReviewItem label="Giới hạn bảo hiểm hệ thống" value={formatVnd(claim?.systemInsuranceCoverageLimitSnapshot)} />
+      <ReviewItem label="Mức tối đa có thể duyệt" value={formatVnd(maximum)} />
+      <ReviewItem label="Mức đề xuất" value={formatVnd(recommended)} />
+      <ReviewItem label="Mức đã duyệt" value={formatVnd(claim?.systemInsuranceApprovedAmount)} />
+      <ReviewItem label="Tham chiếu nhà cung cấp" value={claim?.insuranceReference ?? '—'} />
+    </div>
+    {maximum <= 0 && <div className="risk-alert risk-alert--info">
+      <strong>Bảo hiểm hệ thống hiện không có khoản có thể duyệt cho hồ sơ này.</strong>
+      <p>{zeroReason}</p>
+    </div>}
+    {claim?.insuranceStatus !== 'NOT_SUBMITTED' && claim?.insuranceReference && <button className="risk-secondary" disabled={busy} type="button" onClick={onRefresh}>Cập nhật trạng thái từ nhà cung cấp</button>}
+    {isPendingReview && <>
+      {insurance.mode === 'lower' && <Field label="Số tiền duyệt thấp hơn"><input required type="number" min="1" max={maximum} value={insurance.approvedAmount} onChange={(event) => setInsurance({ ...insurance, approvedAmount: event.target.value })} /></Field>}
+      {(insurance.mode === 'lower' || insurance.mode === 'reject') && <Field label="Lý do (bắt buộc)"><textarea required value={insurance.reason} onChange={(event) => setInsurance({ ...insurance, reason: event.target.value })} /></Field>}
+      <div className="risk-actions">
+        <button disabled={busy} type="button" onClick={(event) => onReview(event, true, 'recommended')}>Phê duyệt mức đề xuất</button>
+        {insurance.mode === 'recommended' && <>
+          <button className="risk-secondary" disabled={busy} type="button" onClick={() => setInsurance({ ...insurance, mode: 'lower' })}>Phê duyệt mức thấp hơn</button>
+          <button className="risk-secondary" disabled={busy} type="button" onClick={() => setInsurance({ ...insurance, mode: 'reject' })}>Từ chối</button>
+        </>}
+        {insurance.mode === 'lower' && <>
+          <button disabled={busy} type="button" onClick={(event) => onReview(event, true, 'lower')}>Xác nhận mức thấp hơn</button>
+          <button className="risk-secondary" disabled={busy} type="button" onClick={() => setInsurance({ ...insurance, mode: 'recommended' })}>Hủy</button>
+        </>}
+        {insurance.mode === 'reject' && <>
+          <button className="risk-secondary" disabled={busy} type="button" onClick={(event) => onReview(event, false, 'reject')}>Xác nhận từ chối</button>
+          <button className="risk-secondary" disabled={busy} type="button" onClick={() => setInsurance({ ...insurance, mode: 'recommended' })}>Hủy</button>
+        </>}
+      </div>
+    </>}
+    <details><summary>Lịch sử Bảo hiểm hệ thống SafeRide (mô phỏng)</summary>{audits.map((item) => <p key={item.id} className="risk-form__hint">{formatDate(item.createdAtUtc)} · {riskProtectionLabel(item.operation)} · {riskProtectionLabel(item.resultStatus)} · {formatVnd(item.approvedAmount)} · {item.providerReference}</p>)}</details>
+  </section>;
 }
 
 function WorkflowHeading({ step, title, description, compact = false }) {
@@ -475,8 +650,6 @@ function claimFieldLabel(key) {
   return ({
     totalDamageAmount: 'Tổng thiệt hại ghi nhận',
     eligibleDamageAmount: 'Thiệt hại đủ điều kiện',
-    requestedInsuranceAmount: 'Số tiền đề nghị bảo hiểm xem xét',
-    requestedRiskFundAmount: 'Số tiền đề nghị Quỹ rủi ro xử lý',
   })[key] ?? key;
 }
 

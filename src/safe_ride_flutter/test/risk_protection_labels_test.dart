@@ -33,7 +33,6 @@ void main() {
         driverLiabilityStatusLabel(l10n, 'PARTIALLY_PAID'),
         isNot('PARTIALLY_PAID'),
       );
-      expect(insuranceStatusLabel(l10n, 'PENDING'), isNot('PENDING'));
       expect(
         safetyReasonLabel(l10n, 'INTERFERING_WITH_VEHICLE'),
         isNot('INTERFERING_WITH_VEHICLE'),

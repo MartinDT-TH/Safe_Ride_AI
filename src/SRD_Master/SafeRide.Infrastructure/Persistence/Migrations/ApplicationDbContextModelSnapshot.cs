@@ -1312,23 +1312,19 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
                     b.Property<string>("Address")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("BackImageUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<DateOnly?>("DateOfBirth")
-                        .HasColumnType("date");
+                    b.Property<string>("DateOfBirth")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("DocumentNumber")
-                        .HasMaxLength(50)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(50)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("DocumentType")
                         .IsRequired()
@@ -1338,28 +1334,23 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("DriverId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<DateOnly?>("ExpiryDate")
-                        .HasColumnType("date");
+                    b.Property<string>("ExpiryDate")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("FileUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("FrontImageUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("FullName")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Gender")
-                        .HasMaxLength(10)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(10)");
+                        .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateOnly?>("IssueDate")
-                        .HasColumnType("date");
+                    b.Property<string>("IssueDate")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("KycStatus")
                         .IsRequired()
@@ -1369,8 +1360,7 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
                         .HasDefaultValueSql("('Pending')");
 
                     b.Property<string>("LicenseClass")
-                        .HasMaxLength(10)
-                        .HasColumnType("nvarchar(10)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("RejectionReason")
                         .HasColumnType("nvarchar(max)");
@@ -1392,8 +1382,6 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_DriverKyc_DrivingLicense", "[DocumentType] <> 'DRIVING_LICENSE' OR ([DocumentNumber] IS NOT NULL AND [LicenseClass] IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_DriverKyc_KycStatus", "[KycStatus] IN ('Pending', 'Approved', 'Rejected')");
-
-                            t.HasCheckConstraint("CK_DriverKyc_LicenseClass", "[LicenseClass] IS NULL OR [LicenseClass] IN ('Old_A1', 'Old_A2', 'Old_B1', 'Old_B2', 'A1', 'A', 'B')");
                         });
                 });
 
@@ -1606,6 +1594,110 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
                     b.ToTable("DriverWallets", t =>
                         {
                             t.HasCheckConstraint("CK_DriverWallets_CurrentBalance", "[CurrentBalance] >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.DriverWalletTopUp", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<long>("OrderCode")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("PaidAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PaymentLinkId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ProviderReference")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<long>("WalletId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderCode")
+                        .IsUnique();
+
+                    b.HasIndex("WalletId");
+
+                    b.ToTable("DriverWalletTopUps");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.InsuranceClaimDocument", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("DocumentType")
+                        .IsRequired()
+                        .HasMaxLength(35)
+                        .HasColumnType("nvarchar(35)");
+
+                    b.Property<long>("FileSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<long>("ProtectionClaimId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Sha256Hash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("StorageObjectKey")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("UploadedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("UploadedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProtectionClaimId", "UploadedAtUtc");
+
+                    b.ToTable("InsuranceClaimDocuments", t =>
+                        {
+                            t.HasCheckConstraint("CK_InsuranceClaimDocuments_FileSize", "[FileSizeBytes] > 0 AND [FileSizeBytes] <= 10000000");
                         });
                 });
 
@@ -2134,6 +2226,20 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<decimal>("CustomerInsuranceAppliedAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("CustomerInsuranceConfirmedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CustomerInsuranceNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("CustomerInsuranceReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
                     b.Property<decimal>("CustomerLiabilityAmount")
                         .HasColumnType("decimal(18,2)");
 
@@ -2214,7 +2320,7 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
 
                     b.ToTable("ProtectionClaims", t =>
                         {
-                            t.HasCheckConstraint("CK_ProtectionClaims_Amounts", "[TotalDamageAmount] >= 0 AND [EligibleDamageAmount] >= 0 AND [EligibleDamageAmount] <= [TotalDamageAmount] AND [InsuranceRequestedAmount] >= 0 AND [InsuranceApprovedAmount] >= 0 AND [InsuranceApprovedAmount] <= [InsuranceRequestedAmount] AND [InsurancePaidDirectToClaimant] >= 0 AND [InsuranceReimbursedToRiskFund] >= 0 AND [InsurancePaidDirectToClaimant] + [InsuranceReimbursedToRiskFund] <= [InsuranceApprovedAmount] AND ([InsurancePaidDirectToClaimant] = 0 OR [InsuranceReimbursedToRiskFund] = 0) AND (([InsurancePaymentDestination] = 'DIRECT_TO_CLAIMANT' AND [InsuranceReimbursedToRiskFund] = 0) OR ([InsurancePaymentDestination] = 'REIMBURSE_RISK_FUND' AND [InsurancePaidDirectToClaimant] = 0)) AND [RiskFundAdvanceAmount] >= 0 AND [RiskFundPermanentLossAmount] >= 0 AND [DriverLiabilityAmount] >= 0 AND [CustomerLiabilityAmount] >= 0 AND [ThirdPartyLiabilityAmount] >= 0 AND [TotalPaidToClaimant] >= 0 AND [TotalPaidToClaimant] <= [EligibleDamageAmount] AND [RecoveredAmount] >= 0 AND [OutstandingRecoveryAmount] >= 0 AND [WrittenOffAdvanceAmount] >= 0 AND [RecoveredAmount] + [OutstandingRecoveryAmount] + [WrittenOffAdvanceAmount] <= [RiskFundAdvanceAmount]");
+                            t.HasCheckConstraint("CK_ProtectionClaims_Amounts", "[TotalDamageAmount] >= 0 AND [EligibleDamageAmount] >= 0 AND [EligibleDamageAmount] <= [TotalDamageAmount] AND [CustomerInsuranceAppliedAmount] >= 0 AND [InsuranceRequestedAmount] >= 0 AND [InsuranceApprovedAmount] >= 0 AND [InsuranceApprovedAmount] <= [InsuranceRequestedAmount] AND [InsurancePaidDirectToClaimant] >= 0 AND [InsuranceReimbursedToRiskFund] >= 0 AND [InsurancePaidDirectToClaimant] + [InsuranceReimbursedToRiskFund] <= [InsuranceApprovedAmount] AND ([InsurancePaidDirectToClaimant] = 0 OR [InsuranceReimbursedToRiskFund] = 0) AND (([InsurancePaymentDestination] = 'DIRECT_TO_CLAIMANT' AND [InsuranceReimbursedToRiskFund] = 0) OR ([InsurancePaymentDestination] = 'REIMBURSE_RISK_FUND' AND [InsurancePaidDirectToClaimant] = 0)) AND [RiskFundAdvanceAmount] >= 0 AND [RiskFundPermanentLossAmount] >= 0 AND [DriverLiabilityAmount] >= 0 AND [CustomerLiabilityAmount] >= 0 AND [ThirdPartyLiabilityAmount] >= 0 AND [TotalPaidToClaimant] >= 0 AND [TotalPaidToClaimant] <= [EligibleDamageAmount] AND [RecoveredAmount] >= 0 AND [OutstandingRecoveryAmount] >= 0 AND [WrittenOffAdvanceAmount] >= 0 AND [RecoveredAmount] + [OutstandingRecoveryAmount] + [WrittenOffAdvanceAmount] <= [RiskFundAdvanceAmount]");
                         });
                 });
 
@@ -3246,20 +3352,6 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("ActivatedAtUtc")
                         .HasColumnType("datetime2");
 
-                    b.Property<decimal?>("InsuranceCoverageSnapshot")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal?>("InsuranceDeductibleSnapshot")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<string>("InsuranceProviderSnapshot")
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
-
-                    b.Property<string>("PolicyNumberSnapshot")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
                     b.Property<long>("PolicyVersionId")
                         .HasColumnType("bigint");
 
@@ -3272,9 +3364,6 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
                     b.Property<long>("TripId")
                         .HasColumnType("bigint");
 
-                    b.Property<long?>("VehicleInsurancePolicyId")
-                        .HasColumnType("bigint");
-
                     b.HasKey("Id");
 
                     b.HasIndex("PolicyVersionId");
@@ -3283,8 +3372,6 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TripId")
                         .IsUnique();
-
-                    b.HasIndex("VehicleInsurancePolicyId");
 
                     b.ToTable("TripProtectionCoverages");
                 });
@@ -3549,79 +3636,6 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
                         });
                 });
 
-            modelBuilder.Entity("SafeRide.Domain.Entities.VehicleInsurancePolicy", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<decimal>("CoverageAmount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<decimal>("Deductible")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<string>("DocumentUrl")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
-                    b.Property<DateTime>("EffectiveFromUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime>("ExpiresAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("InsuranceType")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("PolicyNumber")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("Provider")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
-
-                    b.Property<DateTime?>("ReviewedAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid?>("ReviewedByUserId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime?>("UpdatedAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<long>("VehicleId")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("VerificationStatus")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("VehicleId");
-
-                    b.HasIndex("Provider", "PolicyNumber")
-                        .IsUnique()
-                        .HasFilter("[IsDeleted] = 0");
-
-                    b.ToTable("VehicleInsurancePolicies");
-                });
-
             modelBuilder.Entity("SafeRide.Domain.Entities.WalletTransaction", b =>
                 {
                     b.Property<long>("Id")
@@ -3671,7 +3685,7 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_WalletTransactions_Amount", "[Amount] > 0");
 
-                            t.HasCheckConstraint("CK_WalletTransactions_TransactionType", "[TransactionType] IN ('Income', 'Withdrawal', 'Penalty', 'Bonus')");
+                            t.HasCheckConstraint("CK_WalletTransactions_TransactionType", "[TransactionType] IN ('Income', 'Withdrawal', 'Penalty', 'Bonus', 'TopUp')");
                         });
                 });
 
@@ -4152,6 +4166,27 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
                     b.Navigation("Driver");
                 });
 
+            modelBuilder.Entity("SafeRide.Domain.Entities.DriverWalletTopUp", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.DriverWallet", "Wallet")
+                        .WithMany("TopUps")
+                        .HasForeignKey("WalletId")
+                        .IsRequired();
+
+                    b.Navigation("Wallet");
+                });
+
+            modelBuilder.Entity("SafeRide.Domain.Entities.InsuranceClaimDocument", b =>
+                {
+                    b.HasOne("SafeRide.Domain.Entities.ProtectionClaim", "ProtectionClaim")
+                        .WithMany("InsuranceDocuments")
+                        .HasForeignKey("ProtectionClaimId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ProtectionClaim");
+                });
+
             modelBuilder.Entity("SafeRide.Domain.Entities.InsuranceClaimProviderAudit", b =>
                 {
                     b.HasOne("SafeRide.Domain.Entities.ProtectionClaim", "ProtectionClaim")
@@ -4516,18 +4551,11 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("SafeRide.Domain.Entities.VehicleInsurancePolicy", "VehicleInsurancePolicy")
-                        .WithMany()
-                        .HasForeignKey("VehicleInsurancePolicyId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.Navigation("PolicyVersion");
 
                     b.Navigation("PreTripVehicleCheck");
 
                     b.Navigation("Trip");
-
-                    b.Navigation("VehicleInsurancePolicy");
                 });
 
             modelBuilder.Entity("SafeRide.Domain.Entities.TripReturnConfirmation", b =>
@@ -4605,17 +4633,6 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
                         .HasConstraintName("FK_Vehicles_AspNetUsers");
 
                     b.Navigation("OwnerUser");
-                });
-
-            modelBuilder.Entity("SafeRide.Domain.Entities.VehicleInsurancePolicy", b =>
-                {
-                    b.HasOne("SafeRide.Domain.Entities.Vehicle", "Vehicle")
-                        .WithMany("VehicleInsurancePolicies")
-                        .HasForeignKey("VehicleId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Vehicle");
                 });
 
             modelBuilder.Entity("SafeRide.Domain.Entities.WalletTransaction", b =>
@@ -4719,6 +4736,8 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("SafeRide.Domain.Entities.DriverWallet", b =>
                 {
+                    b.Navigation("TopUps");
+
                     b.Navigation("WalletTransactions");
 
                     b.Navigation("WithdrawalRequests");
@@ -4742,6 +4761,8 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("SafeRide.Domain.Entities.ProtectionClaim", b =>
                 {
                     b.Navigation("DriverLiabilities");
+
+                    b.Navigation("InsuranceDocuments");
 
                     b.Navigation("InsuranceProviderAudits");
 
@@ -4803,8 +4824,6 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("SafeRide.Domain.Entities.Vehicle", b =>
                 {
                     b.Navigation("Bookings");
-
-                    b.Navigation("VehicleInsurancePolicies");
                 });
 #pragma warning restore 612, 618
         }

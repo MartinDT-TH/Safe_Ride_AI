@@ -1,6 +1,7 @@
 using Hangfire;
 using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -62,7 +63,38 @@ public static class DependencyInjection
         IConfiguration configuration,
         IHostEnvironment environment)
     {
+        var dataProtectionKeysPath = configuration["DataProtection:KeysPath"];
+        if (string.IsNullOrWhiteSpace(dataProtectionKeysPath))
+        {
+            dataProtectionKeysPath = Path.Combine(
+                environment.ContentRootPath,
+                "App_Data",
+                "DataProtection-Keys");
+        }
+
+        Directory.CreateDirectory(dataProtectionKeysPath);
+        services
+            .AddDataProtection()
+            .SetApplicationName("SafeRide")
+            .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
         var backgroundJobsEnabled = configuration.GetValue<bool>("BackgroundJobs:Enabled");
+
+        services
+            .AddOptions<EvidenceFileSafetyOptions>()
+            .Bind(configuration.GetSection(EvidenceFileSafetyOptions.SectionName));
+
+        services.AddHttpClient<PublicDemoFileSafetyScanner>((provider, client) =>
+        {
+            ConfigureFileSafetyClient(
+                client,
+                provider.GetRequiredService<IOptions<EvidenceFileSafetyOptions>>().Value);
+        });
+        services.AddHttpClient<RemoteHttpFileSafetyScanner>((provider, client) =>
+        {
+            ConfigureFileSafetyClient(
+                client,
+                provider.GetRequiredService<IOptions<EvidenceFileSafetyOptions>>().Value);
+        });
 
         services
             .AddOptions<AiChatOptions>()
@@ -135,6 +167,9 @@ public static class DependencyInjection
         services
             .AddOptions<CloudinaryOptions>()
             .Bind(configuration.GetSection(CloudinaryOptions.SectionName));
+        services
+            .AddOptions<PrivateInsuranceDocumentStorageOptions>()
+            .Bind(configuration.GetSection(PrivateInsuranceDocumentStorageOptions.SectionName));
         services
             .AddOptions<PayOsOptions>()
             .Bind(configuration.GetSection(PayOsOptions.SectionName));
@@ -320,17 +355,57 @@ public static class DependencyInjection
                 provider.GetRequiredService<InMemoryRedisService>(),
                 provider.GetRequiredService<ILogger<ResilientRedisService>>()));
         services.AddSingleton<ICloudinaryImageService, CloudinaryImageService>();
+        services.AddSingleton<IPiiProtectionService, PiiProtectionService>();
+        services.AddScoped<DriverKycBackfillService>();
         services.AddSingleton<IIdentityDocumentStorage, CloudinaryIdentityDocumentStorage>();
         services.AddSingleton<ITripReturnEvidenceStorage, CloudinaryTripReturnEvidenceStorage>();
         services.AddSingleton<IAccidentEvidenceStorage, CloudinaryAccidentEvidenceStorage>();
-        if (environment.IsDevelopment() || environment.IsEnvironment("Testing"))
+        services.AddSingleton<IPrivateInsuranceDocumentStorage, PrivateInsuranceDocumentStorage>();
+        services.AddScoped<IInsuranceDocumentService, InsuranceDocumentService>();
+        services.AddSingleton<NonProductionFileSafetyScanner>();
+        services.AddSingleton<UnconfiguredFileSafetyScanner>();
+        services.AddSingleton<IFileSafetyScanner>(provider =>
         {
-            services.AddSingleton<IFileSafetyScanner, NonProductionFileSafetyScanner>();
-        }
-        else
-        {
-            services.AddSingleton<IFileSafetyScanner, UnconfiguredFileSafetyScanner>();
-        }
+            if (environment.IsDevelopment())
+            {
+                return provider.GetRequiredService<NonProductionFileSafetyScanner>();
+            }
+
+            var options = provider
+                .GetRequiredService<IOptions<EvidenceFileSafetyOptions>>()
+                .Value;
+            var logger = provider
+                .GetRequiredService<ILoggerFactory>()
+                .CreateLogger("SafeRide.Infrastructure.FileSafety");
+
+            if (!options.Enabled)
+            {
+                return provider.GetRequiredService<UnconfiguredFileSafetyScanner>();
+            }
+
+            if (string.Equals(options.ScannerType, "PublicDemo", StringComparison.OrdinalIgnoreCase)
+                && options.AllowPublicDemo)
+            {
+                logger.LogWarning(
+                    "Evidence file scanning is using PublicDemo mode. PublicDemo must not be used with real accident evidence.");
+                return provider.GetRequiredService<PublicDemoFileSafetyScanner>();
+            }
+
+            if (string.Equals(options.ScannerType, "Demo", StringComparison.OrdinalIgnoreCase)
+                && options.AllowDemo)
+            {
+                logger.LogWarning(
+                    "Evidence file scanning is using Demo mode. NonProductionFileSafetyScanner does not provide production malware protection.");
+                return provider.GetRequiredService<NonProductionFileSafetyScanner>();
+            }
+
+            if (string.Equals(options.ScannerType, "RemoteHttp", StringComparison.OrdinalIgnoreCase))
+            {
+                return provider.GetRequiredService<RemoteHttpFileSafetyScanner>();
+            }
+
+            return provider.GetRequiredService<UnconfiguredFileSafetyScanner>();
+        });
         services.AddSingleton<IEvidenceFileValidator, EvidenceFileValidator>();
         services.AddSingleton<IPreTripVehicleCheckEvidenceStorage, CloudinaryPreTripVehicleCheckEvidenceStorage>();
         services.AddSingleton<ISafetyTerminationEvidenceStorage, CloudinarySafetyTerminationEvidenceStorage>();
@@ -367,13 +442,19 @@ public static class DependencyInjection
         services.AddScoped<IDriverQueryService, DriverQueryService>();
         services.AddScoped<IDriverMatchingPreferencesService, DriverMatchingPreferencesService>();
         services.AddScoped<IDriverWalletService, DriverWalletService>();
+        services.AddHttpClient<IDriverWalletTopUpService, DriverWalletTopUpService>((provider, client) =>
+        {
+            var options = provider.GetRequiredService<IOptions<PayOsOptions>>().Value;
+            client.BaseAddress = new Uri(string.IsNullOrWhiteSpace(options.BaseUrl) ? "https://api-merchant.payos.vn" : options.BaseUrl);
+            if (!string.IsNullOrWhiteSpace(options.ClientId)) client.DefaultRequestHeaders.Add("x-client-id", options.ClientId);
+            if (!string.IsNullOrWhiteSpace(options.ApiKey)) client.DefaultRequestHeaders.Add("x-api-key", options.ApiKey);
+        });
         services.AddScoped<IDriverRealtimeService, DriverRealtimeService>();
         services.AddScoped<TripFareFinalizationService>();
         services.AddSingleton<ITripCommissionCalculator, TripCommissionCalculator>();
         services.AddSingleton<IClaimSettlementCalculator, TripCommissionCalculator>();
         services.AddScoped<IRiskProtectionPolicyProvider, RiskProtectionPolicyProvider>();
         services.AddScoped<IPreTripVehicleCheckService, PreTripVehicleCheckService>();
-        services.AddScoped<IVehicleInsurancePolicyService, VehicleInsurancePolicyService>();
         services.AddScoped<ISafetyReportService, SafetyReportService>();
         services.AddScoped<RiskFundLedgerService>();
         services.AddScoped<IRiskFundLedgerService>(provider => provider.GetRequiredService<RiskFundLedgerService>());
@@ -618,6 +699,21 @@ public static class DependencyInjection
 
         services.AddAuthorization();
         return services;
+    }
+
+    private static void ConfigureFileSafetyClient(
+        HttpClient client,
+        EvidenceFileSafetyOptions options)
+    {
+        if (Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out var baseUri))
+        {
+            client.BaseAddress = baseUri;
+        }
+
+        if (options.TimeoutSeconds > 0)
+        {
+            client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+        }
     }
 
 }

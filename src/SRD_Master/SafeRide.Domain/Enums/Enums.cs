@@ -174,7 +174,8 @@ public enum WalletTransactionType
     Income,
     Withdrawal,
     Penalty,
-    Bonus
+    Bonus,
+    TopUp
 }
 
 public enum WalletSettlementEffect

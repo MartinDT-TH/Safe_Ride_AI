@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NetTopologySuite.Geometries;
+using SafeRide.Application.Common.Exceptions;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
 using SafeRide.Application.Common.Realtime;
@@ -18,6 +19,55 @@ public sealed class DriverRealtimeServiceTests
 {
     private static readonly DateTime UtcNow =
         new(2026, 6, 15, 8, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public async Task SetDriverOnline_WhenApprovedLicenseIsExpired_RejectsRequest()
+    {
+        await using var dbContext = CreateDbContext();
+        var redis = new InMemoryRedisService();
+        var realtime = new RealtimeNotificationServiceFake();
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        SeedDriver(dbContext, driverId);
+        dbContext.DriverKycs.Add(NewDriverLicense(
+            driverId,
+            DateOnly.FromDateTime(UtcNow.AddDays(-1))));
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext, redis, realtime);
+
+        var exception = await Assert.ThrowsAsync<DriverLicenseExpiredException>(
+            () => service.SetDriverOnlineAsync(
+                driverId,
+                10.762622,
+                106.660172,
+                CancellationToken.None));
+
+        Assert.Equal(DateOnly.FromDateTime(UtcNow.AddDays(-1)), exception.ExpiryDate);
+    }
+
+    [Fact]
+    public async Task SetDriverOnline_WhenApprovedLicenseIsValid_SetsOnlineCache()
+    {
+        await using var dbContext = CreateDbContext();
+        var redis = new InMemoryRedisService();
+        var realtime = new RealtimeNotificationServiceFake();
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        SeedDriver(dbContext, driverId);
+        dbContext.DriverKycs.Add(NewDriverLicense(
+            driverId,
+            DateOnly.FromDateTime(UtcNow.AddDays(1))));
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext, redis, realtime);
+
+        await service.SetDriverOnlineAsync(
+            driverId,
+            10.762622,
+            106.660172,
+            CancellationToken.None);
+
+        Assert.Equal(
+            DriverWorkStatus.Online.ToString(),
+            await redis.GetAsync(RedisKeys.DriverStatus(driverId)));
+    }
 
     [Fact]
     public async Task UpdateDriverLocation_UsesCachedActiveTrip()
@@ -478,9 +528,26 @@ public sealed class DriverRealtimeServiceTests
         });
     }
 
+    private static DriverKyc NewDriverLicense(Guid driverId, DateOnly expiryDate)
+    {
+        return new DriverKyc
+        {
+            DriverId = driverId,
+            DocumentType = KycDocumentType.DRIVING_LICENSE,
+            DocumentNumber = "B-123456",
+            LicenseClass = LicenseClass.B,
+            FrontImageUrl = "https://example.test/license.jpg",
+            IssueDate = expiryDate.AddYears(-5),
+            ExpiryDate = expiryDate,
+            KycStatus = KycStatus.Approved,
+            CreatedAt = UtcNow.AddYears(-1),
+            VerifiedAt = UtcNow.AddYears(-1)
+        };
+    }
+
     private sealed class CountingApplicationDbContext(
         DbContextOptions<ApplicationDbContext> options)
-        : ApplicationDbContext(options)
+        : ApplicationDbContext(options, new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider())
     {
         public int SaveChangesCount { get; set; }
 

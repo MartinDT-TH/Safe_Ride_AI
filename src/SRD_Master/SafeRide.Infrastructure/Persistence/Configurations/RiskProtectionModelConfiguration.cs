@@ -201,36 +201,14 @@ internal static class RiskProtectionModelConfiguration
                 "[EvidenceFileSizeBytes] IS NULL OR ([EvidenceFileSizeBytes] > 0 AND [EvidenceFileSizeBytes] <= 10000000)"));
         });
 
-        modelBuilder.Entity<VehicleInsurancePolicy>(entity =>
-        {
-            entity.HasKey(x => x.Id);
-            entity.HasIndex(x => new { x.Provider, x.PolicyNumber }).IsUnique().HasFilter("[IsDeleted] = 0");
-            entity.Property(x => x.InsuranceType).HasConversion<string>().HasMaxLength(30);
-            entity.Property(x => x.VerificationStatus).HasConversion<string>().HasMaxLength(20);
-            entity.Property(x => x.Provider).HasMaxLength(200);
-            entity.Property(x => x.PolicyNumber).HasMaxLength(100);
-            entity.Property(x => x.DocumentUrl).HasMaxLength(1000);
-            Money(entity.Property(x => x.CoverageAmount));
-            Money(entity.Property(x => x.Deductible));
-            entity.HasOne(x => x.Vehicle)
-                .WithMany(x => x.VehicleInsurancePolicies)
-                .HasForeignKey(x => x.VehicleId)
-                .OnDelete(DeleteBehavior.Restrict);
-        });
-
         modelBuilder.Entity<TripProtectionCoverage>(entity =>
         {
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => x.TripId).IsUnique();
             Money(entity.Property(x => x.ProtectionLimit));
-            Money(entity.Property(x => x.InsuranceCoverageSnapshot));
-            Money(entity.Property(x => x.InsuranceDeductibleSnapshot));
-            entity.Property(x => x.InsuranceProviderSnapshot).HasMaxLength(200);
-            entity.Property(x => x.PolicyNumberSnapshot).HasMaxLength(100);
             entity.HasOne(x => x.Trip).WithOne().HasForeignKey<TripProtectionCoverage>(x => x.TripId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.PolicyVersion).WithMany().HasForeignKey(x => x.PolicyVersionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.PreTripVehicleCheck).WithMany().HasForeignKey(x => x.PreTripVehicleCheckId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(x => x.VehicleInsurancePolicy).WithMany().HasForeignKey(x => x.VehicleInsurancePolicyId).OnDelete(DeleteBehavior.SetNull);
         });
     }
 
@@ -330,12 +308,15 @@ internal static class RiskProtectionModelConfiguration
             entity.Property(x => x.InsuranceStatus).HasConversion<string>().HasMaxLength(30);
             entity.Property(x => x.InsurancePaymentDestination).HasConversion<string>().HasMaxLength(30);
             entity.Property(x => x.InsuranceReference).HasMaxLength(200);
+            entity.Property(x => x.CustomerInsuranceReference).HasMaxLength(200);
+            entity.Property(x => x.CustomerInsuranceNote).HasMaxLength(1000);
             entity.Property(x => x.RowVersion).IsRowVersion();
             foreach (var property in typeof(ProtectionClaim).GetProperties().Where(x => x.PropertyType == typeof(decimal))) entity.Property(property.Name).HasColumnType("decimal(18,2)");
             entity.HasOne(x => x.AccidentReport).WithOne(x => x.ProtectionClaim).HasForeignKey<ProtectionClaim>(x => x.AccidentReportId).OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(table => table.HasCheckConstraint(
                 "CK_ProtectionClaims_Amounts",
                 "[TotalDamageAmount] >= 0 AND [EligibleDamageAmount] >= 0 AND [EligibleDamageAmount] <= [TotalDamageAmount] " +
+                "AND [CustomerInsuranceAppliedAmount] >= 0 " +
                 "AND [InsuranceRequestedAmount] >= 0 AND [InsuranceApprovedAmount] >= 0 AND [InsuranceApprovedAmount] <= [InsuranceRequestedAmount] " +
                 "AND [InsurancePaidDirectToClaimant] >= 0 AND [InsuranceReimbursedToRiskFund] >= 0 " +
                 "AND [InsurancePaidDirectToClaimant] + [InsuranceReimbursedToRiskFund] <= [InsuranceApprovedAmount] " +
@@ -346,6 +327,21 @@ internal static class RiskProtectionModelConfiguration
                 "AND [TotalPaidToClaimant] >= 0 AND [TotalPaidToClaimant] <= [EligibleDamageAmount] " +
                 "AND [RecoveredAmount] >= 0 AND [OutstandingRecoveryAmount] >= 0 AND [WrittenOffAdvanceAmount] >= 0 " +
                 "AND [RecoveredAmount] + [OutstandingRecoveryAmount] + [WrittenOffAdvanceAmount] <= [RiskFundAdvanceAmount]"));
+        });
+
+        modelBuilder.Entity<InsuranceClaimDocument>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.ProtectionClaimId, x.UploadedAtUtc });
+            entity.Property(x => x.DocumentType).HasConversion<string>().HasMaxLength(35);
+            entity.Property(x => x.StorageObjectKey).HasMaxLength(500);
+            entity.Property(x => x.OriginalFileName).HasMaxLength(255);
+            entity.Property(x => x.ContentType).HasMaxLength(100);
+            entity.Property(x => x.Sha256Hash).HasMaxLength(64);
+            entity.HasOne(x => x.ProtectionClaim).WithMany(x => x.InsuranceDocuments)
+                .HasForeignKey(x => x.ProtectionClaimId).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_InsuranceClaimDocuments_FileSize", "[FileSizeBytes] > 0 AND [FileSizeBytes] <= 10000000"));
         });
 
         modelBuilder.Entity<DriverLiability>(entity =>

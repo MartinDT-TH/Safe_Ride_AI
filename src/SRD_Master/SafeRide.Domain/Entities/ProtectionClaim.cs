@@ -13,6 +13,10 @@ public sealed class ProtectionClaim
     public decimal InsuranceRequestedAmount { get; set; }
     public decimal TotalDamageAmount { get; set; }
     public decimal EligibleDamageAmount { get; set; }
+    public decimal CustomerInsuranceAppliedAmount { get; set; }
+    public string? CustomerInsuranceReference { get; set; }
+    public DateTime? CustomerInsuranceConfirmedAtUtc { get; set; }
+    public string? CustomerInsuranceNote { get; set; }
     public decimal InsuranceApprovedAmount { get; set; }
     public decimal InsurancePaidDirectToClaimant { get; set; }
     public decimal InsuranceReimbursedToRiskFund { get; set; }
@@ -35,4 +39,5 @@ public sealed class ProtectionClaim
     public ICollection<ClaimRecovery> Recoveries { get; set; } = new List<ClaimRecovery>();
     public ICollection<ClaimReconciliationRecord> ReconciliationRecords { get; set; } = new List<ClaimReconciliationRecord>();
     public ICollection<InsuranceClaimProviderAudit> InsuranceProviderAudits { get; set; } = new List<InsuranceClaimProviderAudit>();
+    public ICollection<InsuranceClaimDocument> InsuranceDocuments { get; set; } = new List<InsuranceClaimDocument>();
 }

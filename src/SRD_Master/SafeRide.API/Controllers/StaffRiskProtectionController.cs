@@ -14,30 +14,20 @@ namespace SafeRide.API.Controllers;
 public sealed class StaffRiskProtectionController : ControllerBase
 {
     private readonly IAccidentManagementService _service;
-    private readonly IVehicleInsurancePolicyService _insurancePolicies;
     private readonly IAccidentEvidenceStorage _evidenceStorage;
     private readonly IEvidenceFileValidator _evidenceFileValidator;
     private readonly ILogger<StaffRiskProtectionController> _logger;
     public StaffRiskProtectionController(
         IAccidentManagementService service,
-        IVehicleInsurancePolicyService insurancePolicies,
         IAccidentEvidenceStorage evidenceStorage,
         IEvidenceFileValidator evidenceFileValidator,
         ILogger<StaffRiskProtectionController> logger)
     {
         _service = service;
-        _insurancePolicies = insurancePolicies;
         _evidenceStorage = evidenceStorage;
         _evidenceFileValidator = evidenceFileValidator;
         _logger = logger;
     }
-
-    [HttpPut("vehicle-insurance-policies/{policyId:long}/verification")]
-    public async Task<ActionResult<VehicleInsurancePolicyResponse>> ReviewInsurancePolicy(
-        long policyId, [FromBody] InsurancePolicyVerificationRequest request,
-        CancellationToken cancellationToken)
-        => Ok(await _insurancePolicies.ReviewAsync(
-            GetUserId(), policyId, request.Status, cancellationToken));
 
     [HttpGet("accidents")]
     public async Task<ActionResult<IReadOnlyList<AccidentResponse>>> GetAccidents(
@@ -175,6 +165,9 @@ public sealed class StaffRiskProtectionController : ControllerBase
     private async Task<StoredControllerEvidence> StoreTrustedEvidenceAsync(
         long claimId, IFormFile file, CancellationToken cancellationToken)
     {
+        if (file is null || file.Length <= 0)
+            throw InvalidEvidence("Vui lòng tải lên chứng từ khoản thu hồi.");
+
         await using var source = file.OpenReadStream();
         var validated = await _evidenceFileValidator.ValidateAsync(
             new EvidenceFileValidationRequest(
@@ -228,5 +221,4 @@ public sealed class StaffRiskProtectionController : ControllerBase
         TrustedClaimEvidence Evidence, string PublicId, string ContentType);
 }
 
-public sealed record InsurancePolicyVerificationRequest(InsuranceVerificationStatus Status);
 public sealed record InsuranceStatusRefreshRequest(string RowVersion);

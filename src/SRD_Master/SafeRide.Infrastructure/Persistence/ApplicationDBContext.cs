@@ -3,7 +3,10 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Microsoft.EntityFrameworkCore.Metadata;
+using System.Security.Cryptography;
 using System;
 using System.Collections.Generic;
 using SafeRide.Domain.Entities;
@@ -14,10 +17,13 @@ namespace SafeRide.Infrastructure.Persistence;
 
 public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNetRole, Guid>
 {
-    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options, IDataProtectionProvider protectionProvider)
         : base(options)
     {
+        _kycProtector = protectionProvider.CreateProtector("SafeRide.DriverKyc.Pii.v1");
     }
+
+    private readonly IDataProtector _kycProtector;
 
     public virtual DbSet<AspNetRole> AspNetRoles { get; set; }
 
@@ -34,6 +40,8 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
     public virtual DbSet<DriverProfile> DriverProfiles { get; set; }
 
     public virtual DbSet<DriverWallet> DriverWallets { get; set; }
+
+    public virtual DbSet<DriverWalletTopUp> DriverWalletTopUps { get; set; }
 
     public virtual DbSet<Notification> Notifications { get; set; }
 
@@ -206,36 +214,42 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
             entity.ToTable("DriverKyc", tb =>
             {
                 tb.HasCheckConstraint("CK_DriverKyc_DocumentType", "[DocumentType] IN ('ID_CARD', 'DRIVING_LICENSE', 'CRIMINAL_RECORD')");
-                tb.HasCheckConstraint("CK_DriverKyc_LicenseClass", "[LicenseClass] IS NULL OR [LicenseClass] IN ('Old_A1', 'Old_A2', 'Old_B1', 'Old_B2', 'A1', 'A', 'B')");
+                tb.HasCheckConstraint("CK_DriverKyc_DrivingLicense", "[DocumentType] <> 'DRIVING_LICENSE' OR ([DocumentNumber] IS NOT NULL AND [LicenseClass] IS NOT NULL)");
                 tb.HasCheckConstraint("CK_DriverKyc_KycStatus", "[KycStatus] IN ('Pending', 'Approved', 'Rejected')");
                 tb.HasCheckConstraint("CK_DriverKyc_DocumentFile", "[FrontImageUrl] IS NOT NULL OR [BackImageUrl] IS NOT NULL OR [FileUrl] IS NOT NULL");
-                tb.HasCheckConstraint("CK_DriverKyc_DrivingLicense", "[DocumentType] <> 'DRIVING_LICENSE' OR ([DocumentNumber] IS NOT NULL AND [LicenseClass] IS NOT NULL)");
             });
 
 
 
-            entity.Property(e => e.BackImageUrl).HasMaxLength(500);
-            entity.Property(e => e.DocumentNumber)
-                .HasMaxLength(50)
-                .IsUnicode(false);
-            entity.Property(e => e.FullName).HasMaxLength(100);
-            entity.Property(e => e.Gender)
-                .HasMaxLength(10)
-                .IsUnicode(false);
-            entity.Property(e => e.Address).HasMaxLength(500);
+            var pii = new ValueConverter<string?, string?>(
+                value => value == null ? null : _kycProtector.Protect(value),
+                value => UnprotectPii(value));
+            var datePii = new ValueConverter<DateOnly?, string?>(
+                value => value.HasValue ? _kycProtector.Protect(value.Value.ToString("yyyy-MM-dd")) : null,
+                value => UnprotectDatePii(value));
+            var enumPii = new ValueConverter<LicenseClass?, string?>(
+                value => value.HasValue ? _kycProtector.Protect(value.Value.ToString()) : null,
+                value => UnprotectLicenseClassPii(value));
+
+            entity.Property(e => e.BackImageUrl).HasConversion(pii).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.DocumentNumber).HasConversion(pii).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.FullName).HasConversion(pii).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.Gender).HasConversion(pii).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.Address).HasConversion(pii).HasColumnType("nvarchar(max)");
             entity.Property(e => e.DocumentType)
                 .HasConversion<string>()
                 .HasMaxLength(50);
-            entity.Property(e => e.FileUrl).HasMaxLength(500);
-            entity.Property(e => e.FrontImageUrl).HasMaxLength(500);
+            entity.Property(e => e.FileUrl).HasConversion(pii).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.FrontImageUrl).HasConversion(pii).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.DateOfBirth).HasConversion(datePii).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.IssueDate).HasConversion(datePii).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.ExpiryDate).HasConversion(datePii).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.LicenseClass).HasConversion(enumPii).HasColumnType("nvarchar(max)");
             entity.Property(e => e.KycStatus)
                 .HasConversion<string>()
                 .HasMaxLength(20)
                 .HasSentinel((KycStatus)(-1))
                 .HasDefaultValueSql("('Pending')");
-            entity.Property(e => e.LicenseClass)
-                .HasConversion<string>()
-                .HasMaxLength(10);
 
             entity.HasOne(d => d.Driver).WithMany(p => p.DriverKycs)
                 .HasForeignKey(d => d.DriverId)
@@ -731,7 +745,7 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
 
             entity.ToTable(tb =>
             {
-                tb.HasCheckConstraint("CK_WalletTransactions_TransactionType", "[TransactionType] IN ('Income', 'Withdrawal', 'Penalty', 'Bonus')");
+                tb.HasCheckConstraint("CK_WalletTransactions_TransactionType", "[TransactionType] IN ('Income', 'Withdrawal', 'Penalty', 'Bonus', 'TopUp')");
                 tb.HasCheckConstraint("CK_WalletTransactions_Amount", "[Amount] > 0");
             });
 
@@ -753,6 +767,19 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
                 .HasForeignKey(d => d.WalletId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_WalletTransaction_Wallet");
+        });
+
+        modelBuilder.Entity<DriverWalletTopUp>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.OrderCode).IsUnique();
+            entity.Property(e => e.Amount).HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
+            entity.Property(e => e.PaymentLinkId).HasMaxLength(100);
+            entity.Property(e => e.ProviderReference).HasMaxLength(100);
+            entity.HasOne(e => e.Wallet).WithMany(e => e.TopUps)
+                .HasForeignKey(e => e.WalletId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
         });
 
         modelBuilder.Entity<WithdrawalRequest>(entity =>
@@ -786,6 +813,41 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
         });
 
         OnModelCreatingPartial(modelBuilder);
+    }
+
+    private string? UnprotectPii(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return value;
+
+        try
+        {
+            return _kycProtector.Unprotect(value);
+        }
+        catch (CryptographicException)
+        {
+            return value;
+        }
+    }
+
+    private DateOnly? UnprotectDatePii(string? value)
+    {
+        var plaintext = UnprotectPii(value);
+        return DateOnly.TryParseExact(
+            plaintext,
+            "yyyy-MM-dd",
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None,
+            out var date)
+            ? date
+            : null;
+    }
+
+    private LicenseClass? UnprotectLicenseClassPii(string? value)
+    {
+        var plaintext = UnprotectPii(value);
+        return Enum.TryParse<LicenseClass>(plaintext, out var licenseClass)
+            ? licenseClass
+            : null;
     }
 
     partial void OnModelCreatingPartial(ModelBuilder modelBuilder);

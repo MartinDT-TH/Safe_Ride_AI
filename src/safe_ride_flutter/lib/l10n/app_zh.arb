@@ -254,7 +254,6 @@
   ,"accidentOccurredAt":"发生时间"
   ,"safetyReportTitle":"报告安全事件","unsafeCustomer":"不安全的客户","vehicleIssue":"车辆问题","safetyReasonCode":"原因","safetyReportDescription":"描述事件","requestSosEscalation":"请求 SOS 升级","requestSosEscalationHint":"发送当前位置并创建持久 SOS 警报","safetyReportSubmitted":"安全事件报告已提交。","safetyReportFailed":"无法提交安全事件报告，请重试。"
   ,"vehicleFaultType":"车辆故障类型","otherVehicleFault":"其他车辆故障","optionalEvidence":"证据（可选）"
-  ,"vehicleInsurance":"保险","addInsurance":"添加保险","insuranceLoadFailed":"无法加载保险信息，请重试。","insuranceUpdateFailed":"无法更新保险。","deleteInsuranceQuestion":"删除保险合同？","policyNumber":"保单编号","optionalInsuranceEmpty":"保险为可选项，此车辆暂无保单。","addInsurancePolicy":"添加保险合同","editInsurancePolicy":"编辑保险合同","insuranceType":"保险类型","mandatoryTplInsurance":"机动车第三者责任强制保险","physicalDamageInsurance":"车辆损失险","insuranceProvider":"保险公司","effectiveDate":"生效日期","expiryDate":"到期日期","insuranceCoverageLimit":"赔付限额","insuranceDeductible":"免赔额","optionalDocumentUrl":"文件 URL（可选）","optionalInsuranceHint":"保险为可选项。新建或编辑后将重置为 PENDING，等待员工验证。"
   ,"endTripReasonTitle":"结束行程原因","endTripReasonDescription":"请选择准确原因。安全终止必须使用单独的 Risk Protection 流程。","normalCompletionReason":"已到达目的地","normalCompletionReasonDescription":"使用预订时的车费。","customerRequestedStopReason":"乘客要求提前结束","customerRequestedStopReasonDescription":"使用预订路线进度和最低服务车费。","driverUnableToContinueReason":"司机无法继续行程","startedByMistakeReason":"误开始行程"
   ,"riskStatusReported":"已受理","riskStatusEvidenceCollection":"正在收集证据","riskStatusUnderReview":"审核中","riskStatusLiabilityPending":"等待责任认定","riskStatusSettlement":"正在处理保障","riskStatusClosed":"已关闭","riskStatusRejected":"已拒绝"
   ,"riskCategoryDriverInjury":"司机受伤","riskCategoryCustomerVehicleDamage":"客户车辆损失","riskCategoryThirdPartyDamage":"第三方损失","riskCategoryMultiple":"多种损失"
@@ -264,7 +263,7 @@
   ,"riskLiabilityPartiallyPaid":"已部分支付","riskLiabilityPaid":"已支付","riskLiabilityWaived":"已豁免"
   ,"riskRoleDriver":"司机","riskRoleCustomer":"客户","riskRoleThirdParty":"第三方","riskRoleVehicle":"车辆","riskRoleObjective":"客观因素"
   ,"riskReasonDistracting":"造成分心","riskReasonViolent":"暴力行为","riskReasonInterferingVehicle":"干扰车辆操控","riskReasonUnsafeRequest":"不安全要求","riskReasonOther":"其他原因"
-  ,"riskInsurancePending":"等待员工验证","riskInsuranceVerified":"已验证","riskInsuranceExpired":"已过期","riskInsuranceOther":"其他保险"
   ,"riskIncidentInformation":"事故信息","riskResponsibilityResult":"责任认定结果","riskProtectionOutcome":"保障处理结果","riskEligibleDamage":"符合条件的损失"
   ,"mandatoryTplExplanation":"强制第三方责任险主要保障第三方，并不自动承保客户车辆损失。","physicalDamageExplanation":"车辆损失险可根据已验证的保单条款用于客户车辆损失。","insurerNoGuarantee":"保存保单不代表保险公司保证批准赔付。","documentUrlDeferredHint":"目前仅保存文件链接。请使用可信链接；待安全共享存储可用后再提供直接上传。"
+  ,"motorbikeFeatureSuspendedTitle":"摩托车服务暂停","motorbikeFeatureSuspendedMessage":"自8月20日起，此功能已暂时停用。","acknowledge":"知道了"
 }

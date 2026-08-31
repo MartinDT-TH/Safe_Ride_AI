@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using SafeRide.Domain.Enums;
 
 namespace SafeRide.Application.Features.RiskProtection;
@@ -104,7 +105,13 @@ public sealed record DriverLiabilityCalculationResult(
     decimal DriverAttributableEligibleDamage,
     decimal AppliedRate,
     decimal? AppliedCap,
-    decimal LiabilityAmount);
+    decimal LiabilityAmount)
+{
+    // A1 applies the policy rate/cap to the post-insurance residual. Keep the
+    // historical property name for API/test compatibility and expose the
+    // unambiguous alias for new callers.
+    public decimal DriverAttributableResidualDamage => DriverAttributableEligibleDamage;
+}
 
 public sealed record ClaimLiabilityCalculationInput(
     decimal EligibleDamage,
@@ -115,13 +122,42 @@ public sealed record ClaimLiabilityCalculationInput(
     decimal OrdinaryNegligenceRate,
     decimal OrdinaryNegligenceCap,
     decimal GrossNegligenceRate,
-    decimal GrossNegligenceCap);
+    decimal GrossNegligenceCap,
+    decimal InsurancePaidAmount = 0m,
+    decimal VehicleFailurePercentage = 0m,
+    decimal ObjectiveCausePercentage = 0m,
+    decimal CustomerInsuranceAppliedAmount = 0m);
 
 public sealed record ClaimLiabilityCalculationResult(
     DriverLiabilityCalculationResult Driver,
     decimal CustomerLiabilityAmount,
     decimal ThirdPartyLiabilityAmount,
-    decimal TotalRecoverableLiabilityAmount);
+    decimal TotalRecoverableLiabilityAmount)
+{
+    public decimal ResidualUninsuredDamage { get; init; }
+    public decimal CustomerGrossExposure { get; init; }
+    public decimal DriverGrossExposure { get; init; }
+    public decimal ThirdPartyGrossExposure { get; init; }
+    public decimal VehicleObjectiveGrossExposure { get; init; }
+    public decimal CustomerInsuranceAppliedAmount { get; init; }
+    public decimal CustomerInsuranceBenefitToCustomer { get; init; }
+    public decimal CustomerInsuranceExcessAppliedToOtherLoss { get; init; }
+    public decimal CustomerInsuranceBenefitToDriver { get; init; }
+    public decimal CustomerInsuranceUnallocatedCategoryReduction { get; init; }
+    public decimal CustomerExposureAfterOwnInsurance { get; init; }
+    public decimal DriverExposureBeforeSystemInsurance { get; init; }
+    public decimal RemainingLossAfterCustomerInsurance { get; init; }
+    public decimal ParticipantExposureBeforeSystemInsurance { get; init; }
+    public decimal SystemInsuranceApprovedAmount { get; init; }
+    public decimal CustomerSystemInsuranceBenefit { get; init; }
+    public decimal DriverSystemInsuranceBenefit { get; init; }
+    public decimal CustomerFinalExposure { get; init; }
+    public decimal DriverRemainingExposureBeforeRateCap { get; init; }
+    public decimal DriverAttributableResidualDamage => Driver.DriverAttributableResidualDamage;
+    public decimal CustomerAttributableResidualDamage { get; init; }
+    public decimal ThirdPartyAttributableResidualDamage { get; init; }
+    public decimal VehicleObjectiveResidualAmount { get; init; }
+}
 
 public sealed record RiskProtectionPolicyResponse(
     long Id,
@@ -211,33 +247,6 @@ public sealed record SafetyReportResponse(
     long? SosAlertId,
     DateTime CreatedAtUtc);
 
-// DocumentUrl is an owner-supplied external reference, not a SafeRide upload.
-// Verification of the policy does not imply that the referenced file was scanned.
-public sealed record VehicleInsurancePolicyRequest(
-    VehicleInsuranceType InsuranceType,
-    string Provider,
-    string PolicyNumber,
-    DateTime EffectiveFromUtc,
-    DateTime ExpiresAtUtc,
-    decimal CoverageAmount,
-    decimal Deductible,
-    string? DocumentUrl);
-
-public sealed record VehicleInsurancePolicyResponse(
-    long Id,
-    long VehicleId,
-    VehicleInsuranceType InsuranceType,
-    string Provider,
-    string PolicyNumber,
-    DateTime EffectiveFromUtc,
-    DateTime ExpiresAtUtc,
-    decimal CoverageAmount,
-    decimal Deductible,
-    string? DocumentUrl,
-    InsuranceVerificationStatus VerificationStatus,
-    Guid? ReviewedByUserId,
-    DateTime? ReviewedAtUtc);
-
 public sealed record CreateAccidentRequest(
     AccidentCategory Category,
     DateTime OccurredAtUtc,
@@ -289,16 +298,22 @@ public sealed record LiabilityAssessmentRequest(
 public sealed record CalculateClaimRequest(
     decimal TotalDamageAmount,
     decimal EligibleDamageAmount,
-    decimal RequestedInsuranceAmount,
-    decimal RequestedRiskFundAmount,
-    bool IsPermanentRiskFundLoss,
+    // Deprecated compatibility fields. The server now derives insurance and
+    // Risk Fund amounts from the immutable snapshots and confirmed facts.
+    [property: JsonIgnore] decimal RequestedInsuranceAmount = 0m,
+    [property: JsonIgnore] decimal RequestedRiskFundAmount = 0m,
+    [property: JsonIgnore] bool IsPermanentRiskFundLoss = false,
     string? RowVersion = null,
-    InsurancePaymentDestination InsurancePaymentDestination = InsurancePaymentDestination.DIRECT_TO_CLAIMANT);
+    [property: JsonIgnore] InsurancePaymentDestination InsurancePaymentDestination = InsurancePaymentDestination.DIRECT_TO_CLAIMANT,
+    bool SubmitToInsurance = true,
+    decimal CustomerInsuranceAppliedAmount = 0m,
+    string? CustomerInsuranceReference = null,
+    string? CustomerInsuranceNote = null);
 
 public sealed record InsuranceReviewRequest(
     decimal ApprovedAmount,
-    string Reference,
-    string Reason,
+    string? Reference = null,
+    string? Reason = null,
     string? RowVersion = null,
     InsurancePaymentDestination InsurancePaymentDestination = InsurancePaymentDestination.DIRECT_TO_CLAIMANT);
 
@@ -453,7 +468,43 @@ public sealed record ProtectionClaimResponse(
     decimal OutstandingRecoveryAmount,
     decimal WrittenOffAdvanceAmount,
     decimal ActualRecoverableFundExposure,
-    bool IsReconciled);
+    bool IsReconciled,
+    decimal InsuranceEligibleAmount = 0m,
+    decimal ResidualUninsuredDamage = 0m,
+    decimal DriverAttributableResidualDamage = 0m,
+    decimal CustomerAttributableResidualDamage = 0m,
+    decimal ThirdPartyAttributableResidualDamage = 0m,
+    decimal VehicleObjectiveResidualAmount = 0m,
+    decimal RiskFundRequiredAmount = 0m,
+    decimal MaximumApprovableInsuranceAmount = 0m,
+    decimal RecommendedInsuranceApprovalAmount = 0m,
+    decimal MockInsuranceCoverageLimit = 0m,
+    string? InsuranceReference = null,
+    decimal CustomerInsuranceAppliedAmount = 0m,
+    string? CustomerInsuranceReference = null,
+    DateTime? CustomerInsuranceConfirmedAtUtc = null,
+    string? CustomerInsuranceNote = null,
+    decimal CustomerGrossExposure = 0m,
+    decimal DriverGrossExposure = 0m,
+    decimal ThirdPartyGrossExposure = 0m,
+    decimal VehicleObjectiveGrossExposure = 0m,
+    decimal CustomerExposureAfterOwnInsurance = 0m,
+    decimal DriverExposureBeforeSystemInsurance = 0m,
+    decimal SystemInsuranceCoveredExposureRemaining = 0m,
+    decimal SystemInsuranceMaximumAmount = 0m,
+    decimal SystemInsuranceApprovedAmount = 0m,
+    decimal CustomerSystemInsuranceBenefit = 0m,
+    decimal DriverSystemInsuranceBenefit = 0m,
+    decimal CustomerFinalExposure = 0m,
+    decimal DriverRemainingExposureBeforeRateCap = 0m,
+    decimal SystemInsuranceCoverageLimitSnapshot = 0m,
+    string SystemInsuranceProvider = "MockInsuranceProvider",
+    string SystemInsuranceEvaluationReason = "NOT_EVALUATED",
+    decimal CustomerInsuranceBenefitToCustomer = 0m,
+    decimal CustomerInsuranceExcessAppliedToOtherLoss = 0m,
+    decimal CustomerInsuranceBenefitToDriver = 0m,
+    decimal CustomerInsuranceUnallocatedCategoryReduction = 0m,
+    decimal RemainingLossAfterCustomerInsurance = 0m);
 
 public sealed record DriverLiabilityResponse(
     long Id,
@@ -480,7 +531,8 @@ public sealed record InsuranceCalculationResult(
     decimal ApprovedAmount,
     string Reference,
     string RequestPayload,
-    string ResponsePayload);
+    string ResponsePayload,
+    decimal MaximumApprovableInsuranceAmount = 0m);
 
 public sealed record InsuranceSubmissionResult(
     InsuranceClaimStatus Status,
@@ -489,7 +541,8 @@ public sealed record InsuranceSubmissionResult(
     decimal ApprovedAmount,
     string Message,
     string RequestPayload,
-    string ResponsePayload);
+    string ResponsePayload,
+    decimal MaximumApprovableInsuranceAmount = 0m);
 
 public sealed record InsuranceClaimSubmissionContext(
     long ClaimId,

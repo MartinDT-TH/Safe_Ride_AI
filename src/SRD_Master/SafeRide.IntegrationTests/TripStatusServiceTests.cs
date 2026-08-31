@@ -1088,47 +1088,17 @@ public sealed class TripStatusServiceTests
         Assert.Equal(pass.Id, coverage.PreTripVehicleCheckId);
         Assert.Equal(20_000_000m, coverage.ProtectionLimit);
         Assert.Equal(UtcNow, coverage.ActivatedAtUtc);
-        Assert.Null(coverage.VehicleInsurancePolicyId);
+        Assert.Equal(
+            await fixture.DbContext.RiskProtectionPolicyVersions.Select(x => x.Id).SingleAsync(),
+            coverage.PolicyVersionId);
     }
 
     [Fact]
-    public async Task StartTrip_WithVerifiedPhysicalDamageInsurance_SnapshotsPolicyValues()
+    public async Task StartTrip_SnapshotsOnlySafeRideProtectionAuthority()
     {
         using var fixture = await TripStatusFixture.CreateAsync(
             TripStatus.ARRIVED,
             riskProtectionEnabled: true);
-        var vehicleId = await fixture.DbContext.Trips
-            .Where(x => x.Id == fixture.TripId)
-            .Select(x => x.Booking.VehicleId)
-            .SingleAsync();
-        var insurance = new VehicleInsurancePolicy
-        {
-            VehicleId = vehicleId,
-            InsuranceType = VehicleInsuranceType.PHYSICAL_DAMAGE,
-            Provider = "Safe Insurer",
-            PolicyNumber = "POLICY-001",
-            EffectiveFromUtc = UtcNow.AddDays(-1),
-            ExpiresAtUtc = UtcNow.AddDays(30),
-            CoverageAmount = 15_000_000m,
-            Deductible = 500_000m,
-            VerificationStatus = InsuranceVerificationStatus.VERIFIED,
-            CreatedAtUtc = UtcNow
-        };
-        var higherCoverageMandatoryTpl = new VehicleInsurancePolicy
-        {
-            VehicleId = vehicleId,
-            InsuranceType = VehicleInsuranceType.MANDATORY_TPL,
-            Provider = "Mandatory TPL Insurer",
-            PolicyNumber = "TPL-001",
-            EffectiveFromUtc = UtcNow.AddDays(-1),
-            ExpiresAtUtc = UtcNow.AddDays(30),
-            CoverageAmount = 100_000_000m,
-            Deductible = 0m,
-            VerificationStatus = InsuranceVerificationStatus.VERIFIED,
-            CreatedAtUtc = UtcNow
-        };
-        fixture.DbContext.VehicleInsurancePolicies.AddRange(insurance, higherCoverageMandatoryTpl);
-        await fixture.DbContext.SaveChangesAsync();
         var checkService = new PreTripVehicleCheckService(
             fixture.DbContext,
             fixture.RiskProtectionPolicyProvider,
@@ -1147,34 +1117,43 @@ public sealed class TripStatusServiceTests
             CancellationToken.None);
 
         var coverage = await fixture.DbContext.TripProtectionCoverages.SingleAsync();
-        Assert.Equal(insurance.Id, coverage.VehicleInsurancePolicyId);
-        Assert.Equal("Safe Insurer", coverage.InsuranceProviderSnapshot);
-        Assert.Equal("POLICY-001", coverage.PolicyNumberSnapshot);
-        Assert.Equal(15_000_000m, coverage.InsuranceCoverageSnapshot);
-        Assert.Equal(500_000m, coverage.InsuranceDeductibleSnapshot);
-
-        insurance.Provider = "Changed Insurer";
-        insurance.PolicyNumber = "CHANGED-POLICY";
-        insurance.CoverageAmount = 1m;
-        insurance.Deductible = 0m;
-        await fixture.DbContext.SaveChangesAsync();
+        var policyId = await fixture.DbContext.RiskProtectionPolicyVersions
+            .Select(x => x.Id)
+            .SingleAsync();
+        Assert.Equal(policyId, coverage.PolicyVersionId);
+        Assert.Equal(20_000_000m, coverage.ProtectionLimit);
+        Assert.Equal(UtcNow, coverage.ActivatedAtUtc);
         fixture.DbContext.ChangeTracker.Clear();
 
         var persistedSnapshot = await fixture.DbContext.TripProtectionCoverages
             .AsNoTracking()
             .SingleAsync(x => x.TripId == fixture.TripId);
-        Assert.Equal("Safe Insurer", persistedSnapshot.InsuranceProviderSnapshot);
-        Assert.Equal("POLICY-001", persistedSnapshot.PolicyNumberSnapshot);
-        Assert.Equal(15_000_000m, persistedSnapshot.InsuranceCoverageSnapshot);
-        Assert.Equal(500_000m, persistedSnapshot.InsuranceDeductibleSnapshot);
+        Assert.Equal(policyId, persistedSnapshot.PolicyVersionId);
+        Assert.Equal(20_000_000m, persistedSnapshot.ProtectionLimit);
     }
 
     [Fact]
-    public async Task InProgressStatusRetry_DoesNotBackfillHistoricalCoverage()
+    public async Task InProgressStatusRetry_RepairsCoverageFromHistoricalStartPolicyAndPass()
     {
         using var fixture = await TripStatusFixture.CreateAsync(
             TripStatus.IN_PROGRESS,
             riskProtectionEnabled: true);
+        var trip = await fixture.DbContext.Trips.SingleAsync(x => x.Id == fixture.TripId);
+        fixture.DbContext.PreTripVehicleChecks.Add(new PreTripVehicleCheck
+        {
+            TripId = trip.Id,
+            DriverId = fixture.DriverId,
+            BrakeResponsePassed = true,
+            FrontRearLightsPassed = true,
+            TurnSignalsPassed = true,
+            VisibleTiresPassed = true,
+            DashboardWarningPassed = true,
+            WindshieldVisibilityPassed = true,
+            NoMajorVisibleIssue = true,
+            Result = PreTripCheckResult.PASS,
+            CheckedAtUtc = trip.StartedAt!.Value.AddMinutes(-1)
+        });
+        await fixture.DbContext.SaveChangesAsync();
 
         await fixture.Service.UpdateDriverTripStatusAsync(
             fixture.DriverId,
@@ -1182,7 +1161,9 @@ public sealed class TripStatusServiceTests
             TripStatus.IN_PROGRESS,
             CancellationToken.None);
 
-        Assert.Empty(await fixture.DbContext.TripProtectionCoverages.ToListAsync());
+        var coverage = await fixture.DbContext.TripProtectionCoverages.SingleAsync();
+        Assert.Equal(trip.StartedAt, coverage.ActivatedAtUtc);
+        Assert.Equal(20_000_000m, coverage.ProtectionLimit);
     }
 
     [Fact]
@@ -2730,7 +2711,7 @@ public sealed class TripStatusServiceTests
             var options = new DbContextOptionsBuilder<ApplicationDbContext>()
                 .UseInMemoryDatabase($"trip-status-{Guid.NewGuid():N}")
                 .Options;
-            var dbContext = new ApplicationDbContext(options);
+            var dbContext = new ApplicationDbContext(options, new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
 
             var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
             var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");

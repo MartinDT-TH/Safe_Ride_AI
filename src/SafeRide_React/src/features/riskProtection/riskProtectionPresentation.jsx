@@ -71,6 +71,25 @@ const labels = {
   DEBIT: 'Ghi giảm quỹ',
 };
 
+export const initialCustomerInsurance = { appliedAmount: '0', reference: '', note: '' };
+
+const evaluatedClaimStatuses = new Set([
+  'APPROVED',
+  'PENDING_FUNDING',
+  'FUNDED',
+  'RECOVERY_IN_PROGRESS',
+  'SETTLED',
+  'CLOSED',
+]);
+
+export function shouldShowSystemInsurance(claim) {
+  if (!claim) return false;
+  return claim.insuranceStatus !== 'NOT_SUBMITTED'
+    || evaluatedClaimStatuses.has(claim.status)
+    || Number(claim.totalDamageAmount) > 0
+    || Number(claim.eligibleDamageAmount) > 0;
+}
+
 export function riskProtectionLabel(value) {
   if (!value) return '—';
   return labels[value] ?? String(value).toLowerCase().split('_')
@@ -92,12 +111,20 @@ export function buildSettlementRecommendation(claim) {
   if (!claim) return [];
   return [
     ['Thiệt hại đủ điều kiện', Number(claim.eligibleDamageAmount ?? 0), 'base'],
-    ['Bảo hiểm xe khách hàng đã duyệt', Number(claim.insuranceApprovedAmount ?? 0), 'offset'],
-    ['Trách nhiệm tài xế có thể thu hồi', Number(claim.driverLiabilityAmount ?? 0), 'offset'],
-    ['Trách nhiệm khách hàng có thể thu hồi', Number(claim.customerLiabilityAmount ?? 0), 'offset'],
-    ['Trách nhiệm bên thứ ba có thể thu hồi', Number(claim.thirdPartyLiabilityAmount ?? 0), 'offset'],
-    ['Quỹ rủi ro ứng trước', Number(claim.riskFundAdvanceAmount ?? 0), 'fund'],
-    ['Hỗ trợ cuối cùng từ Quỹ rủi ro', Number(claim.riskFundPermanentLossAmount ?? 0), 'fund'],
+    ['Phần lỗi gộp của khách', Number(claim.customerGrossExposure ?? 0), 'base'],
+    ['Bảo hiểm riêng của khách', Number(claim.customerInsuranceAppliedAmount ?? 0), 'offset'],
+    ['Phần khách sau bảo hiểm riêng', Number(claim.customerExposureAfterOwnInsurance ?? 0), 'base'],
+    ['Bảo hiểm hệ thống SafeRide đã duyệt', Number(claim.systemInsuranceApprovedAmount ?? claim.insuranceApprovedAmount ?? 0), 'offset'],
+    ['Quyền lợi hệ thống cho khách', Number(claim.customerSystemInsuranceBenefit ?? 0), 'offset'],
+    ['Quyền lợi hệ thống cho tài xế', Number(claim.driverSystemInsuranceBenefit ?? 0), 'offset'],
+    ['Thiệt hại còn lại sau hai lớp bảo hiểm', Number(claim.residualUninsuredDamage ?? 0), 'base'],
+    ['Phần tài xế trước rate/cap', Number(claim.driverRemainingExposureBeforeRateCap ?? claim.driverAttributableResidualDamage ?? 0), 'offset'],
+    ['Nghĩa vụ tài xế sau rate/cap', Number(claim.driverLiabilityAmount ?? 0), 'offset'],
+    ['Phần khách hàng', Number(claim.customerAttributableResidualDamage ?? claim.customerLiabilityAmount ?? 0), 'offset'],
+    ['Phần bên thứ ba', Number(claim.thirdPartyAttributableResidualDamage ?? claim.thirdPartyLiabilityAmount ?? 0), 'offset'],
+    ['Phần phương tiện/khách quan', Number(claim.vehicleObjectiveResidualAmount ?? 0), 'fund'],
+    ['Quỹ rủi ro · khoản ứng có thể thu hồi', Number(claim.riskFundAdvanceAmount ?? 0), 'fund'],
+    ['Quỹ rủi ro · hỗ trợ cuối cùng', Number(claim.riskFundPermanentLossAmount ?? 0), 'fund'],
   ];
 }
 
@@ -111,7 +138,7 @@ export function SettlementRecommendation({ claim }) {
         <h3>Đề xuất từ máy chủ</h3>
         <span className="risk-badge">{riskProtectionLabel(claim.status)}</span>
       </div>
-      <p className="risk-form__hint">Các khoản dưới đây lấy từ policy và coverage snapshot của chuyến đi; giao diện không tự tính lại.</p>
+      <p className="risk-form__hint">Các khoản dưới đây do máy chủ tính theo fault đã duyệt và policy snapshot của chuyến đi; giao diện không tự phân bổ tiền bảo hiểm.</p>
       <dl>
         {buildSettlementRecommendation(claim).map(([label, amount, kind]) => (
           <div key={label} className={`risk-recommendation__row risk-recommendation__row--${kind}`}>
