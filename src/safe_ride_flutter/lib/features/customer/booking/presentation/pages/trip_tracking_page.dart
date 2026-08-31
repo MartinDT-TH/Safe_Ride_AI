@@ -82,6 +82,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
   bool _isSendingSOS = false;
   bool _isReportingAccident = false;
   bool _customerIsComing = false;
+  bool _readinessPromptAcknowledged = false;
   late bool _isSOSActivated;
   late bool _isPrepaid;
   late String? _currentTripStatus;
@@ -519,6 +520,64 @@ class _TripTrackingPageState extends State<TripTrackingPage>
 
     final minutes = (remainingDistanceKm / 25 * 60).round();
     return minutes > 0 ? minutes : 1;
+  }
+
+  bool get _hasReliableArrivalEstimate =>
+      _driverPosition != null || _arrivalRoutePoints.length >= 2;
+
+  Widget _buildReadinessPrompt() {
+    final minutes = _getArrivalDurationMinutes();
+    if (_currentTripStatus != 'DRIVER_ARRIVING' ||
+        !_hasReliableArrivalEstimate ||
+        minutes > 5 ||
+        _readinessPromptAcknowledged) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE8F6F5),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _tealColor.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.notifications_active_outlined, color: _tealColor),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'Tài xế sắp đến. Bạn đã sẵn sàng chưa?',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: () {
+              setState(() => _readinessPromptAcknowledged = true);
+              _showMessage('Đã ghi nhận bạn sẵn sàng.');
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: _tealColor,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text(
+              'Tôi đã sẵn sàng',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   int _getTripDurationMinutes() {
@@ -1451,6 +1510,7 @@ class _TripTrackingPageState extends State<TripTrackingPage>
               ),
               SizedBox(height: 12),
               if (isArriving) ...[
+                _buildReadinessPrompt(),
                 if (_currentTripStatus == 'ARRIVED') ...[
                   SizedBox(
                     width: double.infinity,
