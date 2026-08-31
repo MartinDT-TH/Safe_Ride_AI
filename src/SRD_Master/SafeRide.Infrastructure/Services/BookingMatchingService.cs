@@ -179,12 +179,12 @@ public sealed class BookingMatchingService : IBookingMatchingService
                 return null;
             }
 
-            var approvedDriverLicensesQuery = _dbContext.DriverKycs
+            var approvedDriverLicensesRows = await _dbContext.DriverKycs
                 .AsNoTracking()
                 .Where(x =>
                     x.DocumentType == KycDocumentType.DRIVING_LICENSE &&
                     x.KycStatus == KycStatus.Approved &&
-                    x.LicenseClass.HasValue)
+                    redisCandidateIds.Contains(x.DriverId))
                 .Join(
                     _dbContext.DriverProfiles.AsNoTracking(),
                     kyc => kyc.DriverId,
@@ -192,20 +192,32 @@ public sealed class BookingMatchingService : IBookingMatchingService
                     (kyc, profile) => new
                     {
                         kyc.DriverId,
-                        LicenseClass = kyc.LicenseClass!.Value,
+                        kyc.LicenseClass,
+                        kyc.ExpiryDate,
                         kyc.VerifiedAt,
                         kyc.CreatedAt,
                         profile.WorkStatus,
                         profile.AcceptLongPickupTrips,
                         profile.AcceptLongDistanceTrips
-                    });
-
-            approvedDriverLicensesQuery = approvedDriverLicensesQuery
-                .Where(x => redisCandidateIds.Contains(x.DriverId)
-                    && x.WorkStatus == DriverWorkStatus.Online);
-
-            var approvedDriverLicenses = await approvedDriverLicensesQuery
+                    })
+                .Where(x => x.WorkStatus == DriverWorkStatus.Online)
                 .ToListAsync(cancellationToken);
+
+            var today = DateOnly.FromDateTime(utcNow);
+            var approvedDriverLicenses = approvedDriverLicensesRows
+                .Where(x => x.LicenseClass.HasValue
+                    && (!x.ExpiryDate.HasValue || x.ExpiryDate.Value >= today))
+                .Select(x => new
+                {
+                    x.DriverId,
+                    LicenseClass = x.LicenseClass!.Value,
+                    x.VerifiedAt,
+                    x.CreatedAt,
+                    x.WorkStatus,
+                    x.AcceptLongPickupTrips,
+                    x.AcceptLongDistanceTrips
+                })
+                .ToList();
 
             // Flow: build the blocked driver set from active trips, active offers, and drivers already tried.
             var activeDriverIds = await _dbContext.Trips
@@ -641,7 +653,7 @@ public sealed class BookingMatchingService : IBookingMatchingService
         DateTime utcNow,
         CancellationToken cancellationToken)
     {
-        var activeOffer = await (
+        var activeOfferRows = await (
             from driverOffer in _dbContext.BookingDriverOffers.AsNoTracking()
             join profile in _dbContext.DriverProfiles.AsNoTracking()
                 on driverOffer.DriverId equals profile.DriverId
@@ -655,7 +667,6 @@ public sealed class BookingMatchingService : IBookingMatchingService
                 && driverOffer.ExpiresAt > utcNow
                 && kyc.DocumentType == KycDocumentType.DRIVING_LICENSE
                 && kyc.KycStatus == KycStatus.Approved
-                && kyc.LicenseClass.HasValue
             orderby kyc.VerifiedAt ?? kyc.CreatedAt descending
             select new
             {
@@ -665,17 +676,22 @@ public sealed class BookingMatchingService : IBookingMatchingService
                 user.UserName,
                 user.AvatarUrl,
                 profile.ExperienceYears,
-                LicenseClass = kyc.LicenseClass ?? LicenseClass.A1,
+                LicenseClass = kyc.LicenseClass,
+                kyc.ExpiryDate,
                 driverOffer.ExpiresAt,
                 driverOffer.OfferStatus
             })
-            .Take(1)
-            .FirstOrDefaultAsync(cancellationToken);
+            .ToListAsync(cancellationToken);
+        var today = DateOnly.FromDateTime(utcNow);
+        var activeOffer = activeOfferRows.FirstOrDefault(x =>
+            x.LicenseClass.HasValue
+            && (!x.ExpiryDate.HasValue || x.ExpiryDate.Value >= today));
 
         if (activeOffer is null)
         {
             return null;
         }
+        var activeOfferLicenseClass = activeOffer.LicenseClass.GetValueOrDefault();
 
         var ratingStats = await _dbContext.Ratings
             .AsNoTracking()
@@ -696,7 +712,7 @@ public sealed class BookingMatchingService : IBookingMatchingService
             ratingStats is null ? 0 : Math.Round(ratingStats.AverageRating, 1),
             ratingStats?.TripCount ?? 0,
             activeOffer.ExperienceYears ?? 0,
-            activeOffer.LicenseClass,
+            activeOfferLicenseClass,
             activeOffer.ExpiresAt,
             activeOffer.OfferStatus,
             activeOffer.OfferStatus == DriverOfferStatus.DriverAccepted

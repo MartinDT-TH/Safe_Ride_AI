@@ -350,14 +350,12 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
         var profile = await _dbContext.DriverProfiles
             .FirstOrDefaultAsync(x => x.DriverId == driverId, cancellationToken);
         var today = DateOnly.FromDateTime(utcNow);
-        var expiredLicense = await _dbContext.DriverKycs.AsNoTracking()
-            .Where(x => x.DriverId == driverId
-                && x.DocumentType == KycDocumentType.DRIVING_LICENSE
-                && x.KycStatus == KycStatus.Approved
-                && x.ExpiryDate.HasValue
-                && x.ExpiryDate.Value < today)
-            .Select(x => x.ExpiryDate)
-            .FirstOrDefaultAsync(cancellationToken);
+        var driverLicenses = await _dbContext.LoadApprovedDrivingLicensesAsync(
+            driverId,
+            cancellationToken);
+        var expiredLicense = driverLicenses.Any(license => license.IsUsableOn(today))
+            ? null
+            : driverLicenses.GetLatestExpiredExpiryDate(today);
         if (expiredLicense.HasValue)
         {
             throw new DriverLicenseExpiredException(expiredLicense.Value);
