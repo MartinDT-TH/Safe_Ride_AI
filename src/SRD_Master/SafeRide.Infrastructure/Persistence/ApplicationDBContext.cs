@@ -250,8 +250,6 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
                 .HasMaxLength(20)
                 .HasSentinel((KycStatus)(-1))
                 .HasDefaultValueSql("('Pending')");
-            entity.Property(e => e.LicenseClass)
-                .HasMaxLength(10);
 
             entity.HasOne(d => d.Driver).WithMany(p => p.DriverKycs)
                 .HasForeignKey(d => d.DriverId)

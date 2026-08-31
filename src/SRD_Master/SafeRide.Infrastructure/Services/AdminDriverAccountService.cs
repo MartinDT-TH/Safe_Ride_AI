@@ -191,12 +191,10 @@ public sealed class AdminDriverAccountService : IAdminDriverAccountService
 
         if (status == KycStatus.Approved)
         {
-            var identityCardNumber = documents
-                .FirstOrDefault(x => x.DocumentType == KycDocumentType.ID_CARD)
-                ?.DocumentNumber;
-            var identityCard = documents.First(
+            var identityCard = documents.FirstOrDefault(
                 x => x.DocumentType == KycDocumentType.ID_CARD);
-            if (string.IsNullOrWhiteSpace(identityCardNumber))
+            if (identityCard is null
+                || string.IsNullOrWhiteSpace(identityCard.DocumentNumber))
             {
                 throw new AdminUserAccountException(
                     "admin.driver.identity_card_required",
@@ -204,6 +202,30 @@ public sealed class AdminDriverAccountService : IAdminDriverAccountService
                     StatusCodes.Status400BadRequest);
             }
 
+            var drivingLicenses = documents
+                .Where(x => x.DocumentType == KycDocumentType.DRIVING_LICENSE
+                    && !string.IsNullOrWhiteSpace(x.DocumentNumber)
+                    && x.LicenseClass.HasValue)
+                .ToList();
+            if (drivingLicenses.Count == 0)
+            {
+                throw new AdminUserAccountException(
+                    "admin.driver.driving_license_required",
+                    "Hồ sơ chưa có giấy phép lái xe hợp lệ.",
+                    StatusCodes.Status400BadRequest);
+            }
+
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            if (!drivingLicenses.Any(x =>
+                    !x.ExpiryDate.HasValue || x.ExpiryDate.Value >= today))
+            {
+                throw new AdminUserAccountException(
+                    "admin.driver.driving_license_expired",
+                    "Giấy phép lái xe đã hết hạn nên không thể phê duyệt.",
+                    StatusCodes.Status400BadRequest);
+            }
+
+            var identityCardNumber = identityCard.DocumentNumber;
             var profile = await _db.DriverProfiles.FindAsync([driverId], cancellationToken);
             if (profile is null)
             {

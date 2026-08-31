@@ -1360,7 +1360,6 @@ namespace SafeRide.Infrastructure.Persistence.Migrations
                         .HasDefaultValueSql("('Pending')");
 
                     b.Property<string>("LicenseClass")
-                        .HasMaxLength(10)
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("RejectionReason")

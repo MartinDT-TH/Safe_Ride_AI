@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
 using MediatR;
 using SafeRide.API.Authorization;
@@ -21,6 +20,7 @@ using SafeRide.Contracts.Requests.Drivers;
 using SafeRide.Contracts.Responses.Bookings;
 using SafeRide.Contracts.Responses.Drivers;
 using SafeRide.Domain.Enums;
+using SafeRide.Infrastructure.Persistence;
 using System.Security.Claims;
 
 namespace SafeRide.API.Controllers;
@@ -274,12 +274,11 @@ public sealed class DriversController : ControllerBase
     {
         if (!TryGetUserId(out var driverId)) return Unauthorized();
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var expiry = await HttpContext.RequestServices.GetRequiredService<SafeRide.Infrastructure.Persistence.ApplicationDbContext>()
-            .DriverKycs.AsNoTracking()
-            .Where(x => x.DriverId == driverId && x.DocumentType == KycDocumentType.DRIVING_LICENSE && x.KycStatus == KycStatus.Approved)
-            .OrderByDescending(x => x.ExpiryDate)
-            .Select(x => x.ExpiryDate)
-            .FirstOrDefaultAsync(cancellationToken);
+        var dbContext = HttpContext.RequestServices.GetRequiredService<ApplicationDbContext>();
+        var licenses = await dbContext.LoadApprovedDrivingLicensesAsync(
+            driverId,
+            cancellationToken);
+        var expiry = licenses.GetLatestExpiryDate();
         var daysRemaining = expiry.HasValue ? expiry.Value.DayNumber - today.DayNumber : (int?)null;
         return Ok(new { expiryDate = expiry, daysRemaining, isExpired = daysRemaining.HasValue && daysRemaining.Value < 0, shouldWarn = daysRemaining is >= 0 and <= 3 });
     }
