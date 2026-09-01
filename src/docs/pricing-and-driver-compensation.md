@@ -43,20 +43,43 @@ not increase the normal-completion customer fare, even after a detour.
 
 After the trip is `IN_PROGRESS`, realtime tracking projects the current
 server-side location onto the immutable `Booking.RoutePolyline`. The cached and
-finalized progress is monotonic:
+finalized progress is monotonic. Pricing clamps that authoritative value to the
+inclusive range `[0, 1]` and applies an inclusive 50% threshold:
 
 ```text
 CandidateProgress = Project(CurrentLocation, Booking.RoutePolyline)
 PlannedRouteProgress = max(PreviousPlannedRouteProgress, CandidateProgress)
-GrossFare = max(
-    RoundVnd(Booking.EstimatedFare * PlannedRouteProgress),
-    AcceptedMinimumServiceFare)
+Progress = Clamp(PlannedRouteProgress, 0, 1)
+
+if Progress < 0.50:
+    GrossFare = max(
+        RoundVnd(Booking.EstimatedFare * Progress),
+        AcceptedMinimumServiceFare)
+else:
+    GrossFare = Booking.EstimatedFare
 ```
 
-The distance actually driven and an active/rerouted polyline are not early-stop
-pricing authorities. The finalized component allocation uses the same shared
-calculation used by settlement; the resulting persisted settlement always keeps
-`GrossFare = FareComponent + LongDistanceComponent`.
+Therefore `0.499999` remains progress-priced (subject to whole-VND rounding and
+the minimum-service floor), while `0.50`, `0.75`, and `1.00` charge the full
+locked booking fare. The distance actually driven and an active/rerouted
+polyline are not early-stop pricing authorities.
+
+The finalized component allocation uses the same shared calculation used by
+settlement and always keeps `GrossFare = FareComponent + LongDistanceComponent`:
+
+```text
+if Progress < 0.50:
+    LongDistanceComponent = RoundVnd(
+        AcceptedLongDistanceComponent * Progress)
+    FareComponent = GrossFare - LongDistanceComponent
+else:
+    FareComponent = Booking.EstimatedFare - AcceptedLongDistanceComponent
+    LongDistanceComponent = AcceptedLongDistanceComponent
+```
+
+At or above 50%, the full accepted long-distance component is restored from the
+immutable booking snapshot; it is not recomputed from current driver
+compensation or pricing configuration.
 
 ## Customer settlement and promotion
 
@@ -151,7 +174,7 @@ deducted from the driver wallet.
 | Reason | Current financial direction |
 |---|---|
 | `NORMAL_COMPLETION` | Locked V1 `Booking.EstimatedFare` after destination validation; hourly bookings use their locked duration-based estimate. |
-| `CUSTOMER_REQUESTED_STOP` | Deterministic original-route progress with `AcceptedMinimumServiceFare` floor; ends directly in `WAITING_PAYMENT` without Staff approval. |
+| `CUSTOMER_REQUESTED_STOP` | Below 50% original-route progress: deterministic progress fare with `AcceptedMinimumServiceFare` floor. At or above 50% (inclusive): full locked V1 `Booking.EstimatedFare` and full accepted fare components. Ends directly in `WAITING_PAYMENT` without Staff approval. |
 | `DRIVER_UNABLE_TO_CONTINUE` | Deterministic zero-fare operational end; goes directly to `WAITING_PAYMENT`, forces the driver offline, and does not require Staff approval. |
 | `STARTED_BY_MISTAKE` | Operationally ends immediately in `WAITING_PAYMENT`, but leaves fare fields null and creates a pending Staff reconciliation request. Payment and settlement stay blocked until Staff approves the existing zero-fare rule. |
 | `SYSTEM_ERROR` | Rejected with reconciliation-required conflict; no staff reconciliation endpoint is currently present. |

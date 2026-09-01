@@ -583,6 +583,11 @@ public sealed class BookingMatchingServiceTests
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
+        public Task PublishCustomerReadinessReportedAsync(
+            CustomerReadinessReportedEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
         public Task PublishTripPaymentPendingAsync(
             TripPaymentPendingEvent notification,
             CancellationToken cancellationToken = default) =>
