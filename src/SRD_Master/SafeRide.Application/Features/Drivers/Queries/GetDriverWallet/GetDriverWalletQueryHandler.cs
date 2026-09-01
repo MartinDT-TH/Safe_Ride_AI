@@ -8,17 +8,25 @@ public sealed class GetDriverWalletQueryHandler
     : IRequestHandler<GetDriverWalletQuery, DriverWalletDto>
 {
     private readonly IDriverQueryService _driverQueryService;
+    private readonly IDriverWalletTopUpService _walletTopUpService;
 
-    public GetDriverWalletQueryHandler(IDriverQueryService driverQueryService)
+    public GetDriverWalletQueryHandler(
+        IDriverQueryService driverQueryService,
+        IDriverWalletTopUpService walletTopUpService)
     {
         _driverQueryService = driverQueryService;
+        _walletTopUpService = walletTopUpService;
     }
 
-    public Task<DriverWalletDto> Handle(
+    public async Task<DriverWalletDto> Handle(
         GetDriverWalletQuery request,
         CancellationToken cancellationToken)
     {
-        return _driverQueryService.GetWalletAsync(
+        await _walletTopUpService.ReconcilePendingAsync(
+            request.DriverId,
+            cancellationToken);
+
+        return await _driverQueryService.GetWalletAsync(
             request.DriverId,
             request.Period,
             request.UtcOffsetMinutes,
