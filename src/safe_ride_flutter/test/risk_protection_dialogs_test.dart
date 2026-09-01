@@ -31,6 +31,36 @@ void main() {
     expect(safetyReportReasonCodesForType('VEHICLE_ISSUE'), vehicleFaultTypes);
   });
 
+  testWidgets('safety report reason dropdown fits a narrow trip screen', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('vi'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () => showSafetyReportDialog(context),
+              child: const Text('open safety report'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open safety report'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+  });
+
   test(
     'PNG evidence keeps its content type when picker omits MIME metadata',
     () {

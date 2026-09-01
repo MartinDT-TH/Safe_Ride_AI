@@ -914,7 +914,7 @@ public sealed class TripStatusServiceTests
             fixture.TripId,
             CancellationToken.None,
             TripEndReason.CUSTOMER_REQUESTED_STOP);
-        await fixture.AddSuccessfulPaymentAsync(26_000m);
+        await fixture.AddSuccessfulPaymentAsync(110_000m);
         await fixture.Service.AdvanceAfterSuccessfulPaymentAsync(
             fixture.DriverId,
             fixture.TripId,
@@ -931,8 +931,8 @@ public sealed class TripStatusServiceTests
             .SingleAsync(x => x.Id == fixture.TripId);
 
         Assert.Equal(2m, trip.ActualDistanceKm);
-        Assert.Equal(36_000m, trip.ActualFare);
-        Assert.Equal(26_000m, trip.FinalFare);
+        Assert.Equal(120_000m, trip.ActualFare);
+        Assert.Equal(110_000m, trip.FinalFare);
         Assert.Equal(0.5m, trip.PlannedRouteProgress);
         Assert.False(trip.DestinationReached);
         Assert.Equal(TripStatus.COMPLETED, trip.TripStatus);
@@ -940,7 +940,7 @@ public sealed class TripStatusServiceTests
     }
 
     [Fact]
-    public async Task EndTrip_V1CustomerRequestedStop_WithLongDistance_UsesApprovedGrossAndComponentAllocation()
+    public async Task EndTrip_V1CustomerRequestedStop_AtHalfProgress_UsesFullLockedGrossAndComponents()
     {
         using var fixture = await TripStatusFixture.CreateAsync(
             TripStatus.IN_PROGRESS,
@@ -961,14 +961,24 @@ public sealed class TripStatusServiceTests
             TripEndReason.CUSTOMER_REQUESTED_STOP);
 
         var trip = await fixture.DbContext.Trips
-            .Include(x => x.Booking)
+            .Include(x => x.Booking).ThenInclude(x => x.BookingPromotions)
             .SingleAsync(x => x.Id == fixture.TripId);
+        var settlement = await fixture.FinancialSettlementService.GetOrCreateAsync(
+            trip,
+            false,
+            CancellationToken.None);
 
         Assert.Equal(2m, trip.ActualDistanceKm);
         Assert.Equal(0.5m, trip.PlannedRouteProgress);
-        Assert.Equal(50_000m, trip.ActualFare);
-        Assert.Equal(40_000m, trip.FinalFare);
+        Assert.Equal(100_000m, trip.ActualFare);
+        Assert.Equal(90_000m, trip.FinalFare);
         Assert.Equal(20_000m, trip.Booking.LongDistanceComponent);
+        Assert.Equal(100_000m, settlement.GrossFare);
+        Assert.Equal(80_000m, settlement.FareComponent);
+        Assert.Equal(20_000m, settlement.LongDistanceComponent);
+        Assert.Equal(
+            settlement.GrossFare,
+            settlement.FareComponent + settlement.LongDistanceComponent);
         Assert.Equal(TripEndReason.CUSTOMER_REQUESTED_STOP, trip.EndReason);
         Assert.Empty(await fixture.DbContext.TripEndReconciliationRequests.ToListAsync());
     }
