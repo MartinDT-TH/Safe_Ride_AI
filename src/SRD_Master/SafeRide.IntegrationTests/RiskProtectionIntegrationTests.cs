@@ -484,12 +484,12 @@ public sealed class RiskProtectionIntegrationTests
     }
 
     [Fact]
-    public async Task ComponentAwareSettlement_EarlyStopWithLongDistanceComponent_ProratesComponentsAndPreservesPromotionPolicy()
+    public async Task ComponentAwareSettlement_EarlyStopWithLongDistanceComponent_UsesFullLockedComponentsAndPreservesPromotionPolicy()
     {
         await using var db = CreateDbContext();
         var graph = await SeedTripAsync(
             db, TripStatus.WAITING_PAYMENT, riskEnabled: false, componentAwarePricing: true);
-        graph.Trip.ActualFare = 50_000m;
+        graph.Trip.ActualFare = 100_000m;
         graph.Trip.PlannedRouteProgress = 0.5m;
         graph.Trip.ActualDistanceKm = 999m;
         graph.Trip.EndReason = TripEndReason.CUSTOMER_REQUESTED_STOP;
@@ -512,17 +512,17 @@ public sealed class RiskProtectionIntegrationTests
             safetyTerminated: false,
             CancellationToken.None);
 
-        Assert.Equal(50_000m, settlement.GrossFare);
-        Assert.Equal(40_000m, settlement.FareComponent);
-        Assert.Equal(10_000m, settlement.LongDistanceComponent);
+        Assert.Equal(100_000m, settlement.GrossFare);
+        Assert.Equal(80_000m, settlement.FareComponent);
+        Assert.Equal(20_000m, settlement.LongDistanceComponent);
         Assert.Equal(20_000m, settlement.SnapshotPromotionDiscount);
         Assert.Equal(20_000m, settlement.AppliedPromotionDiscount);
-        Assert.Equal(30_000m, settlement.CustomerPayableAmount);
-        Assert.Equal(40_000m, settlement.CommissionBase);
-        Assert.Equal(12_000m, settlement.GrossPlatformCommission);
-        Assert.Equal(28_000m, settlement.DriverFareEarning);
-        Assert.Equal(10_000m, settlement.LongDistanceEarning);
-        Assert.Equal(38_000m, settlement.DriverPayout);
+        Assert.Equal(80_000m, settlement.CustomerPayableAmount);
+        Assert.Equal(80_000m, settlement.CommissionBase);
+        Assert.Equal(24_000m, settlement.GrossPlatformCommission);
+        Assert.Equal(56_000m, settlement.DriverFareEarning);
+        Assert.Equal(20_000m, settlement.LongDistanceEarning);
+        Assert.Equal(76_000m, settlement.DriverPayout);
         Assert.Equal(
             settlement.GrossFare,
             settlement.FareComponent + settlement.LongDistanceComponent);

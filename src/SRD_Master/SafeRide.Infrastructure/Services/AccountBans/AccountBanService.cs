@@ -20,6 +20,14 @@ public sealed class AccountBanService :
 {
     private const string AutomaticTriggerPrefix = "rating";
 
+    private sealed record AccountRestrictionNotification(
+        Guid UserId,
+        AccountBanType BanType,
+        string Reason,
+        string Message,
+        DateTime UtcNow,
+        DateTime? EndsAt);
+
     private readonly ApplicationDbContext _dbContext;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IUserSessionRevocationService _sessionRevocationService;
@@ -110,122 +118,140 @@ public sealed class AccountBanService :
             return;
         }
 
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync(
-            IsolationLevel.Serializable,
-            cancellationToken);
-
-        var user = await _dbContext.Users
-            .FirstOrDefaultAsync(x => x.Id == rating.DriverId, cancellationToken);
-        if (user is null)
+        var strategy = _dbContext.Database.CreateExecutionStrategy();
+        var restriction = await strategy.ExecuteAsync(async () =>
         {
-            await transaction.RollbackAsync(cancellationToken);
-            return;
-        }
-
-        var utcNow = _dateTimeProvider.UtcNow;
-        await ExpireTemporaryBansAsync(user, utcNow, cancellationToken);
-
-        var activeAutomaticRestriction = await _dbContext.AccountBanHistories
-            .AsNoTracking()
-            .AnyAsync(
-                x => x.UserId == user.Id &&
-                    x.Source == AccountBanSource.AutomaticNegativeFeedback &&
-                    x.Status == AccountBanStatus.Active &&
-                    (x.EndsAt == null || x.EndsAt > utcNow),
+            // A retrying SQL Server strategy must own the complete user transaction.
+            // Otherwise the first query executed after BeginTransactionAsync throws.
+            _dbContext.ChangeTracker.Clear();
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable,
                 cancellationToken);
-        if (activeAutomaticRestriction)
-        {
+
+            var user = await _dbContext.Users
+                .FirstOrDefaultAsync(x => x.Id == rating.DriverId, cancellationToken);
+            if (user is null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return null;
+            }
+
+            var utcNow = _dateTimeProvider.UtcNow;
+            await ExpireTemporaryBansAsync(user, utcNow, cancellationToken);
+
+            var activeAutomaticRestriction = await _dbContext.AccountBanHistories
+                .AsNoTracking()
+                .AnyAsync(
+                    x => x.UserId == user.Id &&
+                        x.Source == AccountBanSource.AutomaticNegativeFeedback &&
+                        x.Status == AccountBanStatus.Active &&
+                        (x.EndsAt == null || x.EndsAt > utcNow),
+                    cancellationToken);
+            if (activeAutomaticRestriction)
+            {
+                await transaction.CommitAsync(cancellationToken);
+                return null;
+            }
+
+            var lastAutomaticBanCreatedAt = await _dbContext.AccountBanHistories
+                .AsNoTracking()
+                .Where(x =>
+                    x.UserId == user.Id &&
+                    x.Source == AccountBanSource.AutomaticNegativeFeedback)
+                .OrderByDescending(x => x.CreatedAt)
+                .Select(x => (DateTime?)x.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            var negativeFeedbackCount = await _dbContext.Ratings
+                .AsNoTracking()
+                .CountAsync(
+                    x => x.DriverId == user.Id &&
+                        x.RatingScore <= configuration.NegativeRatingMaxScore &&
+                        (lastAutomaticBanCreatedAt == null ||
+                            x.CreatedAt > lastAutomaticBanCreatedAt),
+                    cancellationToken);
+            if (negativeFeedbackCount < configuration.NegativeFeedbackThreshold)
+            {
+                await transaction.CommitAsync(cancellationToken);
+                return null;
+            }
+
+            var previousTemporaryBanCount = await _dbContext.AccountBanHistories
+                .AsNoTracking()
+                .CountAsync(
+                    x => x.UserId == user.Id &&
+                        x.Source == AccountBanSource.AutomaticNegativeFeedback &&
+                        x.BanType == AccountBanType.Temporary,
+                    cancellationToken);
+            var shouldPermanentBan =
+                previousTemporaryBanCount >= configuration.MaximumTemporaryBans;
+            var banType = shouldPermanentBan
+                ? AccountBanType.Permanent
+                : AccountBanType.Temporary;
+            int? temporarySequence = shouldPermanentBan
+                ? null
+                : previousTemporaryBanCount + 1;
+            DateTime? endsAt = shouldPermanentBan
+                ? null
+                : utcNow.AddDays(configuration.TemporaryBanDurationDays);
+            var reason = BuildAutomaticBanReason(
+                banType,
+                configuration,
+                negativeFeedbackCount);
+            var message = BuildUserBanMessage(
+                banType,
+                reason,
+                utcNow,
+                endsAt);
+
+            _dbContext.AccountBanHistories.Add(new AccountBanHistory
+            {
+                UserId = user.Id,
+                BanType = banType,
+                Source = AccountBanSource.AutomaticNegativeFeedback,
+                Status = AccountBanStatus.Active,
+                Reason = reason,
+                Trigger = $"{AutomaticTriggerPrefix}:{rating.Id}",
+                StartedAt = utcNow,
+                EndsAt = endsAt,
+                CreatedAt = utcNow,
+                TriggeringRatingId = rating.Id,
+                NegativeFeedbackCount = negativeFeedbackCount,
+                TemporaryBanSequence = temporarySequence
+            });
+
+            user.IsActive = false;
+            user.BanReason = reason;
+            user.UpdatedAt = utcNow;
+
+            await SetDriverOfflineIfNeededAsync(user.Id, utcNow, cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await _sessionRevocationService.RevokeAllUserSessionsAsync(
+                user.Id,
+                reason,
+                cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return;
-        }
 
-        var lastAutomaticBanCreatedAt = await _dbContext.AccountBanHistories
-            .AsNoTracking()
-            .Where(x =>
-                x.UserId == user.Id &&
-                x.Source == AccountBanSource.AutomaticNegativeFeedback)
-            .OrderByDescending(x => x.CreatedAt)
-            .Select(x => (DateTime?)x.CreatedAt)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        var negativeFeedbackCount = await _dbContext.Ratings
-            .AsNoTracking()
-            .CountAsync(
-                x => x.DriverId == user.Id &&
-                    x.RatingScore <= configuration.NegativeRatingMaxScore &&
-                    (lastAutomaticBanCreatedAt == null ||
-                        x.CreatedAt > lastAutomaticBanCreatedAt),
-                cancellationToken);
-        if (negativeFeedbackCount < configuration.NegativeFeedbackThreshold)
-        {
-            await transaction.CommitAsync(cancellationToken);
-            return;
-        }
-
-        var previousTemporaryBanCount = await _dbContext.AccountBanHistories
-            .AsNoTracking()
-            .CountAsync(
-                x => x.UserId == user.Id &&
-                    x.Source == AccountBanSource.AutomaticNegativeFeedback &&
-                    x.BanType == AccountBanType.Temporary,
-                cancellationToken);
-        var shouldPermanentBan =
-            previousTemporaryBanCount >= configuration.MaximumTemporaryBans;
-        var banType = shouldPermanentBan
-            ? AccountBanType.Permanent
-            : AccountBanType.Temporary;
-        int? temporarySequence = shouldPermanentBan
-            ? null
-            : previousTemporaryBanCount + 1;
-        DateTime? endsAt = shouldPermanentBan
-            ? null
-            : utcNow.AddDays(configuration.TemporaryBanDurationDays);
-        var reason = BuildAutomaticBanReason(
-            banType,
-            configuration,
-            negativeFeedbackCount);
-        var message = BuildUserBanMessage(
-            banType,
-            reason,
-            utcNow,
-            endsAt);
-
-        _dbContext.AccountBanHistories.Add(new AccountBanHistory
-        {
-            UserId = user.Id,
-            BanType = banType,
-            Source = AccountBanSource.AutomaticNegativeFeedback,
-            Status = AccountBanStatus.Active,
-            Reason = reason,
-            Trigger = $"{AutomaticTriggerPrefix}:{rating.Id}",
-            StartedAt = utcNow,
-            EndsAt = endsAt,
-            CreatedAt = utcNow,
-            TriggeringRatingId = rating.Id,
-            NegativeFeedbackCount = negativeFeedbackCount,
-            TemporaryBanSequence = temporarySequence
+            return new AccountRestrictionNotification(
+                user.Id,
+                banType,
+                reason,
+                message,
+                utcNow,
+                endsAt);
         });
 
-        user.IsActive = false;
-        user.BanReason = reason;
-        user.UpdatedAt = utcNow;
-
-        await SetDriverOfflineIfNeededAsync(user.Id, utcNow, cancellationToken);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        await _sessionRevocationService.RevokeAllUserSessionsAsync(
-            user.Id,
-            reason,
-            cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-
-        await PublishAccountRestrictionAsync(
-            user.Id,
-            banType,
-            reason,
-            message,
-            utcNow,
-            endsAt,
-            cancellationToken);
+        if (restriction is not null)
+        {
+            await PublishAccountRestrictionAsync(
+                restriction.UserId,
+                restriction.BanType,
+                restriction.Reason,
+                restriction.Message,
+                restriction.UtcNow,
+                restriction.EndsAt,
+                cancellationToken);
+        }
     }
 
     public async Task<AccountRestrictionCheckResult> CheckAccountAccessAsync(

@@ -931,8 +931,8 @@ public sealed class TripStatusServiceTests
             .SingleAsync(x => x.Id == fixture.TripId);
 
         Assert.Equal(2m, trip.ActualDistanceKm);
-        Assert.Equal(120_000m, trip.ActualFare);
-        Assert.Equal(110_000m, trip.FinalFare);
+        Assert.Equal(72_000m, trip.ActualFare);
+        Assert.Equal(62_000m, trip.FinalFare);
         Assert.Equal(0.5m, trip.PlannedRouteProgress);
         Assert.False(trip.DestinationReached);
         Assert.Equal(TripStatus.COMPLETED, trip.TripStatus);
@@ -3252,6 +3252,11 @@ public sealed class TripStatusServiceTests
             }
             return Task.CompletedTask;
         }
+
+        public Task PublishCustomerReadinessReportedAsync(
+            CustomerReadinessReportedEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
 
         public Task PublishTripPaymentPendingAsync(
             TripPaymentPendingEvent notification,
