@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.EntityFrameworkCore.Metadata;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
 
@@ -38,6 +39,38 @@ public sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
             table.HasCheckConstraint(
                 "CK_Bookings_EstimatedFare",
                 "[EstimatedFare] >= 0");
+            table.HasCheckConstraint(
+                "CK_Bookings_PricingSnapshotVersion",
+                "[PricingSnapshotVersion] IS NULL OR [PricingSnapshotVersion] IN (0, 1)");
+            table.HasCheckConstraint(
+                "CK_Bookings_PricingSnapshotAmounts",
+                "[PricingSnapshotVersion] IS NULL OR [PricingSnapshotVersion] = 0 OR (" +
+                "[EstimatedDistanceKm] IS NOT NULL AND [EstimatedDurationMinutes] IS NOT NULL AND " +
+                "[SurgeEvaluationTime] IS NOT NULL AND " +
+                "[AcceptedBaseFare] IS NOT NULL AND [AcceptedBaseFare] >= 0 AND " +
+                "[AcceptedMinimumServiceFare] IS NOT NULL AND [AcceptedMinimumServiceFare] >= 0 AND " +
+                "[AcceptedSurgeMultiplier] IS NOT NULL AND [AcceptedSurgeMultiplier] >= 1 AND " +
+                "[NormalFare] IS NOT NULL AND [NormalFare] >= 0 AND " +
+                "[SurgedFare] IS NOT NULL AND [SurgedFare] >= [NormalFare] AND " +
+                "[SurgeAmount] IS NOT NULL AND " +
+                "[SurgeAmount] = [SurgedFare] - [NormalFare] AND " +
+                "[AcceptedLongDistanceThresholdKm] IS NOT NULL AND [AcceptedLongDistanceThresholdKm] > 0 AND " +
+                "[AcceptedLongDistanceOptInThresholdKm] IS NOT NULL AND " +
+                "[AcceptedLongDistanceOptInThresholdKm] >= [AcceptedLongDistanceThresholdKm] AND " +
+                "[AcceptedMaximumTripDistanceKm] IS NOT NULL AND " +
+                "[AcceptedMaximumTripDistanceKm] >= [AcceptedLongDistanceOptInThresholdKm] AND " +
+                "[AcceptedLongDistanceRatePerKm] IS NOT NULL AND [AcceptedLongDistanceRatePerKm] >= 0 AND " +
+                "[LongDistanceComponent] IS NOT NULL AND [LongDistanceComponent] >= 0 AND " +
+                "[NormalFare] = ROUND([NormalFare], 0) AND " +
+                "[SurgedFare] = ROUND([SurgedFare], 0) AND " +
+                "[SurgeAmount] = ROUND([SurgeAmount], 0) AND " +
+                "[LongDistanceComponent] = ROUND([LongDistanceComponent], 0) AND " +
+                "[EstimatedFare] = ROUND([EstimatedFare], 0) AND " +
+                "[EstimatedFare] = [SurgedFare] + [LongDistanceComponent] AND " +
+                "(([AcceptedPricePerKm] IS NOT NULL AND [AcceptedPricePerKm] > 0 AND " +
+                "[AcceptedPricePerHour] IS NULL AND NULLIF(LTRIM(RTRIM([RoutePolyline])), '') IS NOT NULL) OR " +
+                "([AcceptedPricePerHour] IS NOT NULL AND [AcceptedPricePerHour] > 0 AND " +
+                "[AcceptedPricePerKm] IS NULL AND [LongDistanceComponent] = 0)))");
         });
 
         builder.HasKey(booking => booking.BookingId)
@@ -63,7 +96,39 @@ public sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
         builder.Property(booking => booking.EstimatedFare)
             .HasColumnType("decimal(18,2)");
         builder.Property(booking => booking.EstimatedDistanceKm)
-            .HasColumnType("decimal(10,2)");
+            .HasColumnType("decimal(18,6)");
+        builder.Property(booking => booking.PricingSnapshotVersion);
+        builder.Property(booking => booking.AcceptedBaseFare)
+            .HasColumnType("decimal(18,2)");
+        builder.Property(booking => booking.AcceptedMinimumServiceFare)
+            .HasColumnType("decimal(18,2)");
+        builder.Property(booking => booking.AcceptedPricePerKm)
+            .HasColumnType("decimal(18,2)");
+        builder.Property(booking => booking.AcceptedPricePerHour)
+            .HasColumnType("decimal(18,2)");
+        builder.Property(booking => booking.AcceptedSurgeMultiplier)
+            .HasColumnType("decimal(5,2)");
+        builder.Property(booking => booking.SurgeEvaluationTime)
+            .HasConversion(
+                value => NormalizeUtc(value),
+                storedValue => MarkAsUtc(storedValue))
+            .IsRequired(false);
+        builder.Property(booking => booking.NormalFare)
+            .HasColumnType("decimal(18,2)");
+        builder.Property(booking => booking.SurgedFare)
+            .HasColumnType("decimal(18,2)");
+        builder.Property(booking => booking.SurgeAmount)
+            .HasColumnType("decimal(18,2)");
+        builder.Property(booking => booking.AcceptedLongDistanceThresholdKm)
+            .HasColumnType("decimal(18,6)");
+        builder.Property(booking => booking.AcceptedLongDistanceOptInThresholdKm)
+            .HasColumnType("decimal(18,6)");
+        builder.Property(booking => booking.AcceptedMaximumTripDistanceKm)
+            .HasColumnType("decimal(18,6)");
+        builder.Property(booking => booking.AcceptedLongDistanceRatePerKm)
+            .HasColumnType("decimal(18,2)");
+        builder.Property(booking => booking.LongDistanceComponent)
+            .HasColumnType("decimal(18,2)");
         builder.Property(booking => booking.RoutePolyline)
             .HasColumnType("nvarchar(max)");
         builder.Property(booking => booking.DestinationLocation)
@@ -110,6 +175,45 @@ public sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
             .HasForeignKey(booking => booking.VehicleId)
             .OnDelete(DeleteBehavior.ClientSetNull)
             .HasConstraintName("FK_Booking_Vehicle");
+
+        ConfigurePricingSnapshotImmutability(builder);
+    }
+
+    private static void ConfigurePricingSnapshotImmutability(
+        EntityTypeBuilder<Booking> builder)
+    {
+        string[] propertyNames =
+        [
+            nameof(Booking.BookingType),
+            nameof(Booking.ScheduledAt),
+            nameof(Booking.EstimatedDistanceKm),
+            nameof(Booking.EstimatedDurationMinutes),
+            nameof(Booking.EstimatedFare),
+            nameof(Booking.RoutePolyline),
+            nameof(Booking.PricingRuleId),
+            nameof(Booking.SurgePricingRuleId),
+            nameof(Booking.PricingSnapshotVersion),
+            nameof(Booking.AcceptedBaseFare),
+            nameof(Booking.AcceptedMinimumServiceFare),
+            nameof(Booking.AcceptedPricePerKm),
+            nameof(Booking.AcceptedPricePerHour),
+            nameof(Booking.AcceptedSurgeMultiplier),
+            nameof(Booking.SurgeEvaluationTime),
+            nameof(Booking.NormalFare),
+            nameof(Booking.SurgedFare),
+            nameof(Booking.SurgeAmount),
+            nameof(Booking.AcceptedLongDistanceThresholdKm),
+            nameof(Booking.AcceptedLongDistanceOptInThresholdKm),
+            nameof(Booking.AcceptedMaximumTripDistanceKm),
+            nameof(Booking.AcceptedLongDistanceRatePerKm),
+            nameof(Booking.LongDistanceComponent)
+        ];
+
+        foreach (var propertyName in propertyNames)
+        {
+            builder.Property(propertyName).Metadata.SetAfterSaveBehavior(
+                PropertySaveBehavior.Throw);
+        }
     }
 
     private static DateTime? NormalizeUtc(DateTime? value)

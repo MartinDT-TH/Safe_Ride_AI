@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../../core/localization/localization_extensions.dart';
+import '../../../../../core/widgets/motorbike_feature_notice.dart';
 import 'package:flutter/services.dart';
 
 import '../../data/models/vehicle_model.dart';
@@ -15,6 +16,9 @@ class VehicleFormSheet extends StatefulWidget {
     VehicleModel? vehicle,
     required Future<bool> Function(VehicleModel) onSave,
   }) {
+    if (vehicle?.type == VehicleType.motorbike) {
+      return MotorbikeFeatureNotice.show(context);
+    }
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -48,7 +52,7 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
   @override
   void initState() {
     super.initState();
-    _selectedType = widget.vehicle?.type ?? VehicleType.motorbike;
+    _selectedType = widget.vehicle?.type ?? VehicleType.car;
     _nameController = TextEditingController(text: widget.vehicle?.name ?? '');
     _engineCapacityController = TextEditingController(
       text: widget.vehicle?.engineCapacityCc?.toString() ?? '',
@@ -165,9 +169,7 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
                   : '74A 543.67',
               errorText: _plateError,
               textCapitalization: TextCapitalization.characters,
-              inputFormatters: [
-                _LicensePlateInputFormatter(_selectedType),
-              ],
+              inputFormatters: [_LicensePlateInputFormatter(_selectedType)],
             ),
             SizedBox(height: 20),
             _buildInputField(
@@ -234,6 +236,10 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
   }
 
   Future<void> _saveVehicle() async {
+    if (_selectedType == VehicleType.motorbike) {
+      await MotorbikeFeatureNotice.show(context);
+      return;
+    }
     final name = _nameController.text.trim();
     final engineCapacityText = _engineCapacityController.text.trim();
     final plateNumber = _plateController.text.trim();
@@ -275,19 +281,25 @@ class _VehicleFormSheetState extends State<VehicleFormSheet> {
 
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() {
-          _selectedType = type;
-          _engineCapacityError = null;
-          _plateError = null;
-          final normalized = _formatPartialPlateNumber(
-            _plateController.text,
-            type,
-          );
-          _plateController.value = TextEditingValue(
-            text: normalized,
-            selection: TextSelection.collapsed(offset: normalized.length),
-          );
-        }),
+        onTap: () async {
+          if (type == VehicleType.motorbike) {
+            await MotorbikeFeatureNotice.show(context);
+            return;
+          }
+          setState(() {
+            _selectedType = type;
+            _engineCapacityError = null;
+            _plateError = null;
+            final normalized = _formatPartialPlateNumber(
+              _plateController.text,
+              type,
+            );
+            _plateController.value = TextEditingValue(
+              text: normalized,
+              selection: TextSelection.collapsed(offset: normalized.length),
+            );
+          });
+        },
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
@@ -460,9 +472,7 @@ String? _normalizePlateNumber(String value, VehicleType type) {
 
 String _formatPartialPlateNumber(String value, VehicleType type) {
   final maxLength = type == VehicleType.motorbike ? 9 : 8;
-  var compact = value
-      .toUpperCase()
-      .replaceAll(RegExp(r'[^A-Z0-9]'), '');
+  var compact = value.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
   if (compact.length > maxLength) compact = compact.substring(0, maxLength);
   if (compact.length <= 2) return compact;
 

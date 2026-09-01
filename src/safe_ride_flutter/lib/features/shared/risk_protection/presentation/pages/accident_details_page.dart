@@ -1,0 +1,683 @@
+import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+
+import '../../../../../core/localization/localization_extensions.dart';
+import '../../../../../dependency_injection/injection.dart';
+import '../../data/models/risk_protection_models.dart';
+import '../providers/risk_protection_provider.dart';
+import '../risk_protection_labels.dart';
+
+class AccidentDetailsPage extends StatelessWidget {
+  const AccidentDetailsPage({required this.accidentId, super.key});
+
+  final int accidentId;
+
+  @override
+  Widget build(BuildContext context) => ChangeNotifierProvider(
+    create: (_) => getIt<RiskProtectionProvider>()..loadAccident(accidentId),
+    child: _AccidentDetailsView(accidentId: accidentId),
+  );
+}
+
+class _AccidentDetailsView extends StatelessWidget {
+  const _AccidentDetailsView({required this.accidentId});
+
+  final int accidentId;
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<RiskProtectionProvider>();
+    final accident = provider.accident;
+    return Scaffold(
+      appBar: AppBar(title: Text(context.l10n.riskProtectionCaseTitle)),
+      body: RefreshIndicator(
+        onRefresh: () => provider.loadAccident(accidentId),
+        child: accident == null
+            ? _buildEmptyState(context, provider)
+            : ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                children: [
+                  _AccidentCard(accident: accident),
+                  const SizedBox(height: 16),
+                  _EvidenceCard(accident: accident),
+                  const SizedBox(height: 16),
+                  _AssessmentCard(accident: accident),
+                  const SizedBox(height: 16),
+                  _ClaimCard(claim: accident.claim),
+                  if (provider.errorMessage != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      provider.errorMessage!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+      ),
+      floatingActionButton: accident == null
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: provider.isMutating
+                  ? null
+                  : () => _uploadEvidence(context, provider),
+              icon: const Icon(Icons.add_a_photo_outlined),
+              label: Text(context.l10n.uploadAccidentEvidence),
+            ),
+    );
+  }
+
+  Widget _buildEmptyState(
+    BuildContext context,
+    RiskProtectionProvider provider,
+  ) {
+    if (provider.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(24),
+      children: [
+        const SizedBox(height: 120),
+        Icon(
+          Icons.report_gmailerrorred_outlined,
+          size: 54,
+          color: Colors.grey.shade500,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          provider.errorMessage ?? context.l10n.genericError,
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 12),
+        Center(
+          child: FilledButton.tonal(
+            onPressed: () => provider.loadAccident(accidentId),
+            child: Text(context.l10n.retry),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _uploadEvidence(
+    BuildContext context,
+    RiskProtectionProvider provider,
+  ) async {
+    final firstPhoto = await _captureEvidencePhoto(context);
+    if (firstPhoto == null || !context.mounted) return;
+
+    final photos = <_PendingEvidencePhoto>[firstPhoto];
+    const maxPhotos = 3;
+    final uploaded = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        var description = '';
+        var isSubmitting = false;
+        String? uploadError;
+        return StatefulBuilder(
+          builder: (context, setState) => PopScope(
+            canPop: !isSubmitting,
+            child: AlertDialog(
+              title: Text(context.l10n.uploadAccidentEvidence),
+              content: SizedBox(
+                width: 420,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        context.l10n.photoCount(photos.length, maxPhotos),
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (var index = 0; index < photos.length; index++)
+                            SizedBox(
+                              width: 112,
+                              child: Column(
+                                children: [
+                                  Stack(
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Image.memory(
+                                          photos[index].previewBytes,
+                                          height: 96,
+                                          width: 112,
+                                          fit: BoxFit.cover,
+                                          errorBuilder:
+                                              (
+                                                context,
+                                                error,
+                                                stackTrace,
+                                              ) => Container(
+                                                height: 96,
+                                                width: 112,
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.surfaceContainer,
+                                                alignment: Alignment.center,
+                                                child: const Icon(
+                                                  Icons.broken_image_outlined,
+                                                ),
+                                              ),
+                                        ),
+                                      ),
+                                      Positioned(
+                                        right: 2,
+                                        top: 2,
+                                        child: IconButton.filled(
+                                          visualDensity: VisualDensity.compact,
+                                          tooltip: context.l10n.removePhoto,
+                                          onPressed: isSubmitting
+                                              ? null
+                                              : () => setState(
+                                                  () => photos.removeAt(index),
+                                                ),
+                                          icon: const Icon(
+                                            Icons.close,
+                                            size: 18,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    context.l10n.photoNumber(index + 1),
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        onPressed: isSubmitting || photos.length >= maxPhotos
+                            ? null
+                            : () async {
+                                final photo = await _captureEvidencePhoto(
+                                  context,
+                                );
+                                if (photo == null || !context.mounted) return;
+                                setState(() {
+                                  photos.add(photo);
+                                  uploadError = null;
+                                });
+                              },
+                        icon: const Icon(Icons.camera_alt_outlined),
+                        label: Text(context.l10n.takePhoto),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        enabled: !isSubmitting,
+                        minLines: 2,
+                        maxLines: 4,
+                        onChanged: (value) => description = value,
+                        decoration: InputDecoration(
+                          labelText: context.l10n.optionalNote,
+                        ),
+                      ),
+                      if (uploadError != null) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          uploadError!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(false),
+                  child: Text(context.l10n.cancel),
+                ),
+                FilledButton.icon(
+                  onPressed: isSubmitting || photos.isEmpty
+                      ? null
+                      : () async {
+                          setState(() {
+                            isSubmitting = true;
+                            uploadError = null;
+                          });
+                          final filesToUpload =
+                              List<_PendingEvidencePhoto>.from(photos);
+                          var uploadedCount = 0;
+                          while (uploadedCount < filesToUpload.length) {
+                            final success = await provider.uploadEvidence(
+                              accidentId: accidentId,
+                              file: filesToUpload[uploadedCount].file,
+                              description: description,
+                            );
+                            if (!success) break;
+                            uploadedCount++;
+                          }
+                          if (!dialogContext.mounted) return;
+                          if (uploadedCount == filesToUpload.length) {
+                            Navigator.of(dialogContext).pop(true);
+                            return;
+                          }
+                          setState(() {
+                            if (uploadedCount > 0) {
+                              photos.removeRange(0, uploadedCount);
+                            }
+                            isSubmitting = false;
+                            uploadError =
+                                provider.errorMessage ??
+                                context.l10n.evidenceUploadFailed;
+                          });
+                        },
+                  icon: isSubmitting
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.send_outlined),
+                  label: Text(
+                    isSubmitting
+                        ? context.l10n.submitting
+                        : context.l10n.sendEvidencePhoto,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (uploaded == true && context.mounted) {
+      _showMessage(context, context.l10n.accidentEvidenceUploaded);
+    }
+  }
+
+  Future<_PendingEvidencePhoto?> _captureEvidencePhoto(
+    BuildContext context,
+  ) async {
+    XFile? file;
+    try {
+      file = await ImagePicker().pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.rear,
+        imageQuality: 85,
+        maxWidth: 1920,
+      );
+    } catch (_) {
+      if (context.mounted) {
+        _showMessage(
+          context,
+          context.l10n.mediaAccessFailed(context.l10n.camera),
+        );
+      }
+      return null;
+    }
+    if (file == null || !context.mounted) return null;
+
+    late final Uint8List previewBytes;
+    try {
+      previewBytes = await file.readAsBytes();
+    } catch (_) {
+      if (context.mounted) {
+        _showMessage(context, context.l10n.evidencePreviewFailed);
+      }
+      return null;
+    }
+    if (!context.mounted) return null;
+    return _PendingEvidencePhoto(file, previewBytes);
+  }
+}
+
+class _PendingEvidencePhoto {
+  const _PendingEvidencePhoto(this.file, this.previewBytes);
+
+  final XFile file;
+  final Uint8List previewBytes;
+}
+
+class _AccidentCard extends StatelessWidget {
+  const _AccidentCard({required this.accident});
+  final RiskProtectionAccident accident;
+
+  @override
+  Widget build(BuildContext context) => _SectionCard(
+    title: context.l10n.riskIncidentInformation,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _Row(
+          label: context.l10n.riskProtectionCaseTitle,
+          value: '#${accident.id}',
+        ),
+        _Row(label: context.l10n.tripCode, value: '#${accident.tripId}'),
+        _Row(
+          label: context.l10n.accidentStatus,
+          value: accidentStatusLabel(context.l10n, accident.status),
+        ),
+        _Row(
+          label: context.l10n.accidentCategory,
+          value: accidentCategoryLabel(context.l10n, accident.category),
+        ),
+        _Row(
+          label: context.l10n.accidentOccurredAt,
+          value: DateFormat('dd/MM/yyyy HH:mm').format(accident.occurredAt),
+        ),
+        const Divider(),
+        Text(accident.description),
+        if (accident.policeReportReference?.isNotEmpty == true) ...[
+          const SizedBox(height: 8),
+          Text(
+            accident.policeReportReference!,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
+class _EvidenceCard extends StatelessWidget {
+  const _EvidenceCard({required this.accident});
+  final RiskProtectionAccident accident;
+
+  @override
+  Widget build(BuildContext context) => _SectionCard(
+    title: context.l10n.riskProtectionEvidence,
+    child: accident.evidence.isEmpty
+        ? Text(context.l10n.noAccidentEvidence)
+        : Column(
+            children: accident.evidence
+                .map(
+                  (item) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: item.fileUrl.isEmpty
+                        ? const Icon(Icons.insert_drive_file_outlined)
+                        : ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.network(
+                              item.fileUrl,
+                              width: 52,
+                              height: 52,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  const Icon(Icons.broken_image_outlined),
+                            ),
+                          ),
+                    title: Text(
+                      item.originalFileName ??
+                          context.l10n.riskProtectionEvidence,
+                    ),
+                    subtitle: Text(
+                      [
+                        DateFormat('dd/MM/yyyy HH:mm').format(item.createdAt),
+                        if (item.description?.isNotEmpty == true)
+                          item.description!,
+                      ].join(' · '),
+                    ),
+                  ),
+                )
+                .toList(growable: false),
+          ),
+  );
+}
+
+class _AssessmentCard extends StatelessWidget {
+  const _AssessmentCard({required this.accident});
+  final RiskProtectionAccident accident;
+
+  @override
+  Widget build(BuildContext context) {
+    final assessment = accident.assessment;
+    return _SectionCard(
+      title: context.l10n.riskResponsibilityResult,
+      action: assessment?.status == 'CONFIRMED'
+          ? TextButton(
+              onPressed: () => _dispute(context, accident),
+              child: Text(context.l10n.disputeLiability),
+            )
+          : null,
+      child: assessment == null
+          ? Text(context.l10n.statusPending)
+          : Column(
+              children: [
+                _Row(
+                  label: context.l10n.statusLabel,
+                  value: assessmentStatusLabel(context.l10n, assessment.status),
+                ),
+                _Row(
+                  label: participantLabel(context.l10n, 'DRIVER'),
+                  value:
+                      '${assessment.driverFaultPercentage.toStringAsFixed(0)}% · ${driverFaultLevelLabel(context.l10n, assessment.driverFaultLevel)}',
+                ),
+                _Row(
+                  label: participantLabel(context.l10n, 'CUSTOMER'),
+                  value:
+                      '${assessment.customerFaultPercentage.toStringAsFixed(0)}%',
+                ),
+                _Row(
+                  label: participantLabel(context.l10n, 'THIRD_PARTY'),
+                  value:
+                      '${assessment.thirdPartyFaultPercentage.toStringAsFixed(0)}%',
+                ),
+                _Row(
+                  label: participantLabel(context.l10n, 'VEHICLE'),
+                  value:
+                      '${assessment.vehicleFailurePercentage.toStringAsFixed(0)}%',
+                ),
+                _Row(
+                  label: participantLabel(context.l10n, 'OBJECTIVE'),
+                  value:
+                      '${assessment.objectiveCausePercentage.toStringAsFixed(0)}%',
+                ),
+                if (assessment.disputeReason?.isNotEmpty == true)
+                  Text(
+                    assessment.disputeReason!,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+              ],
+            ),
+    );
+  }
+
+  Future<void> _dispute(
+    BuildContext context,
+    RiskProtectionAccident accident,
+  ) async {
+    if (accident.evidence.isEmpty) {
+      _showMessage(context, context.l10n.noAccidentEvidence);
+      return;
+    }
+    final reason = await _textDialog(
+      context,
+      title: context.l10n.disputeLiability,
+      hint: context.l10n.disputeReasonHint,
+      isRequired: true,
+    );
+    if (reason == null || !context.mounted) return;
+    final provider = context.read<RiskProtectionProvider>();
+    final success = await provider.disputeLiability(
+      accident.id,
+      reason,
+      accident.evidence.map((item) => item.id).toList(growable: false),
+    );
+    if (!context.mounted) return;
+    _showMessage(
+      context,
+      success
+          ? context.l10n.liabilityDisputed
+          : provider.errorMessage ?? context.l10n.genericError,
+    );
+  }
+}
+
+class _ClaimCard extends StatelessWidget {
+  const _ClaimCard({required this.claim});
+  final ProtectionClaimSummary? claim;
+
+  @override
+  Widget build(BuildContext context) => _SectionCard(
+    title: context.l10n.riskProtectionOutcome,
+    child: claim == null
+        ? Text(context.l10n.noProtectionClaim)
+        : Column(
+            children: [
+              _Row(
+                label: context.l10n.claimStatus,
+                value: claimStatusLabel(context.l10n, claim!.status),
+              ),
+              _Row(
+                label: context.l10n.riskEligibleDamage,
+                value: _money(claim!.eligibleDamageAmount),
+              ),
+              _Row(
+                label: context.l10n.insuranceCoverage,
+                value: _money(claim!.insuranceApprovedAmount),
+              ),
+              _Row(
+                label: context.l10n.riskFundCoverage,
+                value: _money(
+                  claim!.riskFundAdvanceAmount +
+                      claim!.riskFundPermanentLossAmount,
+                ),
+              ),
+              _Row(
+                label: context.l10n.paidAmount,
+                value: _money(claim!.totalPaidToClaimant),
+              ),
+            ],
+          ),
+  );
+}
+
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({required this.title, required this.child, this.action});
+  final String title;
+  final Widget child;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              action ?? const SizedBox.shrink(),
+            ],
+          ),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
+    ),
+  );
+}
+
+class _Row extends StatelessWidget {
+  const _Row({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Text(label, style: TextStyle(color: Colors.grey.shade700)),
+        ),
+        const SizedBox(width: 12),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+Future<String?> _textDialog(
+  BuildContext context, {
+  required String title,
+  required String hint,
+  required bool isRequired,
+}) async {
+  final controller = TextEditingController();
+  try {
+    return await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          minLines: 3,
+          maxLines: 6,
+          maxLength: 1000,
+          decoration: InputDecoration(hintText: hint),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(context.l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (!isRequired || value.isNotEmpty) {
+                Navigator.pop(dialogContext, value);
+              }
+            },
+            child: Text(context.l10n.confirm),
+          ),
+        ],
+      ),
+    );
+  } finally {
+    controller.dispose();
+  }
+}
+
+void _showMessage(BuildContext context, String message) {
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(message)));
+}
+
+String _money(num value) => NumberFormat.currency(
+  locale: 'vi_VN',
+  symbol: '₫',
+  decimalDigits: 0,
+).format(value);

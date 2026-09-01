@@ -33,6 +33,8 @@ class BookingRepositoryImpl implements BookingRepository {
     required BookingLocation pickup,
     BookingLocation? destination,
     int? estimatedHours,
+    BookingType bookingType = BookingType.now,
+    DateTime? scheduledAt,
   }) {
     return _remoteDatasource.estimateFare(
       accessToken,
@@ -41,6 +43,8 @@ class BookingRepositoryImpl implements BookingRepository {
       pickup: pickup,
       destination: destination,
       estimatedHours: estimatedHours,
+      bookingType: bookingType,
+      scheduledAt: scheduledAt,
     );
   }
 
@@ -108,17 +112,15 @@ class BookingRepositoryImpl implements BookingRepository {
   }
 
   @override
-  Future<void> respondToEndTripRequest(
+  Future<void> reportCustomerReadiness(
     String accessToken, {
     required int tripId,
-    required bool accepted,
-  }) {
-    return _remoteDatasource.respondToEndTripRequest(
-      accessToken,
-      tripId: tripId,
-      accepted: accepted,
-    );
-  }
+    required String message,
+  }) => _remoteDatasource.reportCustomerReadiness(
+    accessToken,
+    tripId: tripId,
+    message: message,
+  );
 
   @override
   Future<void> triggerSOS(
@@ -134,6 +136,19 @@ class BookingRepositoryImpl implements BookingRepository {
       latitude: latitude,
       longitude: longitude,
       message: message,
+    );
+  }
+
+  @override
+  Future<int> reportAccident(
+    String accessToken, {
+    required int tripId,
+    required String description,
+  }) {
+    return _remoteDatasource.reportAccident(
+      accessToken,
+      tripId: tripId,
+      description: description,
     );
   }
 

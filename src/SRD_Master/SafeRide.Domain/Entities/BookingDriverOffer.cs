@@ -24,6 +24,10 @@ public partial class BookingDriverOffer
 
     public DateTime? ExpiredAt { get; set; }
 
+    // Immutable Phase 3 offer-time routing and compensation snapshot.
+    public decimal? PickupDistanceKm { get; set; }
+    public decimal? LongPickupCompensation { get; set; }
+
     public virtual Booking Booking { get; set; } = null!;
 
     public virtual DriverProfile Driver { get; set; } = null!;

@@ -22,7 +22,12 @@ public sealed record TripPaymentSummaryDto(
     decimal Amount,
     string Currency,
     DateTime? PaidAt,
-    string Message);
+    string Message,
+    decimal SuccessfulPaymentAmount = 0m,
+    decimal RemainingPayableAmount = 0m,
+    decimal RefundObligationAmount = 0m,
+    SafetyPaymentReconciliationStatus? ReconciliationStatus = null,
+    ManualRefundStatus? RefundStatus = null);
 
 public sealed record BookingDetailsDto(
     long BookingId,
@@ -54,4 +59,7 @@ public sealed record BookingDetailsDto(
     double? ActualDistanceKm = null,
     int? ActualDurationMinutes = null,
     string? ActualEncodedPolyline = null,
-    DateTime? TripEndedAt = null);
+    DateTime? TripEndedAt = null,
+    TripTerminationCategory? TerminationCategory = null,
+    string? SafetyTerminationReason = null,
+    DateTime? SafetyTerminatedAt = null);

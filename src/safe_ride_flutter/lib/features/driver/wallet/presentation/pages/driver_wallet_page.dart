@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../../core/localization/locale_provider.dart';
 
@@ -79,6 +80,80 @@ class _DriverWalletPageState extends State<DriverWalletPage> {
     }
   }
 
+  Future<void> _openTopUpForm() async {
+    final controller = TextEditingController();
+    final amount = await showDialog<num>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Nạp tiền vào Ví'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Số tiền (VND)'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(
+              context,
+              num.tryParse(controller.text.replaceAll(',', '')),
+            ),
+            child: const Text('Tạo QR'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (amount == null || amount <= 0 || !mounted) return;
+    final provider = context.read<DriverWalletProvider>();
+    final result = await provider.createTopUp(
+      context.read<AuthProvider>().token,
+      amount,
+    );
+    if (result == null || !mounted) {
+      if (mounted)
+        _showMessage(provider.errorMessage ?? 'Không thể tạo QR nạp tiền.');
+      return;
+    }
+    final qr = result['qrCode']?.toString();
+    if (qr == null || qr.isEmpty) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Quét mã để nạp tiền'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            QrImageView(data: qr, size: 240),
+            const SizedBox(height: 8),
+            const Text('Sau khi thanh toán, số dư sẽ tự động cập nhật.'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Đóng'),
+          ),
+        ],
+      ),
+    );
+    for (var i = 0; i < 12 && mounted; i++) {
+      await Future<void>.delayed(const Duration(seconds: 5));
+      final status = await provider.getTopUpStatus(
+        context.read<AuthProvider>().token,
+        (result['topUpId'] as num).toInt(),
+      );
+      if (status?['status']?.toString().toLowerCase() == 'success') {
+        await _loadWallet();
+        if (mounted) _showMessage('Nạp tiền thành công.');
+        break;
+      }
+    }
+  }
+
   void _showMessage(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -123,6 +198,7 @@ class _DriverWalletPageState extends State<DriverWalletPage> {
                       _BalanceCard(
                         balance: wallet?.availableBalance ?? 0,
                         onWithdraw: _openWithdrawalForm,
+                        onTopUp: _openTopUpForm,
                       ),
                       SizedBox(height: 30),
                       _IncomeHeader(
@@ -167,9 +243,7 @@ class _Header extends StatelessWidget {
           radius: 21,
           backgroundColor: Color(0xFFE6EEEE),
           backgroundImage: hasAvatar ? NetworkImage(avatar!) : null,
-          child: hasAvatar
-              ? null
-              : Icon(Icons.person_rounded, color: _teal),
+          child: hasAvatar ? null : Icon(Icons.person_rounded, color: _teal),
         ),
         SizedBox(width: 12),
         Expanded(
@@ -196,9 +270,14 @@ class _Header extends StatelessWidget {
 }
 
 class _BalanceCard extends StatelessWidget {
-  _BalanceCard({required this.balance, required this.onWithdraw});
+  _BalanceCard({
+    required this.balance,
+    required this.onWithdraw,
+    required this.onTopUp,
+  });
   final num balance;
   final VoidCallback onWithdraw;
+  final VoidCallback onTopUp;
 
   @override
   Widget build(BuildContext context) {
@@ -253,7 +332,7 @@ class _BalanceCard extends StatelessWidget {
                   icon: Icons.account_balance_rounded,
                   label: context.l10n.topUp,
                   filled: false,
-                  onPressed: () {},
+                  onPressed: onTopUp,
                 ),
               ),
             ],
@@ -288,9 +367,7 @@ class _ActionButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 8),
           backgroundColor: filled ? Colors.white : Color(0xFF006C76),
           foregroundColor: filled ? _teal : Colors.white,
-          side: BorderSide(
-            color: filled ? Colors.white : Color(0xFF3B969D),
-          ),
+          side: BorderSide(color: filled ? Colors.white : Color(0xFF3B969D)),
           textStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(13),
@@ -418,9 +495,7 @@ class _IncomeCard extends StatelessWidget {
                 gridData: FlGridData(show: false),
                 borderData: FlBorderData(
                   show: true,
-                  border: Border(
-                    bottom: BorderSide(color: Color(0xFFE4E4E4)),
-                  ),
+                  border: Border(bottom: BorderSide(color: Color(0xFFE4E4E4))),
                 ),
                 barTouchData: BarTouchData(enabled: false),
                 titlesData: FlTitlesData(
@@ -1078,10 +1153,7 @@ class _TransactionTile extends StatelessWidget {
                   data.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                 ),
                 SizedBox(height: 3),
                 Text(

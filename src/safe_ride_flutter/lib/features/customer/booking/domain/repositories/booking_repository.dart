@@ -18,6 +18,8 @@ abstract class BookingRepository {
     required BookingLocation pickup,
     BookingLocation? destination,
     int? estimatedHours,
+    BookingType bookingType = BookingType.now,
+    DateTime? scheduledAt,
   });
 
   Future<BookingResponse> createBooking(
@@ -51,10 +53,10 @@ abstract class BookingRepository {
 
   Future<void> completeTrip(String accessToken, {required int tripId});
 
-  Future<void> respondToEndTripRequest(
+  Future<void> reportCustomerReadiness(
     String accessToken, {
     required int tripId,
-    required bool accepted,
+    required String message,
   });
 
   Future<void> triggerSOS(
@@ -63,6 +65,12 @@ abstract class BookingRepository {
     required double latitude,
     required double longitude,
     required String message,
+  });
+
+  Future<int> reportAccident(
+    String accessToken, {
+    required int tripId,
+    required String description,
   });
 
   Future<void> respondToDriverEndTrip(

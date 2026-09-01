@@ -15,6 +15,7 @@ using SafeRide.Infrastructure.Services;
 
 namespace SafeRide.IntegrationTests;
 
+[Trait(SqlServerTestDatabase.ProviderTraitName, SqlServerTestDatabase.InMemoryProvider)]
 public sealed class TripSharingServiceTests
 {
     [Fact]
@@ -403,7 +404,7 @@ public sealed class TripSharingServiceTests
                 .UseInMemoryDatabase($"trip-sharing-{Guid.NewGuid():N}")
                 .ConfigureWarnings(warnings => warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning))
                 .Options;
-            var db = new ApplicationDbContext(options);
+            var db = new ApplicationDbContext(options, new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
             var clock = new MutableClock { UtcNow = new DateTime(2026, 7, 15, 9, 0, 0, DateTimeKind.Utc) };
 
             var owner = AddUser(db, "+84901234567", "Chủ chuyến đi");
@@ -558,6 +559,7 @@ public sealed class TripSharingServiceTests
         public Task PublishTripCreatedAsync(SafeRide.Application.Common.Realtime.TripCreatedEvent notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task PublishBookingDriverAssignedAsync(SafeRide.Application.Common.Realtime.BookingDriverAssignedEvent notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task PublishTripStatusChangedAsync(SafeRide.Application.Common.Realtime.TripStatusChangedEvent notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task PublishCustomerReadinessReportedAsync(SafeRide.Application.Common.Realtime.CustomerReadinessReportedEvent notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task PublishTripPaymentPendingAsync(SafeRide.Application.Common.Realtime.TripPaymentPendingEvent notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task PublishTripPaymentSucceededAsync(SafeRide.Application.Common.Realtime.TripPaymentSucceededEvent notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task PublishSOSTriggeredAsync(SafeRide.Application.Common.Realtime.SOSTriggeredEvent notification, CancellationToken cancellationToken = default) => Task.CompletedTask;

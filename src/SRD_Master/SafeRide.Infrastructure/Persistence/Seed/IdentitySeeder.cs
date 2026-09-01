@@ -305,15 +305,14 @@ public static class IdentitySeeder
         DateTime now,
         CancellationToken cancellationToken)
     {
-        var existingKycQuery = dbContext.DriverKycs.Where(
-            x => x.DriverId == driverId
-                && x.DocumentType == documentType);
-        if (documentType == KycDocumentType.DRIVING_LICENSE && licenseClass.HasValue)
-        {
-            existingKycQuery = existingKycQuery.Where(x => x.LicenseClass == licenseClass);
-        }
-
-        var existingKyc = await existingKycQuery.FirstOrDefaultAsync(cancellationToken);
+        var existingKycRows = await dbContext.DriverKycs
+            .Where(x => x.DriverId == driverId
+                && x.DocumentType == documentType)
+            .ToListAsync(cancellationToken);
+        var existingKyc = documentType == KycDocumentType.DRIVING_LICENSE
+            && licenseClass.HasValue
+                ? existingKycRows.FirstOrDefault(x => x.LicenseClass == licenseClass)
+                : existingKycRows.FirstOrDefault();
 
         if (existingKyc is null)
         {

@@ -1,6 +1,7 @@
 using Hangfire;
 using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -14,6 +15,8 @@ using Microsoft.IdentityModel.Tokens;
 using SafeRide.Application.Features.Auth.Services;
 using SafeRide.Application.Common.Models;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Features.RiskProtection;
+using SafeRide.Application.Features.Admin.Revenue;
 using SafeRide.Domain.Entities;
 using SafeRide.Infrastructure.Authentication;
 using SafeRide.Infrastructure.AiChat;
@@ -60,7 +63,52 @@ public static class DependencyInjection
         IConfiguration configuration,
         IHostEnvironment environment)
     {
+        var dataProtectionKeysPath = configuration["DataProtection:KeysPath"];
+        if (string.IsNullOrWhiteSpace(dataProtectionKeysPath))
+        {
+            dataProtectionKeysPath = Path.Combine(
+                environment.ContentRootPath,
+                "App_Data",
+                "DataProtection-Keys");
+        }
+
+        Directory.CreateDirectory(dataProtectionKeysPath);
+        services
+            .AddDataProtection()
+            .SetApplicationName("SafeRide")
+            .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
+
+        // DriverKyc values written before 2026-08-31 were protected while the
+        // application discriminator defaulted to the normalized content root.
+        // Keep a read-only provider for those rows while new values use the
+        // explicit "SafeRide" discriminator above.
+        var legacyApplicationName = Path.GetFullPath(environment.ContentRootPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        var legacyProvider = DataProtectionProvider.Create(
+            new DirectoryInfo(dataProtectionKeysPath),
+            builder => builder.SetApplicationName(legacyApplicationName));
+        services.AddSingleton<ILegacyDriverKycPiiProtectionService>(
+            new LegacyDriverKycPiiProtectionService(
+                legacyProvider.CreateProtector("SafeRide.DriverKyc.Pii.v1")));
         var backgroundJobsEnabled = configuration.GetValue<bool>("BackgroundJobs:Enabled");
+
+        services
+            .AddOptions<EvidenceFileSafetyOptions>()
+            .Bind(configuration.GetSection(EvidenceFileSafetyOptions.SectionName));
+
+        services.AddHttpClient<PublicDemoFileSafetyScanner>((provider, client) =>
+        {
+            ConfigureFileSafetyClient(
+                client,
+                provider.GetRequiredService<IOptions<EvidenceFileSafetyOptions>>().Value);
+        });
+        services.AddHttpClient<RemoteHttpFileSafetyScanner>((provider, client) =>
+        {
+            ConfigureFileSafetyClient(
+                client,
+                provider.GetRequiredService<IOptions<EvidenceFileSafetyOptions>>().Value);
+        });
 
         services
             .AddOptions<AiChatOptions>()
@@ -98,7 +146,9 @@ public static class DependencyInjection
         services.AddDbContext<ApplicationDbContext>(
             options => options.UseSqlServer(
                 configuration.GetConnectionString("DefaultConnection"),
-                sqlOptions => sqlOptions.UseNetTopologySuite()));
+                sqlOptions => sqlOptions
+                    .UseNetTopologySuite()
+                    .EnableRetryOnFailure()));
 
         services
             .AddIdentity<AspNetUser, AspNetRole>(options =>
@@ -125,11 +175,15 @@ public static class DependencyInjection
             .Validate(options => options.AccessTokenMinutes > 0, "Authentication:TripContinuation:AccessTokenMinutes must be greater than zero.")
             .Validate(options => options.RefreshTokenMinutes > 0, "Authentication:TripContinuation:RefreshTokenMinutes must be greater than zero.")
             .Validate(options => options.AbsoluteMaxHoursFromTripStart > 0, "Authentication:TripContinuation:AbsoluteMaxHoursFromTripStart must be greater than zero.")
+            .Validate(options => options.AbsoluteMaxHoursFromBookingCreation > 0, "Authentication:TripContinuation:AbsoluteMaxHoursFromBookingCreation must be greater than zero.")
             .Validate(options => options.PostCompletionRatingGraceMinutes > 0, "Authentication:TripContinuation:PostCompletionRatingGraceMinutes must be greater than zero.")
             .ValidateOnStart();
         services
             .AddOptions<CloudinaryOptions>()
             .Bind(configuration.GetSection(CloudinaryOptions.SectionName));
+        services
+            .AddOptions<PrivateInsuranceDocumentStorageOptions>()
+            .Bind(configuration.GetSection(PrivateInsuranceDocumentStorageOptions.SectionName));
         services
             .AddOptions<PayOsOptions>()
             .Bind(configuration.GetSection(PayOsOptions.SectionName));
@@ -172,10 +226,37 @@ public static class DependencyInjection
             .ValidateOnStart();
 
         services
+            .AddOptions<DriverCompensationOptions>()
+            .Bind(configuration.GetSection(DriverCompensationOptions.SectionName))
+            .Validate(options => options.LongPickupThresholdKm > 0, "DriverCompensation:LongPickupThresholdKm must be greater than zero.")
+            .Validate(options => options.LongPickupThresholdKm <= options.LongPickupOptInThresholdKm, "DriverCompensation:LongPickupOptInThresholdKm must be greater than or equal to LongPickupThresholdKm.")
+            .Validate(options => options.LongDistanceThresholdKm > 0, "DriverCompensation:LongDistanceThresholdKm must be greater than zero.")
+            .Validate(options => options.LongDistanceThresholdKm <= options.LongDistanceOptInThresholdKm, "DriverCompensation:LongDistanceOptInThresholdKm must be greater than or equal to LongDistanceThresholdKm.")
+            .Validate(options => options.LongDistanceOptInThresholdKm <= options.MaximumTripDistanceKm, "DriverCompensation:MaximumTripDistanceKm must be greater than or equal to LongDistanceOptInThresholdKm.")
+            .Validate(options => options.LongPickupRatePerKm >= 0, "DriverCompensation:LongPickupRatePerKm must be greater than or equal to zero.")
+            .Validate(options => options.LongDistanceRatePerKm >= 0, "DriverCompensation:LongDistanceRatePerKm must be greater than or equal to zero.")
+            .Validate(options => options.DestinationReachedThresholdMeters > 0, "DriverCompensation:DestinationReachedThresholdMeters must be greater than zero.")
+            .ValidateOnStart();
+
+        services
             .AddOptions<ScheduledBookingMatchingOptions>()
             .Bind(configuration.GetSection(ScheduledBookingMatchingOptions.SectionName))
             .Validate(options => options.StartMatchingBeforeMinutes > 0, "BackgroundJobs:ScheduledBookingMatching:StartMatchingBeforeMinutes must be greater than zero.")
             .Validate(options => options.PollingIntervalSeconds > 0, "BackgroundJobs:ScheduledBookingMatching:PollingIntervalSeconds must be greater than zero.")
+            .ValidateOnStart();
+
+        services
+            .AddOptions<CustomerNoShowOptions>()
+            .Bind(configuration.GetSection(CustomerNoShowOptions.SectionName))
+            .Validate(options => options.NoShowWaitMinutes > 0, "CustomerNoShow:NoShowWaitMinutes must be greater than zero.")
+            .Validate(options => options.ArrivalRadiusMeters > 0, "CustomerNoShow:ArrivalRadiusMeters must be greater than zero.")
+            .Validate(options => options.DriverLocationFreshnessSeconds > 0, "CustomerNoShow:DriverLocationFreshnessSeconds must be greater than zero.")
+            .Validate(options => options.DriverSupportMinPickupDistanceKm > 0, "CustomerNoShow:DriverSupportMinPickupDistanceKm must be greater than zero.")
+            .Validate(options => options.DriverNoShowSupportAmount >= 0, "CustomerNoShow:DriverNoShowSupportAmount must be non-negative.")
+            .Validate(options => options.BehaviorWindowDays > 0, "CustomerNoShow:BehaviorWindowDays must be greater than zero.")
+            .Validate(options => options.ScheduleRestrictionDaysFirst > 0, "CustomerNoShow:ScheduleRestrictionDaysFirst must be greater than zero.")
+            .Validate(options => options.ScheduleRestrictionDaysPersistent > 0, "CustomerNoShow:ScheduleRestrictionDaysPersistent must be greater than zero.")
+            .Validate(options => options.InstantCooldownHoursPersistent > 0, "CustomerNoShow:InstantCooldownHoursPersistent must be greater than zero.")
             .ValidateOnStart();
 
         services
@@ -229,7 +310,6 @@ public static class DependencyInjection
             .Validate(options => options.MaxInferredSpeedKmh > 0, "TripTracking:MaxInferredSpeedKmh must be greater than zero.")
             .Validate(options => options.MaxAccuracyMeters > 0, "TripTracking:MaxAccuracyMeters must be greater than zero.")
             .Validate(options => options.FinalizeLockSeconds > 0, "TripTracking:FinalizeLockSeconds must be greater than zero.")
-            .Validate(options => options.MinimumEarlyEndFare > 0, "TripTracking:MinimumEarlyEndFare must be greater than zero.")
             .Validate(options => options.RouteDeviationThresholdMeters > 0, "TripTracking:RouteDeviationThresholdMeters must be greater than zero.")
             .Validate(options => options.RouteDeviationRequiredSamples > 0, "TripTracking:RouteDeviationRequiredSamples must be greater than zero.")
             .Validate(options => options.RouteDeviationStateTtlMinutes > 0, "TripTracking:RouteDeviationStateTtlMinutes must be greater than zero.")
@@ -289,8 +369,60 @@ public static class DependencyInjection
                 provider.GetRequiredService<InMemoryRedisService>(),
                 provider.GetRequiredService<ILogger<ResilientRedisService>>()));
         services.AddSingleton<ICloudinaryImageService, CloudinaryImageService>();
+        services.AddSingleton<IPiiProtectionService, PiiProtectionService>();
+        services.AddScoped<DriverKycBackfillService>();
         services.AddSingleton<IIdentityDocumentStorage, CloudinaryIdentityDocumentStorage>();
         services.AddSingleton<ITripReturnEvidenceStorage, CloudinaryTripReturnEvidenceStorage>();
+        services.AddSingleton<IAccidentEvidenceStorage, CloudinaryAccidentEvidenceStorage>();
+        services.AddSingleton<IPrivateInsuranceDocumentStorage, PrivateInsuranceDocumentStorage>();
+        services.AddScoped<IInsuranceDocumentService, InsuranceDocumentService>();
+        services.AddSingleton<NonProductionFileSafetyScanner>();
+        services.AddSingleton<UnconfiguredFileSafetyScanner>();
+        services.AddSingleton<IFileSafetyScanner>(provider =>
+        {
+            if (environment.IsDevelopment())
+            {
+                return provider.GetRequiredService<NonProductionFileSafetyScanner>();
+            }
+
+            var options = provider
+                .GetRequiredService<IOptions<EvidenceFileSafetyOptions>>()
+                .Value;
+            var logger = provider
+                .GetRequiredService<ILoggerFactory>()
+                .CreateLogger("SafeRide.Infrastructure.FileSafety");
+
+            if (!options.Enabled)
+            {
+                return provider.GetRequiredService<UnconfiguredFileSafetyScanner>();
+            }
+
+            if (string.Equals(options.ScannerType, "PublicDemo", StringComparison.OrdinalIgnoreCase)
+                && options.AllowPublicDemo)
+            {
+                logger.LogWarning(
+                    "Evidence file scanning is using PublicDemo mode. PublicDemo must not be used with real accident evidence.");
+                return provider.GetRequiredService<PublicDemoFileSafetyScanner>();
+            }
+
+            if (string.Equals(options.ScannerType, "Demo", StringComparison.OrdinalIgnoreCase)
+                && options.AllowDemo)
+            {
+                logger.LogWarning(
+                    "Evidence file scanning is using Demo mode. NonProductionFileSafetyScanner does not provide production malware protection.");
+                return provider.GetRequiredService<NonProductionFileSafetyScanner>();
+            }
+
+            if (string.Equals(options.ScannerType, "RemoteHttp", StringComparison.OrdinalIgnoreCase))
+            {
+                return provider.GetRequiredService<RemoteHttpFileSafetyScanner>();
+            }
+
+            return provider.GetRequiredService<UnconfiguredFileSafetyScanner>();
+        });
+        services.AddSingleton<IEvidenceFileValidator, EvidenceFileValidator>();
+        services.AddSingleton<IPreTripVehicleCheckEvidenceStorage, CloudinaryPreTripVehicleCheckEvidenceStorage>();
+        services.AddSingleton<ISafetyTerminationEvidenceStorage, CloudinarySafetyTerminationEvidenceStorage>();
         services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IGoogleTokenVerifier, GoogleTokenVerifier>();
@@ -322,11 +454,38 @@ public static class DependencyInjection
         services.AddScoped<IBookingMatchingService, BookingMatchingService>();
         services.AddScoped<IBookingAssignmentService, BookingAssignmentService>();
         services.AddScoped<IDriverQueryService, DriverQueryService>();
+        services.AddScoped<IDriverMatchingPreferencesService, DriverMatchingPreferencesService>();
         services.AddScoped<IDriverWalletService, DriverWalletService>();
+        services.AddHttpClient<IDriverWalletTopUpService, DriverWalletTopUpService>((provider, client) =>
+        {
+            var options = provider.GetRequiredService<IOptions<PayOsOptions>>().Value;
+            client.BaseAddress = new Uri(string.IsNullOrWhiteSpace(options.BaseUrl) ? "https://api-merchant.payos.vn" : options.BaseUrl);
+            if (!string.IsNullOrWhiteSpace(options.ClientId)) client.DefaultRequestHeaders.Add("x-client-id", options.ClientId);
+            if (!string.IsNullOrWhiteSpace(options.ApiKey)) client.DefaultRequestHeaders.Add("x-api-key", options.ApiKey);
+        });
         services.AddScoped<IDriverRealtimeService, DriverRealtimeService>();
         services.AddScoped<TripFareFinalizationService>();
+        services.AddSingleton<ITripCommissionCalculator, TripCommissionCalculator>();
+        services.AddSingleton<IClaimSettlementCalculator, TripCommissionCalculator>();
+        services.AddScoped<IRiskProtectionPolicyProvider, RiskProtectionPolicyProvider>();
+        services.AddScoped<IPreTripVehicleCheckService, PreTripVehicleCheckService>();
+        services.AddScoped<ISafetyReportService, SafetyReportService>();
+        services.AddScoped<RiskFundLedgerService>();
+        services.AddScoped<IRiskFundLedgerService>(provider => provider.GetRequiredService<RiskFundLedgerService>());
+        services.AddScoped<ITripFinancialSettlementService, TripFinancialSettlementService>();
+        services.AddScoped<ISafetyPaymentReconciliationService, SafetyPaymentReconciliationService>();
+        services.AddScoped<IInsuranceProvider, MockInsuranceProvider>();
+        services.AddScoped<IAccidentManagementService, AccidentManagementService>();
+        services.AddScoped<IAdminRevenueQueryService, AdminRevenueQueryService>();
         services.AddScoped<TripPaymentSettlementService>();
         services.AddScoped<ITripStatusService, TripStatusService>();
+        services.AddScoped<ITripArrivalVerificationService, TripArrivalVerificationService>();
+        services.AddScoped<ITripCustomerNoShowReminderService, TripCustomerNoShowReminderService>();
+        services.AddScoped<ICustomerNoShowEligibilityService, CustomerNoShowEligibilityService>();
+        services.AddScoped<ICustomerNoShowReportingService, CustomerNoShowReportingService>();
+        services.AddScoped<ITripCustomerReadinessService, TripCustomerReadinessService>();
+        services.AddScoped<ICustomerBookingPrivilegeService, CustomerBookingPrivilegeService>();
+        services.AddScoped<IStaffNoShowReviewService, StaffNoShowReviewService>();
         services.AddScoped<ITripSharingService, TripSharingService>();
         services.AddScoped<ITripChatService, TripChatService>();
         services.AddSingleton<ITripChatContentFilter, TripChatContentFilter>();
@@ -555,6 +714,21 @@ public static class DependencyInjection
 
         services.AddAuthorization();
         return services;
+    }
+
+    private static void ConfigureFileSafetyClient(
+        HttpClient client,
+        EvidenceFileSafetyOptions options)
+    {
+        if (Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out var baseUri))
+        {
+            client.BaseAddress = baseUri;
+        }
+
+        if (options.TimeoutSeconds > 0)
+        {
+            client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+        }
     }
 
 }

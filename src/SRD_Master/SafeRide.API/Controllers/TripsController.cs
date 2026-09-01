@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using SafeRide.API.Authorization;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Common.Models;
 using SafeRide.Application.Features.Auth;
 using SafeRide.Application.Features.Ratings.Commands.SubmitTripRating;
 using SafeRide.Application.Features.Safety.Commands.TriggerSOS;
@@ -21,6 +22,11 @@ namespace SafeRide.API.Controllers;
 public sealed class TripsController : ControllerBase
 {
     private readonly ITripStatusService _tripStatusService;
+    private readonly ITripArrivalVerificationService _tripArrivalVerificationService;
+    private readonly ITripCustomerNoShowReminderService _tripCustomerNoShowReminderService;
+    private readonly ICustomerNoShowEligibilityService _customerNoShowEligibilityService;
+    private readonly ICustomerNoShowReportingService _customerNoShowReportingService;
+    private readonly ITripCustomerReadinessService _tripCustomerReadinessService;
     private readonly ITripChatService _tripChatService;
     private readonly IHubContext<TripChatHub> _tripChatHubContext;
     private readonly ISender _sender;
@@ -28,12 +34,22 @@ public sealed class TripsController : ControllerBase
 
     public TripsController(
         ITripStatusService tripStatusService,
+        ITripArrivalVerificationService tripArrivalVerificationService,
+        ITripCustomerNoShowReminderService tripCustomerNoShowReminderService,
+        ICustomerNoShowEligibilityService customerNoShowEligibilityService,
+        ICustomerNoShowReportingService customerNoShowReportingService,
+        ITripCustomerReadinessService tripCustomerReadinessService,
         ISender sender,
         ITripSharingService tripSharingService,
         ITripChatService tripChatService,
         IHubContext<TripChatHub> tripChatHubContext)
     {
         _tripStatusService = tripStatusService;
+        _tripArrivalVerificationService = tripArrivalVerificationService;
+        _tripCustomerNoShowReminderService = tripCustomerNoShowReminderService;
+        _customerNoShowEligibilityService = customerNoShowEligibilityService;
+        _customerNoShowReportingService = customerNoShowReportingService;
+        _tripCustomerReadinessService = tripCustomerReadinessService;
         _tripChatService = tripChatService;
         _tripChatHubContext = tripChatHubContext;
         _sender = sender;
@@ -122,6 +138,16 @@ public sealed class TripsController : ControllerBase
             });
         }
 
+        if (request.TripStatus == SafeRide.Domain.Enums.TripStatus.ARRIVED)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "GPS verification required",
+                Detail = "Hãy dùng endpoint xác nhận đã đến điểm đón để hệ thống kiểm tra GPS."
+            });
+        }
+
         await _tripStatusService.UpdateDriverTripStatusAsync(
             driverId,
             tripId,
@@ -131,14 +157,89 @@ public sealed class TripsController : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("{tripId:long}/arrive")]
+    [Authorize(Roles = "Driver")]
+    [AllowTripContinuation(TripContinuationOperation.TripStatusUpdate)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Arrive(long tripId, CancellationToken cancellationToken)
+    {
+        if (!TryGetDriverId(out var driverId))
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Unauthorized",
+                Detail = "Cannot resolve authenticated driver account."
+            });
+        }
+
+        await _tripArrivalVerificationService.VerifyAndRecordAsync(driverId, tripId, cancellationToken);
+        await _tripStatusService.UpdateDriverTripStatusAsync(
+            driverId, tripId, SafeRide.Domain.Enums.TripStatus.ARRIVED, cancellationToken);
+        await _tripCustomerNoShowReminderService.RecordIfNeededAsync(tripId, cancellationToken);
+        return NoContent();
+    }
+
+    [HttpGet("{tripId:long}/customer-no-show/eligibility")]
+    [Authorize(Roles = "Driver")]
+    [AllowTripContinuation(TripContinuationOperation.TripStatusUpdate)]
+    [ProducesResponseType<CustomerNoShowEligibilityResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<CustomerNoShowEligibilityResponse>> GetCustomerNoShowEligibility(
+        long tripId, CancellationToken cancellationToken)
+    {
+        if (!TryGetDriverId(out var driverId))
+            return Unauthorized(new ProblemDetails { Status = 401, Title = "Unauthorized", Detail = "Cannot resolve authenticated driver account." });
+        return Ok(await _customerNoShowEligibilityService.GetAsync(driverId, tripId, cancellationToken));
+    }
+
+    [HttpPost("{tripId:long}/customer-no-show")]
+    [Authorize(Roles = "Driver")]
+    [AllowTripContinuation(TripContinuationOperation.TripStatusUpdate)]
+    [ProducesResponseType<CustomerNoShowReportResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<CustomerNoShowReportResponse>> ReportCustomerNoShow(
+        long tripId, CancellationToken cancellationToken)
+    {
+        if (!TryGetDriverId(out var driverId))
+            return Unauthorized(new ProblemDetails { Status = 401, Title = "Unauthorized", Detail = "Cannot resolve authenticated driver account." });
+        return Ok(await _customerNoShowReportingService.ReportAsync(driverId, tripId, cancellationToken));
+    }
+
+    [HttpPost("{tripId:long}/customer-readiness")]
+    [Authorize(Roles = "Customer")]
+    public async Task<IActionResult> ReportCustomerReadiness(
+        long tripId,
+        [FromBody] CustomerReadinessRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var customerId)) return Unauthorized();
+        await _tripCustomerReadinessService.ReportAsync(customerId, tripId, request.Message, cancellationToken);
+        return NoContent();
+    }
+
     [HttpPost("{tripId:long}/end")]
     [AllowTripContinuation(TripContinuationOperation.TripStatusUpdate)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<TripEndReconciliationResult>(StatusCodes.Status202Accepted)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> End(
         long tripId,
+        [FromBody] EndTripRequest request,
         CancellationToken cancellationToken)
     {
         if (!TryGetDriverId(out var driverId))
@@ -151,41 +252,27 @@ public sealed class TripsController : ControllerBase
             });
         }
 
+        if (request.Reason is SafeRide.Domain.Enums.TripEndReason.STARTED_BY_MISTAKE)
+        {
+            return Accepted(await _tripStatusService.RequestEndTripReconciliationAsync(
+                driverId,
+                tripId,
+                request.Reason,
+                request.CanContinueWorking,
+                cancellationToken));
+        }
+
+        var canContinueWorking = request.Reason is
+            SafeRide.Domain.Enums.TripEndReason.DRIVER_UNABLE_TO_CONTINUE
+                ? false
+                : request.CanContinueWorking;
+
         await _tripStatusService.EndTripAsync(
             driverId,
             tripId,
-            cancellationToken);
-
-        return NoContent();
-    }
-
-    [HttpPost("{tripId:long}/end-response")]
-    [Authorize(Roles = "Customer")]
-    [AllowTripContinuation(TripContinuationOperation.TripReturnConfirmation)]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> RespondToEndRequest(
-        long tripId,
-        [FromBody] RespondToEndTripRequest request,
-        CancellationToken cancellationToken)
-    {
-        if (!TryGetUserId(out var customerId))
-        {
-            return Unauthorized(new ProblemDetails
-            {
-                Status = StatusCodes.Status401Unauthorized,
-                Title = "Unauthorized",
-                Detail = "Không xác định được tài khoản khách hàng."
-            });
-        }
-
-        await _tripStatusService.RespondToEndTripRequestAsync(
-            customerId,
-            tripId,
-            request.Accepted,
-            cancellationToken);
+            cancellationToken,
+            request.Reason,
+            canContinueWorking);
 
         return NoContent();
     }
@@ -287,12 +374,19 @@ public sealed class TripsController : ControllerBase
                 f.Length))
             .ToList();
 
-        await _tripStatusService.ConfirmReturnByDriverAsync(
-            driverId,
-            tripId,
-            evidenceItems,
-            note,
-            cancellationToken);
+        try
+        {
+            await _tripStatusService.ConfirmReturnByDriverAsync(
+                driverId,
+                tripId,
+                evidenceItems,
+                note,
+                cancellationToken);
+        }
+        finally
+        {
+            foreach (var item in evidenceItems) await item.Content.DisposeAsync();
+        }
 
         return NoContent();
     }

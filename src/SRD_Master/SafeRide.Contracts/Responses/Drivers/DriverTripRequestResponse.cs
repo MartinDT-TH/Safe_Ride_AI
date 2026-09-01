@@ -7,9 +7,11 @@ public sealed record DriverTripRequestResponse(
     long BookingId,
     DriverOfferStatus OfferStatus,
     DateTime ExpiresAt,
-    decimal ExpectedIncome,
     string PickupAddress,
     string? DestinationAddress,
     double? PickupDistanceKm = null,
     int? PickupDurationMinutes = null,
-    int? CustomerConfirmRemainingSeconds = null);
+    int? CustomerConfirmRemainingSeconds = null,
+    decimal? LongPickupCompensation = null,
+    bool IsLongPickup = false,
+    bool IsLongDistanceTrip = false);

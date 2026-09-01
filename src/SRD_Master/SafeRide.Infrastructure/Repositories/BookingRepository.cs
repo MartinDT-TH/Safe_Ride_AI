@@ -125,6 +125,9 @@ public sealed class BookingRepository : IBookingRepository
                     .ThenInclude(returnConfirmation => returnConfirmation.Evidence)
             .Include(booking => booking.Trip)
                 .ThenInclude(trip => trip!.Payments)
+            .Include(booking => booking.Trip)
+                .ThenInclude(trip => trip!.SafetyPaymentReconciliation)!
+                    .ThenInclude(reconciliation => reconciliation!.Refund)
             .Include(booking => booking.BookingPromotions)
                 .ThenInclude(bookingPromotion => bookingPromotion.Promotion)
             .Where(booking => booking.CustomerId == customerId
@@ -236,15 +239,19 @@ public sealed class BookingRepository : IBookingRepository
             return null;
         }
 
-        var licenseClass = await _dbContext.DriverKycs
-            .AsNoTracking()
-            .Where(kyc => kyc.DriverId == latestOffer.DriverId
-                && kyc.DocumentType == KycDocumentType.DRIVING_LICENSE
-                && kyc.KycStatus == KycStatus.Approved
-                && kyc.LicenseClass.HasValue)
-            .OrderByDescending(kyc => kyc.VerifiedAt ?? kyc.CreatedAt)
-            .Select(kyc => kyc.LicenseClass)
-            .FirstOrDefaultAsync(cancellationToken);
+        var driverLicenses = await _dbContext.LoadApprovedDrivingLicensesAsync(
+            latestOffer.DriverId,
+            cancellationToken);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var licenseClass = driverLicenses
+            .Where(license => license.IsUsableOn(today))
+            .OrderByDescending(license => license.VerifiedAt ?? license.CreatedAt)
+            .Select(license => license.LicenseClass)
+            .FirstOrDefault();
+        if (!licenseClass.HasValue)
+        {
+            return null;
+        }
 
         var ratingStats = await _dbContext.Ratings
             .AsNoTracking()
@@ -268,7 +275,7 @@ public sealed class BookingRepository : IBookingRepository
             ratingStats?.Rating ?? 0,
             ratingStats?.TripCount ?? 0,
             latestOffer.ExperienceYears ?? 0,
-            licenseClass ?? LicenseClass.A1,
+            licenseClass.Value,
             latestOffer.ExpiresAt,
             latestOffer.OfferStatus,
             driverLocation?.Latitude,

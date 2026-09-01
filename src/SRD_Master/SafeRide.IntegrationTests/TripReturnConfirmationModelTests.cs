@@ -7,6 +7,7 @@ using SafeRide.Infrastructure.Persistence;
 
 namespace SafeRide.IntegrationTests;
 
+[Trait(SqlServerTestDatabase.ProviderTraitName, SqlServerTestDatabase.SqliteProvider)]
 public sealed class TripReturnConfirmationModelTests
 {
     [Fact]
@@ -19,7 +20,7 @@ public sealed class TripReturnConfirmationModelTests
             .UseSqlite(connection, sqlite => sqlite.UseNetTopologySuite())
             .Options;
 
-        using var dbContext = new ApplicationDbContext(options);
+        using var dbContext = new ApplicationDbContext(options, new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
 
         var model = dbContext.GetService<IDesignTimeModel>().Model;
         var confirmation = model.FindEntityType(typeof(TripReturnConfirmation));

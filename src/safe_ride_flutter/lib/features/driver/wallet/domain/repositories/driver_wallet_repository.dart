@@ -15,4 +15,6 @@ abstract class DriverWalletRepository {
     required String bankAccountNumber,
     required String bankAccountName,
   });
+  Future<Map<String, dynamic>> createTopUp(String accessToken, {required num amount});
+  Future<Map<String, dynamic>> getTopUpStatus(String accessToken, int id);
 }

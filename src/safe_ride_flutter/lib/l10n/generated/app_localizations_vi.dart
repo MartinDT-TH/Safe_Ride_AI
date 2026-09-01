@@ -1298,7 +1298,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get promotions => 'Khuyến mãi';
 
   @override
-  String get sos => 'SOS';
+  String get sos => 'SOS khẩn cấp';
 
   @override
   String get recentTrips => 'Chuyến đi gần đây';
@@ -1786,7 +1786,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get fareCalculationNote =>
-      'Giá cước sẽ được backend tính từ quãng đường và thời gian thực tế.';
+      'Cước được chấp nhận sẽ được khóa khi bạn đặt chuyến.';
 
   @override
   String get confirmScheduled => 'Xác nhận đặt trước';
@@ -1882,14 +1882,14 @@ class AppLocalizationsVi extends AppLocalizations {
   String get callDriver => 'Gọi tài xế';
 
   @override
-  String get activateSosQuestion => 'Kích hoạt SOS?';
+  String get activateSosQuestion => 'Kích hoạt SOS khẩn cấp?';
 
   @override
   String get activateSosDescription =>
       'Bạn có chắc muốn gửi tín hiệu khẩn cấp cho chuyến đi này không?';
 
   @override
-  String get activateSos => 'Kích hoạt SOS';
+  String get activateSos => 'Kích hoạt SOS khẩn cấp';
 
   @override
   String get sosActivationFailed =>
@@ -1975,10 +1975,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get tripEndFailed => 'Không thể kết thúc chuyến. Vui lòng thử lại.';
 
   @override
-  String get sosActivated => 'SOS đã kích hoạt';
+  String get sosActivated => 'SOS khẩn cấp đã kích hoạt';
 
   @override
-  String get sendingSos => 'Đang gửi tín hiệu SOS...';
+  String get sendingSos => 'Đang gửi tín hiệu SOS khẩn cấp...';
 
   @override
   String get shareRoute => 'Chia sẻ lộ trình';
@@ -2450,27 +2450,369 @@ class AppLocalizationsVi extends AppLocalizations {
   String get offerCustomerConfirmed => 'Khách đã xác nhận';
 
   @override
-  String get driverEndTripRequestTitle => 'Yêu cầu kết thúc chuyến';
+  String get preTripSafetyTitle => 'Kiểm tra an toàn trước chuyến';
 
   @override
-  String get driverEndTripRequestMessage =>
-      'Tài xế muốn kết thúc chuyến đi ngay bây giờ. Nếu đồng ý, cước phí sẽ được tính theo tỷ lệ quãng đường thực tế đã đi, tối thiểu 2.000đ.';
+  String get preTripSafetyDescription =>
+      'Xác nhận từng hạng mục trước khi bắt đầu. Các lần kiểm tra không đạt vẫn được lưu để kiểm toán.';
 
   @override
-  String get continueTrip => 'Tiếp tục chuyến';
+  String get brakeResponse => 'Phản hồi phanh';
 
   @override
-  String get endTripRequestSent =>
-      'Đã gửi yêu cầu kết thúc chuyến. Đang chờ khách hàng xác nhận.';
+  String get frontRearLights => 'Đèn trước và sau';
 
   @override
-  String get endTripRequestAccepted => 'Khách hàng đã đồng ý kết thúc chuyến.';
+  String get turnSignals => 'Đèn xi-nhan';
 
   @override
-  String get endTripRequestRejected =>
-      'Khách hàng đã từ chối. Chuyến đi tiếp tục.';
+  String get visibleTires => 'Tình trạng lốp quan sát được';
 
   @override
-  String get endTripResponseFailed =>
-      'Không thể phản hồi yêu cầu kết thúc chuyến. Vui lòng thử lại.';
+  String get dashboardWarning => 'Không có cảnh báo bảng điều khiển';
+
+  @override
+  String get windshieldVisibility => 'Kính và gương quan sát rõ';
+
+  @override
+  String get noMajorVisibleIssue => 'Không có lỗi nghiêm trọng dễ thấy';
+
+  @override
+  String get confirmSafetyCheck => 'Xác nhận kiểm tra';
+
+  @override
+  String get allChecksRequired =>
+      'Tất cả hạng mục phải đạt trước khi bắt đầu chuyến.';
+
+  @override
+  String get safetyTermination => 'Kết thúc vì an toàn';
+
+  @override
+  String get safetyTerminationDescription =>
+      'Chuyến vẫn ở trạng thái đã hủy. Khuyến mãi không được dùng và có thể tính cước một phần nếu chuyến đã bắt đầu.';
+
+  @override
+  String get safetyTerminationReasonHint => 'Mô tả rủi ro an toàn';
+
+  @override
+  String get captureSafetyEvidence => 'Chụp ảnh bằng chứng (tùy chọn)';
+
+  @override
+  String get retakePhoto => 'Chụp lại';
+
+  @override
+  String get reportAccident => 'Báo cáo tai nạn';
+
+  @override
+  String get accidentDescriptionHint => 'Mô tả diễn biến và thiệt hại ban đầu';
+
+  @override
+  String get createAccidentReport => 'Tạo báo cáo';
+
+  @override
+  String get accidentReported => 'Đã tạo báo cáo tai nạn.';
+
+  @override
+  String get safetyTerminationFailed => 'Không thể kết thúc chuyến vì an toàn.';
+
+  @override
+  String get preTripCheckFailed => 'Không thể gửi kiểm tra an toàn.';
+
+  @override
+  String get riskProtectionCaseTitle => 'Hồ sơ bảo vệ tai nạn';
+
+  @override
+  String get riskProtectionClaim => 'Hồ sơ yêu cầu bảo vệ';
+
+  @override
+  String get riskProtectionEvidence => 'Bằng chứng';
+
+  @override
+  String get riskProtectionAssessment => 'Đánh giá trách nhiệm';
+
+  @override
+  String get uploadAccidentEvidence => 'Thêm ảnh bằng chứng';
+
+  @override
+  String get sendEvidencePhoto => 'Gửi ảnh';
+
+  @override
+  String get evidencePreviewFailed =>
+      'Không thể đọc ảnh đã chọn. Vui lòng chọn lại.';
+
+  @override
+  String get disputeLiability => 'Yêu cầu xem xét trách nhiệm';
+
+  @override
+  String get disputeReasonHint =>
+      'Nêu rõ lý do cần xem xét lại kết quả đánh giá';
+
+  @override
+  String get liabilityDisputed => 'Đã gửi yêu cầu xem xét lại.';
+
+  @override
+  String get accidentEvidenceUploaded => 'Đã gửi ảnh bằng chứng.';
+
+  @override
+  String get noAccidentEvidence => 'Chưa có bằng chứng nào.';
+
+  @override
+  String get noProtectionClaim => 'Hồ sơ yêu cầu bảo vệ chưa được tạo.';
+
+  @override
+  String get driverLiabilities => 'Trách nhiệm của tôi';
+
+  @override
+  String get noDriverLiabilities =>
+      'Bạn chưa có trách nhiệm tài xế nào được xác nhận.';
+
+  @override
+  String get confirmedAmount => 'Số tiền xác nhận';
+
+  @override
+  String get paidAmount => 'Đã thanh toán';
+
+  @override
+  String get outstandingAmount => 'Còn phải thanh toán';
+
+  @override
+  String get attributableDamage =>
+      'Thiệt hại đủ điều kiện do tài xế chịu trách nhiệm';
+
+  @override
+  String get recoveryHistory => 'Lịch sử thu hồi';
+
+  @override
+  String get claimStatus => 'Trạng thái claim';
+
+  @override
+  String get insuranceCoverage => 'Bảo hiểm chi trả';
+
+  @override
+  String get riskFundCoverage => 'Risk Fund chi trả';
+
+  @override
+  String get participantLiabilities => 'Trách nhiệm các bên';
+
+  @override
+  String get accidentStatus => 'Trạng thái tai nạn';
+
+  @override
+  String get accidentCategory => 'Loại tai nạn';
+
+  @override
+  String get accidentOccurredAt => 'Thời điểm xảy ra';
+
+  @override
+  String get safetyReportTitle => 'Báo cáo sự cố an toàn';
+
+  @override
+  String get unsafeCustomer => 'Khách hàng không an toàn';
+
+  @override
+  String get vehicleIssue => 'Sự cố phương tiện';
+
+  @override
+  String get safetyReasonCode => 'Lý do';
+
+  @override
+  String get safetyReportDescription => 'Mô tả sự việc';
+
+  @override
+  String get requestSosEscalation => 'Yêu cầu SOS / chuyển cấp';
+
+  @override
+  String get requestSosEscalationHint =>
+      'Gửi vị trí hiện tại và tạo cảnh báo SOS bền vững';
+
+  @override
+  String get safetyReportSubmitted => 'Đã gửi báo cáo sự cố an toàn.';
+
+  @override
+  String get safetyReportFailed =>
+      'Không thể gửi báo cáo sự cố an toàn. Vui lòng thử lại.';
+
+  @override
+  String get vehicleFaultType => 'Loại lỗi phương tiện';
+
+  @override
+  String get otherVehicleFault => 'Lỗi phương tiện khác';
+
+  @override
+  String get optionalEvidence => 'Bằng chứng (tùy chọn)';
+
+  @override
+  String get endTripReasonTitle => 'Lý do kết thúc chuyến';
+
+  @override
+  String get endTripReasonDescription =>
+      'Chọn đúng lý do. Kết thúc vì an toàn phải dùng quy trình Risk Protection riêng.';
+
+  @override
+  String get normalCompletionReason => 'Đã đến điểm đến';
+
+  @override
+  String get normalCompletionReasonDescription => 'Áp dụng cước đã đặt.';
+
+  @override
+  String get customerRequestedStopReason => 'Khách yêu cầu dừng sớm';
+
+  @override
+  String get customerRequestedStopReasonDescription =>
+      'Cước dựa trên tiến độ tuyến đã đặt và mức cước dịch vụ tối thiểu.';
+
+  @override
+  String get driverUnableToContinueReason => 'Tài xế không thể tiếp tục';
+
+  @override
+  String get startedByMistakeReason => 'Bắt đầu chuyến do nhầm lẫn';
+
+  @override
+  String get riskStatusReported => 'Đã tiếp nhận';
+
+  @override
+  String get riskStatusEvidenceCollection => 'Đang thu thập bằng chứng';
+
+  @override
+  String get riskStatusUnderReview => 'Đang xem xét';
+
+  @override
+  String get riskStatusLiabilityPending => 'Chờ xác định trách nhiệm';
+
+  @override
+  String get riskStatusSettlement => 'Đang xử lý quyền lợi';
+
+  @override
+  String get riskStatusClosed => 'Đã đóng';
+
+  @override
+  String get riskStatusRejected => 'Đã từ chối';
+
+  @override
+  String get riskCategoryDriverInjury => 'Chấn thương tài xế';
+
+  @override
+  String get riskCategoryCustomerVehicleDamage => 'Thiệt hại xe khách hàng';
+
+  @override
+  String get riskCategoryThirdPartyDamage => 'Thiệt hại bên thứ ba';
+
+  @override
+  String get riskCategoryMultiple => 'Nhiều loại thiệt hại';
+
+  @override
+  String get riskFaultNoFault => 'Không có lỗi';
+
+  @override
+  String get riskFaultOrdinary => 'Sơ suất thông thường';
+
+  @override
+  String get riskFaultGross => 'Sơ suất nghiêm trọng';
+
+  @override
+  String get riskFaultIntentional => 'Hành vi cố ý';
+
+  @override
+  String get riskAssessmentDraft => 'Bản nháp';
+
+  @override
+  String get riskAssessmentPendingConfirmation => 'Chờ xác nhận';
+
+  @override
+  String get riskAssessmentConfirmed => 'Đã xác nhận';
+
+  @override
+  String get riskAssessmentDisputed => 'Đang được xem xét lại';
+
+  @override
+  String get riskClaimApproved => 'Đã phê duyệt';
+
+  @override
+  String get riskClaimPendingFunding => 'Chờ cấp kinh phí';
+
+  @override
+  String get riskClaimFunded => 'Đã cấp kinh phí';
+
+  @override
+  String get riskClaimRecovery => 'Đang thu hồi';
+
+  @override
+  String get riskClaimSettled => 'Đã đối soát';
+
+  @override
+  String get riskLiabilityPartiallyPaid => 'Đã thanh toán một phần';
+
+  @override
+  String get riskLiabilityPaid => 'Đã thanh toán';
+
+  @override
+  String get riskLiabilityWaived => 'Đã miễn';
+
+  @override
+  String get riskRoleDriver => 'Tài xế';
+
+  @override
+  String get riskRoleCustomer => 'Khách hàng';
+
+  @override
+  String get riskRoleThirdParty => 'Bên thứ ba';
+
+  @override
+  String get riskRoleVehicle => 'Phương tiện';
+
+  @override
+  String get riskRoleObjective => 'Yếu tố khách quan';
+
+  @override
+  String get riskReasonDistracting => 'Gây mất tập trung';
+
+  @override
+  String get riskReasonViolent => 'Có hành vi bạo lực';
+
+  @override
+  String get riskReasonInterferingVehicle => 'Can thiệp việc điều khiển xe';
+
+  @override
+  String get riskReasonUnsafeRequest => 'Yêu cầu không an toàn';
+
+  @override
+  String get riskReasonOther => 'Lý do khác';
+
+  @override
+  String get riskIncidentInformation => 'Thông tin sự cố';
+
+  @override
+  String get riskResponsibilityResult => 'Kết quả trách nhiệm';
+
+  @override
+  String get riskProtectionOutcome => 'Kết quả hỗ trợ bảo vệ';
+
+  @override
+  String get riskEligibleDamage => 'Thiệt hại đủ điều kiện';
+
+  @override
+  String get mandatoryTplExplanation =>
+      'Bảo hiểm trách nhiệm dân sự bắt buộc chủ yếu bảo vệ bên thứ ba; không mặc định chi trả thiệt hại vật chất của xe khách hàng.';
+
+  @override
+  String get physicalDamageExplanation =>
+      'Bảo hiểm thiệt hại vật chất có thể được xem xét cho hư hỏng xe khách hàng theo hợp đồng đã xác minh.';
+
+  @override
+  String get insurerNoGuarantee =>
+      'Việc lưu hợp đồng không bảo đảm doanh nghiệp bảo hiểm sẽ chấp thuận chi trả.';
+
+  @override
+  String get documentUrlDeferredHint =>
+      'Hiện hệ thống chỉ lưu liên kết tài liệu. Chỉ dùng liên kết tin cậy; tải tệp trực tiếp sẽ được bổ sung khi có kho lưu trữ an toàn dùng chung.';
+
+  @override
+  String get motorbikeFeatureSuspendedTitle => 'Dịch vụ xe máy tạm ngừng';
+
+  @override
+  String get motorbikeFeatureSuspendedMessage =>
+      'Từ ngày 20/8, chức năng đã tạm ngừng.';
+
+  @override
+  String get acknowledge => 'Đã hiểu';
 }

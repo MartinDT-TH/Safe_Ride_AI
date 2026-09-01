@@ -16,6 +16,8 @@ public partial class DriverProfile
     public string? HomeAddress { get; set; }
 
     public DriverWorkStatus WorkStatus { get; set; } = DriverWorkStatus.Offline;
+    public bool AcceptLongPickupTrips { get; set; }
+    public bool AcceptLongDistanceTrips { get; set; }
     public DateTime? LastActiveAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }

@@ -1255,7 +1255,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get promotions => '优惠活动';
 
   @override
-  String get sos => 'SOS';
+  String get sos => '紧急 SOS';
 
   @override
   String get recentTrips => '最近行程';
@@ -1724,7 +1724,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get specialRequest => '特殊要求（可选）';
 
   @override
-  String get fareCalculationNote => '后端将根据实际距离和时间计算车费。';
+  String get fareCalculationNote => '确认预订时会锁定已接受的车费。';
 
   @override
   String get confirmScheduled => '确认预约行程';
@@ -1815,13 +1815,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get callDriver => '呼叫司机';
 
   @override
-  String get activateSosQuestion => '启用 SOS？';
+  String get activateSosQuestion => '启用紧急 SOS？';
 
   @override
   String get activateSosDescription => '确定要为此行程发送紧急信号吗？';
 
   @override
-  String get activateSos => '启用 SOS';
+  String get activateSos => '启用紧急 SOS';
 
   @override
   String get sosActivationFailed => '无法启用 SOS，请重试。';
@@ -1902,10 +1902,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tripEndFailed => '无法结束行程，请重试。';
 
   @override
-  String get sosActivated => 'SOS 已启用';
+  String get sosActivated => '紧急 SOS 已启用';
 
   @override
-  String get sendingSos => '正在发送 SOS...';
+  String get sendingSos => '正在发送紧急 SOS...';
 
   @override
   String get shareRoute => '分享路线';
@@ -2354,24 +2354,354 @@ class AppLocalizationsZh extends AppLocalizations {
   String get offerCustomerConfirmed => '客户已确认';
 
   @override
-  String get driverEndTripRequestTitle => '结束行程请求';
+  String get preTripSafetyTitle => '行程前车辆安全检查';
 
   @override
-  String get driverEndTripRequestMessage =>
-      '司机希望立即结束行程。如果您同意，车费将按实际行驶距离计算，最低收费为2,000越南盾。';
+  String get preTripSafetyDescription => '开始前请确认所有项目。未通过的记录也会保留以供审计。';
 
   @override
-  String get continueTrip => '继续行程';
+  String get brakeResponse => '制动响应';
 
   @override
-  String get endTripRequestSent => '已发送结束行程请求，正在等待乘客确认。';
+  String get frontRearLights => '前后车灯';
 
   @override
-  String get endTripRequestAccepted => '乘客已同意结束行程。';
+  String get turnSignals => '转向灯';
 
   @override
-  String get endTripRequestRejected => '乘客已拒绝，行程将继续。';
+  String get visibleTires => '轮胎外观';
 
   @override
-  String get endTripResponseFailed => '无法回应结束行程请求，请重试。';
+  String get dashboardWarning => '仪表盘无警告';
+
+  @override
+  String get windshieldVisibility => '车窗与后视镜视野清晰';
+
+  @override
+  String get noMajorVisibleIssue => '无明显重大问题';
+
+  @override
+  String get confirmSafetyCheck => '确认安全检查';
+
+  @override
+  String get allChecksRequired => '开始行程前所有安全项目都必须通过。';
+
+  @override
+  String get safetyTermination => '因安全原因结束';
+
+  @override
+  String get safetyTerminationDescription => '行程保持取消状态。优惠不会使用，开始后可能收取部分车费。';
+
+  @override
+  String get safetyTerminationReasonHint => '描述安全风险';
+
+  @override
+  String get captureSafetyEvidence => '拍摄证据照片（可选）';
+
+  @override
+  String get retakePhoto => '重新拍摄';
+
+  @override
+  String get reportAccident => '报告事故';
+
+  @override
+  String get accidentDescriptionHint => '描述事故经过和初步损失';
+
+  @override
+  String get createAccidentReport => '创建报告';
+
+  @override
+  String get accidentReported => '事故报告已创建。';
+
+  @override
+  String get safetyTerminationFailed => '无法因安全原因结束行程。';
+
+  @override
+  String get preTripCheckFailed => '无法提交安全检查。';
+
+  @override
+  String get riskProtectionCaseTitle => '事故保障案件';
+
+  @override
+  String get riskProtectionClaim => '保障申请';
+
+  @override
+  String get riskProtectionEvidence => '证据';
+
+  @override
+  String get riskProtectionAssessment => '责任评估';
+
+  @override
+  String get uploadAccidentEvidence => '添加证据照片';
+
+  @override
+  String get sendEvidencePhoto => '发送照片';
+
+  @override
+  String get evidencePreviewFailed => '无法读取所选图片，请重新选择。';
+
+  @override
+  String get disputeLiability => '申请责任复核';
+
+  @override
+  String get disputeReasonHint => '说明需要复核评估的原因';
+
+  @override
+  String get liabilityDisputed => '已提交复核申请。';
+
+  @override
+  String get accidentEvidenceUploaded => '证据照片已发送。';
+
+  @override
+  String get noAccidentEvidence => '尚未上传证据。';
+
+  @override
+  String get noProtectionClaim => '保障申请尚未创建。';
+
+  @override
+  String get driverLiabilities => '我的责任';
+
+  @override
+  String get noDriverLiabilities => '您没有已确认的司机责任。';
+
+  @override
+  String get confirmedAmount => '确认金额';
+
+  @override
+  String get paidAmount => '已支付金额';
+
+  @override
+  String get outstandingAmount => '未支付金额';
+
+  @override
+  String get attributableDamage => '司机应承担的合格损失';
+
+  @override
+  String get recoveryHistory => '追偿记录';
+
+  @override
+  String get claimStatus => '申请状态';
+
+  @override
+  String get insuranceCoverage => '保险赔付';
+
+  @override
+  String get riskFundCoverage => '风险基金赔付';
+
+  @override
+  String get participantLiabilities => '各方责任';
+
+  @override
+  String get accidentStatus => '事故状态';
+
+  @override
+  String get accidentCategory => '事故类型';
+
+  @override
+  String get accidentOccurredAt => '发生时间';
+
+  @override
+  String get safetyReportTitle => '报告安全事件';
+
+  @override
+  String get unsafeCustomer => '不安全的客户';
+
+  @override
+  String get vehicleIssue => '车辆问题';
+
+  @override
+  String get safetyReasonCode => '原因';
+
+  @override
+  String get safetyReportDescription => '描述事件';
+
+  @override
+  String get requestSosEscalation => '请求 SOS 升级';
+
+  @override
+  String get requestSosEscalationHint => '发送当前位置并创建持久 SOS 警报';
+
+  @override
+  String get safetyReportSubmitted => '安全事件报告已提交。';
+
+  @override
+  String get safetyReportFailed => '无法提交安全事件报告，请重试。';
+
+  @override
+  String get vehicleFaultType => '车辆故障类型';
+
+  @override
+  String get otherVehicleFault => '其他车辆故障';
+
+  @override
+  String get optionalEvidence => '证据（可选）';
+
+  @override
+  String get endTripReasonTitle => '结束行程原因';
+
+  @override
+  String get endTripReasonDescription =>
+      '请选择准确原因。安全终止必须使用单独的 Risk Protection 流程。';
+
+  @override
+  String get normalCompletionReason => '已到达目的地';
+
+  @override
+  String get normalCompletionReasonDescription => '使用预订时的车费。';
+
+  @override
+  String get customerRequestedStopReason => '乘客要求提前结束';
+
+  @override
+  String get customerRequestedStopReasonDescription => '使用预订路线进度和最低服务车费。';
+
+  @override
+  String get driverUnableToContinueReason => '司机无法继续行程';
+
+  @override
+  String get startedByMistakeReason => '误开始行程';
+
+  @override
+  String get riskStatusReported => '已受理';
+
+  @override
+  String get riskStatusEvidenceCollection => '正在收集证据';
+
+  @override
+  String get riskStatusUnderReview => '审核中';
+
+  @override
+  String get riskStatusLiabilityPending => '等待责任认定';
+
+  @override
+  String get riskStatusSettlement => '正在处理保障';
+
+  @override
+  String get riskStatusClosed => '已关闭';
+
+  @override
+  String get riskStatusRejected => '已拒绝';
+
+  @override
+  String get riskCategoryDriverInjury => '司机受伤';
+
+  @override
+  String get riskCategoryCustomerVehicleDamage => '客户车辆损失';
+
+  @override
+  String get riskCategoryThirdPartyDamage => '第三方损失';
+
+  @override
+  String get riskCategoryMultiple => '多种损失';
+
+  @override
+  String get riskFaultNoFault => '无过错';
+
+  @override
+  String get riskFaultOrdinary => '一般过失';
+
+  @override
+  String get riskFaultGross => '重大过失';
+
+  @override
+  String get riskFaultIntentional => '故意行为';
+
+  @override
+  String get riskAssessmentDraft => '草稿';
+
+  @override
+  String get riskAssessmentPendingConfirmation => '等待确认';
+
+  @override
+  String get riskAssessmentConfirmed => '已确认';
+
+  @override
+  String get riskAssessmentDisputed => '重新审核中';
+
+  @override
+  String get riskClaimApproved => '已批准';
+
+  @override
+  String get riskClaimPendingFunding => '等待拨款';
+
+  @override
+  String get riskClaimFunded => '已拨款';
+
+  @override
+  String get riskClaimRecovery => '追偿中';
+
+  @override
+  String get riskClaimSettled => '已对账';
+
+  @override
+  String get riskLiabilityPartiallyPaid => '已部分支付';
+
+  @override
+  String get riskLiabilityPaid => '已支付';
+
+  @override
+  String get riskLiabilityWaived => '已豁免';
+
+  @override
+  String get riskRoleDriver => '司机';
+
+  @override
+  String get riskRoleCustomer => '客户';
+
+  @override
+  String get riskRoleThirdParty => '第三方';
+
+  @override
+  String get riskRoleVehicle => '车辆';
+
+  @override
+  String get riskRoleObjective => '客观因素';
+
+  @override
+  String get riskReasonDistracting => '造成分心';
+
+  @override
+  String get riskReasonViolent => '暴力行为';
+
+  @override
+  String get riskReasonInterferingVehicle => '干扰车辆操控';
+
+  @override
+  String get riskReasonUnsafeRequest => '不安全要求';
+
+  @override
+  String get riskReasonOther => '其他原因';
+
+  @override
+  String get riskIncidentInformation => '事故信息';
+
+  @override
+  String get riskResponsibilityResult => '责任认定结果';
+
+  @override
+  String get riskProtectionOutcome => '保障处理结果';
+
+  @override
+  String get riskEligibleDamage => '符合条件的损失';
+
+  @override
+  String get mandatoryTplExplanation => '强制第三方责任险主要保障第三方，并不自动承保客户车辆损失。';
+
+  @override
+  String get physicalDamageExplanation => '车辆损失险可根据已验证的保单条款用于客户车辆损失。';
+
+  @override
+  String get insurerNoGuarantee => '保存保单不代表保险公司保证批准赔付。';
+
+  @override
+  String get documentUrlDeferredHint => '目前仅保存文件链接。请使用可信链接；待安全共享存储可用后再提供直接上传。';
+
+  @override
+  String get motorbikeFeatureSuspendedTitle => '摩托车服务暂停';
+
+  @override
+  String get motorbikeFeatureSuspendedMessage => '自8月20日起，此功能已暂时停用。';
+
+  @override
+  String get acknowledge => '知道了';
 }

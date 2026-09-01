@@ -10,6 +10,7 @@ using SafeRide.Infrastructure.Services.AccountBans;
 
 namespace SafeRide.IntegrationTests;
 
+[Trait(SqlServerTestDatabase.ProviderTraitName, SqlServerTestDatabase.InMemoryProvider)]
 public sealed class AccountBanServiceTests
 {
     private static readonly DateTime UtcNow = new(2026, 8, 15, 10, 0, 0, DateTimeKind.Utc);
@@ -177,7 +178,7 @@ public sealed class AccountBanServiceTests
                 .UseInMemoryDatabase($"account-bans-{Guid.NewGuid():N}")
                 .ConfigureWarnings(warnings => warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning))
                 .Options;
-            var dbContext = new ApplicationDbContext(options);
+            var dbContext = new ApplicationDbContext(options, new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
             await dbContext.Database.EnsureCreatedAsync();
 
             var configuration = await dbContext.AccountBanConfigurations

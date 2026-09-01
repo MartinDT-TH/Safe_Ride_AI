@@ -1,9 +1,14 @@
 using System.ComponentModel.DataAnnotations;
+using SafeRide.Domain.Enums;
 
 namespace SafeRide.Contracts.Requests.Bookings;
 
 public sealed class EstimateBookingFareRequest
 {
+    public BookingType BookingType { get; init; } = BookingType.Now;
+
+    public DateTime? ScheduledAt { get; init; }
+
     [Range(1, long.MaxValue)]
     public long VehicleId { get; init; }
 

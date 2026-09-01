@@ -9,6 +9,7 @@ import '../../../../../core/maps/models/map_models.dart';
 import '../../../../../core/maps/widgets/map_renderer_widget.dart';
 import '../../../../../core/utils/currency_formatter.dart';
 import '../../../../../core/widgets/app_loading_screen.dart';
+import '../../../../../core/widgets/motorbike_feature_notice.dart';
 import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/models/booking_catalog.dart';
 import '../../data/models/booking_location.dart';
@@ -30,6 +31,7 @@ class RebookTripPage extends StatefulWidget {
 
 class _RebookTripPageState extends State<RebookTripPage> {
   bool _isScheduled = false;
+  DateTime? _scheduledAt;
   BookingLocation? _pickup;
   BookingLocation? _destination;
 
@@ -54,7 +56,8 @@ class _RebookTripPageState extends State<RebookTripPage> {
     // Estimate fare based on old locations and vehicle
     if (_pickup != null &&
         _destination != null &&
-        widget.oldBooking.vehicle != null) {
+        widget.oldBooking.vehicle != null &&
+        !widget.oldBooking.vehicle!.isMotorbike) {
       // Find the service id, assuming PerTrip = 1 or matching the original mode. We'll find from catalog.
       final service = provider.catalog?.services.firstWhere(
         (s) => s.mode == BookingServiceMode.perTrip,
@@ -68,6 +71,8 @@ class _RebookTripPageState extends State<RebookTripPage> {
           serviceTypeId: service.id,
           pickup: _pickup!,
           destination: _destination!,
+          bookingType: _isScheduled ? BookingType.scheduled : BookingType.now,
+          scheduledAt: _scheduledAt,
         );
       }
     }
@@ -111,6 +116,10 @@ class _RebookTripPageState extends State<RebookTripPage> {
       ).showSnackBar(SnackBar(content: Text(context.l10n.oldTripDataInvalid)));
       return;
     }
+    if (vehicle.isMotorbike) {
+      await MotorbikeFeatureNotice.show(context);
+      return;
+    }
 
     if (!_isScheduled && estimate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -133,9 +142,7 @@ class _RebookTripPageState extends State<RebookTripPage> {
         vehicleId: vehicle.id,
         serviceTypeId: service.id,
         bookingType: _isScheduled ? BookingType.scheduled : BookingType.now,
-        scheduledAt: _isScheduled
-            ? DateTime.now().add(Duration(minutes: 35))
-            : null,
+        scheduledAt: _scheduledAt,
         pickup: pickup,
         destination: destination,
       ),
@@ -165,9 +172,9 @@ class _RebookTripPageState extends State<RebookTripPage> {
           ),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.bookingSuccessful)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(context.l10n.bookingSuccessful)));
         Navigator.pop(context);
       }
     }
@@ -416,7 +423,13 @@ class _RebookTripPageState extends State<RebookTripPage> {
                 children: [
                   Expanded(
                     child: GestureDetector(
-                      onTap: () => setState(() => _isScheduled = false),
+                      onTap: () async {
+                        setState(() {
+                          _isScheduled = false;
+                          _scheduledAt = null;
+                        });
+                        await _loadData();
+                      },
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         decoration: BoxDecoration(
@@ -458,7 +471,15 @@ class _RebookTripPageState extends State<RebookTripPage> {
                   SizedBox(width: 12),
                   Expanded(
                     child: GestureDetector(
-                      onTap: () => setState(() => _isScheduled = true),
+                      onTap: () async {
+                        setState(() {
+                          _isScheduled = true;
+                          _scheduledAt = DateTime.now().add(
+                            Duration(minutes: 35),
+                          );
+                        });
+                        await _loadData();
+                      },
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         decoration: BoxDecoration(
@@ -716,10 +737,7 @@ class _RebookPromoTile extends StatelessWidget {
                       selectedPromo!.shortDescription,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Color(0xFF626A6C),
-                        fontSize: 13,
-                      ),
+                      style: TextStyle(color: Color(0xFF626A6C), fontSize: 13),
                     ),
                 ],
               ),

@@ -20,6 +20,9 @@
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
 
     <application
+        android:name=".SafeRideApplication"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:enableOnBackInvokedCallback="true"
         android:label="SafeRide"
         android:icon="@mipmap/ic_launcher">
 

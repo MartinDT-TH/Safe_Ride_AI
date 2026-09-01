@@ -106,8 +106,7 @@ class VehicleProvider extends ChangeNotifier {
       if (data is Map) {
         return ApiErrorLocalizer.translate(
           LocaleProvider.currentLocalizations,
-          fallback:
-              data['message']?.toString() ?? data['detail']?.toString(),
+          fallback: data['message']?.toString() ?? data['detail']?.toString(),
         );
       }
     }

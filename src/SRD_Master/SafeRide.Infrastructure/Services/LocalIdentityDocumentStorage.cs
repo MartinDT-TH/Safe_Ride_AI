@@ -60,7 +60,22 @@ public sealed class LocalIdentityDocumentStorage : IIdentityDocumentStorage
         }
 
         var publicUrl = $"{_publicBasePath.TrimEnd('/')}/{driverId:N}/{documentType.ToString().ToLowerInvariant()}/{fileName}";
-        return new StoredIdentityDocumentFile(publicUrl, fileName, contentType, content.Length);
+        return new StoredIdentityDocumentFile(
+            publicUrl, fileName, contentType, content.Length, absolutePath);
+    }
+
+    public Task DeleteAsync(
+        string storageKey,
+        string contentType,
+        CancellationToken cancellationToken)
+    {
+        var uploadsRoot = Path.GetFullPath(Path.Combine(
+            _environment.ContentRootPath, "uploads", "identity-verification"));
+        var target = Path.GetFullPath(storageKey);
+        if (target.StartsWith(uploadsRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            && File.Exists(target))
+            File.Delete(target);
+        return Task.CompletedTask;
     }
 
     private static string NormalizeSegment(string value)

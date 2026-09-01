@@ -1260,7 +1260,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get promotions => 'プロモーション';
 
   @override
-  String get sos => 'SOS';
+  String get sos => '緊急SOS';
 
   @override
   String get recentTrips => '最近の乗車';
@@ -1732,7 +1732,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get specialRequest => '特別なリクエスト（任意）';
 
   @override
-  String get fareCalculationNote => '実際の距離と時間に基づきバックエンドで料金を計算します。';
+  String get fareCalculationNote => '予約確定時に承認済み運賃が固定されます。';
 
   @override
   String get confirmScheduled => '予約乗車を確定';
@@ -1823,13 +1823,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get callDriver => 'ドライバーに電話';
 
   @override
-  String get activateSosQuestion => 'SOSを有効にしますか？';
+  String get activateSosQuestion => '緊急SOSを有効にしますか？';
 
   @override
   String get activateSosDescription => 'この乗車の緊急信号を送信しますか？';
 
   @override
-  String get activateSos => 'SOSを有効化';
+  String get activateSos => '緊急SOSを有効化';
 
   @override
   String get sosActivationFailed => 'SOSを有効にできませんでした。もう一度お試しください。';
@@ -1910,10 +1910,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get tripEndFailed => '乗車を終了できませんでした。もう一度お試しください。';
 
   @override
-  String get sosActivated => 'SOS有効';
+  String get sosActivated => '緊急SOS有効';
 
   @override
-  String get sendingSos => 'SOSを送信中...';
+  String get sendingSos => '緊急SOSを送信中...';
 
   @override
   String get shareRoute => 'ルートを共有';
@@ -2365,24 +2365,359 @@ class AppLocalizationsJa extends AppLocalizations {
   String get offerCustomerConfirmed => 'お客様が確認済み';
 
   @override
-  String get driverEndTripRequestTitle => '乗車終了リクエスト';
+  String get preTripSafetyTitle => '運行前車両安全確認';
 
   @override
-  String get driverEndTripRequestMessage =>
-      'ドライバーが今すぐ乗車を終了したいと申し出ています。同意すると、実際の走行距離に基づいて最低2,000 VNDの料金が計算されます。';
+  String get preTripSafetyDescription => '開始前に全項目を確認してください。不合格の履歴も監査用に保存されます。';
 
   @override
-  String get continueTrip => '乗車を続ける';
+  String get brakeResponse => 'ブレーキの反応';
 
   @override
-  String get endTripRequestSent => '終了リクエストを送信しました。お客様の確認を待っています。';
+  String get frontRearLights => '前後ライト';
 
   @override
-  String get endTripRequestAccepted => 'お客様が乗車終了に同意しました。';
+  String get turnSignals => '方向指示器';
 
   @override
-  String get endTripRequestRejected => 'お客様が拒否しました。乗車を続けます。';
+  String get visibleTires => 'タイヤの外観';
 
   @override
-  String get endTripResponseFailed => '終了リクエストに応答できませんでした。もう一度お試しください。';
+  String get dashboardWarning => '警告灯なし';
+
+  @override
+  String get windshieldVisibility => '窓とミラーの視界';
+
+  @override
+  String get noMajorVisibleIssue => '重大な外観異常なし';
+
+  @override
+  String get confirmSafetyCheck => '安全確認を送信';
+
+  @override
+  String get allChecksRequired => '運行開始前に全項目が合格する必要があります。';
+
+  @override
+  String get safetyTermination => '安全上の理由で終了';
+
+  @override
+  String get safetyTerminationDescription =>
+      '運行はキャンセルのままです。プロモーションは使用されず、開始後は部分運賃が発生する場合があります。';
+
+  @override
+  String get safetyTerminationReasonHint => '安全上のリスクを説明';
+
+  @override
+  String get captureSafetyEvidence => '証拠写真を撮影（任意）';
+
+  @override
+  String get retakePhoto => '撮り直す';
+
+  @override
+  String get reportAccident => '事故を報告';
+
+  @override
+  String get accidentDescriptionHint => '状況と初期損害を説明';
+
+  @override
+  String get createAccidentReport => '報告を作成';
+
+  @override
+  String get accidentReported => '事故報告を作成しました。';
+
+  @override
+  String get safetyTerminationFailed => '安全上の終了処理に失敗しました。';
+
+  @override
+  String get preTripCheckFailed => '安全確認を送信できませんでした。';
+
+  @override
+  String get riskProtectionCaseTitle => '事故保護ケース';
+
+  @override
+  String get riskProtectionClaim => '保護請求';
+
+  @override
+  String get riskProtectionEvidence => '証拠';
+
+  @override
+  String get riskProtectionAssessment => '責任評価';
+
+  @override
+  String get uploadAccidentEvidence => '証拠写真を追加';
+
+  @override
+  String get sendEvidencePhoto => '写真を送信';
+
+  @override
+  String get evidencePreviewFailed => '選択した画像を読み込めません。もう一度選択してください。';
+
+  @override
+  String get disputeLiability => '責任評価の再審査を依頼';
+
+  @override
+  String get disputeReasonHint => '再審査が必要な理由を入力してください';
+
+  @override
+  String get liabilityDisputed => '再審査依頼を送信しました。';
+
+  @override
+  String get accidentEvidenceUploaded => '証拠写真を送信しました。';
+
+  @override
+  String get noAccidentEvidence => '証拠はまだありません。';
+
+  @override
+  String get noProtectionClaim => '保護請求はまだ作成されていません。';
+
+  @override
+  String get driverLiabilities => '自分の責任';
+
+  @override
+  String get noDriverLiabilities => '確定した運転者責任はありません。';
+
+  @override
+  String get confirmedAmount => '確定額';
+
+  @override
+  String get paidAmount => '支払済み';
+
+  @override
+  String get outstandingAmount => '未払い額';
+
+  @override
+  String get attributableDamage => '運転者責任の対象損害';
+
+  @override
+  String get recoveryHistory => '回収履歴';
+
+  @override
+  String get claimStatus => '請求状況';
+
+  @override
+  String get insuranceCoverage => '保険補償';
+
+  @override
+  String get riskFundCoverage => 'リスク基金補償';
+
+  @override
+  String get participantLiabilities => '当事者の責任';
+
+  @override
+  String get accidentStatus => '事故状況';
+
+  @override
+  String get accidentCategory => '事故区分';
+
+  @override
+  String get accidentOccurredAt => '発生日時';
+
+  @override
+  String get safetyReportTitle => '安全上の問題を報告';
+
+  @override
+  String get unsafeCustomer => '危険な顧客';
+
+  @override
+  String get vehicleIssue => '車両の問題';
+
+  @override
+  String get safetyReasonCode => '理由';
+
+  @override
+  String get safetyReportDescription => '状況を説明してください';
+
+  @override
+  String get requestSosEscalation => 'SOSエスカレーションを依頼';
+
+  @override
+  String get requestSosEscalationHint => '現在地を送信し、永続的なSOS警告を作成します';
+
+  @override
+  String get safetyReportSubmitted => '安全上の問題を報告しました。';
+
+  @override
+  String get safetyReportFailed => '安全上の問題を報告できませんでした。もう一度お試しください。';
+
+  @override
+  String get vehicleFaultType => '車両の不具合種別';
+
+  @override
+  String get otherVehicleFault => 'その他の車両不具合';
+
+  @override
+  String get optionalEvidence => '証拠（任意）';
+
+  @override
+  String get endTripReasonTitle => '終了理由';
+
+  @override
+  String get endTripReasonDescription =>
+      '正しい理由を選択してください。安全上の終了はRisk Protectionの専用手順を使用します。';
+
+  @override
+  String get normalCompletionReason => '目的地に到着';
+
+  @override
+  String get normalCompletionReasonDescription => '予約時の運賃を適用します。';
+
+  @override
+  String get customerRequestedStopReason => 'お客様の希望で途中終了';
+
+  @override
+  String get customerRequestedStopReasonDescription =>
+      '予約ルートの進捗と最低サービス運賃を使用します。';
+
+  @override
+  String get driverUnableToContinueReason => 'ドライバーが続行できない';
+
+  @override
+  String get startedByMistakeReason => '誤って開始した';
+
+  @override
+  String get riskStatusReported => '受付済み';
+
+  @override
+  String get riskStatusEvidenceCollection => '証拠を収集中';
+
+  @override
+  String get riskStatusUnderReview => '審査中';
+
+  @override
+  String get riskStatusLiabilityPending => '責任判定待ち';
+
+  @override
+  String get riskStatusSettlement => '補償処理中';
+
+  @override
+  String get riskStatusClosed => '終了';
+
+  @override
+  String get riskStatusRejected => '却下';
+
+  @override
+  String get riskCategoryDriverInjury => '運転者の負傷';
+
+  @override
+  String get riskCategoryCustomerVehicleDamage => 'お客様車両の損害';
+
+  @override
+  String get riskCategoryThirdPartyDamage => '第三者損害';
+
+  @override
+  String get riskCategoryMultiple => '複数の損害';
+
+  @override
+  String get riskFaultNoFault => '過失なし';
+
+  @override
+  String get riskFaultOrdinary => '通常の過失';
+
+  @override
+  String get riskFaultGross => '重大な過失';
+
+  @override
+  String get riskFaultIntentional => '故意の不正行為';
+
+  @override
+  String get riskAssessmentDraft => '下書き';
+
+  @override
+  String get riskAssessmentPendingConfirmation => '確認待ち';
+
+  @override
+  String get riskAssessmentConfirmed => '確認済み';
+
+  @override
+  String get riskAssessmentDisputed => '再審査中';
+
+  @override
+  String get riskClaimApproved => '承認済み';
+
+  @override
+  String get riskClaimPendingFunding => '資金提供待ち';
+
+  @override
+  String get riskClaimFunded => '資金提供済み';
+
+  @override
+  String get riskClaimRecovery => '回収中';
+
+  @override
+  String get riskClaimSettled => '照合済み';
+
+  @override
+  String get riskLiabilityPartiallyPaid => '一部支払済み';
+
+  @override
+  String get riskLiabilityPaid => '支払済み';
+
+  @override
+  String get riskLiabilityWaived => '免除済み';
+
+  @override
+  String get riskRoleDriver => '運転者';
+
+  @override
+  String get riskRoleCustomer => 'お客様';
+
+  @override
+  String get riskRoleThirdParty => '第三者';
+
+  @override
+  String get riskRoleVehicle => '車両';
+
+  @override
+  String get riskRoleObjective => '客観的要因';
+
+  @override
+  String get riskReasonDistracting => '注意をそらす行為';
+
+  @override
+  String get riskReasonViolent => '暴力行為';
+
+  @override
+  String get riskReasonInterferingVehicle => '車両操作への干渉';
+
+  @override
+  String get riskReasonUnsafeRequest => '危険な要求';
+
+  @override
+  String get riskReasonOther => 'その他の理由';
+
+  @override
+  String get riskIncidentInformation => '事故情報';
+
+  @override
+  String get riskResponsibilityResult => '責任判定結果';
+
+  @override
+  String get riskProtectionOutcome => '補償結果';
+
+  @override
+  String get riskEligibleDamage => '対象損害額';
+
+  @override
+  String get mandatoryTplExplanation =>
+      '自賠責保険は主に第三者を保護するもので、お客様車両の損害を自動的に補償するものではありません。';
+
+  @override
+  String get physicalDamageExplanation =>
+      '車両損害保険は、確認済みの契約条件に基づき、お客様車両の損害に適用される場合があります。';
+
+  @override
+  String get insurerNoGuarantee => '契約を保存しても、保険会社による支払い承認を保証するものではありません。';
+
+  @override
+  String get documentUrlDeferredHint =>
+      '現在は書類リンクのみ保存します。信頼できるリンクを使用してください。安全な共通ストレージ導入後に直接アップロードを追加します。';
+
+  @override
+  String get motorbikeFeatureSuspendedTitle => 'バイクサービスを一時停止';
+
+  @override
+  String get motorbikeFeatureSuspendedMessage => '8月20日より、この機能は一時停止しています。';
+
+  @override
+  String get acknowledge => '了解';
 }

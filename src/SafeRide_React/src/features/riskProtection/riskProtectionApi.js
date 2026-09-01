@@ -1,0 +1,173 @@
+import { apiDownload, apiRequest } from '../../shared/api/apiClient';
+
+export const riskProtectionConcurrencyCodes = new Set([
+  'risk_protection.concurrency_conflict',
+  'persistence.concurrency_conflict',
+]);
+
+export function isRiskProtectionConcurrencyConflict(error) {
+  return error?.status === 409 && riskProtectionConcurrencyCodes.has(error?.code);
+}
+
+export const riskFundDashboardPath = '/admin/risk-fund';
+export const riskFundTransactionsPath = '/admin/risk-fund/transactions';
+export const riskFundExportPath = '/admin/risk-fund/transactions/export';
+export const riskProtectionConfigurationPath = '/admin/risk-protection/configuration';
+export const riskProtectionVersionsPath = '/admin/risk-protection/configuration/versions';
+export const staffAccidentsPath = '/staff/accidents';
+export const staffRefundsPath = '/staff/payments/refunds';
+
+export function buildQueryPath(path, filters = {}) {
+  const query = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== '' && value !== null && value !== undefined) query.set(key, value);
+  });
+  const suffix = query.toString();
+  return suffix ? `${path}?${suffix}` : path;
+}
+
+export function getAccident(accidentId) {
+  return apiRequest(`/accidents/${accidentId}`);
+}
+
+export function saveLiabilityAssessment(accidentId, payload) {
+  return apiRequest(`/staff/accidents/${accidentId}/liability-assessment`, {
+    method: 'PUT', body: JSON.stringify(payload),
+  });
+}
+
+export function createOpeningBalance(payload) {
+  return apiRequest('/admin/risk-fund/opening-balance', {
+    method: 'POST', body: JSON.stringify(payload),
+  });
+}
+
+export function createRiskFundAdjustment(payload) {
+  return apiRequest('/admin/risk-fund/adjustments', {
+    method: 'POST', body: JSON.stringify(payload),
+  });
+}
+
+export function exportRiskFundTransactions(filters) {
+  return apiDownload(buildQueryPath(riskFundExportPath, filters));
+}
+
+export function createRiskProtectionConfiguration(payload) {
+  return apiRequest(riskProtectionConfigurationPath, {
+    method: 'PUT', body: JSON.stringify(payload),
+  });
+}
+
+export function confirmLiabilityAssessment(accidentId, payload) {
+  return apiRequest(`/staff/accidents/${accidentId}/liability-assessment/confirm`, {
+    method: 'POST', body: JSON.stringify(payload),
+  });
+}
+
+export function calculateClaim(claimId, payload) {
+  return apiRequest(`/staff/claims/${claimId}/calculate`, {
+    method: 'POST', body: JSON.stringify(payload),
+  });
+}
+
+export function reviewMockInsurance(claimId, approve, payload) {
+  return apiRequest(`/staff/claims/${claimId}/mock-insurance/${approve ? 'approve' : 'reject'}`, {
+    method: 'POST', body: JSON.stringify(payload),
+  });
+}
+
+export function getMockInsuranceAudits(claimId) {
+  return apiRequest(`/staff/claims/${claimId}/mock-insurance/audits`);
+}
+
+export function refreshMockInsuranceStatus(claimId, rowVersion) {
+  return apiRequest(`/staff/claims/${claimId}/mock-insurance/status`, {
+    method: 'POST', body: JSON.stringify({ rowVersion }),
+  });
+}
+
+export function listClaimInsuranceDocuments(claimId) {
+  return apiRequest(`/staff/claims/${claimId}/insurance-documents`);
+}
+
+export function uploadClaimInsuranceDocument(claimId, documentType, file) {
+  const body = new FormData();
+  body.set('documentType', documentType);
+  body.append('file', file, file.name);
+  return apiRequest(`/staff/claims/${claimId}/insurance-documents`, { method: 'POST', body });
+}
+
+export function fundClaim(claimId, idempotencyKey, rowVersion) {
+  return apiRequest(`/staff/claims/${claimId}/approve-funding`, {
+    method: 'POST', headers: { 'Idempotency-Key': idempotencyKey },
+    body: JSON.stringify({ rowVersion }),
+  });
+}
+
+export function recordClaimRecovery(claimId, payload) {
+  const body = new FormData();
+  ['sourceType', 'payerReference', 'amount', 'paymentReference', 'rowVersion'].forEach((key) => body.set(key, payload[key]));
+  if (payload.evidence) body.append('evidence', payload.evidence, payload.evidence.name);
+  return apiRequest(`/staff/claims/${claimId}/recoveries`, {
+    method: 'POST', headers: { 'Idempotency-Key': payload.idempotencyKey }, body,
+  });
+}
+
+export function writeOffClaimAdvance(claimId, payload) {
+  const body = new FormData();
+  ['amount', 'reason', 'rowVersion'].forEach((key) => body.set(key, payload[key]));
+  body.set('evidence', payload.evidence);
+  return apiRequest(`/staff/claims/${claimId}/write-offs`, {
+    method: 'POST', headers: { 'Idempotency-Key': payload.idempotencyKey }, body,
+  });
+}
+
+export function closeClaim(claimId, rowVersion) {
+  return apiRequest(`/staff/claims/${claimId}/close`, {
+    method: 'POST', body: JSON.stringify({ rowVersion }),
+  });
+}
+
+export function confirmManualRefund(refundId, payload) {
+  return apiRequest(`/staff/payments/refunds/${refundId}/confirm`, {
+    method: 'POST', body: JSON.stringify(payload),
+  });
+}
+
+export function formatVnd(value) {
+  return new Intl.NumberFormat('vi-VN', {
+    style: 'currency', currency: 'VND', maximumFractionDigits: 0,
+  }).format(Number(value ?? 0));
+}
+
+export function createIdempotencyKey(prefix) {
+  return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`;
+}
+
+export function isEntireRiskFundRequestPermanent(claim) {
+  const advanceAmount = Number(claim?.riskFundAdvanceAmount ?? 0);
+  const permanentLossAmount = Number(claim?.riskFundPermanentLossAmount ?? 0);
+  return permanentLossAmount > 0 && advanceAmount === 0;
+}
+
+export function reconcilePartyCauses(causes, responsibleParty, percentage, defaultCause) {
+  const normalizedPercentage = Number(percentage);
+  const currentCauses = Array.isArray(causes) ? causes : [];
+  const partyCauses = currentCauses.filter((cause) => cause.responsibleParty === responsibleParty);
+  if (normalizedPercentage === 0) {
+    return currentCauses.filter((cause) => cause.responsibleParty !== responsibleParty);
+  }
+  if (partyCauses.length === 0) {
+    return [...currentCauses, {
+      rootCause: defaultCause,
+      responsibleParty,
+      percentage: normalizedPercentage,
+    }];
+  }
+  if (partyCauses.length === 1) {
+    return currentCauses.map((cause) => cause.responsibleParty === responsibleParty
+      ? { ...cause, percentage: normalizedPercentage }
+      : cause);
+  }
+  return currentCauses;
+}

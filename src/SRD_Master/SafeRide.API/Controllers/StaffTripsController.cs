@@ -4,6 +4,10 @@ using Microsoft.AspNetCore.Mvc;
 using SafeRide.Application.Features.AdminTrips;
 using SafeRide.Application.Features.AdminTrips.Queries.GetAdminTripDetails;
 using SafeRide.Application.Features.AdminTrips.Queries.GetAdminTripDetailsByBooking;
+using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Features.Trips.DTOs;
+using SafeRide.Contracts.Requests.Trips;
+using System.Security.Claims;
 
 namespace SafeRide.API.Controllers;
 
@@ -13,10 +17,35 @@ namespace SafeRide.API.Controllers;
 public sealed class StaffTripsController : ControllerBase
 {
     private readonly ISender _sender;
+    private readonly ITripStatusService _tripStatusService;
 
-    public StaffTripsController(ISender sender)
+    public StaffTripsController(ISender sender, ITripStatusService tripStatusService)
     {
         _sender = sender;
+        _tripStatusService = tripStatusService;
+    }
+
+    [HttpPost("{tripId:long}/end-reconciliations/{requestId:long}/resolve")]
+    [ProducesResponseType<TripEndReconciliationResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<TripEndReconciliationResult>> ResolveEndReconciliation(
+        long tripId,
+        long requestId,
+        [FromBody] ResolveTripEndReconciliationRequest request,
+        CancellationToken cancellationToken)
+    {
+        var staffUserId = Guid.TryParse(
+            User.FindFirstValue(ClaimTypes.NameIdentifier),
+            out var parsed)
+            ? parsed
+            : throw new UnauthorizedAccessException();
+        return Ok(await _tripStatusService.ResolveEndTripReconciliationAsync(
+            staffUserId,
+            tripId,
+            requestId,
+            request.Approved,
+            request.ResolutionNote,
+            cancellationToken));
     }
 
     [HttpGet("{tripId:long}")]

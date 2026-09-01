@@ -1,10 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Common.Models;
 using SafeRide.Application.Common.Realtime;
 using SafeRide.Application.Features.Bookings;
 using SafeRide.Application.Features.Bookings.Commands.CreateBooking;
 using SafeRide.Application.Features.Bookings.DTOs;
+using SafeRide.Application.Features.Drivers.Services;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
 using SafeRide.Infrastructure.Persistence;
@@ -26,6 +28,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
     private readonly IMatchingPolicyProvider _matchingPolicyProvider;
     private readonly IBookingLifecycleJobScheduler _jobScheduler;
     private readonly IOptionsMonitor<TripTrackingOptions> _tripTrackingOptions;
+    private readonly DriverCompensationOptions _compensationOptions;
 
     public BookingAssignmentService(
         ApplicationDbContext dbContext,
@@ -37,7 +40,8 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         IBookingMatchingService bookingMatchingService,
         IMatchingPolicyProvider matchingPolicyProvider,
         IBookingLifecycleJobScheduler jobScheduler,
-        IOptionsMonitor<TripTrackingOptions> tripTrackingOptions)
+        IOptionsMonitor<TripTrackingOptions> tripTrackingOptions,
+        IOptions<DriverCompensationOptions> compensationOptions)
     {
         _dbContext = dbContext;
         _dateTimeProvider = dateTimeProvider;
@@ -49,9 +53,22 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         _matchingPolicyProvider = matchingPolicyProvider;
         _jobScheduler = jobScheduler;
         _tripTrackingOptions = tripTrackingOptions;
+        _compensationOptions = compensationOptions.Value;
     }
 
-    public async Task<CreateBookingResponse> ConfirmDriverAsync(
+    public Task<CreateBookingResponse> ConfirmDriverAsync(
+        Guid customerId,
+        long bookingId,
+        long? offerId,
+        CancellationToken cancellationToken) =>
+        _dbContext.Database.CreateExecutionStrategy().ExecuteAsync(
+            () => ConfirmDriverCoreAsync(
+                customerId,
+                bookingId,
+                offerId,
+                cancellationToken));
+
+    private async Task<CreateBookingResponse> ConfirmDriverCoreAsync(
         Guid customerId,
         long bookingId,
         long? offerId,
@@ -164,7 +181,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
                 409);
         }
 
-        await EnsureDriverCanServeBookingAsync(offer.DriverId, booking, cancellationToken);
+        await EnsureDriverCanServeBookingAsync(driverProfile, booking, offer, cancellationToken);
         await EnsureDriverHasNoActiveTripAsync(offer.DriverId, cancellationToken);
 
         var assignment = await CompleteDriverAssignmentAsync(
@@ -193,7 +210,14 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             assignment.Trip.TripStatus);
     }
 
-    public async Task<CreateBookingResponse> RejectDriverAsync(
+    public Task<CreateBookingResponse> RejectDriverAsync(
+        Guid customerId,
+        long bookingId,
+        CancellationToken cancellationToken) =>
+        _dbContext.Database.CreateExecutionStrategy().ExecuteAsync(
+            () => RejectDriverCoreAsync(customerId, bookingId, cancellationToken));
+
+    private async Task<CreateBookingResponse> RejectDriverCoreAsync(
         Guid customerId,
         long bookingId,
         CancellationToken cancellationToken)
@@ -282,7 +306,14 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             nextOffer);
     }
 
-    public async Task<CreateBookingResponse> AcceptDriverOfferAsync(
+    public Task<CreateBookingResponse> AcceptDriverOfferAsync(
+        Guid driverId,
+        long offerId,
+        CancellationToken cancellationToken) =>
+        _dbContext.Database.CreateExecutionStrategy().ExecuteAsync(
+            () => AcceptDriverOfferCoreAsync(driverId, offerId, cancellationToken));
+
+    private async Task<CreateBookingResponse> AcceptDriverOfferCoreAsync(
         Guid driverId,
         long offerId,
         CancellationToken cancellationToken)
@@ -314,6 +345,25 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
 
         var existingTrip = await _dbContext.Trips
             .FirstOrDefaultAsync(x => x.BookingId == booking.BookingId, cancellationToken);
+        if (booking.BookingType == BookingType.Now
+            && booking.BookingStatus == BookingStatus.Searching
+            && offer.OfferStatus == DriverOfferStatus.DriverAccepted
+            && offer.ExpiresAt > utcNow
+            && existingTrip is null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            var acceptedOffer = await RunNowAcceptancePostCommitAsync(
+                booking,
+                offer,
+                utcNow,
+                cancellationToken);
+            return BuildResponse(
+                booking,
+                "Tài xế phù hợp đã sẵn sàng.",
+                null,
+                acceptedOffer);
+        }
+
         if (booking.BookingType == BookingType.Scheduled
             && booking.BookingStatus == BookingStatus.DriverAssigned
             && offer.OfferStatus == DriverOfferStatus.CustomerConfirmed
@@ -386,7 +436,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         }
 
         var driverProfile = await EnsureDriverOnlineAsync(driverId, cancellationToken);
-        await EnsureDriverCanServeBookingAsync(driverId, booking, cancellationToken);
+        await EnsureDriverCanServeBookingAsync(driverProfile, booking, offer, cancellationToken);
         await EnsureDriverHasNoActiveTripAsync(driverId, cancellationToken);
         await EnsureNoOtherActiveDriverOfferAsync(driverId, offer.Id, cancellationToken);
 
@@ -467,6 +517,41 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             driverOffer);
     }
 
+    private async Task<BookingDriverOfferDto?> RunNowAcceptancePostCommitAsync(
+        Booking booking,
+        BookingDriverOffer offer,
+        DateTime utcNow,
+        CancellationToken cancellationToken)
+    {
+        await _jobScheduler.CancelExpireDriverOfferAsync(offer.Id, cancellationToken);
+        _jobScheduler.ScheduleExpireDriverOffer(
+            offer.Id,
+            offer.ExpiresAt - utcNow);
+        await CacheMatchingOfferAsync(offer);
+        await _redisService.SetAsync(
+            RedisKeys.MatchingDriverLock(offer.DriverId),
+            booking.BookingId.ToString(),
+            offer.ExpiresAt - utcNow);
+
+        var driverOffer = await GetOfferDtoAsync(offer.Id, utcNow, cancellationToken);
+        if (driverOffer is not null)
+        {
+            await _realtimeNotificationService.PublishDriverOfferAcceptedAsync(
+                new DriverOfferAcceptedEvent(
+                    booking.BookingId,
+                    booking.CustomerId,
+                    offer.DriverId,
+                    offer.Id,
+                    utcNow,
+                    offer.ExpiresAt,
+                    driverOffer,
+                    "Tài xế phù hợp đã sẵn sàng."),
+                cancellationToken);
+        }
+
+        return driverOffer;
+    }
+
     public async Task RejectDriverOfferAsync(
         Guid driverId,
         long offerId,
@@ -533,8 +618,9 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
     }
 
     private async Task EnsureDriverCanServeBookingAsync(
-        Guid driverId,
+        DriverProfile driverProfile,
         Booking booking,
+        BookingDriverOffer offer,
         CancellationToken cancellationToken)
     {
         if (!_vehicleLicenseRequirementService.HasValidRequirement(booking.Vehicle))
@@ -545,19 +631,15 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
                 400);
         }
 
-        var driverLicenses = await _dbContext.DriverKycs
-            .AsNoTracking()
-            .Where(x => x.DriverId == driverId
-                && x.DocumentType == KycDocumentType.DRIVING_LICENSE
-                && x.KycStatus == KycStatus.Approved
-                && x.LicenseClass.HasValue)
-            .Select(x => x.LicenseClass)
-            .ToListAsync(cancellationToken);
+        var driverLicenses = await _dbContext.LoadApprovedDrivingLicensesAsync(
+            driverProfile.DriverId,
+            cancellationToken);
+        var today = DateOnly.FromDateTime(_dateTimeProvider.UtcNow);
 
         var canServeBooking = driverLicenses.Any(driverLicense =>
-            driverLicense.HasValue
+            driverLicense.IsUsableOn(today)
             && _licenseCompatibilityService.CanDrive(
-                driverLicense.Value,
+                driverLicense.LicenseClass!.Value,
                 booking.Vehicle.RequiredLicenseClass));
 
         if (!canServeBooking)
@@ -565,6 +647,41 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             throw new BookingException(
                 "driver_offer.license_not_compatible",
                 "Bằng lái của tài xế không phù hợp với chuyến này.",
+                409);
+        }
+
+        if (DriverCompensationEligibility.ExceedsMaximumTripDistance(
+                booking,
+                _compensationOptions))
+        {
+            throw new BookingException(
+                "driver_offer.trip_distance_exceeds_maximum",
+                "Khoảng cách chuyến đi vượt quá giới hạn nhận chuyến.",
+                409);
+        }
+
+        if (DriverCompensationEligibility.RequiresLongDistanceOptIn(
+                booking,
+                _compensationOptions)
+            && !driverProfile.AcceptLongDistanceTrips)
+        {
+            throw new BookingException(
+                "driver_offer.long_distance_opt_in_required",
+                "Tài xế chưa bật nhận chuyến đường dài.",
+                409);
+        }
+
+        // Never recalculate pickup routing at acceptance/assignment. Legacy offers without
+        // a Phase 3 snapshot remain accept-able for backwards compatibility.
+        if (offer.PickupDistanceKm.HasValue
+            && DriverCompensationEligibility.RequiresLongPickupOptIn(
+                offer.PickupDistanceKm.Value,
+                _compensationOptions)
+            && !driverProfile.AcceptLongPickupTrips)
+        {
+            throw new BookingException(
+                "driver_offer.long_pickup_opt_in_required",
+                "Tài xế chưa bật nhận chuyến có quãng đường đón xa.",
                 409);
         }
     }
@@ -593,12 +710,14 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         long currentOfferId,
         CancellationToken cancellationToken)
     {
+        var utcNow = _dateTimeProvider.UtcNow;
         var hasOtherActiveOffer = await _dbContext.BookingDriverOffers
             .AnyAsync(
                 x => x.BookingId == bookingId
                     && x.Id != currentOfferId
                     && (x.OfferStatus == DriverOfferStatus.Sent
-                        || x.OfferStatus == DriverOfferStatus.DriverAccepted),
+                        || x.OfferStatus == DriverOfferStatus.DriverAccepted)
+                    && x.ExpiresAt > utcNow,
                 cancellationToken);
         if (hasOtherActiveOffer)
         {
@@ -634,12 +753,14 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         long currentOfferId,
         CancellationToken cancellationToken)
     {
+        var utcNow = _dateTimeProvider.UtcNow;
         var hasOtherActiveOffer = await _dbContext.BookingDriverOffers
             .AnyAsync(
                 x => x.DriverId == driverId
                     && x.Id != currentOfferId
                     && (x.OfferStatus == DriverOfferStatus.Sent
-                        || x.OfferStatus == DriverOfferStatus.DriverAccepted),
+                        || x.OfferStatus == DriverOfferStatus.DriverAccepted)
+                    && x.ExpiresAt > utcNow,
                 cancellationToken);
         if (hasOtherActiveOffer)
         {
@@ -905,7 +1026,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
         DateTime utcNow,
         CancellationToken cancellationToken)
     {
-        var confirmedOffer = await (
+        var confirmedOfferRows = await (
             from driverOffer in _dbContext.BookingDriverOffers.AsNoTracking()
             join profile in _dbContext.DriverProfiles.AsNoTracking()
                 on driverOffer.DriverId equals profile.DriverId
@@ -916,7 +1037,6 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             where driverOffer.Id == offerId
                 && kyc.DocumentType == KycDocumentType.DRIVING_LICENSE
                 && kyc.KycStatus == KycStatus.Approved
-                && kyc.LicenseClass.HasValue
             orderby kyc.VerifiedAt ?? kyc.CreatedAt descending
             select new
             {
@@ -926,17 +1046,22 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
                 user.UserName,
                 user.AvatarUrl,
                 profile.ExperienceYears,
-                LicenseClass = kyc.LicenseClass ?? LicenseClass.A1,
+                LicenseClass = kyc.LicenseClass,
+                kyc.ExpiryDate,
                 driverOffer.ExpiresAt,
                 driverOffer.OfferStatus
             })
-            .Take(1)
-            .FirstOrDefaultAsync(cancellationToken);
+            .ToListAsync(cancellationToken);
+        var today = DateOnly.FromDateTime(utcNow);
+        var confirmedOffer = confirmedOfferRows.FirstOrDefault(x =>
+            x.LicenseClass.HasValue
+            && (!x.ExpiryDate.HasValue || x.ExpiryDate.Value >= today));
 
         if (confirmedOffer is null)
         {
             return null;
         }
+        var confirmedLicenseClass = confirmedOffer.LicenseClass.GetValueOrDefault();
 
         var ratingStats = await _dbContext.Ratings
             .AsNoTracking()
@@ -975,7 +1100,7 @@ public sealed class BookingAssignmentService : IBookingAssignmentService
             ratingStats is null ? 0 : Math.Round(ratingStats.AverageRating, 1),
             ratingStats?.TripCount ?? 0,
             confirmedOffer.ExperienceYears ?? 0,
-            confirmedOffer.LicenseClass,
+            confirmedLicenseClass,
             confirmedOffer.ExpiresAt,
             confirmedOffer.OfferStatus,
             driverLatitude,

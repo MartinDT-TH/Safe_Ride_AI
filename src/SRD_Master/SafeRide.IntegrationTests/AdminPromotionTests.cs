@@ -9,6 +9,7 @@ using SafeRide.Infrastructure.Repositories;
 
 namespace SafeRide.IntegrationTests;
 
+[Trait(SqlServerTestDatabase.ProviderTraitName, SqlServerTestDatabase.InMemoryProvider)]
 public sealed class AdminPromotionTests
 {
     private static readonly DateTime StartDate =
@@ -194,7 +195,7 @@ public sealed class AdminPromotionTests
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase($"admin-promotions-{Guid.NewGuid():N}")
             .Options;
-        var dbContext = new ApplicationDbContext(options);
+        var dbContext = new ApplicationDbContext(options, new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
         var repository = new PromotionRepository(dbContext);
         var unitOfWork = new UnitOfWork(dbContext);
         var unlockRuleStore = new PromotionUnlockRuleStoreFake();

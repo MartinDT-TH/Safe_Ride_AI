@@ -30,5 +30,6 @@ public partial class Vehicle
 
     public virtual ICollection<Booking> Bookings { get; set; } = new List<Booking>();
 
+
     public virtual AspNetUser OwnerUser { get; set; } = null!;
 }

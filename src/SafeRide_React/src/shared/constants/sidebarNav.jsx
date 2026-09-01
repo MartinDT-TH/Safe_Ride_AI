@@ -73,6 +73,11 @@ export const SIDEBAR_NAV_ITEMS = [
     label: "Báo cáo",
     icon: <FontAwesomeIcon icon={faChartPie} />,
   },
+  {
+    id: "risk-fund",
+    label: "Risk Fund",
+    icon: <FontAwesomeIcon icon={faDollarSign} />,
+  },
 ];
 SIDEBAR_NAV_ITEMS.push(
   {
@@ -95,6 +100,12 @@ SIDEBAR_NAV_ITEMS.push(
     label: "Yêu cầu Thông báo",
     icon: <FontAwesomeIcon icon={faPaperPlane} />,
   },
+  {
+    id: "staff-accidents",
+    label: "Tai nạn & Trách nhiệm",
+    icon: <FontAwesomeIcon icon={faClipboardList} />,
+  },
+  { id: "staff-customer-no-shows", label: "Duyệt no-show", icon: <FontAwesomeIcon icon={faClipboardCheck} /> },
 );
 export const SIDEBAR_FOOTER_DEFS = [
   {

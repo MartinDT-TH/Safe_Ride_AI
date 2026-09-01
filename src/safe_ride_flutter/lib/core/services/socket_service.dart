@@ -137,8 +137,8 @@ class DriverOfferUpdate {
     }
 
     final driverOffer = Map<String, dynamic>.from(driverOfferRaw);
-    final bookingId = (_value(data, ApiKeys.bookingId) as num?)?.toInt();
-    final offerId = (_value(driverOffer, ApiKeys.offerId) as num?)?.toInt();
+    final bookingId = _positiveInt(_value(data, ApiKeys.bookingId));
+    final offerId = _positiveInt(_value(driverOffer, ApiKeys.offerId));
     if (bookingId == null || offerId == null) {
       return null;
     }
@@ -162,6 +162,13 @@ class DriverOfferUpdate {
         ? key
         : '${key[0].toUpperCase()}${key.substring(1)}';
     return data[key] ?? data[pascalKey];
+  }
+
+  static int? _positiveInt(Object? value) {
+    final parsed = value is num
+        ? value.toInt()
+        : int.tryParse(value?.toString().trim() ?? '');
+    return parsed != null && parsed > 0 ? parsed : null;
   }
 }
 
@@ -267,35 +274,24 @@ class SOSTriggeredUpdate {
   }
 }
 
-class TripEndRequestUpdate {
-  const TripEndRequestUpdate({
-    required this.tripId,
-    required this.bookingId,
-    required this.message,
-    this.accepted,
-  });
+class CustomerReadinessUpdate {
+  const CustomerReadinessUpdate({required this.tripId, required this.message});
 
   final int tripId;
-  final int bookingId;
   final String message;
-  final bool? accepted;
 
-  static TripEndRequestUpdate? fromSignalRArguments(List<Object?>? arguments) {
+  static CustomerReadinessUpdate? fromSignalRArguments(List<Object?>? arguments) {
     if (arguments == null || arguments.isEmpty || arguments.first is! Map) {
       return null;
     }
     final data = Map<String, dynamic>.from(arguments.first as Map);
-    Object? value(String key) =>
-        data[key] ?? data['${key[0].toUpperCase()}${key.substring(1)}'];
-    final tripId = (value(ApiKeys.tripId) as num?)?.toInt();
-    final bookingId = (value(ApiKeys.bookingId) as num?)?.toInt();
-    if (tripId == null || bookingId == null) return null;
-    return TripEndRequestUpdate(
-      tripId: tripId,
-      bookingId: bookingId,
-      message: value(ApiKeys.message)?.toString() ?? '',
-      accepted: value('accepted') as bool?,
-    );
+    final rawTripId = data[ApiKeys.tripId] ?? data['TripId'];
+    final tripId = rawTripId is num
+        ? rawTripId.toInt()
+        : int.tryParse(rawTripId?.toString() ?? '');
+    final message = (data[ApiKeys.message] ?? data['Message'])?.toString();
+    if (tripId == null || message == null || message.isEmpty) return null;
+    return CustomerReadinessUpdate(tripId: tripId, message: message);
   }
 }
 
@@ -743,8 +739,8 @@ class SocketService {
   bool _driverLocationListenerAttached = false;
   bool _tripRouteRecalculatedListenerAttached = false;
   bool _tripStatusListenerAttached = false;
-  bool _tripEndRequestListenersAttached = false;
   bool _sosTriggeredListenerAttached = false;
+  bool _customerReadinessListenerAttached = false;
   bool _tripPaymentListenerAttached = false;
   bool _driverOfferReceivedListenerAttached = false;
   bool _driverOfferClosedListenerAttached = false;
@@ -761,12 +757,10 @@ class SocketService {
   _tripRouteRecalculatedHandlers = {};
   final Map<String, void Function(TripStatusUpdate update)>
   _tripStatusHandlers = {};
-  final Map<String, void Function(TripEndRequestUpdate update)>
-  _tripEndRequestedHandlers = {};
-  final Map<String, void Function(TripEndRequestUpdate update)>
-  _tripEndRequestRespondedHandlers = {};
   final Map<String, void Function(SOSTriggeredUpdate update)>
   _sosTriggeredHandlers = {};
+  final Map<String, void Function(CustomerReadinessUpdate)>
+  _customerReadinessHandlers = {};
   final Map<String, void Function(TripPaymentUpdate update)>
   _tripPaymentHandlers = {};
   final Map<String, void Function(DriverOfferUpdate update)>
@@ -878,8 +872,8 @@ class SocketService {
       _driverLocationListenerAttached = false;
       _tripRouteRecalculatedListenerAttached = false;
       _tripStatusListenerAttached = false;
-      _tripEndRequestListenersAttached = false;
       _sosTriggeredListenerAttached = false;
+      _customerReadinessListenerAttached = false;
       _tripPaymentListenerAttached = false;
       _driverOfferReceivedListenerAttached = false;
       _driverOfferClosedListenerAttached = false;
@@ -922,13 +916,12 @@ class SocketService {
     if (_tripStatusHandlers.isNotEmpty && !_tripStatusListenerAttached) {
       _attachTripStatusListener();
     }
-    if ((_tripEndRequestedHandlers.isNotEmpty ||
-            _tripEndRequestRespondedHandlers.isNotEmpty) &&
-        !_tripEndRequestListenersAttached) {
-      _attachTripEndRequestListeners();
-    }
     if (_sosTriggeredHandlers.isNotEmpty && !_sosTriggeredListenerAttached) {
       _attachSOSTriggeredListener();
+    }
+    if (_customerReadinessHandlers.isNotEmpty &&
+        !_customerReadinessListenerAttached) {
+      _attachCustomerReadinessListener();
     }
     if (_tripPaymentHandlers.isNotEmpty && !_tripPaymentListenerAttached) {
       _attachTripPaymentListeners();
@@ -1122,56 +1115,6 @@ class SocketService {
     _tripStatusHandlers.remove(key);
   }
 
-  void onTripEndRequested(
-    void Function(TripEndRequestUpdate update) handler, {
-    String key = 'default',
-  }) {
-    _tripEndRequestedHandlers[key] = handler;
-    _attachTripEndRequestListeners();
-  }
-
-  void onTripEndRequestResponded(
-    void Function(TripEndRequestUpdate update) handler, {
-    String key = 'default',
-  }) {
-    _tripEndRequestRespondedHandlers[key] = handler;
-    _attachTripEndRequestListeners();
-  }
-
-  void _attachTripEndRequestListeners() {
-    if (_connection == null || _tripEndRequestListenersAttached) return;
-    _tripEndRequestListenersAttached = true;
-    _connection!.on(_configService.config.realtime.events.tripEndRequested, (
-      arguments,
-    ) {
-      final update = TripEndRequestUpdate.fromSignalRArguments(arguments);
-      if (update == null) return;
-      for (final handler in List.of(_tripEndRequestedHandlers.values)) {
-        handler(update);
-      }
-    });
-    _connection!.on(
-      _configService.config.realtime.events.tripEndRequestResponded,
-      (arguments) {
-        final update = TripEndRequestUpdate.fromSignalRArguments(arguments);
-        if (update == null) return;
-        for (final handler in List.of(
-          _tripEndRequestRespondedHandlers.values,
-        )) {
-          handler(update);
-        }
-      },
-    );
-  }
-
-  void removeTripEndRequestedHandler(String key) {
-    _tripEndRequestedHandlers.remove(key);
-  }
-
-  void removeTripEndRequestRespondedHandler(String key) {
-    _tripEndRequestRespondedHandlers.remove(key);
-  }
-
   void onSOSTriggered(
     void Function(SOSTriggeredUpdate update) handler, {
     String key = 'default',
@@ -1200,6 +1143,34 @@ class SocketService {
 
   void removeSOSTriggeredHandler(String key) {
     _sosTriggeredHandlers.remove(key);
+  }
+
+  void onCustomerReadinessReported(
+    void Function(CustomerReadinessUpdate update) handler, {
+    String key = 'default',
+  }) {
+    _customerReadinessHandlers[key] = handler;
+    _attachCustomerReadinessListener();
+  }
+
+  void _attachCustomerReadinessListener() {
+    if (_connection == null || _customerReadinessListenerAttached) return;
+    _customerReadinessListenerAttached = true;
+    _connection!.on(
+      _configService.config.realtime.events.customerReadinessReported,
+      (arguments) {
+        final update = CustomerReadinessUpdate.fromSignalRArguments(arguments);
+        if (update != null) {
+          for (final handler in List.of(_customerReadinessHandlers.values)) {
+            handler(update);
+          }
+        }
+      },
+    );
+  }
+
+  void removeCustomerReadinessReportedHandler(String key) {
+    _customerReadinessHandlers.remove(key);
   }
 
   void onTripPaymentUpdated(
@@ -1660,7 +1631,6 @@ class SocketService {
     _driverLocationListenerAttached = false;
     _tripRouteRecalculatedListenerAttached = false;
     _tripStatusListenerAttached = false;
-    _tripEndRequestListenersAttached = false;
     _tripPaymentListenerAttached = false;
     _driverOfferReceivedListenerAttached = false;
     _driverOfferClosedListenerAttached = false;
@@ -1672,8 +1642,6 @@ class SocketService {
     _driverLocationHandlers.clear();
     _tripRouteRecalculatedHandlers.clear();
     _tripStatusHandlers.clear();
-    _tripEndRequestedHandlers.clear();
-    _tripEndRequestRespondedHandlers.clear();
     _tripPaymentHandlers.clear();
     _driverOfferReceivedHandlers.clear();
     _driverOfferClosedHandlers.clear();

@@ -428,6 +428,8 @@ class BookingProvider extends ChangeNotifier {
     required BookingLocation pickup,
     BookingLocation? destination,
     int? estimatedHours,
+    BookingType bookingType = BookingType.now,
+    DateTime? scheduledAt,
   }) async {
     final requestId = ++_estimateRequestId;
     _isEstimating = true;
@@ -443,6 +445,8 @@ class BookingProvider extends ChangeNotifier {
         pickup: pickup,
         destination: destination,
         estimatedHours: estimatedHours,
+        bookingType: bookingType,
+        scheduledAt: scheduledAt,
       );
       if (requestId != _estimateRequestId) return null;
       _fareEstimate = estimate;
@@ -518,16 +522,16 @@ class BookingProvider extends ChangeNotifier {
     return ok == true;
   }
 
-  Future<bool> respondToEndTripRequest(
+  Future<bool> reportCustomerReadiness(
     String accessToken, {
     required int tripId,
-    required bool accepted,
+    required String message,
   }) async {
     final ok = await _run(() async {
-      await _repository.respondToEndTripRequest(
+      await _repository.reportCustomerReadiness(
         accessToken,
         tripId: tripId,
-        accepted: accepted,
+        message: message,
       );
       return true;
     });
@@ -553,6 +557,20 @@ class BookingProvider extends ChangeNotifier {
       return true;
     });
     return ok == true;
+  }
+
+  Future<int?> reportAccident(
+    String accessToken, {
+    required int tripId,
+    required String description,
+  }) async {
+    return _run(() async {
+      return _repository.reportAccident(
+        accessToken,
+        tripId: tripId,
+        description: description,
+      );
+    });
   }
 
   void markSOSActivated(int tripId) {

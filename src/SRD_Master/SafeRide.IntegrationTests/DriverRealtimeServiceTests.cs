@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NetTopologySuite.Geometries;
+using SafeRide.Application.Common.Exceptions;
 using SafeRide.Application.Common.Interfaces;
 using SafeRide.Application.Common.Models;
 using SafeRide.Application.Common.Realtime;
@@ -13,10 +14,60 @@ using SafeRide.Infrastructure.Services;
 
 namespace SafeRide.IntegrationTests;
 
+[Trait(SqlServerTestDatabase.ProviderTraitName, SqlServerTestDatabase.InMemoryProvider)]
 public sealed class DriverRealtimeServiceTests
 {
     private static readonly DateTime UtcNow =
         new(2026, 6, 15, 8, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public async Task SetDriverOnline_WhenApprovedLicenseIsExpired_RejectsRequest()
+    {
+        await using var dbContext = CreateDbContext();
+        var redis = new InMemoryRedisService();
+        var realtime = new RealtimeNotificationServiceFake();
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        SeedDriver(dbContext, driverId);
+        dbContext.DriverKycs.Add(NewDriverLicense(
+            driverId,
+            DateOnly.FromDateTime(UtcNow.AddDays(-1))));
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext, redis, realtime);
+
+        var exception = await Assert.ThrowsAsync<DriverLicenseExpiredException>(
+            () => service.SetDriverOnlineAsync(
+                driverId,
+                10.762622,
+                106.660172,
+                CancellationToken.None));
+
+        Assert.Equal(DateOnly.FromDateTime(UtcNow.AddDays(-1)), exception.ExpiryDate);
+    }
+
+    [Fact]
+    public async Task SetDriverOnline_WhenApprovedLicenseIsValid_SetsOnlineCache()
+    {
+        await using var dbContext = CreateDbContext();
+        var redis = new InMemoryRedisService();
+        var realtime = new RealtimeNotificationServiceFake();
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        SeedDriver(dbContext, driverId);
+        dbContext.DriverKycs.Add(NewDriverLicense(
+            driverId,
+            DateOnly.FromDateTime(UtcNow.AddDays(1))));
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext, redis, realtime);
+
+        await service.SetDriverOnlineAsync(
+            driverId,
+            10.762622,
+            106.660172,
+            CancellationToken.None);
+
+        Assert.Equal(
+            DriverWorkStatus.Online.ToString(),
+            await redis.GetAsync(RedisKeys.DriverStatus(driverId)));
+    }
 
     [Fact]
     public async Task UpdateDriverLocation_UsesCachedActiveTrip()
@@ -231,6 +282,104 @@ public sealed class DriverRealtimeServiceTests
         Assert.Equal(42, Assert.Single(realtime.DriverLocationNotifications).TripId);
     }
 
+    [Fact]
+    public async Task UpdateDriverLocation_PlannedProgressNeverMovesBackward()
+    {
+        await using var dbContext = CreateDbContext();
+        var redis = new InMemoryRedisService();
+        var realtime = new RealtimeNotificationServiceFake();
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        await SeedCachedTripAsync(redis, driverId, customerId);
+        var service = CreateService(dbContext, redis, realtime);
+
+        await service.UpdateDriverLocationAsync(driverId, 43.252, -126.453);
+        await service.UpdateDriverLocationAsync(driverId, 38.5, -120.2);
+
+        var progress = await ReadMaximumPlannedProgressAsync(redis, 42);
+        Assert.Equal(1d, progress, precision: 6);
+    }
+
+    [Fact]
+    public async Task UpdateDriverLocation_UntrustedProjectionPreservesPreviousPlannedProgress()
+    {
+        await using var dbContext = CreateDbContext();
+        var redis = new InMemoryRedisService();
+        var realtime = new RealtimeNotificationServiceFake();
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        await SeedCachedTripAsync(redis, driverId, customerId);
+        await redis.SetAsync(
+            RedisKeys.TripPlannedRouteProgress(42),
+            "0.6",
+            TimeSpan.FromHours(1));
+        var service = CreateService(dbContext, redis, realtime);
+
+        await service.UpdateDriverLocationAsync(driverId, 0, 0);
+
+        var progress = await ReadMaximumPlannedProgressAsync(redis, 42);
+        Assert.Equal(0.6d, progress, precision: 6);
+    }
+
+    [Fact]
+    public async Task UpdateDriverLocation_ActiveRerouteDoesNotReplaceOriginalPricingRoute()
+    {
+        await using var dbContext = CreateDbContext();
+        var redis = new InMemoryRedisService();
+        var realtime = new RealtimeNotificationServiceFake();
+        var driverId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var customerId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        await SeedCachedTripAsync(redis, driverId, customerId);
+        await redis.SetAsync(
+            RedisKeys.TripActiveRoute(42),
+            System.Text.Json.JsonSerializer.Serialize(new
+            {
+                EncodedPolyline = "_ulLnnqC_mqNvxq`@",
+                DistanceMeters = 1d,
+                DurationSeconds = 1d,
+                UpdatedAt = UtcNow,
+                RouteVersion = 2
+            }),
+            TimeSpan.FromHours(1));
+        var service = CreateService(dbContext, redis, realtime);
+
+        await service.UpdateDriverLocationAsync(driverId, 38.5, -120.2);
+
+        var progress = await ReadMaximumPlannedProgressAsync(redis, 42);
+        Assert.Equal(0d, progress, precision: 6);
+    }
+
+    private static async Task SeedCachedTripAsync(
+        IRedisService redis,
+        Guid driverId,
+        Guid customerId)
+    {
+        await redis.SetAsync(
+            RedisKeys.DriverActiveTrip(driverId),
+            System.Text.Json.JsonSerializer.Serialize(new DriverActiveTripCache(
+                42,
+                84,
+                driverId,
+                customerId,
+                TripStatus.IN_PROGRESS,
+                UtcNow.AddMinutes(-10),
+                "_p~iF~ps|U_ulLnnqC_mqNvxq`@",
+                43.252,
+                -126.453)),
+            TimeSpan.FromMinutes(30));
+    }
+
+    private static async Task<double> ReadMaximumPlannedProgressAsync(
+        IRedisService redis,
+        long tripId)
+    {
+        var json = await redis.GetAsync(RedisKeys.TripPlannedRouteProgress(tripId));
+        Assert.False(string.IsNullOrWhiteSpace(json));
+        return double.Parse(
+            json!,
+            System.Globalization.CultureInfo.InvariantCulture);
+    }
+
     private static DriverRealtimeService CreateService(
         CountingApplicationDbContext dbContext,
         IRedisService redis,
@@ -379,9 +528,26 @@ public sealed class DriverRealtimeServiceTests
         });
     }
 
+    private static DriverKyc NewDriverLicense(Guid driverId, DateOnly expiryDate)
+    {
+        return new DriverKyc
+        {
+            DriverId = driverId,
+            DocumentType = KycDocumentType.DRIVING_LICENSE,
+            DocumentNumber = "B-123456",
+            LicenseClass = LicenseClass.B,
+            FrontImageUrl = "https://example.test/license.jpg",
+            IssueDate = expiryDate.AddYears(-5),
+            ExpiryDate = expiryDate,
+            KycStatus = KycStatus.Approved,
+            CreatedAt = UtcNow.AddYears(-1),
+            VerifiedAt = UtcNow.AddYears(-1)
+        };
+    }
+
     private sealed class CountingApplicationDbContext(
         DbContextOptions<ApplicationDbContext> options)
-        : ApplicationDbContext(options)
+        : ApplicationDbContext(options, new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider())
     {
         public int SaveChangesCount { get; set; }
 
@@ -436,6 +602,11 @@ public sealed class DriverRealtimeServiceTests
 
         public Task PublishTripStatusChangedAsync(
             TripStatusChangedEvent notification,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task PublishCustomerReadinessReportedAsync(
+            CustomerReadinessReportedEvent notification,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 

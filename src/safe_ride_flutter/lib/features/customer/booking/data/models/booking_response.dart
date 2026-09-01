@@ -19,6 +19,9 @@ class BookingResponse {
     this.actualDurationMinutes,
     this.actualEncodedPolyline,
     this.tripEndedAt,
+    this.terminationCategory,
+    this.safetyTerminationReason,
+    this.safetyTerminatedAt,
     this.scheduledAt,
     this.driverOffer,
     this.pickup,
@@ -51,6 +54,9 @@ class BookingResponse {
   final int? actualDurationMinutes;
   final String? actualEncodedPolyline;
   final DateTime? tripEndedAt;
+  final String? terminationCategory;
+  final String? safetyTerminationReason;
+  final DateTime? safetyTerminatedAt;
   final String message;
   final BookingDriverOffer? driverOffer;
   final BookingLocation? pickup;
@@ -75,6 +81,10 @@ class BookingResponse {
   bool get isTrackableTrip =>
       bookingStatus == 'DriverAssigned' && tripId != null;
 
+  bool get isSafetyTerminated =>
+      tripStatus == 'CANCELLED' &&
+      terminationCategory?.trim().toUpperCase() == 'SAFETY';
+
   factory BookingResponse.fromJson(Map<String, dynamic> json) {
     final estimatedFareValue =
         (_value(json, ApiKeys.estimatedFare) as num?)?.toDouble() ?? 0;
@@ -90,31 +100,16 @@ class BookingResponse {
     final vehicleRaw = _value(json, ApiKeys.vehicle);
     final paymentRaw = _value(json, ApiKeys.payment);
 
-    // Fallback originalFare to estimatedFare if it's null or zero
-    final originalFareValue =
-        (originalFareFromApi == null || originalFareFromApi == 0)
-        ? estimatedFareValue
-        : originalFareFromApi;
+    // Explicit zero is authoritative for a finalized trip with no usage.
+    final originalFareValue = originalFareFromApi ?? estimatedFareValue;
 
-    // Calculate final fare.
-    // If we have a discount (> 0), we prioritize calculating it (original - discount)
-    // especially if the backend returns the full price as finalFare or returns 0.
+    // Only calculate a fallback when the backend omitted finalFare. Zero is valid.
     var calculatedFinalFare = finalFareFromApi;
 
-    if (discountAmountValue > 0) {
-      final expectedFare = originalFareValue - discountAmountValue;
-      // If finalFare is missing, zero, or matches the original price despite having a discount, recalculate it.
-      if (calculatedFinalFare == null ||
-          calculatedFinalFare == 0 ||
-          (calculatedFinalFare - originalFareValue).abs() < 1.0 ||
-          (calculatedFinalFare - estimatedFareValue).abs() < 1.0) {
-        calculatedFinalFare = expectedFare;
-      }
-    } else {
-      // No discount applied in this JSON
-      if (calculatedFinalFare == null || calculatedFinalFare == 0) {
-        calculatedFinalFare = estimatedFareValue;
-      }
+    if (calculatedFinalFare == null) {
+      calculatedFinalFare = discountAmountValue > 0
+          ? originalFareValue - discountAmountValue
+          : estimatedFareValue;
     }
 
     // Ensure finalFare is never negative
@@ -147,6 +142,17 @@ class BookingResponse {
       tripEndedAt: _value(json, ApiKeys.tripEndedAt) == null
           ? null
           : DateTime.tryParse(_value(json, ApiKeys.tripEndedAt).toString()),
+      terminationCategory: _value(
+        json,
+        ApiKeys.terminationCategory,
+      )?.toString(),
+      safetyTerminationReason: _value(
+        json,
+        ApiKeys.safetyTerminationReason,
+      )?.toString(),
+      safetyTerminatedAt: parseApiUtcDateTimeToLocal(
+        _value(json, ApiKeys.safetyTerminatedAt),
+      ),
       message:
           _value(json, ApiKeys.message)?.toString() ??
           LocaleProvider.currentLocalizations.bookingSuccess,
@@ -201,6 +207,9 @@ class BookingResponse {
     int? actualDurationMinutes,
     String? actualEncodedPolyline,
     DateTime? tripEndedAt,
+    String? terminationCategory,
+    String? safetyTerminationReason,
+    DateTime? safetyTerminatedAt,
     String? message,
     BookingDriverOffer? driverOffer,
     BookingLocation? pickup,
@@ -236,6 +245,10 @@ class BookingResponse {
       actualEncodedPolyline:
           actualEncodedPolyline ?? this.actualEncodedPolyline,
       tripEndedAt: tripEndedAt ?? this.tripEndedAt,
+      terminationCategory: terminationCategory ?? this.terminationCategory,
+      safetyTerminationReason:
+          safetyTerminationReason ?? this.safetyTerminationReason,
+      safetyTerminatedAt: safetyTerminatedAt ?? this.safetyTerminatedAt,
       message: message ?? this.message,
       driverOffer: driverOffer ?? this.driverOffer,
       pickup: pickup ?? this.pickup,
@@ -289,24 +302,11 @@ class BookingResponse {
       preservedActualEncodedPolyline = actualEncodedPolyline;
     }
 
-    // Case 1: Newer response is completely missing promotion info (typical polling)
-    if (oldHasPromo && !newHasPromo) {
-      final double preservedOriginalFare =
-          (newer.originalFare != null && newer.originalFare! > 0)
-          ? newer.originalFare!
-          : (originalFare ?? newer.estimatedFare);
-
-      final double preservedDiscount = discountAmount ?? 0;
-      final String? preservedCode = promotionCode;
-
-      var calculatedFinalFare = preservedOriginalFare - preservedDiscount;
-      if (calculatedFinalFare < 0) calculatedFinalFare = 0;
-
+    // A safety termination explicitly releases the promotion. Do not merge
+    // stale promotion data from the previously active booking into the
+    // cancelled response or its partial fare.
+    if (newer.isSafetyTerminated) {
       return newer.copyWith(
-        promotionCode: preservedCode,
-        discountAmount: preservedDiscount,
-        originalFare: preservedOriginalFare,
-        finalFare: calculatedFinalFare,
         encodedPolyline: preservedEncodedPolyline,
         arrivalPolyline: preservedArrivalPolyline,
         actualDistanceKm: newer.actualDistanceKm ?? actualDistanceKm,
@@ -321,20 +321,46 @@ class BookingResponse {
       );
     }
 
-    // Case 2: Newer response has promotion info (e.g. detailed get booking or fresh create)
-    // We still want to be careful about finalFare if it looks like the original price
+    // Case 1: Newer response is completely missing promotion info (typical polling)
+    if (oldHasPromo && !newHasPromo) {
+      final double preservedOriginalFare =
+          newer.originalFare ?? originalFare ?? newer.estimatedFare;
+
+      final double preservedDiscount = discountAmount ?? 0;
+      final String? preservedCode = promotionCode;
+
+      var calculatedFinalFare =
+          newer.finalFare ?? preservedOriginalFare - preservedDiscount;
+      if (calculatedFinalFare < 0) calculatedFinalFare = 0;
+
+      return newer.copyWith(
+        promotionCode: preservedCode,
+        discountAmount: preservedDiscount,
+        originalFare: preservedOriginalFare,
+        finalFare: calculatedFinalFare,
+        encodedPolyline: preservedEncodedPolyline,
+        arrivalPolyline: preservedArrivalPolyline,
+        actualDistanceKm: newer.actualDistanceKm ?? actualDistanceKm,
+        actualDurationMinutes:
+            newer.actualDurationMinutes ?? actualDurationMinutes,
+        actualEncodedPolyline: preservedActualEncodedPolyline,
+        tripEndedAt: newer.tripEndedAt ?? tripEndedAt,
+        terminationCategory: newer.terminationCategory ?? terminationCategory,
+        safetyTerminationReason:
+            newer.safetyTerminationReason ?? safetyTerminationReason,
+        safetyTerminatedAt: newer.safetyTerminatedAt ?? safetyTerminatedAt,
+        pickup: newer.pickup ?? pickup,
+        destination: newer.destination ?? destination,
+        vehicle: newer.vehicle ?? vehicle,
+        payment: newer.payment ?? payment,
+      );
+    }
+
+    // Case 2: Newer response has authoritative promotion and fare information.
     if (newHasPromo) {
       final double newerOriginal = newer.originalFare ?? newer.estimatedFare;
       final double newerDiscount = newer.discountAmount ?? 0;
-      var newerFinal = newer.finalFare ?? 0;
-
-      // If newerFinal is suspiciously equal to original price despite having a discount
-      if (newerDiscount > 0 &&
-          (newerFinal == 0 ||
-              (newerFinal - newerOriginal).abs() < 1.0 ||
-              (newerFinal - newer.estimatedFare).abs() < 1.0)) {
-        newerFinal = newerOriginal - newerDiscount;
-      }
+      var newerFinal = newer.finalFare ?? newerOriginal - newerDiscount;
 
       if (newerFinal < 0) newerFinal = 0;
 
@@ -347,6 +373,10 @@ class BookingResponse {
             newer.actualDurationMinutes ?? actualDurationMinutes,
         actualEncodedPolyline: preservedActualEncodedPolyline,
         tripEndedAt: newer.tripEndedAt ?? tripEndedAt,
+        terminationCategory: newer.terminationCategory ?? terminationCategory,
+        safetyTerminationReason:
+            newer.safetyTerminationReason ?? safetyTerminationReason,
+        safetyTerminatedAt: newer.safetyTerminatedAt ?? safetyTerminatedAt,
         pickup: newer.pickup ?? pickup,
         destination: newer.destination ?? destination,
         vehicle: newer.vehicle ?? vehicle,
@@ -363,6 +393,10 @@ class BookingResponse {
           newer.actualDurationMinutes ?? actualDurationMinutes,
       actualEncodedPolyline: preservedActualEncodedPolyline,
       tripEndedAt: newer.tripEndedAt ?? tripEndedAt,
+      terminationCategory: newer.terminationCategory ?? terminationCategory,
+      safetyTerminationReason:
+          newer.safetyTerminationReason ?? safetyTerminationReason,
+      safetyTerminatedAt: newer.safetyTerminatedAt ?? safetyTerminatedAt,
       pickup: newer.pickup ?? pickup,
       destination: newer.destination ?? destination,
       vehicle: newer.vehicle ?? vehicle,
@@ -453,6 +487,11 @@ class TripPaymentSummary {
     this.paymentId,
     this.paymentMethod,
     this.paidAt,
+    this.successfulPaymentAmount = 0,
+    this.remainingPayableAmount = 0,
+    this.refundObligationAmount = 0,
+    this.reconciliationStatus,
+    this.refundStatus,
   });
 
   final int? paymentId;
@@ -461,9 +500,18 @@ class TripPaymentSummary {
   final double amount;
   final String currency;
   final DateTime? paidAt;
+  final double successfulPaymentAmount;
+  final double remainingPayableAmount;
+  final double refundObligationAmount;
+  final String? reconciliationStatus;
+  final String? refundStatus;
   final String message;
 
   bool get isSuccess => paymentStatus.toLowerCase() == 'success';
+  bool get requiresPayment => remainingPayableAmount > 0;
+  bool get isRefundPending =>
+      reconciliationStatus?.toUpperCase() == 'REFUND_PENDING';
+  bool get isRefunded => reconciliationStatus?.toUpperCase() == 'REFUNDED';
 
   factory TripPaymentSummary.fromJson(Map<String, dynamic> json) {
     return TripPaymentSummary(
@@ -476,6 +524,15 @@ class TripPaymentSummary {
       paidAt: _value(json, ApiKeys.paidAt) == null
           ? null
           : DateTime.tryParse(_value(json, ApiKeys.paidAt).toString()),
+      successfulPaymentAmount:
+          (_value(json, ApiKeys.successfulPaymentAmount) as num?)?.toDouble() ?? 0,
+      remainingPayableAmount:
+          (_value(json, ApiKeys.remainingPayableAmount) as num?)?.toDouble() ?? 0,
+      refundObligationAmount:
+          (_value(json, ApiKeys.refundObligationAmount) as num?)?.toDouble() ?? 0,
+      reconciliationStatus:
+          _value(json, ApiKeys.reconciliationStatus)?.toString(),
+      refundStatus: _value(json, ApiKeys.refundStatus)?.toString(),
       message:
           _value(json, ApiKeys.message)?.toString() ??
           LocaleProvider.currentLocalizations.payDriverToComplete,

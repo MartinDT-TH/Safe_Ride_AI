@@ -3,8 +3,14 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.Extensions.Logging;
+using System.Security.Cryptography;
 using System;
 using System.Collections.Generic;
+using SafeRide.Application.Common.Interfaces;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
 using SafeRide.Infrastructure.Persistence.Configurations;
@@ -13,10 +19,21 @@ namespace SafeRide.Infrastructure.Persistence;
 
 public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNetRole, Guid>
 {
-    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+    public ApplicationDbContext(
+        DbContextOptions<ApplicationDbContext> options,
+        IDataProtectionProvider protectionProvider,
+        ILogger<ApplicationDbContext>? logger = null,
+        ILegacyDriverKycPiiProtectionService? legacyPiiProtection = null)
         : base(options)
     {
+        _kycProtector = protectionProvider.CreateProtector("SafeRide.DriverKyc.Pii.v1");
+        _logger = logger;
+        _legacyPiiProtection = legacyPiiProtection;
     }
+
+    private readonly IDataProtector _kycProtector;
+    private readonly ILogger<ApplicationDbContext>? _logger;
+    private readonly ILegacyDriverKycPiiProtectionService? _legacyPiiProtection;
 
     public virtual DbSet<AspNetRole> AspNetRoles { get; set; }
 
@@ -33,6 +50,8 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
     public virtual DbSet<DriverProfile> DriverProfiles { get; set; }
 
     public virtual DbSet<DriverWallet> DriverWallets { get; set; }
+
+    public virtual DbSet<DriverWalletTopUp> DriverWalletTopUps { get; set; }
 
     public virtual DbSet<Notification> Notifications { get; set; }
 
@@ -59,6 +78,8 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
     public virtual DbSet<SystemSetting> SystemSettings { get; set; }
 
     public virtual DbSet<Trip> Trips { get; set; }
+
+    public virtual DbSet<TripEndReconciliationRequest> TripEndReconciliationRequests { get; set; }
 
     public virtual DbSet<TripReturnConfirmation> TripReturnConfirmations { get; set; }
 
@@ -122,6 +143,7 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
         modelBuilder.ApplyConfiguration(new BookingConfiguration());
         modelBuilder.ApplyConfiguration(new TripReturnConfirmationConfiguration());
         modelBuilder.ApplyConfiguration(new TripReturnEvidenceConfiguration());
+        modelBuilder.ApplyConfiguration(new TripEndReconciliationRequestConfiguration());
 
         modelBuilder.Entity<BookingDriverOffer>(entity =>
         {
@@ -131,12 +153,20 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
             {
                 tb.HasCheckConstraint("CK_BookingDriverOffers_OfferStatus", "[OfferStatus] IN ('Sent', 'DriverAccepted', 'CustomerConfirmed', 'Rejected', 'Expired', 'Cancelled')");
                 tb.HasCheckConstraint("CK_BookingDriverOffers_ExpiresAt", "[ExpiresAt] > [OfferedAt]");
+                tb.HasCheckConstraint("CK_BookingDriverOffers_PickupDistanceKm", "[PickupDistanceKm] IS NULL OR [PickupDistanceKm] >= 0");
+                tb.HasCheckConstraint("CK_BookingDriverOffers_LongPickupCompensation", "[LongPickupCompensation] IS NULL OR ([LongPickupCompensation] >= 0 AND [LongPickupCompensation] = ROUND([LongPickupCompensation], 0))");
             });
 
             entity.Property(e => e.OfferStatus)
                 .HasConversion<string>()
                 .HasMaxLength(20);
             entity.Property(e => e.OfferedAt).HasDefaultValueSql("(getutcdate())");
+            entity.Property(e => e.PickupDistanceKm)
+                .HasColumnType("decimal(18, 3)")
+                .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
+            entity.Property(e => e.LongPickupCompensation)
+                .HasColumnType("decimal(18, 2)")
+                .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
 
             entity.HasIndex(e => e.BookingId);
             entity.HasIndex(e => e.DriverId);
@@ -162,6 +192,9 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
         modelBuilder.Entity<BookingPromotion>(entity =>
         {
             entity.HasKey(e => new { e.BookingId, e.PromotionId }).HasName("PK__BookingP__96B958114224E6FD");
+            entity.HasIndex(e => e.BookingId)
+                .IsUnique()
+                .HasDatabaseName("UX_BookingPromotions_BookingId");
 
             entity.ToTable(tb =>
             {
@@ -191,36 +224,42 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
             entity.ToTable("DriverKyc", tb =>
             {
                 tb.HasCheckConstraint("CK_DriverKyc_DocumentType", "[DocumentType] IN ('ID_CARD', 'DRIVING_LICENSE', 'CRIMINAL_RECORD')");
-                tb.HasCheckConstraint("CK_DriverKyc_LicenseClass", "[LicenseClass] IS NULL OR [LicenseClass] IN ('Old_A1', 'Old_A2', 'Old_B1', 'Old_B2', 'A1', 'A', 'B')");
+                tb.HasCheckConstraint("CK_DriverKyc_DrivingLicense", "[DocumentType] <> 'DRIVING_LICENSE' OR ([DocumentNumber] IS NOT NULL AND [LicenseClass] IS NOT NULL)");
                 tb.HasCheckConstraint("CK_DriverKyc_KycStatus", "[KycStatus] IN ('Pending', 'Approved', 'Rejected')");
                 tb.HasCheckConstraint("CK_DriverKyc_DocumentFile", "[FrontImageUrl] IS NOT NULL OR [BackImageUrl] IS NOT NULL OR [FileUrl] IS NOT NULL");
-                tb.HasCheckConstraint("CK_DriverKyc_DrivingLicense", "[DocumentType] <> 'DRIVING_LICENSE' OR ([DocumentNumber] IS NOT NULL AND [LicenseClass] IS NOT NULL)");
             });
 
 
 
-            entity.Property(e => e.BackImageUrl).HasMaxLength(500);
-            entity.Property(e => e.DocumentNumber)
-                .HasMaxLength(50)
-                .IsUnicode(false);
-            entity.Property(e => e.FullName).HasMaxLength(100);
-            entity.Property(e => e.Gender)
-                .HasMaxLength(10)
-                .IsUnicode(false);
-            entity.Property(e => e.Address).HasMaxLength(500);
+            var pii = new ValueConverter<string?, string?>(
+                value => value == null ? null : _kycProtector.Protect(value),
+                value => UnprotectPii(value));
+            var datePii = new ValueConverter<DateOnly?, string?>(
+                value => value.HasValue ? _kycProtector.Protect(value.Value.ToString("yyyy-MM-dd")) : null,
+                value => UnprotectDatePii(value));
+            var enumPii = new ValueConverter<LicenseClass?, string?>(
+                value => value.HasValue ? _kycProtector.Protect(value.Value.ToString()) : null,
+                value => UnprotectLicenseClassPii(value));
+
+            entity.Property(e => e.BackImageUrl).HasConversion(pii).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.DocumentNumber).HasConversion(pii).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.FullName).HasConversion(pii).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.Gender).HasConversion(pii).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.Address).HasConversion(pii).HasColumnType("nvarchar(max)");
             entity.Property(e => e.DocumentType)
                 .HasConversion<string>()
                 .HasMaxLength(50);
-            entity.Property(e => e.FileUrl).HasMaxLength(500);
-            entity.Property(e => e.FrontImageUrl).HasMaxLength(500);
+            entity.Property(e => e.FileUrl).HasConversion(pii).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.FrontImageUrl).HasConversion(pii).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.DateOfBirth).HasConversion(datePii).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.IssueDate).HasConversion(datePii).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.ExpiryDate).HasConversion(datePii).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.LicenseClass).HasConversion(enumPii).HasColumnType("nvarchar(max)");
             entity.Property(e => e.KycStatus)
                 .HasConversion<string>()
                 .HasMaxLength(20)
                 .HasSentinel((KycStatus)(-1))
                 .HasDefaultValueSql("('Pending')");
-            entity.Property(e => e.LicenseClass)
-                .HasConversion<string>()
-                .HasMaxLength(10);
 
             entity.HasOne(d => d.Driver).WithMany(p => p.DriverKycs)
                 .HasForeignKey(d => d.DriverId)
@@ -246,6 +285,8 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
 
             entity.Property(e => e.DriverId).ValueGeneratedNever();
             entity.Property(e => e.ExperienceYears).HasDefaultValue(0);
+            entity.Property(e => e.AcceptLongPickupTrips).HasDefaultValue(false);
+            entity.Property(e => e.AcceptLongDistanceTrips).HasDefaultValue(false);
             entity.Property(e => e.IdentityCardNumber)
                 .HasMaxLength(20)
                 .IsUnicode(false);
@@ -305,6 +346,14 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
         modelBuilder.Entity<Payment>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK__Payments__3214EC076511D9DA");
+            entity.HasIndex(e => e.TripId)
+                .IsUnique()
+                .HasFilter("[PaymentMethod] = 'QR' AND [PaymentStatus] = 'Pending'")
+                .HasDatabaseName("UX_Payments_Trip_PendingQr");
+            entity.HasIndex(e => e.TransactionReference)
+                .IsUnique()
+                .HasFilter("[TransactionReference] IS NOT NULL")
+                .HasDatabaseName("UX_Payments_TransactionReference");
 
             entity.ToTable(tb =>
             {
@@ -574,6 +623,10 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
             entity.Property(e => e.ActualDistanceKm).HasColumnType("decimal(18, 2)");
             entity.Property(e => e.ActualFare).HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.ArrivalLatitude).HasColumnType("decimal(9, 6)");
+            entity.Property(e => e.ArrivalLongitude).HasColumnType("decimal(9, 6)");
+            entity.Property(e => e.ArrivalDistanceMeters).HasColumnType("decimal(18, 3)");
+            entity.Property(e => e.CustomerNoShowReminderSentAt);
             entity.Property(e => e.FinalFare).HasColumnType("decimal(18, 2)");
             entity.Property(e => e.IsSOSActivated)
                 .HasDefaultValue(false)
@@ -593,8 +646,12 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
                 .HasForeignKey(d => d.CancelledByUserId)
                 .HasConstraintName("FK_Trips_CancelledBy");
 
-            // A driver can have many historical trips.
-            // The filtered unique index UX_Trips_Driver_Active already guarantees only one active trip at a time.
+            entity.HasIndex(e => e.DriverId)
+                .IsUnique()
+                .HasFilter("[TripStatus] <> 'COMPLETED' AND [TripStatus] <> 'CANCELLED'")
+                .HasDatabaseName("UX_Trips_Driver_Active");
+
+            // A driver can have many historical trips, but only one active trip.
             entity.HasOne(d => d.Driver).WithMany()
                 .HasForeignKey(d => d.DriverId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
@@ -690,9 +747,15 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
         {
             entity.HasKey(e => e.Id).HasName("PK__WalletTr__3214EC0740D81F8C");
 
+            entity.HasIndex(e => e.TripId);
+            entity.HasIndex(e => new { e.TripId, e.WalletId })
+                .IsUnique()
+                .HasFilter("[TripId] IS NOT NULL AND [SettlementEffect] IS NOT NULL")
+                .HasDatabaseName("UX_WalletTransactions_Trip_Wallet_SettlementEffect");
+
             entity.ToTable(tb =>
             {
-                tb.HasCheckConstraint("CK_WalletTransactions_TransactionType", "[TransactionType] IN ('Income', 'Withdrawal', 'Penalty', 'Bonus')");
+                tb.HasCheckConstraint("CK_WalletTransactions_TransactionType", "[TransactionType] IN ('Income', 'Withdrawal', 'Penalty', 'Bonus', 'TopUp')");
                 tb.HasCheckConstraint("CK_WalletTransactions_Amount", "[Amount] > 0");
             });
 
@@ -702,6 +765,9 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
             entity.Property(e => e.TransactionType)
                 .HasConversion<string>()
                 .HasMaxLength(20);
+            entity.Property(e => e.SettlementEffect)
+                .HasConversion<string>()
+                .HasMaxLength(40);
 
             entity.HasOne(d => d.Trip).WithMany(p => p.WalletTransactions)
                 .HasForeignKey(d => d.TripId)
@@ -711,6 +777,19 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
                 .HasForeignKey(d => d.WalletId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_WalletTransaction_Wallet");
+        });
+
+        modelBuilder.Entity<DriverWalletTopUp>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.OrderCode).IsUnique();
+            entity.Property(e => e.Amount).HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
+            entity.Property(e => e.PaymentLinkId).HasMaxLength(100);
+            entity.Property(e => e.ProviderReference).HasMaxLength(100);
+            entity.HasOne(e => e.Wallet).WithMany(e => e.TopUps)
+                .HasForeignKey(e => e.WalletId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
         });
 
         modelBuilder.Entity<WithdrawalRequest>(entity =>
@@ -744,6 +823,53 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
         });
 
         OnModelCreatingPartial(modelBuilder);
+    }
+
+    private string? UnprotectPii(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return value;
+
+        try
+        {
+            return _kycProtector.Unprotect(value);
+        }
+        catch (CryptographicException exception)
+        {
+            if (_legacyPiiProtection?.TryUnprotect(value, out var legacyPlaintext) == true)
+            {
+                _logger?.LogInformation(
+                    "Decrypted a legacy DriverKyc PII value using the pre-SafeRide application discriminator.");
+                return legacyPlaintext;
+            }
+
+            // Never log PII or ciphertext. This indicates that the runtime cannot
+            // access the Data Protection key that encrypted the stored value.
+            _logger?.LogWarning(
+                exception,
+                "Unable to decrypt DriverKyc PII. The Data Protection key ring or runtime identity may not match the data.");
+            return value;
+        }
+    }
+
+    private DateOnly? UnprotectDatePii(string? value)
+    {
+        var plaintext = UnprotectPii(value);
+        return DateOnly.TryParseExact(
+            plaintext,
+            "yyyy-MM-dd",
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None,
+            out var date)
+            ? date
+            : null;
+    }
+
+    private LicenseClass? UnprotectLicenseClassPii(string? value)
+    {
+        var plaintext = UnprotectPii(value);
+        return Enum.TryParse<LicenseClass>(plaintext, out var licenseClass)
+            ? licenseClass
+            : null;
     }
 
     partial void OnModelCreatingPartial(ModelBuilder modelBuilder);

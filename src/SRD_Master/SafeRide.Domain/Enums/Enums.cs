@@ -174,7 +174,15 @@ public enum WalletTransactionType
     Income,
     Withdrawal,
     Penalty,
-    Bonus
+    Bonus,
+    TopUp
+}
+
+public enum WalletSettlementEffect
+{
+    QrDriverEarning,
+    CashPlatformCommission,
+    CashPromotionSubsidy
 }
 
 public enum WithdrawalRequestStatus

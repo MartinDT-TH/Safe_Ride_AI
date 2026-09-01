@@ -25,22 +25,13 @@ public sealed record TripStatusChangedEvent(
     DateTime UpdatedAt,
     BookingStatus? BookingStatus = null);
 
-public sealed record TripEndRequestedEvent(
+public sealed record CustomerReadinessReportedEvent(
     long TripId,
     long BookingId,
     Guid CustomerId,
     Guid DriverId,
-    DateTime RequestedAt,
-    string Message);
-
-public sealed record TripEndRequestRespondedEvent(
-    long TripId,
-    long BookingId,
-    Guid CustomerId,
-    Guid DriverId,
-    bool Accepted,
-    DateTime RespondedAt,
-    string Message);
+    string Message,
+    DateTime ReportedAt);
 
 public sealed record TripPaymentPendingEvent(
     long TripId,
@@ -96,6 +87,15 @@ public sealed record ReportCreatedEvent(
     string Subject,
     ReportStatus Status,
     DateTime CreatedAt);
+
+public sealed record AccidentCreatedEvent(
+    long AccidentId,
+    long TripId,
+    Guid ReporterUserId,
+    AccidentCategory Category,
+    AccidentStatus Status,
+    DateTime OccurredAtUtc,
+    DateTime CreatedAtUtc);
 
 public sealed record AdminSOSTriggeredEvent(
     long SosAlertId,

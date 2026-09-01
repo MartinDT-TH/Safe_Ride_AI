@@ -1263,7 +1263,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get promotions => '프로모션';
 
   @override
-  String get sos => 'SOS';
+  String get sos => '긴급 SOS';
 
   @override
   String get recentTrips => '최근 여정';
@@ -1736,7 +1736,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get specialRequest => '특별 요청 (선택)';
 
   @override
-  String get fareCalculationNote => '실제 거리와 시간을 기준으로 백엔드에서 요금을 계산합니다.';
+  String get fareCalculationNote => '예약 확정 시 승인된 운임이 고정됩니다.';
 
   @override
   String get confirmScheduled => '예약 여정 확인';
@@ -1828,13 +1828,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get callDriver => '기사에게 전화';
 
   @override
-  String get activateSosQuestion => 'SOS를 활성화할까요?';
+  String get activateSosQuestion => '긴급 SOS를 활성화할까요?';
 
   @override
   String get activateSosDescription => '이 여정에 긴급 신호를 보내시겠습니까?';
 
   @override
-  String get activateSos => 'SOS 활성화';
+  String get activateSos => '긴급 SOS 활성화';
 
   @override
   String get sosActivationFailed => 'SOS를 활성화할 수 없습니다. 다시 시도해 주세요.';
@@ -1909,16 +1909,16 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get tripCannotEndNow => '지금은 여정을 종료할 수 없습니다.';
+  String get tripCannotEndNow => '지금은 이 여정을 종료할 수 없습니다.';
 
   @override
   String get tripEndFailed => '여정을 종료할 수 없습니다. 다시 시도해 주세요.';
 
   @override
-  String get sosActivated => 'SOS 활성화됨';
+  String get sosActivated => '긴급 SOS 활성화됨';
 
   @override
-  String get sendingSos => 'SOS 전송 중...';
+  String get sendingSos => '긴급 SOS 전송 중...';
 
   @override
   String get shareRoute => '경로 공유';
@@ -2369,24 +2369,360 @@ class AppLocalizationsKo extends AppLocalizations {
   String get offerCustomerConfirmed => '고객 확인 완료';
 
   @override
-  String get driverEndTripRequestTitle => '운행 종료 요청';
+  String get preTripSafetyTitle => '운행 전 차량 안전 점검';
 
   @override
-  String get driverEndTripRequestMessage =>
-      '기사가 지금 운행을 종료하려고 합니다. 동의하면 실제 이동 거리에 따라 최소 2,000 VND의 요금이 부과됩니다.';
+  String get preTripSafetyDescription =>
+      '운행 시작 전에 모든 항목을 확인하세요. 실패 기록도 감사 목적으로 보관됩니다.';
 
   @override
-  String get continueTrip => '운행 계속';
+  String get brakeResponse => '브레이크 반응';
 
   @override
-  String get endTripRequestSent => '운행 종료 요청을 보냈습니다. 고객의 확인을 기다리고 있습니다.';
+  String get frontRearLights => '전조등 및 후미등';
 
   @override
-  String get endTripRequestAccepted => '고객이 운행 종료에 동의했습니다.';
+  String get turnSignals => '방향 지시등';
 
   @override
-  String get endTripRequestRejected => '고객이 거절했습니다. 운행을 계속합니다.';
+  String get visibleTires => '타이어 외관';
 
   @override
-  String get endTripResponseFailed => '운행 종료 요청에 응답하지 못했습니다. 다시 시도해 주세요.';
+  String get dashboardWarning => '계기판 경고 없음';
+
+  @override
+  String get windshieldVisibility => '유리와 거울 시야';
+
+  @override
+  String get noMajorVisibleIssue => '중대한 외관 문제 없음';
+
+  @override
+  String get confirmSafetyCheck => '안전 점검 확인';
+
+  @override
+  String get allChecksRequired => '운행 시작 전에 모든 안전 항목을 통과해야 합니다.';
+
+  @override
+  String get safetyTermination => '안전 사유로 종료';
+
+  @override
+  String get safetyTerminationDescription =>
+      '운행은 취소 상태로 유지됩니다. 프로모션은 사용되지 않으며 시작 후에는 부분 요금이 적용될 수 있습니다.';
+
+  @override
+  String get safetyTerminationReasonHint => '안전 위험을 설명하세요';
+
+  @override
+  String get captureSafetyEvidence => '증거 사진 촬영(선택)';
+
+  @override
+  String get retakePhoto => '다시 촬영';
+
+  @override
+  String get reportAccident => '사고 신고';
+
+  @override
+  String get accidentDescriptionHint => '사고 경위와 초기 피해를 설명하세요';
+
+  @override
+  String get createAccidentReport => '신고서 생성';
+
+  @override
+  String get accidentReported => '사고 신고서를 생성했습니다.';
+
+  @override
+  String get safetyTerminationFailed => '안전 사유로 운행을 종료할 수 없습니다.';
+
+  @override
+  String get preTripCheckFailed => '안전 점검을 제출할 수 없습니다.';
+
+  @override
+  String get riskProtectionCaseTitle => '사고 보호 사건';
+
+  @override
+  String get riskProtectionClaim => '보호 청구';
+
+  @override
+  String get riskProtectionEvidence => '증거';
+
+  @override
+  String get riskProtectionAssessment => '책임 평가';
+
+  @override
+  String get uploadAccidentEvidence => '증거 사진 추가';
+
+  @override
+  String get sendEvidencePhoto => '사진 보내기';
+
+  @override
+  String get evidencePreviewFailed => '선택한 이미지를 읽을 수 없습니다. 다시 선택해 주세요.';
+
+  @override
+  String get disputeLiability => '책임 재검토 요청';
+
+  @override
+  String get disputeReasonHint => '재검토가 필요한 이유를 입력하세요';
+
+  @override
+  String get liabilityDisputed => '재검토 요청을 제출했습니다.';
+
+  @override
+  String get accidentEvidenceUploaded => '증거 사진을 보냈습니다.';
+
+  @override
+  String get noAccidentEvidence => '업로드된 증거가 없습니다.';
+
+  @override
+  String get noProtectionClaim => '보호 청구가 아직 생성되지 않았습니다.';
+
+  @override
+  String get driverLiabilities => '나의 책임';
+
+  @override
+  String get noDriverLiabilities => '확정된 운전자 책임이 없습니다.';
+
+  @override
+  String get confirmedAmount => '확정 금액';
+
+  @override
+  String get paidAmount => '납부 금액';
+
+  @override
+  String get outstandingAmount => '미납 금액';
+
+  @override
+  String get attributableDamage => '운전자 귀책 적격 손해';
+
+  @override
+  String get recoveryHistory => '회수 내역';
+
+  @override
+  String get claimStatus => '청구 상태';
+
+  @override
+  String get insuranceCoverage => '보험 보장';
+
+  @override
+  String get riskFundCoverage => '위험 기금 보장';
+
+  @override
+  String get participantLiabilities => '당사자 책임';
+
+  @override
+  String get accidentStatus => '사고 상태';
+
+  @override
+  String get accidentCategory => '사고 유형';
+
+  @override
+  String get accidentOccurredAt => '발생 시각';
+
+  @override
+  String get safetyReportTitle => '안전 사고 신고';
+
+  @override
+  String get unsafeCustomer => '위험한 고객';
+
+  @override
+  String get vehicleIssue => '차량 문제';
+
+  @override
+  String get safetyReasonCode => '사유';
+
+  @override
+  String get safetyReportDescription => '상황을 설명하세요';
+
+  @override
+  String get requestSosEscalation => 'SOS 에스컬레이션 요청';
+
+  @override
+  String get requestSosEscalationHint => '현재 위치를 보내고 지속 SOS 알림을 생성합니다';
+
+  @override
+  String get safetyReportSubmitted => '안전 사고 신고를 제출했습니다.';
+
+  @override
+  String get safetyReportFailed => '안전 사고 신고를 제출할 수 없습니다. 다시 시도하세요.';
+
+  @override
+  String get vehicleFaultType => '차량 결함 유형';
+
+  @override
+  String get otherVehicleFault => '기타 차량 결함';
+
+  @override
+  String get optionalEvidence => '증거 자료(선택)';
+
+  @override
+  String get endTripReasonTitle => '운행 종료 사유';
+
+  @override
+  String get endTripReasonDescription =>
+      '정확한 사유를 선택하세요. 안전 종료는 별도의 Risk Protection 절차를 사용해야 합니다.';
+
+  @override
+  String get normalCompletionReason => '목적지 도착';
+
+  @override
+  String get normalCompletionReasonDescription => '예약된 운임을 적용합니다.';
+
+  @override
+  String get customerRequestedStopReason => '고객의 조기 종료 요청';
+
+  @override
+  String get customerRequestedStopReasonDescription =>
+      '예약 경로 진행률과 최소 서비스 운임을 사용합니다.';
+
+  @override
+  String get driverUnableToContinueReason => '기사가 계속 운행할 수 없음';
+
+  @override
+  String get startedByMistakeReason => '실수로 운행 시작';
+
+  @override
+  String get riskStatusReported => '접수됨';
+
+  @override
+  String get riskStatusEvidenceCollection => '증거 수집 중';
+
+  @override
+  String get riskStatusUnderReview => '검토 중';
+
+  @override
+  String get riskStatusLiabilityPending => '책임 판정 대기';
+
+  @override
+  String get riskStatusSettlement => '보호 처리 중';
+
+  @override
+  String get riskStatusClosed => '종료됨';
+
+  @override
+  String get riskStatusRejected => '거절됨';
+
+  @override
+  String get riskCategoryDriverInjury => '기사 부상';
+
+  @override
+  String get riskCategoryCustomerVehicleDamage => '고객 차량 손해';
+
+  @override
+  String get riskCategoryThirdPartyDamage => '제3자 손해';
+
+  @override
+  String get riskCategoryMultiple => '복수 손해';
+
+  @override
+  String get riskFaultNoFault => '과실 없음';
+
+  @override
+  String get riskFaultOrdinary => '일반 과실';
+
+  @override
+  String get riskFaultGross => '중과실';
+
+  @override
+  String get riskFaultIntentional => '고의 행위';
+
+  @override
+  String get riskAssessmentDraft => '초안';
+
+  @override
+  String get riskAssessmentPendingConfirmation => '확인 대기';
+
+  @override
+  String get riskAssessmentConfirmed => '확인됨';
+
+  @override
+  String get riskAssessmentDisputed => '재검토 중';
+
+  @override
+  String get riskClaimApproved => '승인됨';
+
+  @override
+  String get riskClaimPendingFunding => '자금 지급 대기';
+
+  @override
+  String get riskClaimFunded => '자금 지급됨';
+
+  @override
+  String get riskClaimRecovery => '회수 진행 중';
+
+  @override
+  String get riskClaimSettled => '정산됨';
+
+  @override
+  String get riskLiabilityPartiallyPaid => '일부 납부됨';
+
+  @override
+  String get riskLiabilityPaid => '납부됨';
+
+  @override
+  String get riskLiabilityWaived => '면제됨';
+
+  @override
+  String get riskRoleDriver => '기사';
+
+  @override
+  String get riskRoleCustomer => '고객';
+
+  @override
+  String get riskRoleThirdParty => '제3자';
+
+  @override
+  String get riskRoleVehicle => '차량';
+
+  @override
+  String get riskRoleObjective => '객관적 요인';
+
+  @override
+  String get riskReasonDistracting => '주의 산만 유발';
+
+  @override
+  String get riskReasonViolent => '폭력적 행동';
+
+  @override
+  String get riskReasonInterferingVehicle => '차량 조작 방해';
+
+  @override
+  String get riskReasonUnsafeRequest => '안전하지 않은 요구';
+
+  @override
+  String get riskReasonOther => '기타 사유';
+
+  @override
+  String get riskIncidentInformation => '사고 정보';
+
+  @override
+  String get riskResponsibilityResult => '책임 판정 결과';
+
+  @override
+  String get riskProtectionOutcome => '보호 처리 결과';
+
+  @override
+  String get riskEligibleDamage => '보호 대상 손해';
+
+  @override
+  String get mandatoryTplExplanation =>
+      '의무 제3자 책임보험은 주로 제3자를 보호하며 고객 차량 손해를 자동으로 보장하지 않습니다.';
+
+  @override
+  String get physicalDamageExplanation =>
+      '차량 손해보험은 확인된 계약 조건에 따라 고객 차량 손해에 적용될 수 있습니다.';
+
+  @override
+  String get insurerNoGuarantee => '계약 저장이 보험사의 지급 승인을 보장하지는 않습니다.';
+
+  @override
+  String get documentUrlDeferredHint =>
+      '현재는 문서 링크만 저장합니다. 신뢰할 수 있는 링크를 사용하세요. 안전한 공용 저장소가 마련되면 직접 업로드를 추가합니다.';
+
+  @override
+  String get motorbikeFeatureSuspendedTitle => '오토바이 서비스 일시 중단';
+
+  @override
+  String get motorbikeFeatureSuspendedMessage => '8월 20일부터 이 기능이 일시 중단되었습니다.';
+
+  @override
+  String get acknowledge => '확인';
 }

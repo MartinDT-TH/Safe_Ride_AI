@@ -40,7 +40,8 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
                 ["GoogleMaps:RoutesApiUrl"] = "https://routes.googleapis.com/v2:computeRoutes",
                 ["GoogleMaps:GeocodingApiUrl"] = "https://maps.googleapis.com/maps/api/geocode/json",
                 ["OpenRouteService:DirectionsApiUrl"] = "https://api.openrouteservice.org/v2/directions/driving-car",
-                ["OpenRouteService:MatrixApiUrl"] = "https://api.openrouteservice.org/v2/matrix/driving-car"
+                ["OpenRouteService:MatrixApiUrl"] = "https://api.openrouteservice.org/v2/matrix/driving-car",
+                ["TripSharing:AppLinkBaseUrl"] = "https://example.test/trips"
             });
         });
 

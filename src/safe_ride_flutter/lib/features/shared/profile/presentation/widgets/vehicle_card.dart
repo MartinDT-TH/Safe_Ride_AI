@@ -7,7 +7,7 @@ class VehicleCard extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
-  VehicleCard({
+  const VehicleCard({
     super.key,
     required this.vehicle,
     required this.onEdit,
@@ -126,7 +126,7 @@ class VehicleCard extends StatelessWidget {
           vehicle.engineCapacityCc != null)
         '${vehicle.engineCapacityCc}cc',
       if (vehicle.requiredLicenseClass.trim().isNotEmpty)
-        context.l10n.requiredLicense(vehicle.requiredLicenseClass!),
+        context.l10n.requiredLicense(vehicle.requiredLicenseClass),
     ];
 
     return details.join(' • ');

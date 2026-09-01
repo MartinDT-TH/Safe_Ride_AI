@@ -87,27 +87,14 @@ public sealed class SignalRRealtimeNotificationService
                 cancellationToken));
     }
 
-    public Task PublishTripEndRequestedAsync(
-        TripEndRequestedEvent notification,
-        CancellationToken cancellationToken = default)
-    {
-        return SendToUserAsync(
-            notification.CustomerId,
-            "TripEndRequested",
-            notification,
-            cancellationToken);
-    }
-
-    public Task PublishTripEndRequestRespondedAsync(
-        TripEndRequestRespondedEvent notification,
-        CancellationToken cancellationToken = default)
-    {
-        return SendToDriverAsync(
+    public Task PublishCustomerReadinessReportedAsync(
+        CustomerReadinessReportedEvent notification,
+        CancellationToken cancellationToken = default) =>
+        SendToDriverAsync(
             notification.DriverId,
-            "TripEndRequestResponded",
+            "CustomerReadinessReported",
             notification,
             cancellationToken);
-    }
 
     public Task PublishTripPaymentPendingAsync(
         TripPaymentPendingEvent notification,

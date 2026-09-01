@@ -29,6 +29,9 @@ const StaffDriverVerificationPage = lazy(() => import('./pages/staff/StaffDriver
 const StaffPaymentStatusPage = lazy(() => import('./pages/staff/StaffPaymentStatusPage'));
 const StaffDriverRatingsPage = lazy(() => import('./pages/staff/StaffDriverRatingsPage'));
 const StaffNotificationRequestsPage = lazy(() => import('./pages/staff/StaffNotificationRequestsPage'));
+const StaffAccidentsPage = lazy(() => import('./pages/staff/StaffAccidentsPage'));
+const CustomerNoShowsPage = lazy(() => import('./pages/staff/CustomerNoShowsPage'));
+const AdminRiskFundPage = lazy(() => import('./pages/admin/risk-fund/AdminRiskFundPage'));
 /**
  * Root component — reads auth state from Redux to decide
  * which page to show. Will be replaced by React Router later.
@@ -69,6 +72,12 @@ function App() {
         if (effectiveSidebarId === 'staff-notifications') {
             return <Suspense fallback={<div className="app-loading">Đang tải yêu cầu thông báo...</div>}><StaffNotificationRequestsPage /></Suspense>;
         }
+        if (effectiveSidebarId === 'staff-accidents') {
+            return <Suspense fallback={<div className="app-loading">Đang tải hồ sơ tai nạn...</div>}><StaffAccidentsPage /></Suspense>;
+        }
+        if (effectiveSidebarId === 'staff-customer-no-shows') {
+            return <Suspense fallback={<div className="app-loading">Đang tải review no-show...</div>}><CustomerNoShowsPage /></Suspense>;
+        }
     }
     if (activeSidebarId !== effectiveSidebarId && effectiveSidebarId === 'revenue') {
         return <Suspense fallback={<div className="app-loading">Đang tải trang doanh thu...</div>}><RevenuePage /></Suspense>;
@@ -78,6 +87,9 @@ function App() {
     }
     if (effectiveSidebarId === 'notifications') {
         return <Suspense fallback={<div className="app-loading">Đang tải duyệt thông báo...</div>}><AdminNotificationReviewPage /></Suspense>;
+    }
+    if (effectiveSidebarId === 'staff-customer-no-shows') {
+        return <Suspense fallback={<div className="app-loading">Đang tải review no-show...</div>}><CustomerNoShowsPage /></Suspense>;
     }
     if (activeSidebarId === 'bookings') {
         return <Suspense fallback={<div className="app-loading">Đang tải trang yêu cầu đặt xe...</div>}><BookingsPage /></Suspense>;
@@ -108,6 +120,9 @@ function App() {
     }
     if (activeSidebarId === 'reports') {
         return <Suspense fallback={<div className="app-loading">Đang tải danh sách báo cáo...</div>}><AdminReportsPage /></Suspense>;
+    }
+    if (effectiveSidebarId === 'risk-fund') {
+        return <Suspense fallback={<div className="app-loading">Đang tải SafeRide Risk Fund...</div>}><AdminRiskFundPage /></Suspense>;
     }
     return <DriversPage />;
 }

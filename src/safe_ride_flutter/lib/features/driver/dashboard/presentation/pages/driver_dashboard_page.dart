@@ -14,10 +14,12 @@ import '../../../../../core/services/map_api_service.dart';
 import '../../../../../core/services/connectivity_service.dart';
 import '../../../../../core/services/socket_service.dart';
 import '../../../../../core/widgets/current_location_button.dart';
+import '../../../../../core/widgets/app_dialog.dart';
 import '../../../../../dependency_injection/injection.dart';
 
 import '../providers/driver_dashboard_provider.dart';
 import '../widgets/driver_bottom_nav_bar.dart';
+import '../widgets/risk_protection_dialogs.dart';
 import '../../../../../core/localization/localization_extensions.dart';
 import '../../../../../core/localization/locale_provider.dart';
 import '../../../../../core/constants/app_strings.dart';
@@ -33,6 +35,7 @@ import '../../../../shared/profile/presentation/pages/profile_page.dart';
 import '../../../../shared/chat/presentation/pages/trip_chat_page.dart';
 import '../../../../shared/notifications/presentation/pages/notifications_page.dart';
 import '../../../../shared/notifications/presentation/providers/notification_provider.dart';
+import '../../../../shared/risk_protection/presentation/pages/accident_details_page.dart';
 import 'driver_trip_payment_page.dart';
 import 'driver_return_evidence_page.dart';
 import '../../../wallet/presentation/pages/driver_wallet_page.dart';
@@ -156,6 +159,20 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
       if (token != null) {
         _provider.initializeRealtime(token);
         await context.read<NotificationProvider>().initialize(token);
+        final license = await _provider.getLicenseStatus();
+        final days = license?['daysRemaining'];
+        if (mounted && days is num && days >= 1 && days <= 3) {
+          await showDialog<void>(
+            context: context,
+            builder: (_) => AppDialog(
+              icon: Icons.warning_amber_rounded,
+              title: 'Bằng lái sắp hết hạn',
+              description: 'Bằng lái của bạn còn $days ngày nữa sẽ hết hạn. Vui lòng cập nhật bằng lái mới.',
+              confirmText: 'Đã hiểu',
+              onConfirm: () => Navigator.of(context).pop(),
+            ),
+          );
+        }
       }
       unawaited(
         getIt<TripShareDeepLinkCoordinator>().processPendingAfterNavigation(),
@@ -518,6 +535,28 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
   }
 
   Future<void> _publishInitialLocation() async {
+    final provider = context.read<DriverDashboardProvider>();
+    final canGoOnline = await provider.hasMinimumOnlineWalletBalance();
+    if (!mounted) return;
+    if (!canGoOnline) {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Ví tài xế chưa đủ số dư'),
+          content: const Text(
+            'Ví tài xế cần tối thiểu 500.000VND để có thể nhận chuyến.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Đã hiểu'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     try {
       final locationService = getIt<LocationService>();
       final location = await locationService.getCurrentLocation();
@@ -531,7 +570,6 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
         _driverPosition = newPos;
       });
 
-      final provider = context.read<DriverDashboardProvider>();
       await provider.goOnline(location.latitude, location.longitude);
 
       _startLocationUpdates();
@@ -1012,6 +1050,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                   bool isUpdatingTrip,
                   bool isWaitingForCustomerConfirmation,
                   String? tripRequestsErrorMessage,
+                  CustomerNoShowEligibility? noShowEligibility,
                 })
               >(
                 selector: (_, provider) => (
@@ -1026,6 +1065,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                   isWaitingForCustomerConfirmation:
                       provider.isWaitingForCustomerConfirmation,
                   tripRequestsErrorMessage: provider.tripRequestsErrorMessage,
+                  noShowEligibility: provider.customerNoShowEligibility,
                 ),
                 builder: (context, state, child) {
                   if (state.isLoadingActiveTrip ||
@@ -1070,6 +1110,7 @@ class _DriverDashboardPageState extends State<DriverDashboardPage> {
                       isUpdating: state.isUpdatingTrip,
                       onCall: () => _startInAppCall(state.activeTrip!),
                       onChat: () => _openChat(state.activeTrip!),
+                      noShowEligibility: state.noShowEligibility,
                     );
                   }
                   if (state.hasNewRequest && state.currentRequest != null) {
@@ -1180,12 +1221,14 @@ class _ActiveTripCard extends StatelessWidget {
     required this.isUpdating,
     required this.onCall,
     required this.onChat,
+    required this.noShowEligibility,
   });
 
   final ActiveDriverTrip trip;
   final bool isUpdating;
   final VoidCallback onCall;
   final VoidCallback onChat;
+  final CustomerNoShowEligibility? noShowEligibility;
 
   @override
   Widget build(BuildContext context) {
@@ -1361,7 +1404,7 @@ class _ActiveTripCard extends StatelessWidget {
                   ),
                 ],
               )
-            else if (status == 'ARRIVED')
+            else if (status == 'ARRIVED') ...[
               Row(
                 children: [
                   if (canCancel) ...[
@@ -1393,46 +1436,131 @@ class _ActiveTripCard extends StatelessWidget {
                     child: ElevatedButton.icon(
                       onPressed: isUpdating
                           ? null
-                          : () => _runTripAction(
-                              context,
-                              () => context
-                                  .read<DriverDashboardProvider>()
-                                  .startTrip(),
-                            ),
+                          : () => _startTripAfterSafetyCheck(context),
                       icon: Icon(Icons.play_arrow_rounded),
                       label: Text(context.l10n.startTrip),
                       style: _primaryButtonStyle(),
                     ),
                   ),
                 ],
-              )
-            else if (status == 'IN_PROGRESS')
+              ),
+              const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: isUpdating
+                  onPressed:
+                      isUpdating || noShowEligibility?.canReportNoShow != true
                       ? null
                       : () => _runTripAction(
                           context,
                           () => context
                               .read<DriverDashboardProvider>()
-                              .endTripAsync(),
+                              .reportCustomerNoShow(),
                         ),
-                  icon: Icon(Icons.flag_rounded),
+                  icon: const Icon(Icons.person_off_outlined),
+                    label: Text(
+                        noShowEligibility?.canReportNoShow == true
+                            ? 'Khách không xuất hiện'
+                            : noShowEligibility?.remainingSeconds != null &&
+                                    noShowEligibility!.remainingSeconds > 0
+                                ? 'Còn ${_formatNoShowCountdown(noShowEligibility!.remainingSeconds)} để báo khách không xuất hiện'
+                            : noShowEligibility?.reasonMessage.isNotEmpty == true
+                                ? noShowEligibility!.reasonMessage
+                                : 'Đang chờ đủ thời gian xác nhận',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFB45309),
+                    side: const BorderSide(color: Color(0xFFB45309)),
+                  ),
+                ),
+              ),
+            ] else if (status == 'IN_PROGRESS') ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: isUpdating
+                          ? null
+                          : () => _reportAccident(context),
+                      icon: const Icon(Icons.car_crash_outlined),
+                      label: Text(context.l10n.reportAccident),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: isUpdating
+                          ? null
+                          : () => _safetyTerminate(context, trip.tripId),
+                      icon: const Icon(Icons.health_and_safety_outlined),
+                      label: Text(context.l10n.safetyTermination),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFC2410C),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: isUpdating
+                      ? null
+                      : () => _submitSafetyReport(context),
+                  icon: const Icon(Icons.report_problem_outlined),
+                  label: Text(context.l10n.safetyReportTitle),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFB45309),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: isUpdating
+                      ? null
+                      : () => _endTripWithReason(context),
+                  icon: const Icon(Icons.flag_rounded),
                   label: Text(
                     isUpdating ? context.l10n.processing : context.l10n.endTrip,
                   ),
                   style: _primaryButtonStyle(),
                 ),
-              )
-            else if (isWaitingReturn)
+              ),
+            ] else if (isWaitingReturn)
               trip.paymentCompleted
                   ? _buildWaitingReturnSection(context, trip.tripId, isUpdating)
                   : _buildWaitingPaymentSection(context, trip.tripId)
             else if (isReturnConfirmed)
-              _buildReturnConfirmedBanner(context)
+              _buildReturnConfirmedSection(context, isUpdating)
             else if (isWaitingPayment)
-              _buildWaitingPaymentSection(context, trip.tripId),
+              trip.endReconciliationPending
+                  ? _buildEndReconciliationPendingSection(context)
+                  : _buildWaitingPaymentSection(context, trip.tripId),
+            if (canCancel) ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: isUpdating
+                      ? null
+                      : () => _safetyTerminate(
+                          context,
+                          trip.tripId,
+                          requiresPayment: false,
+                        ),
+                  icon: const Icon(Icons.health_and_safety_outlined),
+                  label: Text(context.l10n.safetyTermination),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFC2410C),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -1522,30 +1650,59 @@ class _ActiveTripCard extends StatelessWidget {
 
   // ─────────── RETURN_CONFIRMED banner ─────────────────────────────────
 
-  static Widget _buildReturnConfirmedBanner(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Color(0xFFE8F7F0),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Color(0xFF0A8F62).withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.check_circle_rounded, color: Color(0xFF0A8F62), size: 22),
-          SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              context.l10n.returnConfirmedCompleting,
-              style: TextStyle(
-                color: Color(0xFF0A5C3E),
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
+  static Widget _buildReturnConfirmedSection(
+    BuildContext context,
+    bool isUpdating,
+  ) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Color(0xFFE8F7F0),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Color(0xFF0A8F62).withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.check_circle_rounded,
+                color: Color(0xFF0A8F62),
+                size: 22,
               ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  context.l10n.returnConfirmedCompleting,
+                  style: TextStyle(
+                    color: Color(0xFF0A5C3E),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: isUpdating
+                ? null
+                : () => _runTripAction(
+                    context,
+                    () => context
+                        .read<DriverDashboardProvider>()
+                        .completeActiveTrip(),
+                  ),
+            icon: Icon(Icons.sync_rounded),
+            label: Text(
+              isUpdating ? context.l10n.processing : context.l10n.checkAgain,
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -1603,6 +1760,35 @@ class _ActiveTripCard extends StatelessWidget {
     );
   }
 
+  static Widget _buildEndReconciliationPendingSection(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF4E5),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: const Color(0xFFE58A00).withValues(alpha: 0.4),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.rule_rounded, color: Color(0xFF9A5A00), size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              '${context.l10n.startedByMistakeReason}: ${context.l10n.waitingConfirmation}',
+              style: const TextStyle(
+                color: Color(0xFF7A4700),
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   static String _statusLabel(BuildContext context, String status) {
     return switch (status) {
       'ACCEPTED' => context.l10n.statusAccepted,
@@ -1636,10 +1822,223 @@ class _ActiveTripCard extends StatelessWidget {
         ..showSnackBar(SnackBar(content: Text(successMessage)));
     } catch (_) {
       if (!context.mounted) return;
+      final provider = context.read<DriverDashboardProvider>();
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
-          SnackBar(content: Text(context.l10n.tripStatusUpdateFailed)),
+          SnackBar(
+            content: Text(
+              provider.errorMessage ?? context.l10n.tripStatusUpdateFailed,
+            ),
+          ),
+        );
+    }
+  }
+
+  static Future<void> _startTripAfterSafetyCheck(BuildContext context) async {
+    final check = await showPreTripSafetyCheckDialog(context);
+    if (!context.mounted || check == null) return;
+    await _runTripAction(context, () async {
+      final provider = context.read<DriverDashboardProvider>();
+      final submitted = await provider.submitPreTripVehicleCheck(
+        brakeResponsePassed: check.values[0],
+        frontRearLightsPassed: check.values[1],
+        turnSignalsPassed: check.values[2],
+        visibleTiresPassed: check.values[3],
+        dashboardWarningPassed: check.values[4],
+        windshieldVisibilityPassed: check.values[5],
+        noMajorVisibleIssue: check.values[6],
+        faultType: check.faultType,
+        note: check.note,
+        evidence: check.evidence,
+      );
+      if (!submitted) return false;
+      if (!check.allPassed) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context)
+            ..hideCurrentSnackBar()
+            ..showSnackBar(
+              SnackBar(content: Text(context.l10n.allChecksRequired)),
+            );
+        }
+        return true;
+      }
+      return provider.startTrip();
+    });
+  }
+
+  static Future<void> _endTripWithReason(BuildContext context) async {
+    final reason = await showDialog<DriverTripEndReason>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.l10n.endTripReasonTitle),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(context.l10n.endTripReasonDescription),
+              const SizedBox(height: 12),
+              ListTile(
+                leading: const Icon(Icons.location_on_outlined),
+                title: Text(context.l10n.normalCompletionReason),
+                subtitle: Text(context.l10n.normalCompletionReasonDescription),
+                onTap: () => Navigator.of(
+                  dialogContext,
+                ).pop(DriverTripEndReason.normalCompletion),
+              ),
+              ListTile(
+                leading: const Icon(Icons.flag_outlined),
+                title: Text(context.l10n.customerRequestedStopReason),
+                subtitle: Text(
+                  context.l10n.customerRequestedStopReasonDescription,
+                ),
+                onTap: () => Navigator.of(
+                  dialogContext,
+                ).pop(DriverTripEndReason.customerRequestedStop),
+              ),
+              ListTile(
+                leading: const Icon(Icons.person_off_outlined),
+                title: Text(context.l10n.driverUnableToContinueReason),
+                onTap: () => Navigator.of(
+                  dialogContext,
+                ).pop(DriverTripEndReason.driverUnableToContinue),
+              ),
+              ListTile(
+                leading: const Icon(Icons.undo_rounded),
+                title: Text(context.l10n.startedByMistakeReason),
+                onTap: () => Navigator.of(
+                  dialogContext,
+                ).pop(DriverTripEndReason.startedByMistake),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!context.mounted || reason == null) return;
+    final bool canContinueWorking;
+    if (reason.forcesDriverOffline) {
+      canContinueWorking = false;
+    } else {
+      final selection = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(context.l10n.endTrip),
+          content: Text(context.l10n.startReceivingTrips),
+          actions: [
+            TextButton.icon(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              icon: const Icon(Icons.offline_bolt_outlined),
+              label: Text(context.l10n.statusOffline),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              icon: const Icon(Icons.online_prediction_rounded),
+              label: Text(context.l10n.statusOnline),
+            ),
+          ],
+        ),
+      );
+      if (!context.mounted || selection == null) return;
+      canContinueWorking = selection;
+    }
+    await _runTripAction(
+      context,
+      () => context.read<DriverDashboardProvider>().endTripAsync(
+        reason,
+        canContinueWorking: canContinueWorking,
+      ),
+    );
+  }
+
+  static Future<void> _reportAccident(BuildContext context) async {
+    final description = await showAccidentReportDialog(context);
+    if (!context.mounted || description == null) return;
+    final provider = context.read<DriverDashboardProvider>();
+    try {
+      final accidentId = await provider.reportAccident(description);
+      if (!context.mounted) return;
+      if (accidentId == null) {
+        throw StateError('Missing accident id');
+      }
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(context.l10n.accidentReported)));
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => AccidentDetailsPage(accidentId: accidentId),
+        ),
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(provider.errorMessage ?? context.l10n.genericError),
+          ),
+        );
+    }
+  }
+
+  static Future<void> _submitSafetyReport(BuildContext context) async {
+    final report = await showSafetyReportDialog(context);
+    if (!context.mounted || report == null) return;
+    try {
+      final submitted = await context
+          .read<DriverDashboardProvider>()
+          .submitSafetyReport(
+            reportType: report.reportType,
+            reasonCode: report.reasonCode,
+            description: report.description,
+            escalationRequested: report.escalationRequested,
+          );
+      if (!context.mounted || !submitted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text(context.l10n.safetyReportSubmitted)),
+        );
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text(context.l10n.safetyReportFailed)),
+        );
+    }
+  }
+
+  static Future<void> _safetyTerminate(
+    BuildContext context,
+    int tripId, {
+    bool requiresPayment = true,
+  }) async {
+    final result = await showSafetyTerminationDialog(context);
+    if (!context.mounted || result == null) return;
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final provider = context.read<DriverDashboardProvider>();
+    final fallbackMessage = context.l10n.safetyTerminationFailed;
+    try {
+      final terminated = await provider.safetyTerminate(
+        result.reason,
+        evidence: result.evidence,
+      );
+      if (!terminated) return;
+      if (!requiresPayment) return;
+      if (!navigator.mounted) return;
+      await navigator.push<bool>(
+        MaterialPageRoute(
+          builder: (_) => DriverTripPaymentPage(tripId: tripId),
+        ),
+      );
+    } catch (_) {
+      if (!messenger.mounted) return;
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text(provider.errorMessage ?? fallbackMessage)),
         );
     }
   }
@@ -2039,7 +2438,9 @@ class _NewRequestCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      context.l10n.expectedIncomeUpper,
+                      request.isLongDistanceTrip
+                          ? 'CHUYẾN ĐƯỜNG DÀI'
+                          : 'THÔNG TIN CHUYẾN',
                       style: TextStyle(
                         fontSize: 10,
                         color: Colors.grey,
@@ -2047,10 +2448,15 @@ class _NewRequestCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      _formatCurrency(request.expectedIncome),
+                      request.longPickupCompensation != null &&
+                              request.longPickupCompensation! > 0
+                          ? '+ ${_formatCurrency(request.longPickupCompensation!)} đón xa'
+                          : request.isLongPickup
+                          ? 'Đón xa'
+                          : 'Chi tiết trước khi nhận',
                       style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
                         color: Color(0xFF006B70),
                       ),
                     ),
@@ -2201,3 +2607,10 @@ class _AddressItem extends StatelessWidget {
 }
 
 // _BottomNavBar logic removed, now using DriverBottomNavBar widget
+
+String _formatNoShowCountdown(int seconds) {
+  final safeSeconds = seconds < 0 ? 0 : seconds;
+  final minutes = safeSeconds ~/ 60;
+  final remainingSeconds = safeSeconds % 60;
+  return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+}

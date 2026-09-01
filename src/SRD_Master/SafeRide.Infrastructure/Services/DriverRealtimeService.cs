@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Common.Exceptions;
 using SafeRide.Application.Common.Models;
 using SafeRide.Application.Common.Realtime;
 using SafeRide.Domain.Enums;
@@ -90,6 +91,9 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
             activeTrip,
             utcNow,
             cancellationToken);
+        await RecordPlannedRouteProgressIfEligibleAsync(
+            location,
+            activeTrip);
         await RecalculateRouteIfDeviatedAsync(
             driverId,
             location,
@@ -345,6 +349,17 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
         var utcNow = _dateTimeProvider.UtcNow;
         var profile = await _dbContext.DriverProfiles
             .FirstOrDefaultAsync(x => x.DriverId == driverId, cancellationToken);
+        var today = DateOnly.FromDateTime(utcNow);
+        var driverLicenses = await _dbContext.LoadApprovedDrivingLicensesAsync(
+            driverId,
+            cancellationToken);
+        var expiredLicense = driverLicenses.Any(license => license.IsUsableOn(today))
+            ? null
+            : driverLicenses.GetLatestExpiredExpiryDate(today);
+        if (expiredLicense.HasValue)
+        {
+            throw new DriverLicenseExpiredException(expiredLicense.Value);
+        }
         if (profile is not null && profile.WorkStatus != DriverWorkStatus.Busy)
         {
             profile.WorkStatus = DriverWorkStatus.Online;
@@ -513,6 +528,49 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
         }
     }
 
+    private async Task RecordPlannedRouteProgressIfEligibleAsync(
+        DriverLocationUpdateInput location,
+        ActiveDriverTripSnapshot? activeTrip)
+    {
+        if (activeTrip is null
+            || activeTrip.TripStatus != TripStatus.IN_PROGRESS
+            || string.IsNullOrWhiteSpace(activeTrip.RoutePolyline))
+        {
+            return;
+        }
+
+        try
+        {
+            var route = EncodedPolylineGeometry.Decode(activeTrip.RoutePolyline);
+            var projection = EncodedPolylineGeometry.Project(
+                new LocationPoint(location.Latitude, location.Longitude),
+                route);
+            if (projection.TotalRouteMeters <= 0
+                || projection.DistanceToRouteMeters
+                    > _tripTrackingOptions.CurrentValue.RouteDeviationThresholdMeters)
+            {
+                return;
+            }
+
+            var key = RedisKeys.TripPlannedRouteProgress(activeTrip.TripId);
+            var candidate = Math.Clamp(
+                projection.ProgressMeters / projection.TotalRouteMeters,
+                0d,
+                1d);
+            await _redisService.SetMaximumDoubleAsync(
+                key,
+                candidate,
+                TimeSpan.FromHours(_tripTrackingOptions.CurrentValue.ActiveRouteTtlHours));
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _logger.LogWarning(
+                exception,
+                "Could not update original planned-route progress for trip {TripId}.",
+                activeTrip.TripId);
+        }
+    }
+
     private async Task<ActiveDriverTripSnapshot?> GetActiveTripForLocationAsync(
         Guid driverId,
         CancellationToken cancellationToken)
@@ -676,4 +734,5 @@ public sealed class DriverRealtimeService : IDriverRealtimeService
         double MaximumProgressMeters,
         double RemainingMeters,
         DateTime UpdatedAt);
+
 }

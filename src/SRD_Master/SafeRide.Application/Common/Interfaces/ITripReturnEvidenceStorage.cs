@@ -13,6 +13,9 @@ public interface ITripReturnEvidenceStorage
         string contentType,
         Stream content,
         CancellationToken cancellationToken);
+    Task DeleteAsync(
+        string publicId,
+        CancellationToken cancellationToken) => Task.CompletedTask;
 }
 
 /// <summary>

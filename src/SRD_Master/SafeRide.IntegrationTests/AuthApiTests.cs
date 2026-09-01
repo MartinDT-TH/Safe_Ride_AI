@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using SafeRide.Application.Common.Interfaces;
+using SafeRide.Application.Features.Auth;
 using SafeRide.Application.Features.Auth.DTOs;
 using SafeRide.Application.Features.Auth.Services;
 using SafeRide.Domain.Entities;
@@ -8,10 +10,13 @@ using SafeRide.Infrastructure.Persistence;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace SafeRide.IntegrationTests;
 
+[Trait(SqlServerTestDatabase.ProviderTraitName, SqlServerTestDatabase.SqliteProvider)]
 public sealed class AuthApiTests
 {
     [Fact]
@@ -655,6 +660,149 @@ public sealed class AuthApiTests
             new RefreshTokenRequest { RefreshToken = login.RefreshToken });
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.Equal("auth.refresh_token_expired", await ReadProblemCodeAsync(response));
+    }
+
+    [Fact]
+    public async Task ExpiredRefreshToken_DuringActiveTrip_IssuesAndRotatesContinuationSession()
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateClient();
+        var login = await LoginAsync(factory, client, "0901234576");
+        const long bookingId = 9001;
+        const long tripId = 9002;
+        var driverId = Guid.NewGuid();
+        var tripStartedAt = DateTime.UtcNow.AddMinutes(-10);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var tokenService = scope.ServiceProvider.GetRequiredService<IJwtTokenService>();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var tokenHash = tokenService.HashToken(login.RefreshToken);
+            var refreshToken = dbContext.RefreshTokens.Single(x => x.TokenHash == tokenHash);
+            refreshToken.ExpiresAt = DateTime.UtcNow.AddMinutes(-1);
+
+            await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO Bookings (
+                    Id, CustomerId, BookingStatus, BookingType, PickupAddress,
+                    EstimatedDistanceKm, EstimatedDurationMinutes, EstimatedFare,
+                    OriginalFare, DiscountAmount, FinalFare, CreatedAt)
+                VALUES (
+                    {bookingId}, {refreshToken.UserId}, {"DriverAssigned"}, {"Now"}, {"Test pickup"},
+                    {0}, {0}, {"0"}, {"0"}, {"0"}, {"0"}, {tripStartedAt.AddMinutes(-5)})
+                """);
+            await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO Trips (
+                    Id, BookingId, DriverId, TripStatus, CreatedAt,
+                    DriverAssignedAt, StartedAt)
+                VALUES (
+                    {tripId}, {bookingId}, {driverId}, {"IN_PROGRESS"},
+                    {tripStartedAt.AddMinutes(-5)}, {tripStartedAt.AddMinutes(-5)}, {tripStartedAt})
+                """);
+            await dbContext.SaveChangesAsync();
+        }
+
+        var continuationResponse = await client.PostAsJsonAsync(
+            "/api/auth/refresh-token",
+            new RefreshTokenRequest
+            {
+                RefreshToken = login.RefreshToken,
+                DeviceId = "integration-device"
+            });
+
+        Assert.Equal(HttpStatusCode.OK, continuationResponse.StatusCode);
+        var continuation = await continuationResponse.Content
+            .ReadFromJsonAsync<AuthResponse>();
+        Assert.NotNull(continuation);
+        Assert.Equal(AuthSessionModes.TripContinuation, continuation.SessionMode);
+        Assert.True(continuation.ReloginRequiredAfterTrip);
+        Assert.Equal(tripId, continuation.ContinuationTripId);
+        Assert.Equal(bookingId, continuation.ContinuationBookingId);
+        Assert.StartsWith("tc.", continuation.RefreshToken);
+        var accessToken = new JwtSecurityTokenHandler()
+            .ReadJwtToken(continuation.AccessToken);
+        Assert.Contains(accessToken.Claims, claim =>
+            claim.Type == AuthClaimTypes.ContinuationTripId
+            && claim.Value == tripId.ToString());
+
+        var rotatedResponse = await client.PostAsJsonAsync(
+            "/api/auth/refresh-token",
+            new RefreshTokenRequest
+            {
+                RefreshToken = continuation.RefreshToken,
+                DeviceId = "integration-device"
+            });
+
+        Assert.Equal(HttpStatusCode.OK, rotatedResponse.StatusCode);
+        var rotated = await rotatedResponse.Content.ReadFromJsonAsync<AuthResponse>();
+        Assert.NotNull(rotated);
+        Assert.Equal(AuthSessionModes.TripContinuation, rotated.SessionMode);
+        Assert.NotEqual(continuation.RefreshToken, rotated.RefreshToken);
+    }
+
+    [Fact]
+    public async Task ExpiredRefreshToken_DuringActiveBooking_IssuesBookingScopedContinuationSession()
+    {
+        using var factory = new AuthApiFactory();
+        using var client = factory.CreateClient();
+        var login = await LoginAsync(factory, client, "0901234577");
+        const long bookingId = 9011;
+        var bookingCreatedAt = DateTime.UtcNow.AddMinutes(-10);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var tokenService = scope.ServiceProvider.GetRequiredService<IJwtTokenService>();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var tokenHash = tokenService.HashToken(login.RefreshToken);
+            var refreshToken = dbContext.RefreshTokens.Single(x => x.TokenHash == tokenHash);
+            refreshToken.ExpiresAt = DateTime.UtcNow.AddMinutes(-1);
+
+            await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO Bookings (
+                    Id, CustomerId, BookingStatus, BookingType, PickupAddress,
+                    EstimatedDistanceKm, EstimatedDurationMinutes, EstimatedFare,
+                    OriginalFare, DiscountAmount, FinalFare, CreatedAt)
+                VALUES (
+                    {bookingId}, {refreshToken.UserId}, {"Searching"}, {"Now"}, {"Test pickup"},
+                    {0}, {0}, {"0"}, {"0"}, {"0"}, {"0"}, {bookingCreatedAt})
+                """);
+            await dbContext.SaveChangesAsync();
+        }
+
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/refresh-token",
+            new RefreshTokenRequest
+            {
+                RefreshToken = login.RefreshToken,
+                DeviceId = "integration-device"
+            });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var continuation = await response.Content.ReadFromJsonAsync<AuthResponse>();
+        Assert.NotNull(continuation);
+        Assert.Equal(AuthSessionModes.TripContinuation, continuation.SessionMode);
+        Assert.True(continuation.ReloginRequiredAfterTrip);
+        Assert.Null(continuation.ContinuationTripId);
+        Assert.Equal(bookingId, continuation.ContinuationBookingId);
+        Assert.StartsWith("tc.", continuation.RefreshToken);
+        var accessToken = new JwtSecurityTokenHandler()
+            .ReadJwtToken(continuation.AccessToken);
+        Assert.Contains(accessToken.Claims, claim =>
+            claim.Type == AuthClaimTypes.ContinuationBookingId
+            && claim.Value == bookingId.ToString());
+
+        using var authorizationScope = factory.Services.CreateScope();
+        var accessService = authorizationScope.ServiceProvider
+            .GetRequiredService<ITripContinuationAccessService>();
+        var principal = new ClaimsPrincipal(
+            new ClaimsIdentity(accessToken.Claims, "test"));
+        Assert.True(await accessService.IsAllowedAsync(
+            principal,
+            TripContinuationOperation.BookingManage,
+            bookingId: bookingId));
+        Assert.False(await accessService.IsAllowedAsync(
+            principal,
+            TripContinuationOperation.BookingManage,
+            bookingId: bookingId + 1));
     }
 
     private static async Task<AuthResponse> LoginAsync(

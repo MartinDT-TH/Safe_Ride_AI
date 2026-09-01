@@ -50,6 +50,13 @@ public sealed class SafeRideHub : Hub
                     Context.ConnectionId,
                     RealtimeGroups.AdminSOS);
             }
+            if (Context.User?.IsInRole("Admin") == true
+                || Context.User?.IsInRole("Staff") == true)
+            {
+                await Groups.AddToGroupAsync(
+                    Context.ConnectionId,
+                    RealtimeGroups.ManagementAccidents);
+            }
         }
 
         await base.OnConnectedAsync();
@@ -144,6 +151,22 @@ public sealed class SafeRideHub : Hub
         return Groups.RemoveFromGroupAsync(
             Context.ConnectionId,
             RealtimeGroups.AdminSOS);
+    }
+
+    [Authorize(Roles = "Staff,Admin")]
+    public Task JoinManagementAccidentsGroup()
+    {
+        return Groups.AddToGroupAsync(
+            Context.ConnectionId,
+            RealtimeGroups.ManagementAccidents);
+    }
+
+    [Authorize(Roles = "Staff,Admin")]
+    public Task LeaveManagementAccidentsGroup()
+    {
+        return Groups.RemoveFromGroupAsync(
+            Context.ConnectionId,
+            RealtimeGroups.ManagementAccidents);
     }
 
     public Task SendInAppCallOffer(InAppCallSignal signal)
