@@ -77,6 +77,20 @@ public static class DependencyInjection
             .AddDataProtection()
             .SetApplicationName("SafeRide")
             .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
+
+        // DriverKyc values written before 2026-08-31 were protected while the
+        // application discriminator defaulted to the normalized content root.
+        // Keep a read-only provider for those rows while new values use the
+        // explicit "SafeRide" discriminator above.
+        var legacyApplicationName = Path.GetFullPath(environment.ContentRootPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        var legacyProvider = DataProtectionProvider.Create(
+            new DirectoryInfo(dataProtectionKeysPath),
+            builder => builder.SetApplicationName(legacyApplicationName));
+        services.AddSingleton<ILegacyDriverKycPiiProtectionService>(
+            new LegacyDriverKycPiiProtectionService(
+                legacyProvider.CreateProtector("SafeRide.DriverKyc.Pii.v1")));
         var backgroundJobsEnabled = configuration.GetValue<bool>("BackgroundJobs:Enabled");
 
         services
