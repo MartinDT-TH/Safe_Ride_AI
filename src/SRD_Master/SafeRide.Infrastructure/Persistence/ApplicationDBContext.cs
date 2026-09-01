@@ -23,17 +23,20 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
         DbContextOptions<ApplicationDbContext> options,
         IDataProtectionProvider protectionProvider,
         ILogger<ApplicationDbContext>? logger = null,
-        ILegacyDriverKycPiiProtectionService? legacyPiiProtection = null)
+        ILegacyDriverKycPiiProtectionService? legacyPiiProtection = null,
+        IPreviousDriverKycPiiProtectionService? previousPiiProtection = null)
         : base(options)
     {
         _kycProtector = protectionProvider.CreateProtector("SafeRide.DriverKyc.Pii.v1");
         _logger = logger;
         _legacyPiiProtection = legacyPiiProtection;
+        _previousPiiProtection = previousPiiProtection;
     }
 
     private readonly IDataProtector _kycProtector;
     private readonly ILogger<ApplicationDbContext>? _logger;
     private readonly ILegacyDriverKycPiiProtectionService? _legacyPiiProtection;
+    private readonly IPreviousDriverKycPiiProtectionService? _previousPiiProtection;
 
     public virtual DbSet<AspNetRole> AspNetRoles { get; set; }
 
@@ -835,6 +838,13 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
         }
         catch (CryptographicException exception)
         {
+            if (_previousPiiProtection?.TryUnprotect(value, out var previousPlaintext) == true)
+            {
+                _logger?.LogInformation(
+                    "Decrypted a DriverKyc PII value using the previous SafeRide key ring.");
+                return previousPlaintext;
+            }
+
             if (_legacyPiiProtection?.TryUnprotect(value, out var legacyPlaintext) == true)
             {
                 _logger?.LogInformation(
