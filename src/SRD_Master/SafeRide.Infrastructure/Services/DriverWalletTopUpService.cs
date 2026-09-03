@@ -78,10 +78,78 @@ public sealed class DriverWalletTopUpService(
 
     public async Task<WalletTopUpResult> GetStatusAsync(Guid driverId, long topUpId, CancellationToken cancellationToken)
     {
-        var topUp = await dbContext.DriverWalletTopUps.Include(x => x.Wallet)
+        var topUp = await dbContext.DriverWalletTopUps.AsNoTracking().Include(x => x.Wallet)
             .SingleOrDefaultAsync(x => x.Id == topUpId && x.Wallet.DriverId == driverId, cancellationToken)
             ?? throw new BookingException("wallet.top_up.not_found", "Không tìm thấy giao dịch nạp tiền.", StatusCodes.Status404NotFound);
+
+        if (topUp.Status == PaymentStatus.Pending)
+        {
+            var payOsOrder = await TryGetPayOsOrderAsync(topUp.OrderCode, cancellationToken);
+            var providerStatus = payOsOrder?.Status?.Trim().ToUpperInvariant();
+            if (providerStatus == "PAID")
+            {
+                await ApplyProviderResultAsync(
+                    topUp.OrderCode,
+                    success: true,
+                    payOsOrder!.AmountPaid is > 0
+                        ? payOsOrder.AmountPaid.Value
+                        : payOsOrder.Amount,
+                    payOsOrder.Id,
+                    cancellationToken);
+            }
+            else if (providerStatus == "CANCELLED")
+            {
+                await ApplyProviderResultAsync(
+                    topUp.OrderCode,
+                    success: false,
+                    topUp.Amount,
+                    payOsOrder?.Id,
+                    cancellationToken);
+            }
+
+            topUp = await dbContext.DriverWalletTopUps.AsNoTracking().Include(x => x.Wallet)
+                .SingleAsync(x => x.Id == topUpId && x.Wallet.DriverId == driverId, cancellationToken);
+        }
+
         return ToResult(topUp, null, null);
+    }
+
+    public async Task ReconcilePendingAsync(Guid driverId, CancellationToken cancellationToken)
+    {
+        var pendingTopUps = await dbContext.DriverWalletTopUps
+            .AsNoTracking()
+            .Where(x => x.Wallet.DriverId == driverId && x.Status == PaymentStatus.Pending)
+            .OrderByDescending(x => x.CreatedAt)
+            .Take(20)
+            .Select(x => new { x.OrderCode, x.Amount })
+            .ToListAsync(cancellationToken);
+
+        foreach (var topUp in pendingTopUps)
+        {
+            var payOsOrder = await TryGetPayOsOrderAsync(topUp.OrderCode, cancellationToken);
+            var providerStatus = payOsOrder?.Status?.Trim().ToUpperInvariant();
+            if (providerStatus == "PAID")
+            {
+                var paidAmount = payOsOrder!.AmountPaid is > 0
+                    ? payOsOrder.AmountPaid.Value
+                    : payOsOrder.Amount;
+                await ApplyProviderResultAsync(
+                    topUp.OrderCode,
+                    success: true,
+                    paidAmount,
+                    payOsOrder.Id,
+                    cancellationToken);
+            }
+            else if (providerStatus == "CANCELLED")
+            {
+                await ApplyProviderResultAsync(
+                    topUp.OrderCode,
+                    success: false,
+                    topUp.Amount,
+                    payOsOrder?.Id,
+                    cancellationToken);
+            }
+        }
     }
 
     public async Task<bool> TryHandleWebhookAsync(PayOsWebhookRequest request, CancellationToken cancellationToken)
@@ -92,42 +160,84 @@ public sealed class DriverWalletTopUpService(
         if (!VerifyWebhookSignature(request))
             throw new BookingException("payment.invalid_webhook_signature", "PayOS webhook signature is invalid.", StatusCodes.Status400BadRequest);
 
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
-        var topUp = await dbContext.DriverWalletTopUps.Include(x => x.Wallet)
-            .SingleAsync(x => x.OrderCode == request.Data.OrderCode, cancellationToken);
-        if (topUp.Status == PaymentStatus.Success)
+        var success = request.Success && (request.Code == "00" || request.Data.Code == "00");
+        await ApplyProviderResultAsync(
+            request.Data.OrderCode,
+            success,
+            request.Data.Amount,
+            request.Data.Reference,
+            cancellationToken);
+        return true;
+    }
+
+    private async Task ApplyProviderResultAsync(
+        long orderCode,
+        bool success,
+        decimal providerAmount,
+        string? providerReference,
+        CancellationToken cancellationToken)
+    {
+        var strategy = dbContext.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
         {
-            await transaction.CommitAsync(cancellationToken);
-            return true;
-        }
-        if (!request.Success || (request.Code != "00" && request.Data.Code != "00"))
-        {
-            topUp.Status = PaymentStatus.Failed;
-            topUp.UpdatedAt = DateTime.UtcNow;
+            // A failed attempt can leave successfully-mutated entities tracked even
+            // though its transaction was rolled back. Reload everything on retries so
+            // the idempotency check reflects the database, not stale tracked state.
+            dbContext.ChangeTracker.Clear();
+
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable,
+                cancellationToken);
+            var topUp = await dbContext.DriverWalletTopUps.Include(x => x.Wallet)
+                .SingleAsync(x => x.OrderCode == orderCode, cancellationToken);
+            if (topUp.Status == PaymentStatus.Success)
+            {
+                await transaction.CommitAsync(cancellationToken);
+                return;
+            }
+            if (!success)
+            {
+                topUp.Status = PaymentStatus.Failed;
+                topUp.UpdatedAt = DateTime.UtcNow;
+                await dbContext.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return;
+            }
+            if (Math.Round(providerAmount, 0) != topUp.Amount)
+                throw new BookingException("wallet.top_up.amount_mismatch", "Số tiền PayOS xác nhận không khớp.", StatusCodes.Status409Conflict);
+
+            var now = DateTime.UtcNow;
+            topUp.Wallet.CurrentBalance += topUp.Amount;
+            topUp.Status = PaymentStatus.Success;
+            topUp.PaidAt = now;
+            topUp.UpdatedAt = now;
+            topUp.ProviderReference = providerReference;
+            dbContext.WalletTransactions.Add(new WalletTransaction
+            {
+                WalletId = topUp.WalletId,
+                TransactionType = WalletTransactionType.TopUp,
+                Amount = topUp.Amount,
+                Description = $"Nạp tiền qua PayOS - {topUp.OrderCode}",
+                CreatedAt = now
+            });
             await dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return true;
-        }
-        if (Math.Round(request.Data.Amount, 0) != topUp.Amount)
-            throw new BookingException("wallet.top_up.amount_mismatch", "Số tiền PayOS xác nhận không khớp.", StatusCodes.Status409Conflict);
-
-        var now = DateTime.UtcNow;
-        topUp.Wallet.CurrentBalance += topUp.Amount;
-        topUp.Status = PaymentStatus.Success;
-        topUp.PaidAt = now;
-        topUp.UpdatedAt = now;
-        topUp.ProviderReference = request.Data.Reference;
-        dbContext.WalletTransactions.Add(new WalletTransaction
-        {
-            WalletId = topUp.WalletId,
-            TransactionType = WalletTransactionType.TopUp,
-            Amount = topUp.Amount,
-            Description = $"Nạp tiền qua PayOS - {topUp.OrderCode}",
-            CreatedAt = now
         });
-        await dbContext.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return true;
+    }
+
+    private async Task<PayOsPaymentData?> TryGetPayOsOrderAsync(
+        long orderCode,
+        CancellationToken cancellationToken)
+    {
+        var response = await httpClient.GetAsync(
+            $"/v2/payment-requests/{orderCode}",
+            cancellationToken);
+        if (!response.IsSuccessStatusCode) return null;
+
+        var payload = await response.Content.ReadFromJsonAsync<PayOsGetPaymentResponse>(
+            new JsonSerializerOptions(JsonSerializerDefaults.Web),
+            cancellationToken);
+        return payload?.Code == "00" ? payload.Data : null;
     }
 
     private WalletTopUpResult ToResult(DriverWalletTopUp topUp, string? qrCode, string? checkoutUrl) =>

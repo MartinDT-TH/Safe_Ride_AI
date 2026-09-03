@@ -136,31 +136,35 @@ public sealed class AdminTransactionsController : ControllerBase
         long id,
         CancellationToken cancellationToken)
     {
-        await using var transaction = await _db.Database.BeginTransactionAsync(
-            IsolationLevel.Serializable, cancellationToken);
-        var request = await _db.WithdrawalRequests
-            .Include(x => x.Wallet)
-            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
-        if (request is null) return NotFound();
-        if (request.Status != WithdrawalRequestStatus.Pending)
-            return Conflict(new ProblemDetails { Detail = "Yêu cầu này đã được xử lý." });
-        if (request.Wallet.CurrentBalance < request.Amount)
-            return Conflict(new ProblemDetails { Detail = "Số dư ví hiện tại không đủ để duyệt." });
-
-        request.Wallet.CurrentBalance -= request.Amount;
-        request.Status = WithdrawalRequestStatus.Approved;
-        request.ProcessedAt = DateTime.UtcNow;
-        _db.WalletTransactions.Add(new WalletTransaction
+        var strategy = _db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync<IActionResult>(async () =>
         {
-            WalletId = request.WalletId,
-            TransactionType = WalletTransactionType.Withdrawal,
-            Amount = request.Amount,
-            Description = $"Rút tiền #{request.Id} về {request.BankName}",
-            CreatedAt = request.ProcessedAt.Value
+            await using var transaction = await _db.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable, cancellationToken);
+            var request = await _db.WithdrawalRequests
+                .Include(x => x.Wallet)
+                .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+            if (request is null) return NotFound();
+            if (request.Status != WithdrawalRequestStatus.Pending)
+                return Conflict(new ProblemDetails { Detail = "Yêu cầu này đã được xử lý." });
+            if (request.Wallet.CurrentBalance < request.Amount)
+                return Conflict(new ProblemDetails { Detail = "Số dư ví hiện tại không đủ để duyệt." });
+
+            request.Wallet.CurrentBalance -= request.Amount;
+            request.Status = WithdrawalRequestStatus.Approved;
+            request.ProcessedAt = DateTime.UtcNow;
+            _db.WalletTransactions.Add(new WalletTransaction
+            {
+                WalletId = request.WalletId,
+                TransactionType = WalletTransactionType.Withdrawal,
+                Amount = request.Amount,
+                Description = $"Rút tiền #{request.Id} về {request.BankName}",
+                CreatedAt = request.ProcessedAt.Value
+            });
+            await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return NoContent();
         });
-        await _db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return NoContent();
     }
 
     [HttpPost("withdrawals/{id:long}/reject")]
@@ -169,22 +173,26 @@ public sealed class AdminTransactionsController : ControllerBase
         [FromBody] RejectWithdrawalRequest? body,
         CancellationToken cancellationToken)
     {
-        await using var transaction = await _db.Database.BeginTransactionAsync(
-            IsolationLevel.Serializable, cancellationToken);
-        var request = await _db.WithdrawalRequests
-            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
-        if (request is null) return NotFound();
-        if (request.Status != WithdrawalRequestStatus.Pending)
-            return Conflict(new ProblemDetails { Detail = "Yêu cầu này đã được xử lý." });
+        var strategy = _db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync<IActionResult>(async () =>
+        {
+            await using var transaction = await _db.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable, cancellationToken);
+            var request = await _db.WithdrawalRequests
+                .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+            if (request is null) return NotFound();
+            if (request.Status != WithdrawalRequestStatus.Pending)
+                return Conflict(new ProblemDetails { Detail = "Yêu cầu này đã được xử lý." });
 
-        request.Status = WithdrawalRequestStatus.Rejected;
-        request.RejectionReason = string.IsNullOrWhiteSpace(body?.Reason)
-            ? "Từ chối bởi quản trị viên"
-            : body.Reason.Trim()[..Math.Min(body.Reason.Trim().Length, 255)];
-        request.ProcessedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return NoContent();
+            request.Status = WithdrawalRequestStatus.Rejected;
+            request.RejectionReason = string.IsNullOrWhiteSpace(body?.Reason)
+                ? "Từ chối bởi quản trị viên"
+                : body.Reason.Trim()[..Math.Min(body.Reason.Trim().Length, 255)];
+            request.ProcessedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return NoContent();
+        });
     }
 
     private async Task<AdminTransactionStats> BuildStats(

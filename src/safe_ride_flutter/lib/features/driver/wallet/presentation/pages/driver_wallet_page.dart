@@ -81,69 +81,31 @@ class _DriverWalletPageState extends State<DriverWalletPage> {
   }
 
   Future<void> _openTopUpForm() async {
-    final controller = TextEditingController();
-    final amount = await showDialog<num>(
+    final provider = context.read<DriverWalletProvider>();
+    final token = context.read<AuthProvider>().token;
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Nạp tiền vào Ví'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Số tiền (VND)'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Hủy'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(
-              context,
-              num.tryParse(controller.text.replaceAll(',', '')),
-            ),
-            child: const Text('Tạo QR'),
-          ),
-        ],
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _TopUpSheet(
+        onCreate: (amount) => provider.createTopUp(token, amount),
+        onGetStatus: (id) => provider.getTopUpStatus(token, id),
+        onSuccess: _loadWallet,
+        errorMessage: () => provider.errorMessage,
       ),
     );
-    controller.dispose();
-    if (amount == null || amount <= 0 || !mounted) return;
-    final provider = context.read<DriverWalletProvider>();
-    final result = await provider.createTopUp(
-      context.read<AuthProvider>().token,
-      amount,
-    );
-    if (result == null || !mounted) {
-      if (mounted)
-        _showMessage(provider.errorMessage ?? 'Không thể tạo QR nạp tiền.');
+    if (result == null || !mounted) return;
+
+    if (result['status']?.toString().toLowerCase() == 'success') {
+      _showMessage('Nạp tiền thành công.');
       return;
     }
-    final qr = result['qrCode']?.toString();
-    if (qr == null || qr.isEmpty) return;
-    await showDialog<void>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Quét mã để nạp tiền'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            QrImageView(data: qr, size: 240),
-            const SizedBox(height: 8),
-            const Text('Sau khi thanh toán, số dư sẽ tự động cập nhật.'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Đóng'),
-          ),
-        ],
-      ),
-    );
+
     for (var i = 0; i < 12 && mounted; i++) {
       await Future<void>.delayed(const Duration(seconds: 5));
       final status = await provider.getTopUpStatus(
-        context.read<AuthProvider>().token,
+        token,
         (result['topUpId'] as num).toInt(),
       );
       if (status?['status']?.toString().toLowerCase() == 'success') {
@@ -222,6 +184,274 @@ class _DriverWalletPageState extends State<DriverWalletPage> {
                   ],
                 ),
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TopUpSheet extends StatefulWidget {
+  const _TopUpSheet({
+    required this.onCreate,
+    required this.onGetStatus,
+    required this.onSuccess,
+    required this.errorMessage,
+  });
+
+  final Future<Map<String, dynamic>?> Function(num amount) onCreate;
+  final Future<Map<String, dynamic>?> Function(int id) onGetStatus;
+  final Future<void> Function() onSuccess;
+  final String? Function() errorMessage;
+
+  @override
+  State<_TopUpSheet> createState() => _TopUpSheetState();
+}
+
+class _TopUpSheetState extends State<_TopUpSheet> {
+  static const int _minimumAmount = 10000;
+  static const int _maximumAmount = 100000000;
+
+  final _formKey = GlobalKey<FormState>();
+  final _controller = TextEditingController();
+  bool _submitting = false;
+  String? _errorMessage;
+  String? _qrCode;
+  Map<String, dynamic>? _result;
+  Map<String, dynamic>? _successResult;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  int? _parseAmount(String? value) {
+    final digits = (value ?? '').replaceAll(RegExp(r'[^0-9]'), '');
+    return int.tryParse(digits);
+  }
+
+  Future<void> _submit() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _submitting = true;
+      _errorMessage = null;
+    });
+
+    final result = await widget.onCreate(_parseAmount(_controller.text)!);
+    if (!mounted) return;
+
+    final qrCode = result?['qrCode']?.toString();
+    if (result == null || qrCode == null || qrCode.isEmpty) {
+      setState(() {
+        _submitting = false;
+        _errorMessage = result == null
+            ? widget.errorMessage() ?? 'Không thể tạo QR nạp tiền.'
+            : 'PayOS không trả về mã QR. Vui lòng thử lại.';
+      });
+      return;
+    }
+
+    setState(() {
+      _submitting = false;
+      _result = result;
+      _qrCode = qrCode;
+    });
+
+    final topUpId = result['topUpId'];
+    if (topUpId is num) {
+      _pollUntilPaid(topUpId.toInt());
+    }
+  }
+
+  Future<void> _pollUntilPaid(int topUpId) async {
+    for (var attempt = 0; attempt < 100 && mounted; attempt++) {
+      await Future<void>.delayed(const Duration(seconds: 3));
+      if (!mounted) return;
+
+      final status = await widget.onGetStatus(topUpId);
+      if (!mounted) return;
+      if (status?['status']?.toString().toLowerCase() != 'success') continue;
+
+      await widget.onSuccess();
+      if (!mounted) return;
+      setState(() => _successResult = status);
+      return;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final qrCode = _qrCode;
+    final succeeded = _successResult != null;
+    return PopScope(
+      canPop: !_submitting,
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Material(
+          color: Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          clipBehavior: Clip.antiAlias,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD7D7D7),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    succeeded
+                        ? 'Nạp tiền thành công'
+                        : qrCode == null
+                        ? 'Nạp tiền vào Ví'
+                        : 'Quét mã để nạp tiền',
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: _ink,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                if (succeeded) ...[
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    size: 88,
+                    color: _teal,
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Đã cộng ${_formatMoney(_successResult?['amount'] as num? ?? 0)} vào số dư ví.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () =>
+                          Navigator.of(context).pop(_successResult),
+                      style: FilledButton.styleFrom(backgroundColor: _teal),
+                      child: const Text('Hoàn tất'),
+                    ),
+                  ),
+                ] else if (qrCode == null)
+                  Form(
+                    key: _formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextFormField(
+                          controller: _controller,
+                          autofocus: true,
+                          enabled: !_submitting,
+                          keyboardType: TextInputType.number,
+                          textInputAction: TextInputAction.done,
+                          decoration: const InputDecoration(
+                            labelText: 'Số tiền (VND)',
+                            hintText: 'Tối thiểu 10.000đ',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) {
+                            final amount = _parseAmount(value);
+                            if (amount == null || amount < _minimumAmount) {
+                              return 'Số tiền nạp tối thiểu là 10.000đ.';
+                            }
+                            if (amount > _maximumAmount) {
+                              return 'Số tiền nạp tối đa là 100.000.000đ.';
+                            }
+                            return null;
+                          },
+                          onFieldSubmitted: _submitting
+                              ? null
+                              : (_) => _submit(),
+                        ),
+                        if (_submitting) ...[
+                          const SizedBox(height: 20),
+                          const CircularProgressIndicator(color: _teal),
+                        ],
+                        if (_errorMessage != null) ...[
+                          const SizedBox(height: 14),
+                          Text(
+                            _errorMessage!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.red),
+                          ),
+                        ],
+                        const SizedBox(height: 20),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: _submitting
+                                    ? null
+                                    : () => Navigator.of(context).pop(),
+                                child: const Text('Hủy'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: FilledButton(
+                                onPressed: _submitting ? null : _submit,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: _teal,
+                                ),
+                                child: const Text('Tạo QR'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  )
+                else ...[
+                  RepaintBoundary(
+                    child: ColoredBox(
+                      color: Colors.white,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: ExcludeSemantics(
+                          child: QrImageView(
+                            data: qrCode,
+                            size: 260,
+                            backgroundColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Sau khi thanh toán, số dư sẽ tự động cập nhật.',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () => Navigator.of(context).pop(_result),
+                      style: FilledButton.styleFrom(backgroundColor: _teal),
+                      child: const Text('Đóng'),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ),
