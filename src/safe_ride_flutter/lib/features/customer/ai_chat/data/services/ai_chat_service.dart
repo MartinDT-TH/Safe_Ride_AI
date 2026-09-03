@@ -111,6 +111,10 @@ class AiChatService {
     return Options(
       headers: {ApiKeys.authorization: AuthHeader.bearer(accessToken)},
       receiveTimeout: receiveTimeout,
+      // AI chat is an optional feature and presents request failures inside its
+      // own sheet. A MongoDB/Gemini outage must not mark the whole SafeRide API
+      // as unavailable or show the global server-error snackbar on the home page.
+      extra: {DioRequestExtras.suppressGlobalErrorSnackBar: true},
     );
   }
 }

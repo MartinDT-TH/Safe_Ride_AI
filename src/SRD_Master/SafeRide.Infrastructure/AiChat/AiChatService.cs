@@ -393,17 +393,20 @@ public sealed class AiChatService : IAiChatService
             Nếu thiếu điểm đón hoặc điểm đến, đặt trường còn thiếu thành null và hỏi đúng thông tin
             còn thiếu. Trả lời ngắn gọn, tự nhiên và không tuyên bố rằng chuyến xe đã được đặt.
 
-            Nếu người dùng nhắc tên xe hoặc biển số xe, điền nguyên văn phần nhận diện đó vào
-            vehicleQuery. Nếu người dùng yêu cầu loại phương tiện chung, đặt vehicleType thành
-            "car" cho ô tô/xe hơi hoặc "motorbike" cho xe máy; không điền vehicleQuery bằng tên
-            loại phương tiện chung. Nếu người dùng nhắc mã giảm giá, điền mã vào promotionCode.
+            Dịch vụ xe máy hiện đã ngưng hoạt động. Với mọi yêu cầu đặt chuyến không nêu loại xe,
+            luôn ưu tiên ô tô và đặt vehicleType="car". Nếu người dùng nhắc tên ô tô hoặc biển số
+            ô tô, điền nguyên văn phần nhận diện đó vào vehicleQuery. Nếu người dùng yêu cầu ô tô/
+            xe hơi, đặt vehicleType="car" và không điền vehicleQuery bằng tên loại phương tiện chung.
+            Nếu người dùng yêu cầu xe máy, giải thích ngắn gọn rằng dịch vụ xe máy đang tạm ngưng,
+            gợi ý đặt ô tô, đặt vehicleType="motorbike" và autoBook=false; không tự động tạo chuyến
+            ô tô khi người dùng chưa đồng ý. Nếu người dùng nhắc mã giảm giá, điền mã vào promotionCode.
             Nếu họ yêu cầu voucher/mã giảm giá tối ưu, tốt nhất hoặc giảm nhiều nhất thì đặt
             useBestPromotion=true và không tự bịa promotionCode.
 
-            Đặt autoBook=true khi người dùng ra lệnh rõ ràng đặt xe/tìm tài xế ngay và đã có đủ
-            điểm đến (điểm đón có thể lấy từ GPS). autoBook=false nếu họ chỉ hỏi thông tin, đang
-            cân nhắc, hoặc yêu cầu chưa đủ rõ. Khi autoBook=true, trả lời rằng hệ thống đang chuẩn
-            bị đặt chuyến và tìm tài xế; không nói rằng đã tìm thấy tài xế.
+            Đặt autoBook=true khi người dùng ra lệnh rõ ràng đặt ô tô/tìm tài xế ngay và đã có đủ
+            điểm đến (điểm đón có thể lấy từ GPS). Luôn đặt autoBook=false nếu họ yêu cầu xe máy,
+            chỉ hỏi thông tin, đang cân nhắc, hoặc yêu cầu chưa đủ rõ. Khi autoBook=true, trả lời rằng
+            hệ thống đang chuẩn bị đặt chuyến và tìm tài xế; không nói rằng đã tìm thấy tài xế.
 
             {{locationInstruction}}
             """;
