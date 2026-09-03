@@ -5,35 +5,39 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import "./Pagination.css";
 function Pagination({ currentPage, totalPages, onPageChange }) {
+  const safeTotalPages = Math.max(1, Number(totalPages) || 1);
+  const safeCurrentPage = Math.min(Math.max(1, Number(currentPage) || 1), safeTotalPages);
   const handleClick = (page) => {
-    if (page >= 1 && page <= totalPages && page !== currentPage) {
+    if (page >= 1 && page <= safeTotalPages && page !== safeCurrentPage) {
       onPageChange?.(page);
     }
   };
-  /** Build an array of page numbers with ellipsis */
+  /** Keep the active page visible while avoiding duplicate or missing page buttons. */
   const getPages = () => {
-    if (totalPages <= 5) {
-      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    if (safeTotalPages <= 7) {
+      return Array.from({ length: safeTotalPages }, (_, i) => i + 1);
     }
-    const pages = [1, 2, 3];
-    if (currentPage > 4) {
-      pages.push("...");
+    const pages = [1];
+    const start = Math.max(2, safeCurrentPage - 1);
+    const end = Math.min(safeTotalPages - 1, safeCurrentPage + 1);
+    if (start > 2) {
+      pages.push('...');
     }
-    if (currentPage > 3 && currentPage < totalPages - 1) {
-      pages.push(currentPage);
+    for (let page = start; page <= end; page += 1) {
+      pages.push(page);
     }
-    if (currentPage < totalPages - 2) {
-      pages.push("...");
+    if (end < safeTotalPages - 1) {
+      pages.push('...');
     }
-    pages.push(totalPages);
+    pages.push(safeTotalPages);
     return pages;
   };
   return (
     <div className="pagination" id="pagination">
       <button
         className="pagination-btn pagination-arrow"
-        disabled={currentPage === 1}
-        onClick={() => handleClick(currentPage - 1)}
+        disabled={safeCurrentPage === 1}
+        onClick={() => handleClick(safeCurrentPage - 1)}
         aria-label="Trang trước"
         type="button"
       >
@@ -48,8 +52,9 @@ function Pagination({ currentPage, totalPages, onPageChange }) {
         ) : (
           <button
             key={page}
-            className={`pagination-btn${page === currentPage ? " pagination-btn--active" : ""}`}
+            className={`pagination-btn${page === safeCurrentPage ? " pagination-btn--active" : ""}`}
             onClick={() => handleClick(page)}
+            aria-current={page === safeCurrentPage ? 'page' : undefined}
             type="button"
           >
             {page}
@@ -59,8 +64,8 @@ function Pagination({ currentPage, totalPages, onPageChange }) {
 
       <button
         className="pagination-btn pagination-arrow"
-        disabled={currentPage === totalPages}
-        onClick={() => handleClick(currentPage + 1)}
+        disabled={safeCurrentPage === safeTotalPages}
+        onClick={() => handleClick(safeCurrentPage + 1)}
         aria-label="Trang sau"
         type="button"
       >
