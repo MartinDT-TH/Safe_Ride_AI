@@ -108,6 +108,7 @@ Future<SafetyReportDialogResult?> showSafetyReportDialog(BuildContext context) {
               DropdownButtonFormField<String>(
                 key: ValueKey(reportType),
                 initialValue: reasonCode,
+                isExpanded: true,
                 decoration: InputDecoration(
                   labelText: context.l10n.safetyReasonCode,
                 ),
@@ -115,7 +116,11 @@ Future<SafetyReportDialogResult?> showSafetyReportDialog(BuildContext context) {
                     .map(
                       (value) => DropdownMenuItem(
                         value: value,
-                        child: Text(safetyReasonLabel(context.l10n, value)),
+                        child: Text(
+                          safetyReasonLabel(context.l10n, value),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     )
                     .toList(growable: false),

@@ -51,8 +51,12 @@ public sealed class FareEstimationServiceValidationTests
     [Theory]
     [InlineData(0, 30_000)]
     [InlineData(0.05, 30_000)]
-    [InlineData(0.5, 60_000)]
-    public void FinalizeFare_CustomerRequestedStopWithoutLongDistance_UsesProgressWithSnapshotMinimum(
+    [InlineData(0.49, 58_800)]
+    [InlineData(0.499999, 60_000)]
+    [InlineData(0.5, 120_000)]
+    [InlineData(0.75, 120_000)]
+    [InlineData(1, 120_000)]
+    public void FinalizeFare_CustomerRequestedStop_UsesInclusiveHalfProgressThreshold(
         double progress,
         decimal expectedFare)
     {
@@ -84,9 +88,11 @@ public sealed class FareEstimationServiceValidationTests
     [Theory]
     [InlineData(0d, 30_000, 30_000, 0)]
     [InlineData(0.1d, 30_000, 28_000, 2_000)]
-    [InlineData(0.5d, 50_000, 40_000, 10_000)]
+    [InlineData(0.49d, 49_000, 39_200, 9_800)]
+    [InlineData(0.5d, 100_000, 80_000, 20_000)]
+    [InlineData(0.75d, 100_000, 80_000, 20_000)]
     [InlineData(1d, 100_000, 80_000, 20_000)]
-    public void CustomerRequestedStopComponentAllocation_ProratesBothAcceptedComponents(
+    public void CustomerRequestedStopComponentAllocation_UsesProgressBelowHalfAndFullComponentsAtOrAboveHalf(
         double progress,
         decimal expectedGrossFare,
         decimal expectedFareComponent,
@@ -108,7 +114,7 @@ public sealed class FareEstimationServiceValidationTests
     }
 
     [Fact]
-    public void CustomerRequestedStopComponentAllocation_RoundsApprovedGrossBeforeAllocatingComponents()
+    public void CustomerRequestedStopComponentAllocation_BelowHalf_RoundsApprovedGrossBeforeAllocatingComponents()
     {
         var allocation =
             TripFareFinalizationService.CalculateCustomerRequestedStopComponentAllocation(
@@ -116,16 +122,16 @@ public sealed class FareEstimationServiceValidationTests
                     estimatedFare: 30_002m,
                     longDistanceComponent: 20_001m,
                     acceptedMinimumServiceFare: 0m).Booking,
-                plannedRouteProgress: 0.5m);
+                plannedRouteProgress: 0.49m);
 
-        Assert.Equal(15_001m, allocation.GrossFare);
-        Assert.Equal(5_000m, allocation.FareComponent);
-        Assert.Equal(10_001m, allocation.LongDistanceComponent);
+        Assert.Equal(14_701m, allocation.GrossFare);
+        Assert.Equal(4_901m, allocation.FareComponent);
+        Assert.Equal(9_800m, allocation.LongDistanceComponent);
         Assert.Equal(
             allocation.GrossFare,
             allocation.FareComponent + allocation.LongDistanceComponent);
         Assert.Equal(
-            decimal.Round(30_002m * 0.5m, 0, MidpointRounding.AwayFromZero),
+            decimal.Round(30_002m * 0.49m, 0, MidpointRounding.AwayFromZero),
             allocation.GrossFare);
     }
 
@@ -150,7 +156,7 @@ public sealed class FareEstimationServiceValidationTests
             plannedRouteProgress: 0.5m,
             destinationReached: false);
 
-        Assert.Equal(50_000m, result.ActualFare);
+        Assert.Equal(100_000m, result.ActualFare);
     }
 
     [Fact]
@@ -177,8 +183,27 @@ public sealed class FareEstimationServiceValidationTests
             plannedRouteProgress: 0.5m,
             destinationReached: false);
 
-        Assert.Equal(50_000m, shortPathResult.ActualFare);
+        Assert.Equal(100_000m, shortPathResult.ActualFare);
         Assert.Equal(shortPathResult, longPathResult);
+    }
+
+    [Fact]
+    public void FinalizeFare_CustomerRequestedStopAtHalfProgress_PreservesPromotionHandling()
+    {
+        var trip = CreateSnapshottedTrip();
+        trip.Booking.BookingPromotions.Add(new BookingPromotion
+        {
+            DiscountAmount = 10_000m
+        });
+
+        var result = CreateService().CalculateLockedFare(
+            trip,
+            TripEndReason.CUSTOMER_REQUESTED_STOP,
+            plannedRouteProgress: 0.5m,
+            destinationReached: false);
+
+        Assert.Equal(120_000m, result.ActualFare);
+        Assert.Equal(110_000m, result.FinalFare);
     }
 
     [Theory]

@@ -46,6 +46,14 @@
     <Folder Include="Filters\" />
   </ItemGroup>
 
+  <!-- Demo deployment uses a portable, repository-shared Data Protection key ring. -->
+  <ItemGroup>
+    <Content Include="App_Data\DataProtection-Keys-Shared\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
   <ItemGroup>
     <None Include="efpt.config.json.user" />
   </ItemGroup>

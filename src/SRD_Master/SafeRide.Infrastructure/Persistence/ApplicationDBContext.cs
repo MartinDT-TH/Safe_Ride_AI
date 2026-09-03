@@ -6,9 +6,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using System;
 using System.Collections.Generic;
+using SafeRide.Application.Common.Interfaces;
 using SafeRide.Domain.Entities;
 using SafeRide.Domain.Enums;
 using SafeRide.Infrastructure.Persistence.Configurations;
@@ -17,13 +19,24 @@ namespace SafeRide.Infrastructure.Persistence;
 
 public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNetRole, Guid>
 {
-    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options, IDataProtectionProvider protectionProvider)
+    public ApplicationDbContext(
+        DbContextOptions<ApplicationDbContext> options,
+        IDataProtectionProvider protectionProvider,
+        ILogger<ApplicationDbContext>? logger = null,
+        ILegacyDriverKycPiiProtectionService? legacyPiiProtection = null,
+        IPreviousDriverKycPiiProtectionService? previousPiiProtection = null)
         : base(options)
     {
         _kycProtector = protectionProvider.CreateProtector("SafeRide.DriverKyc.Pii.v1");
+        _logger = logger;
+        _legacyPiiProtection = legacyPiiProtection;
+        _previousPiiProtection = previousPiiProtection;
     }
 
     private readonly IDataProtector _kycProtector;
+    private readonly ILogger<ApplicationDbContext>? _logger;
+    private readonly ILegacyDriverKycPiiProtectionService? _legacyPiiProtection;
+    private readonly IPreviousDriverKycPiiProtectionService? _previousPiiProtection;
 
     public virtual DbSet<AspNetRole> AspNetRoles { get; set; }
 
@@ -823,8 +836,27 @@ public partial class ApplicationDbContext : IdentityDbContext<AspNetUser, AspNet
         {
             return _kycProtector.Unprotect(value);
         }
-        catch (CryptographicException)
+        catch (CryptographicException exception)
         {
+            if (_previousPiiProtection?.TryUnprotect(value, out var previousPlaintext) == true)
+            {
+                _logger?.LogInformation(
+                    "Decrypted a DriverKyc PII value using the previous SafeRide key ring.");
+                return previousPlaintext;
+            }
+
+            if (_legacyPiiProtection?.TryUnprotect(value, out var legacyPlaintext) == true)
+            {
+                _logger?.LogInformation(
+                    "Decrypted a legacy DriverKyc PII value using the pre-SafeRide application discriminator.");
+                return legacyPlaintext;
+            }
+
+            // Never log PII or ciphertext. This indicates that the runtime cannot
+            // access the Data Protection key that encrypted the stored value.
+            _logger?.LogWarning(
+                exception,
+                "Unable to decrypt DriverKyc PII. The Data Protection key ring or runtime identity may not match the data.");
             return value;
         }
     }

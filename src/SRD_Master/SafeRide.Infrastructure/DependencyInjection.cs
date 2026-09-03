@@ -69,7 +69,26 @@ public static class DependencyInjection
             dataProtectionKeysPath = Path.Combine(
                 environment.ContentRootPath,
                 "App_Data",
+                "DataProtection-Keys-Shared");
+        }
+        else if (!Path.IsPathRooted(dataProtectionKeysPath))
+        {
+            dataProtectionKeysPath = Path.Combine(
+                environment.ContentRootPath,
+                dataProtectionKeysPath);
+        }
+
+        var legacyKeysPath = configuration["DataProtection:LegacyKeysPath"];
+        if (string.IsNullOrWhiteSpace(legacyKeysPath))
+        {
+            legacyKeysPath = Path.Combine(
+                environment.ContentRootPath,
+                "App_Data",
                 "DataProtection-Keys");
+        }
+        else if (!Path.IsPathRooted(legacyKeysPath))
+        {
+            legacyKeysPath = Path.Combine(environment.ContentRootPath, legacyKeysPath);
         }
 
         Directory.CreateDirectory(dataProtectionKeysPath);
@@ -77,6 +96,29 @@ public static class DependencyInjection
             .AddDataProtection()
             .SetApplicationName("SafeRide")
             .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
+
+        // DriverKyc values written before 2026-08-31 were protected while the
+        // application discriminator defaulted to the normalized content root.
+        // Keep a read-only provider for those rows while new values use the
+        // explicit "SafeRide" discriminator above.
+        var legacyApplicationName = Path.GetFullPath(environment.ContentRootPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        var legacyProvider = DataProtectionProvider.Create(
+            new DirectoryInfo(legacyKeysPath),
+            builder => builder.SetApplicationName(legacyApplicationName));
+        services.AddSingleton<ILegacyDriverKycPiiProtectionService>(
+            new LegacyDriverKycPiiProtectionService(
+                legacyProvider.CreateProtector("SafeRide.DriverKyc.Pii.v1")));
+
+        // Values written after SetApplicationName("SafeRide") was introduced,
+        // but before the portable shared key ring was added.
+        var previousProvider = DataProtectionProvider.Create(
+            new DirectoryInfo(legacyKeysPath),
+            builder => builder.SetApplicationName("SafeRide"));
+        services.AddSingleton<IPreviousDriverKycPiiProtectionService>(
+            new LegacyDriverKycPiiProtectionService(
+                previousProvider.CreateProtector("SafeRide.DriverKyc.Pii.v1")));
         var backgroundJobsEnabled = configuration.GetValue<bool>("BackgroundJobs:Enabled");
 
         services
@@ -356,6 +398,7 @@ public static class DependencyInjection
                 provider.GetRequiredService<ILogger<ResilientRedisService>>()));
         services.AddSingleton<ICloudinaryImageService, CloudinaryImageService>();
         services.AddSingleton<IPiiProtectionService, PiiProtectionService>();
+        services.AddScoped<DriverKycKeyMigrationService>();
         services.AddScoped<DriverKycBackfillService>();
         services.AddSingleton<IIdentityDocumentStorage, CloudinaryIdentityDocumentStorage>();
         services.AddSingleton<ITripReturnEvidenceStorage, CloudinaryTripReturnEvidenceStorage>();

@@ -1167,6 +1167,7 @@ public sealed class RiskProtectionSqlServerTests
         public Task PublishTripCreatedAsync(TripCreatedEvent notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task PublishBookingDriverAssignedAsync(BookingDriverAssignedEvent notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task PublishTripStatusChangedAsync(TripStatusChangedEvent notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task PublishCustomerReadinessReportedAsync(CustomerReadinessReportedEvent notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task PublishTripPaymentPendingAsync(TripPaymentPendingEvent notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task PublishTripPaymentSucceededAsync(TripPaymentSucceededEvent notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task PublishSOSTriggeredAsync(SOSTriggeredEvent notification, CancellationToken cancellationToken = default) => Task.CompletedTask;

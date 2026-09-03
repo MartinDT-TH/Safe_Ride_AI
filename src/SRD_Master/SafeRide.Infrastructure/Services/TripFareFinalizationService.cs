@@ -9,6 +9,7 @@ namespace SafeRide.Infrastructure.Services;
 
 public sealed class TripFareFinalizationService
 {
+    private const decimal FullLockedFareProgressThreshold = 0.50m;
     private readonly IFareEstimationService _fareEstimationService;
 
     public TripFareFinalizationService(
@@ -143,6 +144,14 @@ public sealed class TripFareFinalizationService
         }
 
         var progress = Math.Clamp(plannedRouteProgress, 0m, 1m);
+        if (progress >= FullLockedFareProgressThreshold)
+        {
+            return new CustomerRequestedStopComponentAllocation(
+                booking.EstimatedFare,
+                acceptedFareComponent,
+                acceptedLongDistanceComponent);
+        }
+
         var progressGrossFare = RoundVnd(booking.EstimatedFare * progress);
         var progressLongDistanceComponent = RoundVnd(acceptedLongDistanceComponent * progress);
         var grossFare = Math.Max(

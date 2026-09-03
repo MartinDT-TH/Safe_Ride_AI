@@ -360,11 +360,14 @@ public sealed class DriverQueryService : IDriverQueryService
                 x.TransactionType,
                 x.Amount,
                 x.TransactionType == WalletTransactionType.Income
-                    || x.TransactionType == WalletTransactionType.Bonus,
+                    || x.TransactionType == WalletTransactionType.Bonus
+                    || x.TransactionType == WalletTransactionType.TopUp,
                 x.TripId != null
                     ? "Chuyến đi #TRP-" + x.TripId
                     : x.TransactionType == WalletTransactionType.Withdrawal
                         ? "Rút tiền về ngân hàng"
+                        : x.TransactionType == WalletTransactionType.TopUp
+                            ? "Nạp tiền qua PayOS"
                         : x.TransactionType == WalletTransactionType.Bonus
                             ? "Tiền thưởng"
                             : x.TransactionType == WalletTransactionType.Penalty
