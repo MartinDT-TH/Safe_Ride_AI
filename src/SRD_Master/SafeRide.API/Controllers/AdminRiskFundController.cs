@@ -26,12 +26,16 @@ public sealed class AdminRiskFundController : ControllerBase
         => Ok(await _ledger.GetDashboardAsync(cancellationToken));
 
     [HttpGet("risk-fund/transactions")]
-    public async Task<ActionResult<IReadOnlyList<RiskFundTransactionResponse>>> GetTransactions(
+    public async Task<ActionResult<RiskFundTransactionPageResponse>> GetTransactions(
         [FromQuery] RiskFundTransactionType? type,
         [FromQuery] DateTime? fromUtc,
         [FromQuery] DateTime? toUtc,
-        CancellationToken cancellationToken)
-        => Ok(await _ledger.GetTransactionsAsync(type, fromUtc, toUtc, cancellationToken));
+        CancellationToken cancellationToken,
+        [FromQuery] int limit = 50,
+        [FromQuery] DateTime? cursorCreatedAtUtc = null,
+        [FromQuery] long? cursorId = null)
+        => Ok(await _ledger.GetTransactionsAsync(
+            type, fromUtc, toUtc, limit, cursorCreatedAtUtc, cursorId, cancellationToken));
 
     [HttpGet("risk-fund/transactions/export")]
     public async Task ExportTransactions(

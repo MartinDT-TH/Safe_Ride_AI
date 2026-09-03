@@ -78,26 +78,49 @@ public sealed class RiskFundLedgerService : IRiskFundLedgerService
             pendingFunding);
     }
 
-    public async Task<IReadOnlyList<RiskFundTransactionResponse>> GetTransactionsAsync(
+    public async Task<RiskFundTransactionPageResponse> GetTransactionsAsync(
         RiskFundTransactionType? type,
         DateTime? fromUtc,
         DateTime? toUtc,
+        int limit,
+        DateTime? cursorCreatedAtUtc,
+        long? cursorId,
         CancellationToken cancellationToken)
     {
-        if (fromUtc.HasValue && toUtc.HasValue && fromUtc.Value > toUtc.Value)
+        ValidateFilter(fromUtc, toUtc);
+        if (limit is < 1 or > 100)
         {
-            throw Invalid("Thời điểm bắt đầu không được sau thời điểm kết thúc.");
+            throw Invalid("Kích thước trang phải từ 1 đến 100 giao dịch.");
+        }
+
+        if (cursorCreatedAtUtc.HasValue != cursorId.HasValue)
+        {
+            throw Invalid("Con trỏ phân trang phải gồm cả thời gian và mã giao dịch.");
         }
 
         var query = ApplyFilters(
             _dbContext.RiskFundTransactions.AsNoTracking(), type, fromUtc, toUtc);
+        if (cursorCreatedAtUtc.HasValue)
+        {
+            var cursorCreatedAt = cursorCreatedAtUtc.Value;
+            var lastId = cursorId!.Value;
+            query = query.Where(x => x.CreatedAtUtc < cursorCreatedAt
+                || (x.CreatedAtUtc == cursorCreatedAt && x.Id < lastId));
+        }
 
-        var transactions = await query
+        var results = await query
             .OrderByDescending(x => x.CreatedAtUtc)
             .ThenByDescending(x => x.Id)
-            .Take(1000)
+            .Take(limit + 1)
             .ToListAsync(cancellationToken);
-        return transactions.Select(Map).ToList();
+        var hasNextPage = results.Count > limit;
+        var transactions = results.Take(limit).ToList();
+        var lastTransaction = hasNextPage ? transactions[^1] : null;
+        return new(
+            transactions.Select(Map).ToList(),
+            hasNextPage,
+            lastTransaction?.CreatedAtUtc,
+            lastTransaction?.Id);
     }
 
     public async Task ExportTransactionsAsync(

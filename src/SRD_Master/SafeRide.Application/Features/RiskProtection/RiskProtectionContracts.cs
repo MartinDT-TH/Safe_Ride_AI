@@ -384,6 +384,12 @@ public sealed record RiskFundTransactionResponse(
     string IdempotencyKey,
     DateTime CreatedAtUtc);
 
+public sealed record RiskFundTransactionPageResponse(
+    IReadOnlyList<RiskFundTransactionResponse> Items,
+    bool HasNextPage,
+    DateTime? NextCursorCreatedAtUtc,
+    long? NextCursorId);
+
 public sealed record RiskFundMutationResponse(
     bool Applied,
     RiskFundTransactionResponse Transaction);

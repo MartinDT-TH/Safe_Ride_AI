@@ -49,11 +49,17 @@ const transactionTypes = [
 
 function AdminRiskFundPage() {
   const [filters, setFilters] = useState({ type: '', fromUtc: '', toUtc: '' });
+  const [pageSize, setPageSize] = useState(50);
+  const [cursor, setCursor] = useState(null);
+  const [cursorHistory, setCursorHistory] = useState([]);
   const transactionPath = useMemo(() => buildQueryPath(riskFundTransactionsPath, {
     type: filters.type,
     fromUtc: toUtc(filters.fromUtc),
     toUtc: toUtc(filters.toUtc),
-  }), [filters]);
+    limit: pageSize,
+    cursorCreatedAtUtc: cursor?.createdAtUtc,
+    cursorId: cursor?.id,
+  }), [cursor, filters, pageSize]);
   const dashboard = useFetch(riskFundDashboardPath);
   const ledger = useFetch(transactionPath);
   const configuration = useFetch(riskProtectionConfigurationPath);
@@ -65,7 +71,8 @@ function AdminRiskFundPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [policy, setPolicy] = useState(initialPolicy);
-  const transactions = Array.isArray(ledger.data) ? ledger.data : [];
+  const ledgerPage = ledger.data ?? {};
+  const transactions = Array.isArray(ledgerPage.items) ? ledgerPage.items : [];
   const stats = dashboard.data ?? {};
   const currentPolicy = configuration.data;
 
@@ -80,6 +87,29 @@ function AdminRiskFundPage() {
     setMode(nextMode);
     setMutation(initialMutation);
     setMutationKey(createIdempotencyKey(nextMode));
+  };
+
+  const updateFilters = (nextFilters) => {
+    setFilters(nextFilters);
+    setCursor(null);
+    setCursorHistory([]);
+  };
+
+  const changePageSize = (event) => {
+    setPageSize(Number(event.target.value));
+    setCursor(null);
+    setCursorHistory([]);
+  };
+
+  const goToNextPage = () => {
+    if (!ledgerPage.hasNextPage || !ledgerPage.nextCursorCreatedAtUtc || !ledgerPage.nextCursorId) return;
+    setCursorHistory((history) => [...history, cursor]);
+    setCursor({ createdAtUtc: ledgerPage.nextCursorCreatedAtUtc, id: ledgerPage.nextCursorId });
+  };
+
+  const goToPreviousPage = () => {
+    setCursor(cursorHistory.at(-1) ?? null);
+    setCursorHistory((history) => history.slice(0, -1));
   };
 
   const copyCurrentPolicy = () => {
@@ -193,9 +223,10 @@ function AdminRiskFundPage() {
         <section className="risk-card" aria-labelledby="risk-ledger-title">
           <div className="risk-card__title"><div><h2 id="risk-ledger-title">Sổ cái</h2><p className="risk-form__hint">Lịch sử bất biến của mọi khoản vào và ra Quỹ rủi ro.</p></div><div className="risk-actions"><button type="button" onClick={ledger.refetch}>Tải lại</button><button type="button" disabled={busy} onClick={downloadLedger}>Xuất CSV đầy đủ</button></div></div>
           <div className="risk-filters">
-            <Field label="Loại giao dịch"><select value={filters.type} onChange={(event) => setFilters({ ...filters, type: event.target.value })}><option value="">Tất cả</option>{transactionTypes.map((type) => <option key={type} value={type}>{riskProtectionLabel(type)}</option>)}</select></Field>
-            <Field label="Từ ngày"><input type="datetime-local" value={filters.fromUtc} onChange={(event) => setFilters({ ...filters, fromUtc: event.target.value })} /></Field>
-            <Field label="Đến ngày"><input type="datetime-local" value={filters.toUtc} onChange={(event) => setFilters({ ...filters, toUtc: event.target.value })} /></Field>
+            <Field label="Loại giao dịch"><select value={filters.type} onChange={(event) => updateFilters({ ...filters, type: event.target.value })}><option value="">Tất cả</option>{transactionTypes.map((type) => <option key={type} value={type}>{riskProtectionLabel(type)}</option>)}</select></Field>
+            <Field label="Từ ngày"><input type="datetime-local" value={filters.fromUtc} onChange={(event) => updateFilters({ ...filters, fromUtc: event.target.value })} /></Field>
+            <Field label="Đến ngày"><input type="datetime-local" value={filters.toUtc} onChange={(event) => updateFilters({ ...filters, toUtc: event.target.value })} /></Field>
+            <Field label="Hiển thị"><select value={pageSize} onChange={changePageSize}><option value={25}>25 dòng</option><option value={50}>50 dòng</option><option value={100}>100 dòng</option></select></Field>
           </div>
           <div className="risk-table-wrap">
             <table className="risk-table">
@@ -205,6 +236,13 @@ function AdminRiskFundPage() {
                 {!ledger.isLoading && transactions.length === 0 && <tr><td colSpan="9">Chưa có giao dịch phù hợp bộ lọc.</td></tr>}
               </tbody>
             </table>
+          </div>
+          <div className="risk-pagination" aria-label="Phân trang sổ cái">
+            <div><strong>Trang {cursorHistory.length + 1}</strong><span>{transactions.length} giao dịch đang hiển thị</span></div>
+            <div className="risk-pagination__actions">
+              <button type="button" className="risk-secondary" disabled={ledger.isLoading || cursorHistory.length === 0} onClick={goToPreviousPage}>Trước</button>
+              <button type="button" className="risk-pagination__next" disabled={ledger.isLoading || !ledgerPage.hasNextPage} onClick={goToNextPage}>Tiếp theo</button>
+            </div>
           </div>
         </section>
 
@@ -275,7 +313,7 @@ function formatDate(value) {
 }
 
 function Stat({ label, value, emphasize = false }) {
-  return <article className={emphasize ? 'risk-stat--emphasize' : ''}><span>{label}</span><strong>{value}</strong></article>;
+  return <article className={`risk-stat ${emphasize ? 'risk-stat--emphasize' : ''}`}><span>{label}</span><strong>{value}</strong></article>;
 }
 
 function ReviewItem({ label, value }) {
