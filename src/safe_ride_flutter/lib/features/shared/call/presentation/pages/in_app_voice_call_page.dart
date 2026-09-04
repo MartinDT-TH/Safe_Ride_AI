@@ -103,11 +103,6 @@ class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
     await Helper.setAndroidAudioConfiguration(
       AndroidAudioConfiguration.communication,
     );
-    await Helper.setAppleAudioIOMode(
-      AppleAudioIOMode.localAndRemote,
-      preferSpeakerOutput: _speakerOn,
-    );
-    await Helper.ensureAudioSession();
 
     _localStream = await navigator.mediaDevices.getUserMedia({
       'audio': {
@@ -166,7 +161,6 @@ class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
 
   Future<void> _activateCallAudio() async {
     await _callTonePlayer.stop();
-    await Helper.ensureAudioSession();
     if (_speakerOn) {
       await Helper.setSpeakerphoneOnButPreferBluetooth();
     } else {
