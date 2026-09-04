@@ -137,6 +137,17 @@ if (args.Contains("--backfill-driver-kyc", StringComparer.OrdinalIgnoreCase))
     Console.WriteLine($"DriverKyc backfill completed. Updated rows: {updatedRows}");
     return;
 }
+if (args.Contains("--migrate-driver-kyc-key", StringComparer.OrdinalIgnoreCase))
+{
+    using var migrationScope = app.Services.CreateScope();
+    var migration = migrationScope.ServiceProvider
+        .GetRequiredService<SafeRide.Infrastructure.Services.DriverKycKeyMigrationService>();
+    var result = await migration.RunAsync();
+    Console.WriteLine(
+        $"DriverKyc key migration completed. Rows: {result.MigratedRows}; "
+        + $"values: {result.MigratedValues}; skipped: {result.SkippedValues}.");
+    return;
+}
 await app.Services.SeedAdminIdentityAsync();
 await app.Services.SeedIdentityAsync();
 await app.Services.SeedCustomerIdentityAsync();

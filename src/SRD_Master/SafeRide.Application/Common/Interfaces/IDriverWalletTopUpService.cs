@@ -6,6 +6,7 @@ public interface IDriverWalletTopUpService
 {
     Task<WalletTopUpResult> CreateAsync(Guid driverId, decimal amount, string? returnUrl, string? cancelUrl, CancellationToken cancellationToken);
     Task<WalletTopUpResult> GetStatusAsync(Guid driverId, long topUpId, CancellationToken cancellationToken);
+    Task ReconcilePendingAsync(Guid driverId, CancellationToken cancellationToken);
     Task<bool> TryHandleWebhookAsync(PayOsWebhookRequest request, CancellationToken cancellationToken);
 }
 

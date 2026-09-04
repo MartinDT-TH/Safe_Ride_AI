@@ -5,6 +5,7 @@
   justify-content: flex-end;
   gap: 6px;
   padding: 20px 24px;
+  flex-wrap: wrap;
 }
 
 .pagination-btn {
@@ -28,6 +29,11 @@
 .pagination-btn:hover:not(:disabled):not(.pagination-btn--active) {
   background: var(--sr-gray-50);
   border-color: var(--sr-gray-300);
+}
+
+.pagination-btn:focus-visible {
+  outline: 3px solid rgba(0, 118, 130, 0.24);
+  outline-offset: 2px;
 }
 
 .pagination-btn--active {

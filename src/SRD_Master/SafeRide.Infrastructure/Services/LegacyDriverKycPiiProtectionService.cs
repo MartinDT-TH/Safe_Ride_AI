@@ -5,7 +5,7 @@ using System.Security.Cryptography;
 namespace SafeRide.Infrastructure.Services;
 
 public sealed class LegacyDriverKycPiiProtectionService(IDataProtector protector)
-    : ILegacyDriverKycPiiProtectionService
+    : ILegacyDriverKycPiiProtectionService, IPreviousDriverKycPiiProtectionService
 {
     public bool TryUnprotect(string protectedValue, out string? plaintext)
     {

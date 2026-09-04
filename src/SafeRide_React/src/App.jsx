@@ -76,7 +76,7 @@ function App() {
             return <Suspense fallback={<div className="app-loading">Đang tải hồ sơ tai nạn...</div>}><StaffAccidentsPage /></Suspense>;
         }
         if (effectiveSidebarId === 'staff-customer-no-shows') {
-            return <Suspense fallback={<div className="app-loading">Đang tải review no-show...</div>}><CustomerNoShowsPage /></Suspense>;
+            return <Suspense fallback={<div className="app-loading">Đang tải xử lý khách vắng mặt...</div>}><CustomerNoShowsPage /></Suspense>;
         }
     }
     if (activeSidebarId !== effectiveSidebarId && effectiveSidebarId === 'revenue') {
@@ -89,7 +89,7 @@ function App() {
         return <Suspense fallback={<div className="app-loading">Đang tải duyệt thông báo...</div>}><AdminNotificationReviewPage /></Suspense>;
     }
     if (effectiveSidebarId === 'staff-customer-no-shows') {
-        return <Suspense fallback={<div className="app-loading">Đang tải review no-show...</div>}><CustomerNoShowsPage /></Suspense>;
+        return <Suspense fallback={<div className="app-loading">Đang tải xử lý khách vắng mặt...</div>}><CustomerNoShowsPage /></Suspense>;
     }
     if (activeSidebarId === 'bookings') {
         return <Suspense fallback={<div className="app-loading">Đang tải trang yêu cầu đặt xe...</div>}><BookingsPage /></Suspense>;

@@ -130,69 +130,88 @@ public sealed class TripSharingService : ITripSharingService
         var tokenHash = TripShareTokenService.HashToken(rawToken);
         var expiresAt = utcNow.AddHours(_options.CurrentValue.DefaultExpirationHours);
 
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
-        var share = await _dbContext.TripShares.FirstOrDefaultAsync(
-            x => x.TripId == tripId
-                && x.RecipientUserId == recipient.Id
-                && x.RevokedAt == null,
-            cancellationToken);
-
-        if (share is null || share.ExpiresAt <= utcNow)
+        TripShare? share = null;
+        Notification? notification = null;
+        var executionAttempt = 0;
+        var strategy = _dbContext.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
         {
-            if (share is not null)
+            // SQL Server uses EnableRetryOnFailure. The execution strategy must
+            // own the complete transaction, and a retry must not reuse entities
+            // left tracked by a rolled-back attempt.
+            if (executionAttempt++ > 0)
             {
-                // Preserve the expired record for audit history before creating a new share.
-                share.RevokedAt = utcNow;
-                await _dbContext.SaveChangesAsync(cancellationToken);
+                _dbContext.ChangeTracker.Clear();
             }
 
-            share = new TripShare
-            {
-                TripId = tripId,
-                SharedByUserId = sharedByUserId,
-                RecipientUserId = recipient.Id,
-                TokenHash = tokenHash,
-                ExpiresAt = expiresAt,
-                CreatedAt = utcNow
-            };
-            _dbContext.TripShares.Add(share);
-        }
-        else
-        {
-            // Rotate the token so an active share can be returned without storing plaintext.
-            share.SharedByUserId = sharedByUserId;
-            share.TokenHash = tokenHash;
-            share.ExpiresAt = expiresAt;
-            share.OpenedAt = null;
-        }
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+            share = await _dbContext.TripShares.FirstOrDefaultAsync(
+                x => x.TripId == tripId
+                    && x.RecipientUserId == recipient.Id
+                    && x.RevokedAt == null,
+                cancellationToken);
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        var notification = new Notification
-        {
-            UserId = recipient.Id,
-            Title = "Chuyến đi được chia sẻ",
-            Content = $"Một chuyến đi đã được chia sẻ với bạn (mã {share.Id}).",
-            NotificationType = "TripShared",
-            ReferenceId = share.Id,
-            SentAt = utcNow
-        };
-        _dbContext.Notifications.Add(notification);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        _expiryScheduler.ScheduleExpiration(share.Id, share.ExpiresAt);
+            if (share is null || share.ExpiresAt <= utcNow)
+            {
+                if (share is not null)
+                {
+                    // Preserve the expired record for audit history before creating a new share.
+                    share.RevokedAt = utcNow;
+                    await _dbContext.SaveChangesAsync(cancellationToken);
+                }
+
+                share = new TripShare
+                {
+                    TripId = tripId,
+                    SharedByUserId = sharedByUserId,
+                    RecipientUserId = recipient.Id,
+                    TokenHash = tokenHash,
+                    ExpiresAt = expiresAt,
+                    CreatedAt = utcNow
+                };
+                _dbContext.TripShares.Add(share);
+            }
+            else
+            {
+                // Rotate the token so an active share can be returned without storing plaintext.
+                share.SharedByUserId = sharedByUserId;
+                share.TokenHash = tokenHash;
+                share.ExpiresAt = expiresAt;
+                share.OpenedAt = null;
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            notification = new Notification
+            {
+                UserId = recipient.Id,
+                Title = "Chuyến đi được chia sẻ",
+                Content = $"Một chuyến đi đã được chia sẻ với bạn (mã {share.Id}).",
+                NotificationType = "TripShared",
+                ReferenceId = share.Id,
+                SentAt = utcNow
+            };
+            _dbContext.Notifications.Add(notification);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        });
+
+        // A successful execution always assigns both persisted entities.
+        var committedShare = share!;
+        var committedNotification = notification!;
+        _expiryScheduler.ScheduleExpiration(committedShare.Id, committedShare.ExpiresAt);
 
         try
         {
             await _notificationDeliveryService.PublishUserNotificationsAsync(
                 [new UserNotificationRealtimeEvent(
-                    notification.UserId,
-                    notification.Id,
-                    notification.Title,
-                    notification.Content,
-                    notification.NotificationType,
-                    notification.ReferenceId,
-                    notification.TranslationsJson,
-                    notification.SentAt)],
+                    committedNotification.UserId,
+                    committedNotification.Id,
+                    committedNotification.Title,
+                    committedNotification.Content,
+                    committedNotification.NotificationType,
+                    committedNotification.ReferenceId,
+                    committedNotification.TranslationsJson,
+                    committedNotification.SentAt)],
                 cancellationToken);
         }
         catch (Exception exception)
@@ -200,12 +219,12 @@ public sealed class TripSharingService : ITripSharingService
             _logger.LogWarning(
                 exception,
                 "Failed to push realtime trip-share notification {NotificationId} for share {TripShareId}.",
-                notification.Id,
-                share.Id);
+                committedNotification.Id,
+                committedShare.Id);
         }
 
         return new CreateTripShareResult(
-            share.Id,
+            committedShare.Id,
             ToRecipient(recipient),
             BuildShareUrl(_options.CurrentValue.AppLinkBaseUrl, rawToken),
             expiresAt);

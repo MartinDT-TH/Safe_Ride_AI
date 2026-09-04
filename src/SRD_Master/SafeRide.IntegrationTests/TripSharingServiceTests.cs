@@ -509,12 +509,12 @@ public sealed class TripSharingServiceTests
         public ValueTask DisposeAsync() => Db.DisposeAsync();
     }
 
-    private sealed class MutableClock : IDateTimeProvider
+    internal sealed class MutableClock : IDateTimeProvider
     {
         public DateTime UtcNow { get; set; }
     }
 
-    private sealed class ExpirySchedulerFake : ITripShareExpiryScheduler
+    internal sealed class ExpirySchedulerFake : ITripShareExpiryScheduler
     {
         public List<(long TripShareId, DateTime ExpiresAt)> Scheduled { get; } = [];
 
@@ -524,7 +524,7 @@ public sealed class TripSharingServiceTests
         }
     }
 
-    private sealed class NotificationDeliveryFake : ISystemNotificationDeliveryService
+    internal sealed class NotificationDeliveryFake : ISystemNotificationDeliveryService
     {
         public List<UserNotificationRealtimeEvent> Events { get; } = [];
 
@@ -537,7 +537,7 @@ public sealed class TripSharingServiceTests
         }
     }
 
-    private sealed class RealtimeFake : IRealtimeNotificationService
+    internal sealed class RealtimeFake : IRealtimeNotificationService
     {
         public List<(SharedTripStatusUpdate Update, string EventName)> StatusEvents { get; } = [];
         public List<SharedTripLocationUpdate> LocationEvents { get; } = [];
@@ -576,7 +576,7 @@ public sealed class TripSharingServiceTests
         public Task PublishBookingExpiredAsync(SafeRide.Application.Common.Realtime.BookingExpiredEvent notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
-    private sealed class OptionsMonitorFake<T>(T value) : IOptionsMonitor<T>
+    internal sealed class OptionsMonitorFake<T>(T value) : IOptionsMonitor<T>
     {
         public T CurrentValue => value;
         public T Get(string? name) => value;

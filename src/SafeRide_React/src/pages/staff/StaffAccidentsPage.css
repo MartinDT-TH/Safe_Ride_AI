@@ -1,0 +1,77 @@
+.staff-accidents-page .risk-page__header {
+  background: linear-gradient(118deg, #eaf9fa 0%, #fff 52%, #edf8f5 100%);
+}
+
+.staff-accidents-page__header-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 15px;
+  color: #39747a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.staff-accidents-page__queue-title { align-items: flex-end; }
+.staff-accidents-page__queue-title h2 { margin-top: 3px; }
+.staff-accidents-page__eyebrow { color: #087782; font-size: 11px; font-weight: 900; letter-spacing: .1em; }
+
+.staff-accidents-page__stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
+  gap: 11px;
+  margin: 0 0 18px;
+}
+
+.staff-accidents-page__stat {
+  display: grid;
+  gap: 5px;
+  min-height: 76px;
+  padding: 13px 14px;
+  border: 1px solid #e0ecec;
+  border-radius: 11px;
+  background: #fbfdfd;
+}
+
+.staff-accidents-page__stat span { color: #657b7e; font-size: 12px; font-weight: 700; }
+.staff-accidents-page__stat strong { color: #173c40; font-size: 24px; line-height: 1; }
+.staff-accidents-page__stat--attention { border-color: #f1dca6; background: #fffaf0; }
+.staff-accidents-page__stat--attention strong { color: #a56d08; }
+.staff-accidents-page__stat--progress { border-color: #bfdef6; background: #f4faff; }
+.staff-accidents-page__stat--progress strong { color: #1870a5; }
+.staff-accidents-page__stat--success { border-color: #bfe3d2; background: #f2fbf6; }
+.staff-accidents-page__stat--success strong { color: #187348; }
+
+.staff-accidents-page .risk-filters { grid-template-columns: repeat(3, minmax(145px, 1fr)); align-items: end; }
+.staff-accidents-page__filter-actions { display: flex; align-items: end; min-height: 62px; }
+.staff-accidents-page__filter-actions button { width: 100%; }
+.staff-accidents-page__open-button { border: 1px solid #9dcbd0; border-radius: 7px; background: #fff; color: #076976; font-weight: 800; padding: 8px 11px; transition: all .15s ease; }
+.staff-accidents-page__open-button:hover { border-color: #007682; background: #eaf9fa; }
+.staff-accidents-page__status--reported,.staff-accidents-page__status--evidence_collection { background: #fff4d9; color: #9a6500; }
+.staff-accidents-page__status--under_review,.staff-accidents-page__status--liability_pending { background: #e6f2fe; color: #17689e; }
+.staff-accidents-page__status--settlement { background: #f2e9ff; color: #71429c; }
+.staff-accidents-page__status--closed { background: #e5f7ed; color: #187247; }
+.staff-accidents-page__status--rejected { background: #fff0f0; color: #a43d3d; }
+
+.staff-accidents-page__pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 15px; }
+.staff-accidents-page__pagination > div:first-child { color: #6b7f81; font-size: 13px; }
+.staff-accidents-page__pagination > div:first-child strong { color: #173c40; }
+.staff-accidents-page__pagination > label { display: flex; align-items: center; gap: 7px; color: #61777a; font-size: 13px; font-weight: 700; }
+.staff-accidents-page__pagination select { min-height: 36px; padding: 6px 9px; border: 1px solid #c9dddd; border-radius: 7px; background: #fff; color: #173c40; font: inherit; }
+.staff-accidents-page__pagination .pagination { justify-content: flex-end; padding: 0; }
+
+@media (max-width: 960px) {
+  .staff-accidents-page__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .staff-accidents-page .risk-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .staff-accidents-page__queue-title { align-items: flex-start; }
+  .staff-accidents-page__pagination { align-items: flex-start; flex-direction: column; }
+  .staff-accidents-page__pagination .pagination { justify-content: flex-start; }
+}
+
+@media (max-width: 460px) {
+  .staff-accidents-page__stats, .staff-accidents-page .risk-filters { grid-template-columns: 1fr; }
+  .staff-accidents-page__header-meta { font-size: 12px; }
+}

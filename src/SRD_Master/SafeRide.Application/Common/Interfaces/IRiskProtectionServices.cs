@@ -140,10 +140,13 @@ public sealed record FileSafetyScanResult(
 public interface IRiskFundLedgerService
 {
     Task<RiskFundDashboardResponse> GetDashboardAsync(CancellationToken cancellationToken);
-    Task<IReadOnlyList<RiskFundTransactionResponse>> GetTransactionsAsync(
+    Task<RiskFundTransactionPageResponse> GetTransactionsAsync(
         RiskFundTransactionType? type,
         DateTime? fromUtc,
         DateTime? toUtc,
+        int limit,
+        DateTime? cursorCreatedAtUtc,
+        long? cursorId,
         CancellationToken cancellationToken);
     Task ExportTransactionsAsync(
         RiskFundTransactionType? type,

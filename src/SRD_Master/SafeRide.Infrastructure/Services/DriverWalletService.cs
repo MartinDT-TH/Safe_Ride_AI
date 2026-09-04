@@ -31,43 +31,47 @@ public sealed class DriverWalletService : IDriverWalletService
             throw new DriverWalletException("Số tiền rút tối thiểu là 10.000đ.");
         }
 
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync(
-            IsolationLevel.Serializable,
-            cancellationToken);
-
-        var wallet = await _dbContext.DriverWallets
-            .SingleOrDefaultAsync(x => x.DriverId == driverId, cancellationToken);
-        if (wallet is null)
+        var strategy = _dbContext.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            throw new DriverWalletException("Ví tài xế chưa được khởi tạo.");
-        }
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable,
+                cancellationToken);
 
-        if (amount > wallet.CurrentBalance)
-        {
-            throw new DriverWalletException("Số dư khả dụng không đủ.");
-        }
+            var wallet = await _dbContext.DriverWallets
+                .SingleOrDefaultAsync(x => x.DriverId == driverId, cancellationToken);
+            if (wallet is null)
+            {
+                throw new DriverWalletException("Ví tài xế chưa được khởi tạo.");
+            }
 
-        var now = DateTime.UtcNow;
-        var request = new WithdrawalRequest
-        {
-            WalletId = wallet.Id,
-            Amount = decimal.Round(amount, 0, MidpointRounding.AwayFromZero),
-            BankName = bankName.Trim(),
-            BankAccountNumber = bankAccountNumber.Trim(),
-            BankAccountName = bankAccountName.Trim(),
-            Status = WithdrawalRequestStatus.Pending,
-            CreatedAt = now
-        };
+            if (amount > wallet.CurrentBalance)
+            {
+                throw new DriverWalletException("Số dư khả dụng không đủ.");
+            }
 
-        _dbContext.WithdrawalRequests.Add(request);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+            var now = DateTime.UtcNow;
+            var request = new WithdrawalRequest
+            {
+                WalletId = wallet.Id,
+                Amount = decimal.Round(amount, 0, MidpointRounding.AwayFromZero),
+                BankName = bankName.Trim(),
+                BankAccountNumber = bankAccountNumber.Trim(),
+                BankAccountName = bankAccountName.Trim(),
+                Status = WithdrawalRequestStatus.Pending,
+                CreatedAt = now
+            };
 
-        return new WithdrawalRequestDto(
-            request.Id,
-            request.Amount,
-            request.Status,
-            request.CreatedAt,
-            wallet.CurrentBalance);
+            _dbContext.WithdrawalRequests.Add(request);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            return new WithdrawalRequestDto(
+                request.Id,
+                request.Amount,
+                request.Status,
+                request.CreatedAt,
+                wallet.CurrentBalance);
+        });
     }
 }

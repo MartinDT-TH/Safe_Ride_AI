@@ -28,6 +28,9 @@ import {
   shouldShowSystemInsurance,
 } from '../../features/riskProtection/riskProtectionPresentation';
 import '../admin/risk-fund/AdminRiskFundPage.css';
+import '../../shared/components/Pagination/Pagination.css';
+import Pagination from '../../shared/components/Pagination/Pagination';
+import './StaffAccidentsPage.css';
 
 const allocations = [
   ['driverFaultPercentage', 'Tài xế', 'DRIVER', 'DRIVER_ERROR'],
@@ -63,6 +66,8 @@ const initialWriteOff = { amount: '', reason: '', evidence: null };
 
 function StaffAccidentsPage() {
   const [filters, setFilters] = useState({ status: '', category: '', tripId: '', fromUtc: '', toUtc: '' });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const queuePath = useMemo(() => buildQueryPath(staffAccidentsPath, {
     status: filters.status,
     category: filters.category,
@@ -96,7 +101,18 @@ function StaffAccidentsPage() {
   const showSystemInsurance = shouldShowSystemInsurance(currentClaim);
   const fundingAllowed = ['APPROVED', 'PENDING_FUNDING'].includes(currentClaim?.status);
   const audits = useFetch(claimId ? `/staff/claims/${claimId}/mock-insurance/audits` : null);
-  const accidents = Array.isArray(queue.data) ? queue.data : [];
+  const accidents = useMemo(() => Array.isArray(queue.data) ? queue.data : [], [queue.data]);
+  const totalPages = Math.max(1, Math.ceil(accidents.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const visibleAccidents = accidents.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const firstVisibleItem = accidents.length ? (currentPage - 1) * pageSize + 1 : 0;
+  const lastVisibleItem = Math.min(currentPage * pageSize, accidents.length);
+  const queueStats = useMemo(() => ({
+    total: accidents.length,
+    needsReview: accidents.filter((item) => ['REPORTED', 'EVIDENCE_COLLECTION', 'UNDER_REVIEW', 'LIABILITY_PENDING'].includes(item.status)).length,
+    inSettlement: accidents.filter((item) => item.status === 'SETTLEMENT').length,
+    activeClaims: accidents.filter((item) => item.claimId && item.claimStatus !== 'CLOSED').length,
+  }), [accidents]);
   const total = responsibilityTotal(assessment);
   const causeTotal = assessment.causes.reduce((sum, cause) => sum + Number(cause.percentage), 0);
   const assessmentConfirmed = accident?.liabilityAssessment?.status === 'CONFIRMED';
@@ -320,36 +336,74 @@ function StaffAccidentsPage() {
     causes: [...assessment.causes, { rootCause: 'UNKNOWN', responsibleParty: 'OBJECTIVE', percentage: 1 }],
   });
 
+  const updateFilters = (nextFilters) => {
+    setFilters(nextFilters);
+    setPage(1);
+  };
+
+  const resetFilters = () => updateFilters({ status: '', category: '', tripId: '', fromUtc: '', toUtc: '' });
+
+  const changePageSize = (event) => {
+    setPageSize(Number(event.target.value));
+    setPage(1);
+  };
+
   return (
     <AdminLayout>
-      <div className="risk-page">
+      <div className="risk-page staff-accidents-page">
         <header className="risk-page__header">
           <div>
             <h1>Hồ sơ sự cố & bảo vệ</h1>
             <p>Quy trình theo từng bước; trách nhiệm và nguồn chi trả luôn được xử lý riêng.</p>
+            <div className="staff-accidents-page__header-meta">
+              <span>Trung tâm xử lý hồ sơ</span>
+              <span>•</span>
+              <span>Danh sách cập nhật theo bộ lọc</span>
+            </div>
           </div>
         </header>
         {(queue.error || detailError || error) && <div className="risk-alert risk-alert--error">{error || detailError || queue.error}</div>}
         {feedback && <div className="risk-alert risk-alert--success">{feedback}</div>}
 
         <section className="risk-card">
-          <div className="risk-card__title"><h2>Hàng đợi tai nạn</h2><button type="button" onClick={queue.refetch}>Tải lại</button></div>
+          <div className="risk-card__title staff-accidents-page__queue-title">
+            <div><span className="staff-accidents-page__eyebrow">HÀNG ĐỢI VẬN HÀNH</span><h2>Hàng đợi tai nạn</h2></div>
+            <button className="risk-secondary" type="button" onClick={queue.refetch}>Tải lại</button>
+          </div>
+          <div className="staff-accidents-page__stats" aria-label="Tóm tắt hàng đợi">
+            <QueueStat label="Hồ sơ đã tải" value={queueStats.total} />
+            <QueueStat label="Cần rà soát" value={queueStats.needsReview} tone="attention" />
+            <QueueStat label="Đang quyết toán" value={queueStats.inSettlement} tone="progress" />
+            <QueueStat label="Yêu cầu bảo vệ mở" value={queueStats.activeClaims} tone="success" />
+          </div>
           <div className="risk-filters">
-            <Field label="Trạng thái"><select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}><option value="">Tất cả</option>{accidentStatuses.map((value) => <option key={value} value={value}>{riskProtectionLabel(value)}</option>)}</select></Field>
-            <Field label="Loại sự cố"><select value={filters.category} onChange={(event) => setFilters({ ...filters, category: event.target.value })}><option value="">Tất cả</option>{accidentCategories.map((value) => <option key={value} value={value}>{riskProtectionLabel(value)}</option>)}</select></Field>
-            <Field label="Trip ID"><input type="number" min="1" value={filters.tripId} onChange={(event) => setFilters({ ...filters, tripId: event.target.value })} /></Field>
-            <Field label="Từ ngày"><input type="datetime-local" value={filters.fromUtc} onChange={(event) => setFilters({ ...filters, fromUtc: event.target.value })} /></Field>
-            <Field label="Đến ngày"><input type="datetime-local" value={filters.toUtc} onChange={(event) => setFilters({ ...filters, toUtc: event.target.value })} /></Field>
+            <Field label="Trạng thái"><select value={filters.status} onChange={(event) => updateFilters({ ...filters, status: event.target.value })}><option value="">Tất cả</option>{accidentStatuses.map((value) => <option key={value} value={value}>{riskProtectionLabel(value)}</option>)}</select></Field>
+            <Field label="Loại sự cố"><select value={filters.category} onChange={(event) => updateFilters({ ...filters, category: event.target.value })}><option value="">Tất cả</option>{accidentCategories.map((value) => <option key={value} value={value}>{riskProtectionLabel(value)}</option>)}</select></Field>
+            <Field label="Trip ID"><input type="number" min="1" value={filters.tripId} onChange={(event) => updateFilters({ ...filters, tripId: event.target.value })} /></Field>
+            <Field label="Từ ngày"><input type="datetime-local" value={filters.fromUtc} onChange={(event) => updateFilters({ ...filters, fromUtc: event.target.value })} /></Field>
+            <Field label="Đến ngày"><input type="datetime-local" value={filters.toUtc} onChange={(event) => updateFilters({ ...filters, toUtc: event.target.value })} /></Field>
+            <div className="staff-accidents-page__filter-actions"><button className="risk-secondary" type="button" onClick={resetFilters} disabled={!Object.values(filters).some(Boolean)}>Xóa bộ lọc</button></div>
           </div>
           <div className="risk-table-wrap">
             <table className="risk-table">
               <thead><tr><th>Mã</th><th>Chuyến</th><th>Loại</th><th>Trạng thái</th><th>Thời điểm</th><th>Yêu cầu bảo vệ</th><th /></tr></thead>
               <tbody>
-                {accidents.map((item) => <tr key={item.id}><td>#{item.id}</td><td>#{item.tripId}</td><td>{riskProtectionLabel(item.category)}</td><td><span className="risk-badge">{riskProtectionLabel(item.status)}</span></td><td>{formatDate(item.occurredAtUtc)}</td><td>{item.claimId ? `#${item.claimId} · ${riskProtectionLabel(item.claimStatus)}` : 'Chưa tạo'}</td><td><button type="button" onClick={() => openAccident(item.id)}>Mở hồ sơ</button></td></tr>)}
+                {visibleAccidents.map((item) => <tr key={item.id}><td>#{item.id}</td><td>#{item.tripId}</td><td>{riskProtectionLabel(item.category)}</td><td><span className={`risk-badge staff-accidents-page__status staff-accidents-page__status--${item.status?.toLowerCase()}`}>{riskProtectionLabel(item.status)}</span></td><td>{formatDate(item.occurredAtUtc)}</td><td>{item.claimId ? `#${item.claimId} · ${riskProtectionLabel(item.claimStatus)}` : 'Chưa tạo'}</td><td><button className="staff-accidents-page__open-button" type="button" onClick={() => openAccident(item.id)}>Mở hồ sơ</button></td></tr>)}
                 {!queue.isLoading && accidents.length === 0 && <tr><td colSpan="7">Không có hồ sơ phù hợp bộ lọc.</td></tr>}
               </tbody>
             </table>
           </div>
+          <footer className="staff-accidents-page__pagination">
+            <div>
+              <strong>{firstVisibleItem}–{lastVisibleItem}</strong>
+              <span> trên {accidents.length} hồ sơ đã tải</span>
+            </div>
+            <label>
+              <span>Số dòng</span>
+              <select value={pageSize} onChange={changePageSize} aria-label="Số dòng mỗi trang"><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select>
+            </label>
+            <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setPage} />
+          </footer>
         </section>
 
         {selectedId && <div className="risk-workflow">
@@ -615,6 +669,10 @@ export function SystemInsuranceCard({
 
 function WorkflowHeading({ step, title, description, compact = false }) {
   return <div className={`risk-step-heading ${compact ? 'risk-step-heading--compact' : ''}`}><span>{step}</span><div><h2>{title}</h2><p>{description}</p></div></div>;
+}
+
+function QueueStat({ label, value, tone = 'default' }) {
+  return <article className={`staff-accidents-page__stat staff-accidents-page__stat--${tone}`}><span>{label}</span><strong>{Number(value).toLocaleString('vi-VN')}</strong></article>;
 }
 
 function CauseRow({ cause, onChange, onRemove }) {

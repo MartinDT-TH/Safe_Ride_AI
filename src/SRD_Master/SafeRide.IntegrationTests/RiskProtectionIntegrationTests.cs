@@ -57,6 +57,49 @@ public sealed class RiskProtectionIntegrationTests
     }
 
     [Fact]
+    public async Task RiskFund_TransactionsUseStableKeysetPagination()
+    {
+        await using var db = CreateDbContext();
+        var ledger = new RiskFundLedgerService(db);
+        var actor = Guid.NewGuid();
+        await ledger.ApplyOpeningBalanceAsync(actor, Mutation("opening-page"), CancellationToken.None);
+        for (var index = 1; index <= 3; index++)
+        {
+            await ledger.ApplyAdjustmentAsync(actor, new RiskFundMutationRequest(
+                index,
+                LedgerDirection.CREDIT,
+                $"Adjustment {index}",
+                $"ADJ-{index}",
+                $"https://evidence.test/adjustment-{index}.pdf",
+                $"adjustment-page-{index}"), CancellationToken.None);
+        }
+
+        var firstPage = await ledger.GetTransactionsAsync(
+            null, null, null, 2, null, null, CancellationToken.None);
+        var secondPage = await ledger.GetTransactionsAsync(
+            null,
+            null,
+            null,
+            2,
+            firstPage.NextCursorCreatedAtUtc,
+            firstPage.NextCursorId,
+            CancellationToken.None);
+
+        Assert.True(firstPage.HasNextPage);
+        Assert.False(secondPage.HasNextPage);
+        Assert.Equal(2, firstPage.Items.Count);
+        Assert.Equal(2, secondPage.Items.Count);
+        Assert.Empty(firstPage.Items.Select(x => x.Id).Intersect(secondPage.Items.Select(x => x.Id)));
+        Assert.Equal(
+            (await db.RiskFundTransactions.AsNoTracking()
+                .OrderByDescending(x => x.CreatedAtUtc)
+                .ThenByDescending(x => x.Id)
+                .Select(x => x.Id)
+                .ToListAsync()),
+            firstPage.Items.Concat(secondPage.Items).Select(x => x.Id));
+    }
+
+    [Fact]
     public async Task RiskFund_OpeningBalance_CannotBeBackfilledTwice()
     {
         await using var db = CreateDbContext();
