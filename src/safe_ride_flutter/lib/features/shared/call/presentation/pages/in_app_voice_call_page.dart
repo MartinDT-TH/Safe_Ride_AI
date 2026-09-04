@@ -39,6 +39,7 @@ class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
   RTCPeerConnection? _peerConnection;
   MediaStream? _localStream;
   MediaStream? _remoteStream;
+  final List<RTCIceCandidate> _pendingIceCandidates = [];
   Timer? _durationTimer;
   Duration _duration = Duration.zero;
   bool _initializing = true;
@@ -95,8 +96,25 @@ class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
   }
 
   Future<void> _createPeerConnection() async {
+    // The ringtone player uses the media audio route. Explicitly switch WebRTC
+    // to a bidirectional communication session before opening the microphone,
+    // otherwise some Android/iOS devices keep playback/capture on the stale
+    // media route after the ringtone stops.
+    await Helper.setAndroidAudioConfiguration(
+      AndroidAudioConfiguration.communication,
+    );
+    await Helper.setAppleAudioIOMode(
+      AppleAudioIOMode.localAndRemote,
+      preferSpeakerOutput: _speakerOn,
+    );
+    await Helper.ensureAudioSession();
+
     _localStream = await navigator.mediaDevices.getUserMedia({
-      'audio': true,
+      'audio': {
+        'echoCancellation': true,
+        'noiseSuppression': true,
+        'autoGainControl': true,
+      },
       'video': false,
     });
 
@@ -128,15 +146,32 @@ class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
       );
     };
 
-    peerConnection.onTrack = (event) {
-      if (event.streams.isEmpty) return;
-      _remoteStream = event.streams.first;
-      _remoteRenderer.srcObject = _remoteStream;
-      unawaited(_callTonePlayer.stop());
+    peerConnection.onTrack = (event) async {
+      if (event.track.kind != 'audio') return;
+
+      final remoteStream = event.streams.isNotEmpty
+          ? event.streams.first
+          : await createLocalMediaStream('remote-$_activeCallId');
+      if (event.streams.isEmpty) {
+        await remoteStream.addTrack(event.track, addToNative: true);
+      }
+      _remoteStream = remoteStream;
+      _remoteRenderer.srcObject = remoteStream;
+      await _activateCallAudio();
       if (!mounted) return;
       setState(() => _connected = true);
       _startDurationTimer();
     };
+  }
+
+  Future<void> _activateCallAudio() async {
+    await _callTonePlayer.stop();
+    await Helper.ensureAudioSession();
+    if (_speakerOn) {
+      await Helper.setSpeakerphoneOnButPreferBluetooth();
+    } else {
+      await Helper.setSpeakerphoneOn(false);
+    }
   }
 
   Future<void> _startOutgoingCall() async {
@@ -167,6 +202,7 @@ class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
     await _peerConnection!.setRemoteDescription(
       RTCSessionDescription(sdp, sdpType),
     );
+    await _flushPendingIceCandidates();
     final answer = await _peerConnection!.createAnswer({
       'offerToReceiveAudio': true,
       'offerToReceiveVideo': false,
@@ -194,15 +230,24 @@ class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
       await _peerConnection?.setRemoteDescription(
         RTCSessionDescription(signal.sdp, signal.sdpType),
       );
-      await _callTonePlayer.stop();
+      await _flushPendingIceCandidates();
+      await _activateCallAudio();
       if (mounted) setState(() => _connected = true);
       _startDurationTimer();
     }, key: '$key:answer');
     _socketService.onInAppCallIceCandidate((signal) async {
       if (!_matchesCall(signal) || signal.candidate == null) return;
-      await _peerConnection?.addCandidate(
-        RTCIceCandidate(signal.candidate, signal.sdpMid, signal.sdpMLineIndex),
+      final candidate = RTCIceCandidate(
+        signal.candidate,
+        signal.sdpMid,
+        signal.sdpMLineIndex,
       );
+      final remoteDescription = await _peerConnection?.getRemoteDescription();
+      if (remoteDescription == null) {
+        _pendingIceCandidates.add(candidate);
+        return;
+      }
+      await _peerConnection?.addCandidate(candidate);
     }, key: '$key:ice');
     _socketService.onInAppCallRejected((signal) {
       if (!_matchesCall(signal)) return;
@@ -212,6 +257,16 @@ class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
       if (!_matchesCall(signal)) return;
       _closeWithMessage(context.l10n.callEnded);
     }, key: '$key:ended');
+  }
+
+  Future<void> _flushPendingIceCandidates() async {
+    final peerConnection = _peerConnection;
+    if (peerConnection == null || _pendingIceCandidates.isEmpty) return;
+    final candidates = List<RTCIceCandidate>.of(_pendingIceCandidates);
+    _pendingIceCandidates.clear();
+    for (final candidate in candidates) {
+      await peerConnection.addCandidate(candidate);
+    }
   }
 
   void _removeSignalHandlers() {
@@ -238,6 +293,7 @@ class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
     final nextMuted = !_muted;
     for (final track
         in _localStream?.getAudioTracks() ?? <MediaStreamTrack>[]) {
+      await Helper.setMicrophoneMute(nextMuted, track);
       track.enabled = !nextMuted;
     }
     setState(() => _muted = nextMuted);
@@ -269,6 +325,8 @@ class _InAppVoiceCallPageState extends State<InAppVoiceCallPage> {
     await _remoteStream?.dispose();
     await _peerConnection?.close();
     await _peerConnection?.dispose();
+    _pendingIceCandidates.clear();
+    await Helper.clearAndroidCommunicationDevice();
   }
 
   void _closeWithMessage(String message) {
